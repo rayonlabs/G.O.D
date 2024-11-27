@@ -51,7 +51,7 @@ GPU_SERVER = os.getenv("GPU_SERVER")
 
 SYNTH_MODEL = "chat-llama-3-1-70b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
-GRADIENTS_ENDPOINT = "https://corcel-internal-image-stuff.ngrok.dev/validator-signup"
+GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
 
