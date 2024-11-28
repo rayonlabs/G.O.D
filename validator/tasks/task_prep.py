@@ -84,7 +84,9 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
     try:
         sampled_data_list = list(sampled_data)
     except Exception as e:
+
         return None
+
         logger.info(
             f"There is an issue with this sample data for some reason {sampled_data} {e}")
     synthetic_data = await generate_synthetic_dataset(sampled_data_list, keypair=keypair)
@@ -154,10 +156,10 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
     test_json_path = await save_json_to_temp_file(test_data_json, prefix="test_data_")
     synth_json_path = await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_") if synthetic_data else None
 
-    train_json_url = await upload_json_to_minio(train_json_path, "GOD", f"{os.urandom(8).hex()}_train_data.json")
-    test_json_url = await upload_json_to_minio(test_json_path, "GOD", f"{os.urandom(8).hex()}_test_data.json")
+    train_json_url = await upload_json_to_minio(train_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_train_data.json")
+    test_json_url = await upload_json_to_minio(test_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_test_data.json")
     synth_json_url = (
-        await upload_json_to_minio(synth_json_path, "GOD", f"{os.urandom(8).hex()}_synth_data.json")
+        await upload_json_to_minio(synth_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_synth_data.json")
         if synthetic_data
         else None
     )

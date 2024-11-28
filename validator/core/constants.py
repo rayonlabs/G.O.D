@@ -12,6 +12,7 @@ REDIS_KEY_COLDKEY_STAKE = "coldkey_stake"
 API_KEY = "api_key"
 COLDKEY = "coldkey"
 
+BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 
 VALI_CONFIG_PATH = "validator/test_axolotl.yml"
 

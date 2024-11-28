@@ -116,6 +116,7 @@ def generate_validator_config(dev: bool = False) -> Dict[str, Any]:
     s3_compatible_endpoint = input("🎯 Enter s3 compatible endpoint: ")
     s3_compatible_access_key = input("🎯 Enter s3 compatible access key: ")
     s3_compatible_secret_key = input("🎯 Enter s3 compatible secret key: ")
+    s3_bucket_name = input("🎯 Enter your s3 bucket name: ")
 
     frontend_api_key = generate_secure_password(
     ) if not frontend_api_key else frontend_api_key
@@ -135,6 +136,7 @@ def generate_validator_config(dev: bool = False) -> Dict[str, Any]:
         s3_compatible_endpoint=s3_compatible_endpoint,
         s3_compatible_access_key=s3_compatible_access_key,
         s3_compatible_secret_key=s3_compatible_secret_key,
+        s3_bucket_name=s3_bucket_name,
         frontend_api_key=frontend_api_key,
         validator_port=validator_port,
         gpu_server=None,

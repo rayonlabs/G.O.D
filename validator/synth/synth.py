@@ -105,8 +105,7 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
                 else:
                     consecutive_errors += 1
             except json.JSONDecodeError:
-                logger.debug(
-                    f"Error decoding synthetic data point :(  - point: {synthetic_data_point}")
+
                 json_errors += 1
                 consecutive_errors += 1
                 return None
@@ -120,11 +119,12 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
         except Exception as e:
             generic_errors += 1
             consecutive_errors += 1
-            pass
 
         if consecutive_errors >= max_consecutive_errors:
             logger.error(
-                f"Stopping process due to {consecutive_errors} consecutive errors")
+
+                f"Stopping process due to {consecutive_errors} consecutive errors with the synth production")
+
             raise RuntimeError(
                 f"Process stopped after {consecutive_errors} consecutive errors")
 
@@ -139,15 +139,18 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
                 if isinstance(result, RuntimeError):
 
                     logger.error(
-                        "Maximum consecutive errors reached. Stopping process.")
+                        "Maximum consecutive errors reached. Stopping synth dataset process.")
+
                     return None
             valid_results = [
                 r for r in results if r is not None and not isinstance(r, Exception)]
             synthetic_dataset.extend(valid_results)
 
+
         logger.info(
             f"Generated {len(synthetic_dataset)} synthetic data points"
         )
+
 
         return synthetic_dataset
     except RuntimeError:
