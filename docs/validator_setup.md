@@ -70,7 +70,9 @@ Gradients allows anyone in the world to train a model on Bittensor. We communica
 Technically it will work without this connection, but then the subnet is just synthetics. Make sure to allow it!
 
 
-7. IF YOU ARE DEVVING, ADD THIS (key needs to be upgraded)
+
+
+IF YOU ARE DEVVING AND ONLY IF YOU ARE A DEVELOPER, ADD THIS (key needs to be upgraded)
 ```bash
 echo "NINETEEN_API_KEY=<your-nineteen-api-key>" >> .vali.env
 ```
