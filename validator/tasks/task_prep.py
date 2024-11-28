@@ -163,6 +163,7 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
         if synthetic_data
         else None
     )
+    logger.info(f"{train_json_url} {test_json_url} {synth_json_url}")
 
     if not train_json_url:
         raise Exception("Failed to upload training data to MinIO storage")
