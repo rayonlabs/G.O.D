@@ -21,15 +21,19 @@ logger = get_logger(__name__)
 
 
 async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", prefix=prefix)
+    temp_file = tempfile.NamedTemporaryFile(
+        delete=False, suffix=".json", prefix=prefix)
     with open(temp_file.name, "w") as f:
         json.dump(data, f)
     return temp_file.name
 
 
-async def upload_json_to_minio(file_path: str, bucket_name: str, object_name: str) -> str:
-    await async_minio_client.upload_file(bucket_name, object_name, file_path)
-    return await async_minio_client.get_presigned_url(bucket_name, object_name)
+async def upload_json_to_minio(file_path: str, bucket_name: str, object_name: str) -> str | bool:
+    result = await async_minio_client.upload_file(bucket_name, object_name, file_path)
+    if not result:
+        return await async_minio_client.get_presigned_url(bucket_name, object_name)
+    else:
+        return False
 
 
 def train_test_split(dataset_name: str, test_size: float = None) -> DatasetDict:
@@ -38,24 +42,28 @@ def train_test_split(dataset_name: str, test_size: float = None) -> DatasetDict:
     logger.info(f"Loading dataset '{dataset_name}'")
     try:
         config_name = get_default_dataset_config(dataset_name)
-        dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
+        dataset = load_dataset(dataset_name, config_name,
+                               trust_remote_code=True)
     except Exception as e:
         logger.exception(f"Failed to load dataset {dataset_name}: {e}")
         raise e
 
     if isinstance(dataset, DatasetDict):
-        combined_dataset = concatenate_datasets([split for split in dataset.values()])
+        combined_dataset = concatenate_datasets(
+            [split for split in dataset.values()])
     else:
         combined_dataset = dataset
 
     logger.info(f"Combined dataset size: {len(combined_dataset)}")
-    logger.info(f"Splitting combined dataset into train and test with test size {test_size}")
+    logger.info(
+        f"Splitting combined dataset into train and test with test size {test_size}")
 
     test_size = min(
         int(len(combined_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE),
         cst.MAX_SYNTH_DATA_POINTS,
     )
-    split_dataset = combined_dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
+    split_dataset = combined_dataset.train_test_split(
+        test_size=test_size, shuffle=True, seed=42)
     logger.info(f"Train set size: {len(split_dataset['train'])}")
     logger.info(f"Test set size: {len(split_dataset['test'])}")
 
@@ -70,12 +78,15 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
     logger.info(f"Generating {num_samples} additional synthetic data points")
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
 
-    sampled_data = sampled_data.remove_columns([col for col in sampled_data.column_names if col not in columns_to_sample])
+    sampled_data = sampled_data.remove_columns(
+        [col for col in sampled_data.column_names if col not in columns_to_sample])
     # NOTE: Need to do something if errors, without trying to then generate synthetic data
     try:
         sampled_data_list = list(sampled_data)
     except Exception as e:
-        logger.info(f"There is an issue with this sample data for some reason {sampled_data} {e}")
+        return None
+        logger.info(
+            f"There is an issue with this sample data for some reason {sampled_data} {e}")
     synthetic_data = await generate_synthetic_dataset(sampled_data_list, keypair=keypair)
 
     return synthetic_data
@@ -88,12 +99,13 @@ def change_to_json_format(dataset: Dataset, columns: List[str]):
 def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     dataset_length = len(train_dataset)
 
-    synthetic_data = train_dataset.select(range(dataset_length - cst.MAX_SYNTH_DATA_POINTS, dataset_length))
-    train_dataset = train_dataset.select(range(dataset_length - cst.MAX_SYNTH_DATA_POINTS))
+    synthetic_data = train_dataset.select(
+        range(dataset_length - cst.MAX_SYNTH_DATA_POINTS, dataset_length))
+    train_dataset = train_dataset.select(
+        range(dataset_length - cst.MAX_SYNTH_DATA_POINTS))
 
     logger.info(f"Assigning some from tain to synth {synthetic_data}")
     return train_dataset, synthetic_data
-
 
 
 async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair: Keypair) -> tuple[str, str, str]:
@@ -123,16 +135,20 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
     except Exception as e:
         # if for some reason the api is down, we move some of the train over to be synth
 
-        logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
+        logger.info(
+            f"Synthetic dataset gen is down, moving part of the train over: {e}")
 
-        train_dataset, synthetic_data = assign_some_of_the_train_to_synth(train_dataset)
+        train_dataset, synthetic_data = assign_some_of_the_train_to_synth(
+            train_dataset)
 
     if synthetic_data is None:
-        train_dataset, synthetic_data = assign_some_of_the_train_to_synth(train_dataset)
+        train_dataset, synthetic_data = assign_some_of_the_train_to_synth(
+            train_dataset)
 
     train_data_json = change_to_json_format(train_dataset, columns_to_sample)
     test_data_json = change_to_json_format(test_dataset, columns_to_sample)
-    synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample) if synthetic_data else []
+    synthetic_data_json = change_to_json_format(
+        synthetic_data, columns_to_sample) if synthetic_data else []
 
     train_json_path = await save_json_to_temp_file(train_data_json, prefix="train_data_")
     test_json_path = await save_json_to_temp_file(test_data_json, prefix="test_data_")
@@ -145,6 +161,13 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
         if synthetic_data
         else None
     )
+
+    if not train_json_url:
+        raise Exception("Failed to upload training data to MinIO storage")
+    if not test_json_url:
+        raise Exception("Failed to upload test data to MinIO storage")
+    if not synth_json_url and synthetic_data:
+        raise Exception("Failed to upload synthetic data to MinIO storage")
 
     os.remove(test_json_path)
     if synth_json_path:
