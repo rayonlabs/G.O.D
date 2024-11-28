@@ -7,7 +7,7 @@ load_dotenv()
 
 VERSION_KEY = 61_000
 # Default NETUID if not set in environment
-DEFAULT_NETUID = 241
+DEFAULT_NETUID = 56
 
 try:
     NETUID = int(os.getenv("NETUID", DEFAULT_NETUID))
