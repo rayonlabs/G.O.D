@@ -31,7 +31,8 @@ def load_prompts() -> Prompts:
 def load_and_sample_dataset(dataset_name: str, columns_to_sample: List[str]) -> List[dict]:
     try:
         config_name = get_default_dataset_config(dataset_name)
-        dataset = load_dataset(dataset_name, config_name, trust_remote_code=True, streaming=True)
+        dataset = load_dataset(dataset_name, config_name,
+                               trust_remote_code=True, streaming=True)
     except Exception as e:
         logger.exception(f"Failed to load dataset {dataset_name}: {e}")
         raise e
@@ -39,12 +40,14 @@ def load_and_sample_dataset(dataset_name: str, columns_to_sample: List[str]) -> 
     logger.info(f"Loading dataset: {dataset_name}")
     train_dataset = dataset["train"]
 
-    filtered_dataset = train_dataset.remove_columns([col for col in train_dataset.column_names if col not in columns_to_sample])
+    filtered_dataset = train_dataset.remove_columns(
+        [col for col in train_dataset.column_names if col not in columns_to_sample])
 
     num_samples = MAX_SYNTH_DATA_POINTS
     logger.info(f"Taking {num_samples} samples from {dataset_name}")
 
-    sampled_data = filtered_dataset.shuffle(seed=42, buffer_size=1000).take(num_samples)
+    sampled_data = filtered_dataset.shuffle(
+        seed=42, buffer_size=1000).take(num_samples)
 
     sampled_data_list = [sample for sample in sampled_data]
     return sampled_data_list
@@ -52,10 +55,12 @@ def load_and_sample_dataset(dataset_name: str, columns_to_sample: List[str]) -> 
 
 def create_messages_from_row(row: dict, prompts: Prompts) -> List[Message]:
     messages = []
-    system_message = Message(role=Role.SYSTEM, content=prompts.synth_data_creation_sys)
+    system_message = Message(
+        role=Role.SYSTEM, content=prompts.synth_data_creation_sys)
     messages.append(system_message)
     schema = json.dumps({key: value for key, value in row.items()})
-    user_message = Message(role=Role.USER, content=prompts.synth_data_creation_prompt.format(schema=schema))
+    user_message = Message(
+        role=Role.USER, content=prompts.synth_data_creation_prompt.format(schema=schema))
     messages.append(user_message)
     return messages
 
@@ -71,7 +76,6 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
     json_errors = 0
     generic_errors = 0
 
-
     consecutive_errors = 0
     max_consecutive_errors = 3
 
@@ -80,7 +84,6 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
 
         nonlocal json_errors
         nonlocal generic_errors
-
 
         messages = create_messages_from_row(row, prompts)
         payload = {
@@ -95,15 +98,14 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
 
             try:
                 if isinstance(synthetic_data_point, str):
-                    json_synthetic_data_point = json.loads(synthetic_data_point)
+                    json_synthetic_data_point = json.loads(
+                        synthetic_data_point)
                 else:
                     json_synthetic_data_point = synthetic_data_point
             except json.JSONDecodeError:
-                logger.debug(f"Error decoding synthetic data point :(  - point: {synthetic_data_point}")
                 json_errors += 1
                 consecutive_errors += 1
                 return None
-
 
             if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
                 consecutive_errors = 0  # Reset counter on success
@@ -111,37 +113,36 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
             else:
                 consecutive_errors += 1
 
-
         except Exception as e:
-            logger.info(f"Error was {e} in side of Synth dataset gen")
             generic_errors += 1
             consecutive_errors += 1
             pass
 
         if consecutive_errors >= max_consecutive_errors:
-            logger.error(f"Stopping process due to {consecutive_errors} consecutive errors")
-            raise RuntimeError(f"Process stopped after {consecutive_errors} consecutive errors")
-
+            logger.error(
+                f"Stopping process due to {consecutive_errors} consecutive errors with the synth production")
+            raise RuntimeError(
+                f"Process stopped after {consecutive_errors} consecutive errors")
 
         return None
 
     try:
         for i in range(0, len(sampled_data), SYNTH_GEN_BATCH_SIZE):
-            batch = sampled_data[i : i + SYNTH_GEN_BATCH_SIZE]
+            batch = sampled_data[i: i + SYNTH_GEN_BATCH_SIZE]
             tasks = [process_row(row) for row in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for result in results:
                 if isinstance(result, RuntimeError):
 
-                    logger.error("Maximum consecutive errors reached. Stopping process.")
+                    logger.error(
+                        "Maximum consecutive errors reached. Stopping synth dataset process.")
                     return None
-            valid_results = [r for r in results if r is not None and not isinstance(r, Exception)]
+            valid_results = [
+                r for r in results if r is not None and not isinstance(r, Exception)]
             synthetic_dataset.extend(valid_results)
 
         logger.info(
             f"Generated {len(synthetic_dataset)} synthetic data points"
-            f"We had {json_errors} json errors, {generic_errors} generic errors"
-            f" and {consecutive_errors} consecutive errors when generating the synthetic dataset"
         )
 
         return synthetic_dataset
