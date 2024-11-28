@@ -39,3 +39,4 @@ class ValidatorConfig(BaseConfig):
     gpu_server: Optional[str] = None
     localhost: bool = False
     env_file: str = ".vali.env"
+    hf_datasets_trust_remote_code = True

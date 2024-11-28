@@ -29,10 +29,12 @@ class AsyncMinioClient:
         logger.info("Attempting to upload")
         try:
             result = await self.loop.run_in_executor(self.executor, func, *args)
-            logger.info(f"The bucket_name is {bucket_name} and the result was {result}")
+            logger.info(
+                f"The bucket_name is {bucket_name} and the result was {result}")
             return result
         except Exception as e:
             logger.info(f"There was an issue with uploading {e}")
+            return False
 
     async def download_file(self, bucket_name, object_name, file_path):
         func = self.client.fget_object
