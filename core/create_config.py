@@ -70,7 +70,7 @@ def generate_miner_config(dev: bool = False) -> Dict[str, Any]:
         subtensor_network=subtensor_network,
         subtensor_address=subtensor_address,
         refresh_nodes=True,
-        netuid=241 if subtensor_network == "test" else 19,
+        netuid=241 if subtensor_network == "test" else 56,
         env="dev" if dev else "prod",
         min_stake_threshold=input(
             f"Enter MIN_STAKE_THRESHOLD (default: {'0' if subtensor_network == 'test' else '1000'}): ")
@@ -102,7 +102,7 @@ def generate_validator_config(dev: bool = False) -> Dict[str, Any]:
         "💼 Enter wallet name (default: default): ") or "default"
     hotkey_name = input(
         "🔑 Enter hotkey name (default: default): ") or "default"
-    netuid = 241 if subtensor_network == "test" else 64
+    netuid = 241 if subtensor_network.strip() == "test" else 56
     postgres_user = "user"
     postgres_password = generate_secure_password(
     ) if not postgres_password else postgres_password

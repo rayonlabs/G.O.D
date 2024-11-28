@@ -56,7 +56,8 @@ async def process_non_stream_fiber_get(endpoint: str, config: Config, node: Node
         replace_with_docker_localhost=False,
         replace_with_localhost=False,
     )
-    logger.info(f"Attempting to hit a GET {server_address} endpoint {endpoint}")
+    logger.info(
+        f"Attempting to hit a GET {server_address} endpoint {endpoint}")
     try:
         response = await client.make_non_streamed_get(
             httpx_client=config.httpx_client,
@@ -107,7 +108,7 @@ async def process_non_stream_fiber(
 
 
 @retry_with_backoff
-async def post_to_nineteen_ai(payload: dict[str, Any], keypair: Keypair) -> str:
+async def post_to_nineteen_ai(payload: dict[str, Any], keypair: Keypair) -> str | None:
     if NINETEEN_API_KEY is None:
         headers = _get_headers_for_signed_https_request(keypair)
     else:
@@ -127,7 +128,7 @@ async def post_to_nineteen_ai(payload: dict[str, Any], keypair: Keypair) -> str:
         except (KeyError, IndexError) as e:
             logger.error(f"Error in nineteen ai response: {response_json}")
             logger.exception(e)
-            raise
+            return None
 
 
 # If this it to talk to the miner, its already in fiber
@@ -162,7 +163,8 @@ def get_external_ip() -> str:
     """
     # --- Try AWS
     try:
-        external_ip = requests.get("https://checkip.amazonaws.com").text.strip()
+        external_ip = requests.get(
+            "https://checkip.amazonaws.com").text.strip()
         assert isinstance(_ip_to_int(external_ip), int)
         return str(external_ip)
     except Exception:
@@ -200,7 +202,8 @@ def get_external_ip() -> str:
 
     # --- Try urllib ipv6
     try:
-        external_ip = urllib3.request.urlopen("https://ident.me").read().decode("utf8")
+        external_ip = urllib3.request.urlopen(
+            "https://ident.me").read().decode("utf8")
         assert isinstance(_ip_to_int(external_ip), int)
         return str(external_ip)
     except Exception:
@@ -208,7 +211,8 @@ def get_external_ip() -> str:
 
     # --- Try Wikipedia
     try:
-        external_ip = requests.get("https://www.wikipedia.org").headers["X-Client-IP"]
+        external_ip = requests.get(
+            "https://www.wikipedia.org").headers["X-Client-IP"]
         assert isinstance(_ip_to_int(external_ip), int)
         return str(external_ip)
     except Exception:
@@ -245,7 +249,8 @@ async def sign_up_to_gradients(keypair: Keypair):
                 f"Failed to sign up to Gradients API with status code {response.status_code} and response {response.json()}!"
             )
 
-        logger.info(f"Signed up to Gradients API successfully with response {response.json()}!")
+        logger.info(
+            f"Signed up to Gradients API successfully with response {response.json()}!")
         return response.json()
 
 

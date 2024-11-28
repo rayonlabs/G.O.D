@@ -102,7 +102,10 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
                         synthetic_data_point)
                 elif synthetic_data_point is not None:
                     json_synthetic_data_point = synthetic_data_point
+                else:
+                    consecutive_errors += 1
             except json.JSONDecodeError:
+
                 json_errors += 1
                 consecutive_errors += 1
                 return None
@@ -119,7 +122,9 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
 
         if consecutive_errors >= max_consecutive_errors:
             logger.error(
+
                 f"Stopping process due to {consecutive_errors} consecutive errors with the synth production")
+
             raise RuntimeError(
                 f"Process stopped after {consecutive_errors} consecutive errors")
 
@@ -132,12 +137,20 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for result in results:
                 if isinstance(result, RuntimeError):
+
                     logger.error(
                         "Maximum consecutive errors reached. Stopping synth dataset process.")
+
                     return None
             valid_results = [
                 r for r in results if r is not None and not isinstance(r, Exception)]
             synthetic_dataset.extend(valid_results)
+
+
+        logger.info(
+            f"Generated {len(synthetic_dataset)} synthetic data points"
+        )
+
 
         return synthetic_dataset
     except RuntimeError:

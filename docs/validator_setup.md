@@ -24,7 +24,11 @@ source $HOME/.bashrc
 source $HOME/.venv/bin/activate
 ```
 
-2. Create and set up the `.vali.env` file:
+2. Get your key onto the VM:
+
+You know how to do this, don't you ;)
+
+3. Create and set up the `.vali.env` file:
 
 ```bash
 python -m core.create_config
@@ -32,7 +36,7 @@ python -m core.create_config
 
 Make sure the VALIDATOR_PORT is not being used by anything else, and is exposed in your firewall settings.
 
-3. Install the dependencies:
+4. Install the dependencies:
 
 ```bash
 task install
@@ -44,9 +48,7 @@ pip install -e '.[dev]'
 pre-commit install
 ```
 
-4. Get your key onto the VM:
 
-You know how to do this, don't you ;)
 
 
 5. Run the Validator
