@@ -200,6 +200,7 @@ echo_ "checking for task"
 if ! [[ $(which task) ]]; then
   echo_ "task was not found, installing..."
   sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+  export PATH="$HOME/.local/bin:$PATH"
   echo_ "task installed successfully"
 fi
 
