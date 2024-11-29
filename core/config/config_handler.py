@@ -21,7 +21,8 @@ def create_dataset_entry(
     dataset_entry = {"path": dataset}
 
     if file_format == FileFormat.JSON:
-        dataset_entry = {"path": f"/workspace/input_data/{os.path.basename(dataset)}"}
+        dataset_entry = {
+            "path": f"/workspace/input_data/{os.path.basename(dataset)}"}
 
     if isinstance(dataset_type, DatasetType):
         dataset_entry["type"] = dataset_type.value
@@ -47,9 +48,6 @@ def update_model_info(config: dict, model: str, job_id: str = ""):
     tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         config["special_tokens"] = {"pad_token": tokenizer.eos_token}
-
-    if not config.get("hub_repo"):
-        raise ValueError("hub_repo is not set in the config.")
 
     config["base_model"] = model
     config["wandb_runid"] = job_id

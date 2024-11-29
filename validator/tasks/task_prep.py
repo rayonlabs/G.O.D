@@ -30,7 +30,7 @@ async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
 
 async def upload_json_to_minio(file_path: str, bucket_name: str, object_name: str) -> str | bool:
     result = await async_minio_client.upload_file(bucket_name, object_name, file_path)
-    if not result:
+    if result:
         return await async_minio_client.get_presigned_url(bucket_name, object_name)
     else:
         return False
