@@ -95,6 +95,7 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
         try:
 
             synthetic_data_point = await post_to_nineteen_ai(payload, keypair)
+            logger.info(synthetic_data_point)
 
             try:
                 if isinstance(synthetic_data_point, str):
@@ -146,11 +147,9 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
                 r for r in results if r is not None and not isinstance(r, Exception)]
             synthetic_dataset.extend(valid_results)
 
-
         logger.info(
             f"Generated {len(synthetic_dataset)} synthetic data points"
         )
-
 
         return synthetic_dataset
     except RuntimeError:
