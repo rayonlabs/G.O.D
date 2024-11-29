@@ -95,6 +95,7 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
         try:
 
             synthetic_data_point = await post_to_nineteen_ai(payload, keypair)
+            logger.info(synthetic_data_point)
 
             try:
                 if isinstance(synthetic_data_point, str):
