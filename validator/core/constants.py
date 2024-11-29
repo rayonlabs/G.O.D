@@ -22,8 +22,7 @@ START_TRAINING_ENDPOINT = "/start_training/"
 TASK_OFFER_ENDPOINT = "/task_offer/"
 SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 
-
-GET_ALL_DATASETS_ENDPOINT = "https://content.gradients.io/datasets"
+GET_ALL_DATASETS_ENDPOINT = "https://content.gradients.io/datasets?limit=1000"
 GET_ALL_MODELS_ENDPOINT = "https://content.gradients.io/models"
 GET_COLUMNS_FOR_DATASET_ENDPOINT = "https://content.gradients.io/dataset/{dataset}/columns/suggest"
 
