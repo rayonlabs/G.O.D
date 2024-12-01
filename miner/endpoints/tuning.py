@@ -103,7 +103,10 @@ async def task_offer(
         # You will want to optimise this as a miner
         global current_job_finish_time
         current_time = datetime.now()
-
+        if 'llama' not in request.model:
+                return MinerTaskResponse(
+                    message="I'm not yet optimised and only accept llama-type jobs", accepted=False
+                )
         if (
             current_job_finish_time is None
             or current_time + timedelta(hours=1) > current_job_finish_time
