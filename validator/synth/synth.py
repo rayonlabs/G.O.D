@@ -147,9 +147,11 @@ async def generate_synthetic_dataset(sampled_data: List[dict], keypair: Keypair)
                 r for r in results if r is not None and not isinstance(r, Exception)]
             synthetic_dataset.extend(valid_results)
 
+
         logger.info(
             f"Generated {len(synthetic_dataset)} synthetic data points"
         )
+
 
         return synthetic_dataset
     except RuntimeError:

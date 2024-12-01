@@ -22,7 +22,7 @@ START_TRAINING_ENDPOINT = "/start_training/"
 TASK_OFFER_ENDPOINT = "/task_offer/"
 SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 
-
+# will change this to be a random 1000 soon 
 GET_ALL_DATASETS_ENDPOINT = "https://content.gradients.io/datasets?limit=1000"
 GET_ALL_MODELS_ENDPOINT = "https://content.gradients.io/models"
 GET_COLUMNS_FOR_DATASET_ENDPOINT = "https://content.gradients.io/dataset/{dataset}/columns/suggest"
@@ -70,11 +70,6 @@ TARGET_SCORE_RATIO = 1
 MIN_TASK_SCORE = -0.1
 MAX_TASK_SCORE = 1.6
 TASK_SCORE_THRESHOLD = 0.8
-BASE_WEIGHT = 0.00  # smallest weight we assign
-# how much positive weights contribute to the norm scores
-POSITIVE_WEIGHT_PORTION = 0.8
-NEGATIVE_WEIGHT_PORTION = 1 - POSITIVE_WEIGHT_PORTION
-
 
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
