@@ -69,6 +69,11 @@ TARGET_SCORE_RATIO = 1
 MIN_TASK_SCORE = -0.3
 MAX_TASK_SCORE = 1.6
 TASK_SCORE_THRESHOLD = 0.8
+BASE_WEIGHT = 0.00  # smallest weight we assign
+# how much positive weights contribute to the norm scores
+POSITIVE_WEIGHT_PORTION = 0.8
+NEGATIVE_WEIGHT_PORTION = 1 - POSITIVE_WEIGHT_PORTION
+
 
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5

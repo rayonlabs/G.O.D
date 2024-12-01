@@ -46,25 +46,36 @@ def get_task_work_score(task: Task) -> float:
     return max(1, 2 * np.log(float(hours * model_size_value)))
 
 
-def calculate_adjusted_task_score(quality_score: float, task_work_score: float) -> float:
+def calculate_adjusted_task_score(
+    quality_score: float, task_work_score: float
+) -> float:
     """Calculate adjusted task score based on quality score and work score."""
     assert not np.isnan(quality_score), "Quality score cannot be NaN"
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
-    return max(cts.MIN_TASK_SCORE, quality_score - cts.TASK_SCORE_THRESHOLD) * task_work_score
+    return (
+        max(cts.MIN_TASK_SCORE, quality_score - cts.TASK_SCORE_THRESHOLD)
+        * task_work_score
+    )
 
 
 def update_node_aggregation(
-    node_aggregations: dict[str, NodeAggregationResult], node_score: TaskNode, task_work_score: float
+    node_aggregations: dict[str, NodeAggregationResult],
+    node_score: TaskNode,
+    task_work_score: float,
 ) -> None:
     """Update node aggregation results with new scores for a particular task."""
     assert isinstance(node_score.hotkey, str), "hotkey is string"
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
 
     if node_score.hotkey not in node_aggregations:
-        node_aggregations[node_score.hotkey] = NodeAggregationResult(hotkey=node_score.hotkey)
+        node_aggregations[node_score.hotkey] = NodeAggregationResult(
+            hotkey=node_score.hotkey
+        )
 
     node_result = node_aggregations[node_score.hotkey]
-    adjusted_score = calculate_adjusted_task_score(node_score.quality_score, task_work_score)
+    adjusted_score = calculate_adjusted_task_score(
+        node_score.quality_score, task_work_score
+    )
 
     node_result.summed_adjusted_task_scores += adjusted_score
     node_result.task_raw_scores.append(node_score.quality_score)
@@ -78,7 +89,6 @@ def calculate_node_quality_scores(
     assert node_aggregations, "Node aggregations dictionary cannot be empty"
 
     final_scores: list[PeriodScore] = []
-    min_score = float("inf")
 
     for hotkey, node_agg in node_aggregations.items():
         assert node_agg.task_raw_scores, f"No raw scores available for node {hotkey}"
@@ -86,8 +96,6 @@ def calculate_node_quality_scores(
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
         score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
         node_agg.quality_score = score
-        min_score = min(min_score, score)
-
         final_scores.append(
             PeriodScore(
                 hotkey=hotkey,
@@ -97,23 +105,38 @@ def calculate_node_quality_scores(
             )
         )
 
-    return final_scores, min_score
+    return final_scores
 
 
-def normalise_scores(
-    period_scores: list[PeriodScore],
-    min_score: float,
-) -> list[PeriodScore]:
-    """Normalise scores and update node emission values."""
-    assert period_scores, "Period scores list cannot be empty"
+def normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
 
-    shift = abs(min_score) + 1e-10 if min_score < 0 else 0
-    total = sum(node_period_score.quality_score + shift for node_period_score in period_scores)
+    positive_scores = [ps for ps in period_scores if ps.quality_score > 0]
+    negative_scores = [ps for ps in period_scores if ps.quality_score <= 0]
 
-    for node_period_score in period_scores:
-        normalised_score = (node_period_score.quality_score + shift) / total if total > 0 else 1.0 / len(period_scores)
-        node_period_score.normalised_score = normalised_score
-    logger.info(f"Here are the node period scores {period_scores}")
+    if positive_scores:
+        pos_total = sum(ps.quality_score for ps in positive_scores)
+        for ps in positive_scores:
+            ps.normalised_score = (
+                ps.quality_score / pos_total) * cts.POSITIVE_WEIGHT_PORTION
+
+    if negative_scores:
+        worst_score = min(ps.quality_score for ps in negative_scores)
+        for ps in negative_scores:
+            if worst_score == 0:
+                relative_score = 1.0
+            else:
+                relative_score = 1 - (ps.quality_score / worst_score)
+            weight = cts.BASE_WEIGHT + \
+                (relative_score * (cts.NEGATIVE_WEIGHT_PORTION - cts.BASE_WEIGHT)) / \
+                len(negative_scores)
+            ps.normalised_score = weight
+
+    total_weight = sum(
+        ps.normalised_score for ps in period_scores if ps.normalised_score)
+    if total_weight > 0:
+        for ps in period_scores:
+            if ps.normalised_score:
+                ps.normalised_score /= total_weight
     return period_scores
 
 
@@ -133,10 +156,11 @@ async def scoring_aggregation_from_date(psql_db: str) -> list[PeriodScore]:
         logger.info(f"Got work socre {task_work_score}")
         for node_score in task_res.node_scores:
             logger.info(f"Looking at node score {node_score}")
-            update_node_aggregation(node_aggregations, node_score, task_work_score)
+            update_node_aggregation(
+                node_aggregations, node_score, task_work_score)
 
-    final_scores, min_score = calculate_node_quality_scores(node_aggregations)
-    final_scores = normalise_scores(final_scores, min_score)
+    final_scores = calculate_node_quality_scores(node_aggregations)
+    final_scores = normalise_scores(final_scores)
     return final_scores
 
 
@@ -144,7 +168,10 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     """Calculate weighted average of losses with more weight on test loss."""
     assert not np.isnan(test_loss), "Test loss cannot be NaN"
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
-    return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
+    return (
+        cts.TEST_SCORE_WEIGHTING * test_loss
+        + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
+    )
 
 
 def calculate_scaled_score(weighted_loss: float, scale_factor: float) -> float:
@@ -158,20 +185,31 @@ def calculate_scaled_score(weighted_loss: float, scale_factor: float) -> float:
 def compute_adaptive_scale_factor(miner_results: list[MinerResults]) -> float:
     """Compute scale factor based only on finetuned submissions."""
     finetuned_results = [
-        res for res in miner_results if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
+        res
+        for res in miner_results
+        if res.is_finetune
+        and not np.isnan(res.test_loss)
+        and not np.isnan(res.synth_loss)
     ]
 
     if not finetuned_results or len(finetuned_results) == 1:
         logger.info("No finetuned results found for scale factor calculation")
         return 1.0
 
-    weighted_losses = [calculate_weighted_loss(res.test_loss, res.synth_loss) for res in finetuned_results]
+    weighted_losses = [
+        calculate_weighted_loss(res.test_loss, res.synth_loss)
+        for res in finetuned_results
+    ]
 
     min_loss, max_loss = min(weighted_losses), max(weighted_losses)
-    logger.info(f"Loss range for finetuned submissions - min: {min_loss:.4f}, max: {max_loss:.4f}")
+    logger.info(
+        f"Loss range for finetuned submissions - min: {min_loss:.4f}, max: {max_loss:.4f}"
+    )
 
     if min_loss == max_loss:
-        logger.info("All finetuned submissions have identical losses, using default scale factor")
+        logger.info(
+            "All finetuned submissions have identical losses, using default scale factor"
+        )
         return 2.0
 
     scale = float(np.log(cts.TARGET_SCORE_RATIO) / (max_loss - min_loss))
@@ -179,25 +217,33 @@ def compute_adaptive_scale_factor(miner_results: list[MinerResults]) -> float:
     return scale
 
 
-def adjust_miner_scores_to_be_relative_to_other_comps(miner_results: list[MinerResults]) -> list[MinerResults]:
+def adjust_miner_scores_to_be_relative_to_other_comps(
+    miner_results: list[MinerResults],
+) -> list[MinerResults]:
     """Adjusts scores to have geometric mean of 1.0 for finetuned submissions only."""
     valid_scores = [
         res.score
         for res in miner_results
-        if res.is_finetune and res.score is not None and not np.isnan(res.score) and res.score > 0
+        if res.is_finetune
+        and res.score is not None
+        and not np.isnan(res.score)
+        and res.score > 0
     ]
 
     if not valid_scores:
-        logger.warning("No valid finetuned submissions found for score adjustment")
+        logger.warning(
+            "No valid finetuned submissions found for score adjustment")
         return miner_results
 
-    logger.info(f"Adjusting scores for {len(valid_scores)} finetuned submissions")
+    logger.info(
+        f"Adjusting scores for {len(valid_scores)} finetuned submissions")
     logger.info(f"Pre-adjustment scores: {valid_scores}")
 
     geometric_mean = float(gmean(np.array(valid_scores)))
 
     if np.isnan(geometric_mean) or np.isinf(geometric_mean) or geometric_mean <= 0:
-        logger.warning(f"Invalid geometric mean: {geometric_mean}. Scores unchanged.")
+        logger.warning(
+            f"Invalid geometric mean: {geometric_mean}. Scores unchanged.")
         geometric_mean = 1.0
 
     logger.info(f"Geometric mean: {geometric_mean:.4f}")
@@ -205,40 +251,59 @@ def adjust_miner_scores_to_be_relative_to_other_comps(miner_results: list[MinerR
     for res in miner_results:
         if res.is_finetune and res.score is not None and not np.isnan(res.score):
             original_score = res.score
-            res.score = min(float(res.score / geometric_mean), cts.MAX_TASK_SCORE)
-            logger.info(f"Miner {res.hotkey}: {original_score:.4f} -> {res.score:.4f}")
+            res.score = min(float(res.score / geometric_mean),
+                            cts.MAX_TASK_SCORE)
+            logger.info(
+                f"Miner {res.hotkey}: {original_score:.4f} -> {res.score:.4f}")
         else:
             res.score = 0.0
-            logger.info(f"Miner {res.hotkey}: score set to 0.0 (non-finetuned or invalid)")
+            logger.info(
+                f"Miner {res.hotkey}: score set to 0.0 (non-finetuned or invalid)"
+            )
 
     return miner_results
 
 
-def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[MinerResults]:
+def add_raw_scores_to_miner_results(
+    miner_results: list[MinerResults],
+) -> list[MinerResults]:
     """Calculate scores using only finetuned submissions."""
     logger.info("Beginning score calculation...")
 
     for result in miner_results:
         if not result.is_finetune:
             result.score = 0.0
-            logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
+            logger.info(
+                f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
 
     finetuned_results = [
-        res for res in miner_results if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
+        res
+        for res in miner_results
+        if res.is_finetune
+        and not np.isnan(res.test_loss)
+        and not np.isnan(res.synth_loss)
     ]
 
     if not finetuned_results:
-        logger.warning("No valid finetuned submissions found. All scores set to 0.0")
+        logger.warning(
+            "No valid finetuned submissions found. All scores set to 0.0")
         for result in miner_results:
             result.score = 0.0
         return miner_results
 
     scale_factor = compute_adaptive_scale_factor(finetuned_results)
-    logger.info(f"Using scale factor: {scale_factor} (calculated from {len(finetuned_results)} finetuned submissions)")
+    logger.info(
+        f"Using scale factor: {scale_factor} (calculated from {len(finetuned_results)} finetuned submissions)"
+    )
 
     for result in miner_results:
-        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
-            weighted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss)
+        if (
+            result.is_finetune
+            and not np.isnan(result.test_loss)
+            and not np.isnan(result.synth_loss)
+        ):
+            weighted_loss = calculate_weighted_loss(
+                result.test_loss, result.synth_loss)
             result.score = calculate_scaled_score(weighted_loss, scale_factor)
             logger.info(
                 f"Miner {result.hotkey} (finetuned):"
@@ -249,7 +314,9 @@ def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[M
             )
         else:
             result.score = 0.0
-            logger.info(f"Miner {result.hotkey}: score=0.0 (non-finetuned or invalid losses)")
+            logger.info(
+                f"Miner {result.hotkey}: score=0.0 (non-finetuned or invalid losses)"
+            )
 
     return miner_results
 
@@ -266,7 +333,13 @@ def _get_dataset_type(task: Task) -> CustomDatasetType:
 
 
 def _create_failed_miner_result(hotkey: str) -> MinerResults:
-    return MinerResults(hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, submission=None)
+    return MinerResults(
+        hotkey=hotkey,
+        test_loss=np.nan,
+        synth_loss=np.nan,
+        is_finetune=False,
+        submission=None,
+    )
 
 
 async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str | None:
@@ -292,7 +365,9 @@ async def _evaluate_submission(
     assert task.test_data is not None, "Test data shouldn't be none"
     logger.info("Starting synth evaluation")
     synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-    synth_eval_result = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
+    synth_eval_result = await run_evaluation_docker(
+        dataset=synthetic_data_filepath, **evaluation_params
+    )
 
     if not synth_eval_result.is_finetune:
         return (
@@ -301,13 +376,19 @@ async def _evaluate_submission(
         )
 
     test_data_filepath = await download_s3_file(task.test_data)
-    test_eval_result = await run_evaluation_docker(dataset=test_data_filepath, **evaluation_params)
+    test_eval_result = await run_evaluation_docker(
+        dataset=test_data_filepath, **evaluation_params
+    )
 
     return synth_eval_result, test_eval_result
 
 
-async def _process_miner(miner: Node, task: Task, dataset_type: CustomDatasetType, config: Config) -> MinerResults:
-    assert task.task_id is not None, "We should have a task id when processing the miner"
+async def _process_miner(
+    miner: Node, task: Task, dataset_type: CustomDatasetType, config: Config
+) -> MinerResults:
+    assert (
+        task.task_id is not None
+    ), "We should have a task id when processing the miner"
     submission_repo = await _get_submission_repo(miner, str(task.task_id), config)
     logger.info(f"Found repo {submission_repo}")
     if not submission_repo:
@@ -322,7 +403,9 @@ async def _process_miner(miner: Node, task: Task, dataset_type: CustomDatasetTyp
             updated_on=datetime.now(),
         )
 
-        synth_result, test_result = await _evaluate_submission(task, submission_repo, dataset_type)
+        synth_result, test_result = await _evaluate_submission(
+            task, submission_repo, dataset_type
+        )
 
         return MinerResults(
             hotkey=miner.hotkey,
@@ -343,7 +426,10 @@ async def _update_scores(task: Task, task_results: list[MinerResults], psql_db) 
             continue
 
         await set_task_node_quality_score(
-            task_id=task.task_id, hotkey=result.hotkey, quality_score=float(result.score), psql_db=psql_db
+            task_id=task.task_id,
+            hotkey=result.hotkey,
+            quality_score=float(result.score),
+            psql_db=psql_db,
         )
 
         if result.submission:
@@ -364,18 +450,26 @@ async def get_repo_creation_time(repo_name: str) -> datetime:
             logger.debug(f"Fetching creation time from: {url}")
             response = await process_non_stream_get(url, None)
             if response:
-                return datetime.fromisoformat(response["createdAt"].replace("Z", "+00:00"))
+                return datetime.fromisoformat(
+                    response["createdAt"].replace("Z", "+00:00")
+                )
     except Exception as e:
         logger.error(f"Error fetching repo creation time for {repo_name}: {e}")
     return datetime.max
 
 
-def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float], list[tuple[str, str]]]:
+def group_by_losses(
+    task_results: list[MinerResults],
+) -> dict[tuple[float, float], list[tuple[str, str]]]:
     """Group submissions by their loss values."""
     loss_groups: dict[tuple[float, float], list[tuple[str, str]]] = {}
 
     for result in task_results:
-        if result.submission and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
+        if (
+            result.submission
+            and not np.isnan(result.test_loss)
+            and not np.isnan(result.synth_loss)
+        ):
             losses = (float(result.test_loss), float(result.synth_loss))
             if losses not in loss_groups:
                 loss_groups[losses] = []
@@ -384,7 +478,9 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
     return loss_groups
 
 
-async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[str, str, list[tuple[str, str]]]:
+async def get_earliest_submission(
+    submissions: list[tuple[str, str]]
+) -> tuple[str, str, list[tuple[str, str]]]:
     """Determine earliest submission and list of duplicates."""
     timestamps = []
     for hotkey, repo in submissions:
@@ -398,15 +494,21 @@ async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[s
     return earliest_hotkey, earliest_repo, duplicates
 
 
-async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict[str, bool]:
+async def handle_duplicate_submissions(
+    task_results: list[MinerResults],
+) -> dict[str, bool]:
     """Process submissions and identify duplicates."""
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
 
     for losses, submissions in loss_groups.items():
         if len(submissions) > 1:
-            logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
-            earliest_hotkey, earliest_repo, duplicates = await get_earliest_submission(submissions)
+            logger.warning(
+                f"Found {len(submissions)} submissions with identical losses {losses}"
+            )
+            earliest_hotkey, earliest_repo, duplicates = await get_earliest_submission(
+                submissions
+            )
 
             for hotkey, repo in duplicates:
                 keep_submission[hotkey] = False
@@ -419,7 +521,9 @@ async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict
     return keep_submission
 
 
-def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dict[str, bool]) -> list[MinerResults]:
+def zero_duplicate_scores(
+    task_results: list[MinerResults], keep_submission: dict[str, bool]
+) -> list[MinerResults]:
     """Zero out scores for duplicate submissions."""
     for result in task_results:
         if not keep_submission[result.hotkey]:
@@ -438,8 +542,12 @@ async def evaluate_and_score(task: Task, config: Config) -> Task:
     miner_pool = await get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
     dataset_type = _get_dataset_type(task)
 
-    logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
-    task_results = [await _process_miner(miner, task, dataset_type, config) for miner in miner_pool]
+    logger.info(
+        f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners"
+    )
+    task_results = [
+        await _process_miner(miner, task, dataset_type, config) for miner in miner_pool
+    ]
 
     logger.info("Checking for duplicates ...")
     keep_submission = await handle_duplicate_submissions(task_results)
@@ -447,10 +555,12 @@ async def evaluate_and_score(task: Task, config: Config) -> Task:
 
     logger.info("Calculating final scores...")
     task_results = add_raw_scores_to_miner_results(task_results)
-    task_results = adjust_miner_scores_to_be_relative_to_other_comps(task_results)
+    task_results = adjust_miner_scores_to_be_relative_to_other_comps(
+        task_results)
     await _update_scores(task, task_results, config.psql_db)
     # all_scores_zero = all(result.score == 0.0 for result in task_results)
-    all_scores_zero = False  # for now we just let them fail, need to come back to decide whether we wanna restart the job
+    # for now we just let them fail, need to come back to decide whether we wanna restart the job
+    all_scores_zero = False
     if all_scores_zero:
         task.status = TaskStatus.NODE_TRAINING_FAILURE
         logger.info(
@@ -459,5 +569,6 @@ async def evaluate_and_score(task: Task, config: Config) -> Task:
         )
     else:
         task.status = TaskStatus.SUCCESS
-        logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
+        logger.info(
+            f"Task {task.task_id} completed successfully with non-zero scores")
     return task
