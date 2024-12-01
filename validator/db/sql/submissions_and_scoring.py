@@ -196,7 +196,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                             '{cst.QUALITY_SCORE}', tn.{cst.TASK_NODE_QUALITY_SCORE}
                         )
                         ORDER BY tn.{cst.TASK_NODE_QUALITY_SCORE} DESC NULLS LAST
-                    ) FILTER (WHERE tn.{cst.HOTKEY} IS NOT NULL),
+                    ) FILTER (WHERE tn.{cst.HOTKEY} IS NOT NULL AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL),
                     '[]'::json
                 ) as node_scores
             FROM {cst.TASKS_TABLE} t
