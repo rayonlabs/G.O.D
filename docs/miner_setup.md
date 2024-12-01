@@ -89,7 +89,7 @@ fiber-post-ip --netuid 176 --subtensor.network test --external_port 7999 --walle
 NOTE: You will need a wandb token & a huggingface token.
 
 6. Update the wandb & huggingface configuration:
-    - Update your `wandb_entity` in the wandb section of the config to be your wandb username+org_name [here](../core/config/base.yml)
+    - Update your `wandb_entity` in the wandb section of the config to be your wandb username+org_name [here](../core/config/base.yml) - if you are part of a team. 
 
 7. Start the miner service:
 
