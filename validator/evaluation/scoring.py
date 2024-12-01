@@ -99,22 +99,23 @@ def calculate_node_quality_scores(
 
     return final_scores, min_score
 
-
-def normalise_scores(
-    period_scores: list[PeriodScore],
-    min_score: float,
-) -> list[PeriodScore]:
-    """Normalise scores and update node emission values."""
+def normalise_scores(period_scores: list[PeriodScore], min_score: float) -> list[PeriodScore]:
+    """Normalise scores and update node emission values. Now < 0 maps to zero"""
     assert period_scores, "Period scores list cannot be empty"
-    shift = abs(min_score) + 1e-10 if min_score < 0 else 0
-    total = sum(node_period_score.quality_score + shift for node_period_score in period_scores)
-
+    max_score = max(ps.quality_score for ps in period_scores)
+    if max_score <= 0:
+        for node_period_score in period_scores:
+            node_period_score.normalised_score = 0.0
+        return period_scores
+        
     for node_period_score in period_scores:
-        normalised_score = (node_period_score.quality_score + shift) / total if total > 0 else 1.0 / len(period_scores)
-        node_period_score.normalised_score = normalised_score
-    logger.info(f"Here are the node period scores {period_scores}")
-
+        if node_period_score.quality_score <= 0:
+            node_period_score.normalised_score = 0.0
+        else:
+            node_period_score.normalised_score = (node_period_score.quality_score / max_score) ** 1.2
+            
     return period_scores
+
 
 
 async def scoring_aggregation_from_date(psql_db: str) -> list[PeriodScore]:
