@@ -137,6 +137,7 @@ def normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     for ps in period_scores:
         ps.normalised_score /= total
 
+
     return period_scores
 
 

@@ -15,3 +15,6 @@
 
 [Compute Requirements](docs/compute.md)
 
+## Miner Advice
+
+[Miner Advice](docs/miner_advice.md)

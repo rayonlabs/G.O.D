@@ -208,7 +208,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                 SELECT 1
                 FROM {cst.TASK_NODES_TABLE} tn2
                 WHERE tn2.{cst.TASK_ID} = t.{cst.TASK_ID}
-                AND tn2.{cst.TASK_NODE_QUALITY_SCORE} > 0
+                AND tn2.{cst.TASK_NODE_QUALITY_SCORE} >= 0
                 AND tn2.{cst.NETUID} = $2
             )
             GROUP BY t.{cst.TASK_ID}
