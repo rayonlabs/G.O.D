@@ -89,11 +89,10 @@ async def get_additional_synth_data(
     try:
         sampled_data_list = list(sampled_data)
     except Exception as e:
-
-        return None
-
         logger.info(
             f"There is an issue with this sample data for some reason {sampled_data} {e}")
+        return None
+
     synthetic_data = await generate_synthetic_dataset(
         sampled_data_list,
         column_to_reformulate=column_to_reformulate,
