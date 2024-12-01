@@ -70,7 +70,12 @@ def train_test_split(dataset_name: str, test_size: float = None) -> DatasetDict:
     return split_dataset
 
 
-async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[str], keypair: Keypair) -> List[dict]:
+async def get_additional_synth_data(
+    dataset: Dataset,
+    columns_to_sample: List[str],
+    column_to_reformulate: str | None,
+    keypair: Keypair
+) -> List[dict]:
     num_samples = min(
         cst.MAX_SYNTH_DATA_POINTS,
         int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
@@ -89,7 +94,11 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
 
         logger.info(
             f"There is an issue with this sample data for some reason {sampled_data} {e}")
-    synthetic_data = await generate_synthetic_dataset(sampled_data_list, keypair=keypair)
+    synthetic_data = await generate_synthetic_dataset(
+        sampled_data_list,
+        column_to_reformulate=column_to_reformulate,
+        keypair=keypair
+    )
 
     return synthetic_data
 
@@ -110,7 +119,12 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     return train_dataset, synthetic_data
 
 
-async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair: Keypair) -> tuple[str, str, str]:
+async def prepare_task(
+    dataset_name: str,
+    columns_to_sample: List[str],
+    column_to_reformulate: str | None,
+    keypair: Keypair
+) -> tuple[str, str, str]:
 
     logger.info(f"Preparing {dataset_name}")
     dataset_dict = train_test_split(dataset_name)
@@ -122,7 +136,7 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
 
-            synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair=keypair)
+            synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, column_to_reformulate, keypair)
 
             synthetic_dataset = Dataset.from_list(synthetic_data)
             logger.info("First 2 examples from original test dataset:")

@@ -43,8 +43,9 @@ async def _run_task_prep(task: Task, keypair: Keypair) -> Task:
         for i in [task.system, task.instruction, task.input, task.output]
         if i is not None
     ]
+    column_to_reformulate = task.output
     test_data, synth_data, train_data = await prepare_task(
-        dataset_name=task.ds_id, columns_to_sample=columns_to_sample, keypair=keypair
+        dataset_name=task.ds_id, columns_to_sample=columns_to_sample, column_to_reformulate=column_to_reformulate, keypair=keypair
     )
     task.hf_training_repo = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
@@ -172,7 +173,7 @@ async def _let_miners_know_to_start_training(
         task_id=str(task.task_id),
         hours_to_complete=task.hours_to_complete,
     )
-    logger.info(f"We are tellingminers to start training there are  {len(nodes)}")
+    logger.info(f"We are telling miners to start training there are {len(nodes)}")
 
     for node in nodes:
         response = await process_non_stream_fiber(

@@ -76,5 +76,9 @@ class Message(BaseModel):
 
 
 class Prompts(BaseModel):
-    synth_data_creation_sys: str
-    synth_data_creation_prompt: str
+    synth_data_creation_from_distribution_sys: str
+    synth_data_creation_from_distribution_prompt: str
+    output_reformulation_sys: str
+    output_reformulation_prompt: str
+    input_generation_sys: str
+    input_generation_prompt: str
