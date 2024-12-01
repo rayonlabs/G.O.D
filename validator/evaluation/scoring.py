@@ -103,11 +103,6 @@ def normalise_scores(period_scores: list[PeriodScore], min_score: float) -> list
     """Normalise scores and update node emission values. Now < 0 maps to zero"""
     assert period_scores, "Period scores list cannot be empty"
     max_score = max(ps.quality_score for ps in period_scores)
-    if max_score <= 0:
-        for node_period_score in period_scores:
-            node_period_score.normalised_score = 0.0
-        return period_scores
-        
     for node_period_score in period_scores:
         if node_period_score.quality_score <= 0:
             node_period_score.normalised_score = 0.0
