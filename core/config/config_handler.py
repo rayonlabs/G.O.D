@@ -49,6 +49,11 @@ def update_model_info(config: dict, model: str, job_id: str = ""):
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         config["special_tokens"] = {"pad_token": tokenizer.eos_token}
 
+    if "llama" in model.lower() or "gemma" in model.lower() or "mistral" in model.lower() or "jamba" in model.lower():
+        config["flash_attention"] = True
+    else:
+        config["flash_attention"] = False
+
     config["base_model"] = model
     config["wandb_runid"] = job_id
     config["wandb_name"] = job_id
