@@ -109,7 +109,6 @@ def calculate_node_quality_scores(
 
 
 def normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
-
     positive_scores = [ps for ps in period_scores if ps.quality_score > 0]
     negative_scores = [ps for ps in period_scores if ps.quality_score <= 0]
 
@@ -121,22 +120,23 @@ def normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
 
     if negative_scores:
         worst_score = min(ps.quality_score for ps in negative_scores)
-        for ps in negative_scores:
-            if worst_score == 0:
-                relative_score = 1.0
-            else:
-                relative_score = 1 - (ps.quality_score / worst_score)
-            weight = cts.BASE_WEIGHT + \
-                (relative_score * (cts.NEGATIVE_WEIGHT_PORTION - cts.BASE_WEIGHT)) / \
-                len(negative_scores)
-            ps.normalised_score = weight
+        negative_total = 0
 
-    total_weight = sum(
-        ps.normalised_score for ps in period_scores if ps.normalised_score)
-    if total_weight > 0:
-        for ps in period_scores:
-            if ps.normalised_score:
-                ps.normalised_score /= total_weight
+        for ps in negative_scores:
+            score_diff = ps.quality_score - worst_score
+            ps.normalised_score = cts.BASE_WEIGHT + \
+                (score_diff / abs(worst_score)) * \
+                (cts.NEGATIVE_WEIGHT_PORTION / len(negative_scores))
+            negative_total += ps.normalised_score
+
+        for ps in negative_scores:
+            ps.normalised_score = ps.normalised_score * \
+                (cts.NEGATIVE_WEIGHT_PORTION / negative_total)
+
+    total = sum(ps.normalised_score for ps in period_scores)
+    for ps in period_scores:
+        ps.normalised_score /= total
+
     return period_scores
 
 
