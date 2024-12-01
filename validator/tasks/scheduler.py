@@ -26,7 +26,15 @@ async def _get_a_model() -> AsyncGenerator[str, None]:
         raise TypeError(
             "Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
     models: list[dict[str, Any]] = response
-    model_ids = [model.get(csts.GET_ALL_MODELS_ID, "") for model in models]
+    TEMP_MODEL_FAMILIES_ACCEPTED = ['llama', 'falcon', 'mistral', 'gemma', 'gemini',  'phi']
+    model_ids = [
+        model.get(csts.GET_ALL_MODELS_ID, "")
+        for model in models 
+        if any(
+            family in model.get(csts.GET_ALL_MODELS_ID, "").lower() 
+            for family in TEMP_MODEL_FAMILIES_ACCEPTED
+        )
+    ]
     random.shuffle(model_ids)
     for model_id in model_ids:
         yield model_id
