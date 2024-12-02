@@ -1,6 +1,19 @@
 import os
 import shutil
 import glob
+import tempfile 
+
+def cleanup_temp_files():
+    temp_dir = tempfile.gettempdir()
+    for filename in os.listdir(temp_dir):
+        if filename.endswith('.json') and (
+            any(prefix in filename for prefix in ['train_data_', 'test_data_', 'synth_data_']) or
+            any(suffix in filename for suffix in ['_test_data.json', '_train_data.json', '_synth_data.json'])
+        ):
+            try:
+                os.remove(os.path.join(temp_dir, filename))
+            except OSError:
+                pass
 
 def delete_dataset_from_cache(dataset_name):
     """
@@ -12,6 +25,7 @@ def delete_dataset_from_cache(dataset_name):
     lock_pattern = os.path.join(cache_dir, f"*cache_huggingface_datasets_{dataset_name}*.lock")
     
     deleted = False
+    cleanup_temp_files()
     
     if os.path.exists(dataset_path):
         try:
