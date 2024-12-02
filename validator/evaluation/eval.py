@@ -35,7 +35,7 @@ def _load_and_update_evaluation_config(
     with open(config_path, "r") as file:
         config_dict = yaml.safe_load(file)
 
-    dataset_entry = create_dataset_entry( # TODO: double-check works outta the box
+    dataset_entry = create_dataset_entry(
         dataset=dataset_name,
         dataset_type=dataset_type,
         file_format=file_format,

@@ -1,4 +1,4 @@
-synth_data_creation_sys: >
+in_context_learning_generation_sys: >
   You are an expert in creating synthetic data for testing and training.
   You will be given a few examples of a datasets and a schema for that dataset.
   You will create a single, valid data point that adheres to the schema.
@@ -41,8 +41,42 @@ synth_data_creation_sys: >
   {"question": "Generate an approximately twenty-word sentence that describes all this data: The Crimson Oak eatType pub; The Crimson Oak food American; The Crimson Oak priceRange cheap; The Crimson Oak customer rating 4 out of 5; The Crimson Oak near Riverside Park",
   "answer": "The Crimson Oak is a cheap American pub near Riverside Park with a 4 out of 5 customer rating."}
 
-synth_data_creation_prompt: >
+in_context_learning_generation_user: >
   Create a single, valid data point that adheres to the schema provided.
   Schema:
   {schema}
   Data Point:
+
+output_field_reformulation_sys: >
+  You are an expert in analyzing and reformulating data. You will receive a data sample
+  and need to reformulate the specified field while maintaining semantic equivalence.
+  You will also analyze the overall topic and nature of the data sample and provide a brief description (1 sentence).
+  You will return only the requested json, with no other text or whitespace.
+
+output_field_reformulation_user: >
+  Given this data sample:
+  {data}
+
+  1. Reformulate the {output_field} field while maintaining its meaning
+  2. Provide a brief description of what this overall data sample is about
+
+  Return your response in JSON format:
+  {{"reformulated_output": "your reformulation", "description": "your topic description"}}
+
+input_field_generation_sys: >
+  You are an expert in generating synthetic data. You will receive:
+  - A field already fixed
+  - A schema to strictly adhere to for the generated data point in JSON format
+  - A description of the topic and nature of the data sample to populate
+  You will generate matching remaining fields of the schema that are semantically consistent with the given field.
+  You will create a single, valid data point that adheres to the schema, which should include
+  the fixed field with its corresponding fixed value unchanged.
+  You will return only the requested json, with no other text or whitespace.
+
+input_field_generation_user: >
+  Generate remaining fields for the following schema: {schema}
+  The {output_field} field is fixed to: {output}
+  Description of the data sample to populate: {description}
+
+  Generate the remaining fields, ensuring they are consistent with the given {output_field} field and the overall description.
+  Return your response in JSON format with the {output_field} field included.

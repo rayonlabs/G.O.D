@@ -172,7 +172,7 @@ async def _let_miners_know_to_start_training(
         task_id=str(task.task_id),
         hours_to_complete=task.hours_to_complete,
     )
-    logger.info(f"We are tellingminers to start training there are  {len(nodes)}")
+    logger.info(f"We are telling miners to start training there are {len(nodes)}")
 
     for node in nodes:
         response = await process_non_stream_fiber(

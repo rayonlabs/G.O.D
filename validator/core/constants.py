@@ -45,16 +45,18 @@ MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
 # synth stuff
-SYNTH_GEN_BATCH_SIZE = 2
+SYNTH_GEN_BATCH_SIZE = 10
 SYNTH_MODEL_TEMPERATURE = 0.4
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 GPU_SERVER = os.getenv("GPU_SERVER")
 
-SYNTH_MODEL = "chat-llama-3-1-70b"
+SYNTH_MODEL = "chat-llama-3-2-3b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
+# Probability for using output reformulation method
+OUTPUT_REFORMULATION_PROBABILITY = 0.5
 
 # Task Stuff
 MINIMUM_MINER_POOL = 1
