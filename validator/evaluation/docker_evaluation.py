@@ -105,4 +105,8 @@ async def run_evaluation_docker(
         logger.error(f"Failed to retrieve evaluation results: {str(e)}")
         raise Exception(f"Failed to retrieve evaluation results: {str(e)}")
     finally:
+        try:
+            container.remove(force=True)
+        except:
+            pass
         client.close()
