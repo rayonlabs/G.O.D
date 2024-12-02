@@ -56,19 +56,19 @@ def load_and_sample_dataset(dataset_name: str, columns_to_sample: List[str]) -> 
 
 def create_messages_for_distribution_replication(row: dict, prompts: Prompts) -> List[Message]:
     messages = []
-    system_message = Message(role=Role.SYSTEM, content=prompts.synth_data_creation_from_distribution_sys)
+    system_message = Message(role=Role.SYSTEM, content=prompts.in_context_learning_generation_sys)
     messages.append(system_message)
     schema = json.dumps({key: value for key, value in row.items()})
-    user_message = Message(role=Role.USER, content=prompts.synth_data_creation_from_distribution_prompt.format(schema=schema))
+    user_message = Message(role=Role.USER, content=prompts.in_context_learning_generation_user.format(schema=schema))
     messages.append(user_message)
     return messages
 
 
 def create_messages_for_output_reformulation(row: dict, output_field: str, prompts: Prompts) -> List[Message]:
     messages = []
-    system_message = Message(role=Role.SYSTEM, content=prompts.output_reformulation_sys)
+    system_message = Message(role=Role.SYSTEM, content=prompts.output_field_reformulation_sys)
     messages.append(system_message)
-    user_message = Message(role=Role.USER, content=prompts.output_reformulation_prompt.format(
+    user_message = Message(role=Role.USER, content=prompts.output_field_reformulation_user.format(
         data=json.dumps(row),
         output_field=output_field
     ))
@@ -84,9 +84,9 @@ def create_messages_for_input_generation(
     prompts: Prompts
 ) -> List[Message]:
     messages = []
-    system_message = Message(role=Role.SYSTEM, content=prompts.input_generation_sys)
+    system_message = Message(role=Role.SYSTEM, content=prompts.input_field_generation_sys)
     messages.append(system_message)
-    user_message = Message(role=Role.USER, content=prompts.input_generation_prompt.format(
+    user_message = Message(role=Role.USER, content=prompts.input_field_generation_user.format(
         schema=json.dumps(schema),
         output_field=output_field,
         output=reformulated_output,
