@@ -43,9 +43,8 @@ async def _run_task_prep(task: Task, keypair: Keypair) -> Task:
         for i in [task.system, task.instruction, task.input, task.output]
         if i is not None
     ]
-    column_to_reformulate = task.output
     test_data, synth_data, train_data = await prepare_task(
-        dataset_name=task.ds_id, columns_to_sample=columns_to_sample, column_to_reformulate=column_to_reformulate, keypair=keypair
+        dataset_name=task.ds_id, columns_to_sample=columns_to_sample, keypair=keypair
     )
     task.hf_training_repo = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES

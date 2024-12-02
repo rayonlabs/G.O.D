@@ -73,7 +73,6 @@ def train_test_split(dataset_name: str, test_size: float = None) -> DatasetDict:
 async def get_additional_synth_data(
     dataset: Dataset,
     columns_to_sample: List[str],
-    column_to_reformulate: str | None,
     keypair: Keypair
 ) -> List[dict]:
     num_samples = min(
@@ -85,6 +84,7 @@ async def get_additional_synth_data(
 
     sampled_data = sampled_data.remove_columns(
         [col for col in sampled_data.column_names if col not in columns_to_sample])
+    column_to_reformulate = columns_to_sample[-1] if len(columns_to_sample) > 1 else None  # output column
     # NOTE: Need to do something if errors, without trying to then generate synthetic data
     try:
         sampled_data_list = list(sampled_data)
@@ -121,7 +121,6 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
 async def prepare_task(
     dataset_name: str,
     columns_to_sample: List[str],
-    column_to_reformulate: str | None,
     keypair: Keypair
 ) -> tuple[str, str, str]:
 
@@ -135,7 +134,7 @@ async def prepare_task(
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
 
-            synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, column_to_reformulate, keypair)
+            synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair)
 
             synthetic_dataset = Dataset.from_list(synthetic_data)
             logger.info("First 2 examples from original test dataset:")
