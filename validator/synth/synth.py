@@ -100,15 +100,23 @@ def check_the_synthetic_data(synthetic_data_point: dict, original_data_columns: 
     return set(synthetic_data_point.keys()) == set(original_data_columns)
 
 
-async def generate_from_distribution(row: dict, prompts: Prompts, keypair: Keypair) -> str:
-    messages = create_messages_for_distribution_replication(row, prompts)
-    payload = {
+def convert_to_nineteen_payload(
+    messages: List[Message],
+    model: str = SYNTH_MODEL,
+    temperature: float = SYNTH_MODEL_TEMPERATURE,
+    stream: bool = False
+) -> dict:
+    return {
         "messages": [message.model_dump() for message in messages],
-        "model": SYNTH_MODEL,
-        "temperature": SYNTH_MODEL_TEMPERATURE,
-        "stream": False,
+        "model": model,
+        "temperature": temperature,
+        "stream": stream,
     }
 
+
+async def generate_from_distribution(row: dict, prompts: Prompts, keypair: Keypair) -> str:
+    messages = create_messages_for_distribution_replication(row, prompts)
+    payload = convert_to_nineteen_payload(messages)
     synthetic_data_point = await post_to_nineteen_ai(payload, keypair)
     json_synthetic_data_point = (
         json.loads(synthetic_data_point) if isinstance(synthetic_data_point, str)
@@ -119,13 +127,7 @@ async def generate_from_distribution(row: dict, prompts: Prompts, keypair: Keypa
 async def generate_from_output(row: dict, output_field: str, prompts: Prompts, keypair: Keypair) -> str:
     # Step 1: Reformulate output and get description
     messages = create_messages_for_output_reformulation(row, output_field, prompts)
-    payload = {
-        "messages": [message.model_dump() for message in messages],
-        "model": SYNTH_MODEL,
-        "temperature": SYNTH_MODEL_TEMPERATURE,
-        "stream": False,
-    }
-
+    payload = convert_to_nineteen_payload(messages)
     result = await post_to_nineteen_ai(payload, keypair)
     result_dict = json.loads(result) if isinstance(result, str) else result
     reformulated_output = result_dict["reformulated_output"]
@@ -134,12 +136,7 @@ async def generate_from_output(row: dict, output_field: str, prompts: Prompts, k
     # Step 2: Generate inputs based on reformulated output
     schema = {k: type(v).__name__ for k, v in row.items()}
     messages = create_messages_for_input_generation(reformulated_output, description, output_field, schema, prompts)
-    payload = {
-        "messages": [message.model_dump() for message in messages],
-        "model": SYNTH_MODEL,
-        "temperature": SYNTH_MODEL_TEMPERATURE,
-        "stream": False,
-    }
+    payload = convert_to_nineteen_payload(messages)
     result = await post_to_nineteen_ai(payload, keypair)
     generated_inputs = json.loads(result) if isinstance(result, str) else result
     generated_inputs[output_field] = reformulated_output # Double check the output is unchanged
