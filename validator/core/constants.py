@@ -55,6 +55,8 @@ PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
+# Probability for using output reformulation method
+OUTPUT_REFORMULATION_PROBABILITY = 0.5
 
 # Task Stuff
 MINIMUM_MINER_POOL = 1
@@ -67,7 +69,7 @@ MAX_COMPETITION_HOURS = 5
 SOFTMAX_TEMPERATURE = 0.5
 TEST_SCORE_WEIGHTING = 0.8  # synth will be (1 - this)
 TARGET_SCORE_RATIO = 1
-MIN_TASK_SCORE = -0.001 
+MIN_TASK_SCORE = -0.001
 MAX_TASK_SCORE = 1.6
 TASK_SCORE_THRESHOLD = 0.8
 

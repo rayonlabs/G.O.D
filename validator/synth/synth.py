@@ -12,6 +12,7 @@ from core.models.utility_models import Message
 from core.models.utility_models import Prompts
 from core.models.utility_models import Role
 from validator.core.constants import MAX_SYNTH_DATA_POINTS
+from validator.core.constants import OUTPUT_REFORMULATION_PROBABILITY
 from validator.core.constants import PROMPT_PATH
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
 from validator.core.constants import SYNTH_MODEL
@@ -154,10 +155,10 @@ async def generate_synthetic_dataset(sampled_data: List[dict], column_to_reformu
     max_consecutive_errors = 3
 
     async def process_row(row, column_to_reformulate):
-        # When column_to_reformulate is provided, randomly choose between methods
-        use_output_method = random.choice([True, False]) if column_to_reformulate else False
+        # Use probability constant for deciding the method
+        use_output_reformulation_method = random.random() < OUTPUT_REFORMULATION_PROBABILITY if column_to_reformulate else False
 
-        if use_output_method and column_to_reformulate:
+        if use_output_reformulation_method:
             json_synthetic_data_point = await generate_from_output(row, column_to_reformulate, prompts, keypair)
         else:
             json_synthetic_data_point = await generate_from_distribution(row, prompts, keypair)
