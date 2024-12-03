@@ -162,7 +162,7 @@ async def generate_synthetic_dataset(sampled_data: List[dict], column_to_reformu
             json_synthetic_data_point = await generate_from_output(row, column_to_reformulate, prompts, keypair)
         else:
             json_synthetic_data_point = await generate_from_distribution(row, prompts, keypair)
-
+        logger.info(json_synthetic_data_point)
         if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
             return json_synthetic_data_point
         else:
