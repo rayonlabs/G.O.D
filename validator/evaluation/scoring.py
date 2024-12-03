@@ -334,7 +334,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
         try:
             logger.info(
                 f"files = {file_paths} and bucket is {cts.BUCKET_NAME}")
-            assert cts.BUCKET_NAME is not None 'bucket name needs setting to delete'
+          #  assert cts.BUCKET_NAME is not None 'bucket name needs setting to delete'
             object_name = file_path.split(cts.BUCKET_NAME + "/")[-1]
             logger.info(
                 f"Deleting file {object_name} from MinIO bucket {cts.BUCKET_NAME}")
