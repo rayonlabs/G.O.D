@@ -127,7 +127,7 @@ def normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
 
 async def scoring_aggregation_from_date(psql_db: str) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
-    date = datetime.now() - timedelta(days=2)
+    date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
     task_results: list[TaskResults] = await get_aggregate_scores_since(date, psql_db)
     logger.info(f"Got task results {task_results}")
     if not task_results:
