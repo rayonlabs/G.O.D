@@ -332,6 +332,8 @@ async def _evaluate_submission(
 async def _clear_up_s3(file_paths: list[str]) -> None:
     for file_path in file_paths:
         try:
+            logger.info(
+                f"files = {file_paths} and bucket is {cts.BUCKET_NAME}")
             assert cts.BUCKET_NAME is not None 'bucket name needs setting to delete'
             object_name = file_path.split(cts.BUCKET_NAME + "/")[-1]
             logger.info(
@@ -498,8 +500,9 @@ async def evaluate_and_score(task: Task, config: Config) -> Task:
         )
     else:
         if cts.DELETE_S3_AFTER_COMPLETE:
-            _clear_up_s3(task.training_data,
-                         task.test_data, task.synthetic_data)
+
+            await _clear_up_s3(
+                [task.training_data, task.test_data, task.synthetic_data])
         task.status = TaskStatus.SUCCESS
         logger.info(
             f"Task {task.task_id} completed successfully with non-zero scores")

@@ -13,6 +13,7 @@ API_KEY = "api_key"
 COLDKEY = "coldkey"
 
 BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+DELETE_S3_AFTER_COMPLETE = True
 
 VALI_CONFIG_PATH = "validator/test_axolotl.yml"
 
