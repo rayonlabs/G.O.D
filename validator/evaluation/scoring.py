@@ -497,7 +497,7 @@ async def evaluate_and_score(task: Task, config: Config) -> Task:
             "we are going to try again."
         )
     else:
-        if cts.DELETE_AFTER_COMPLETE:
+        if cts.DELETE_S3_AFTER_COMPLETE:
             _clear_up_s3(task.training_data,
                          task.test_data, task.synthetic_data)
         task.status = TaskStatus.SUCCESS
