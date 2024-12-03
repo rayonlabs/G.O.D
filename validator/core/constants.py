@@ -12,7 +12,7 @@ REDIS_KEY_COLDKEY_STAKE = "coldkey_stake"
 API_KEY = "api_key"
 COLDKEY = "coldkey"
 
-BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 
 VALI_CONFIG_PATH = "validator/test_axolotl.yml"
 
@@ -22,9 +22,10 @@ START_TRAINING_ENDPOINT = "/start_training/"
 TASK_OFFER_ENDPOINT = "/task_offer/"
 SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 
-GET_RANDOM_DATASETS_ENDPOINT = "https://dataset-model-checker-1.onrender.com/datasets/random"
-GET_RANDOM_MODELS_ENDPOINT = "https://dataset-model-checker-1.onrender.com/models/random"
-GET_COLUMNS_FOR_DATASET_ENDPOINT = "https://dataset-model-checker-1.onrender.com/dataset/{dataset}/columns/suggest"
+
+GET_ALL_DATASETS_ENDPOINT = "https://content.gradients.io/datasets/random"
+GET_ALL_MODELS_ENDPOINT = "https://content.gradients.io/models/random"
+GET_COLUMNS_FOR_DATASET_ENDPOINT = "https://content.gradients.io/dataset/{dataset}/columns/suggest"
 
 
 GET_ALL_DATASETS_ID = "dataset_id"
@@ -44,18 +45,16 @@ MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
 # synth stuff
-SYNTH_GEN_BATCH_SIZE = 10
+SYNTH_GEN_BATCH_SIZE = 2
 SYNTH_MODEL_TEMPERATURE = 0.4
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 GPU_SERVER = os.getenv("GPU_SERVER")
 
-SYNTH_MODEL = "chat-llama-3-2-3b"
+SYNTH_MODEL = "chat-llama-3-1-70b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
-# Probability for using output reformulation method
-OUTPUT_REFORMULATION_PROBABILITY = 0.5
 
 # Task Stuff
 MINIMUM_MINER_POOL = 1
