@@ -22,8 +22,8 @@ START_TRAINING_ENDPOINT = "/start_training/"
 TASK_OFFER_ENDPOINT = "/task_offer/"
 SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 
-GET_ALL_DATASETS_ENDPOINT = "https://dataset-model-checker-1.onrender.com/datasets"
-GET_ALL_MODELS_ENDPOINT = "https://dataset-model-checker-1.onrender.com/models"
+GET_RANDOM_DATASETS_ENDPOINT = "https://dataset-model-checker-1.onrender.com/datasets/random"
+GET_RANDOM_MODELS_ENDPOINT = "https://dataset-model-checker-1.onrender.com/models/random"
 GET_COLUMNS_FOR_DATASET_ENDPOINT = "https://dataset-model-checker-1.onrender.com/dataset/{dataset}/columns/suggest"
 
 

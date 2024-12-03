@@ -22,7 +22,7 @@ logger = get_logger(name="task synth")
 
 
 async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:
-    response = await call_content_service(csts.GET_ALL_MODELS_ENDPOINT, keypair)
+    response = await call_content_service(csts.GET_RANDOM_MODELS_ENDPOINT, keypair)
     if not isinstance(response, list):
         raise TypeError("Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
     models: list[dict[str, Any]] = response
@@ -38,7 +38,7 @@ async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:
 
 
 async def _get_datasets(keypair: Keypair) -> AsyncGenerator[str, None]:
-    response = await call_content_service(csts.GET_ALL_DATASETS_ENDPOINT, keypair)
+    response = await call_content_service(csts.GET_RANDOM_DATASETS_ENDPOINT, keypair)
     if not isinstance(response, list):
         raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
     datasets: list[dict[str, Any]] = response
