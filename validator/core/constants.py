@@ -31,7 +31,6 @@ GET_COLUMNS_FOR_DATASET_ENDPOINT = "https://content.gradients.io/dataset/{datase
 GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
 
-
 # task stuff
 HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME = 6
 NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 30

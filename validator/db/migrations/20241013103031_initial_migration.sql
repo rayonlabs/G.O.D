@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     status TEXT NOT NULL,
     test_data TEXT,
     synthetic_data TEXT,
-    hf_training_repo TEXT,
+    training_data TEXT,
     format TEXT,
     no_input_format TEXT,
     miner_scores FLOAT[],
