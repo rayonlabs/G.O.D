@@ -33,7 +33,7 @@ GET_ALL_MODELS_ID = "model_id"
 
 # task stuff
 
-HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME = 10
+HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME = 6
 NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 60
 
 
@@ -71,8 +71,8 @@ TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 TARGET_SCORE_RATIO = 1
 MIN_TASK_SCORE = -0.001
 MAX_TASK_SCORE = 1.6
-TASK_SCORE_THRESHOLD = 0.85
-REWEIGHTING_EXP = 1.2 # how much of a drop off from leader 
+TASK_SCORE_THRESHOLD = 0.9
+REWEIGHTING_EXP = 1.1 # how much of a drop off from leader 
 SCORING_WINDOW = 3  # number of days over which we score
 
 # processing stuff
