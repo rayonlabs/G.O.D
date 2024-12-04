@@ -68,12 +68,12 @@ MAX_COMPETITION_HOURS = 5
 
 # scoring stuff
 SOFTMAX_TEMPERATURE = 0.5
-TEST_SCORE_WEIGHTING = 0.8  # synth will be (1 - this)
+TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 TARGET_SCORE_RATIO = 1
 MIN_TASK_SCORE = -0.001
 MAX_TASK_SCORE = 1.6
-TASK_SCORE_THRESHOLD = 0.8
-REWEIGHTING_EXP = 1.1 # how much of a drop off from leader 
+TASK_SCORE_THRESHOLD = 0.85
+REWEIGHTING_EXP = 1.2 # how much of a drop off from leader 
 SCORING_WINDOW = 3  # number of days over which we score
 
 # processing stuff
