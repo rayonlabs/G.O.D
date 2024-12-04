@@ -219,7 +219,8 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
         results = []
         for row in rows:
             row_dict = dict(row)
-            task_dict = {k: v for k, v in row_dict.items() if k != "node_scores"}
+            task_dict = {k: v for k, v in row_dict.items() if k !=
+                         "node_scores"}
             task = Task(**task_dict)
 
             node_scores_data = row_dict["node_scores"]
@@ -230,7 +231,8 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                 TaskNode(
                     task_id=str(node[cst.TASK_ID]),
                     hotkey=node[cst.HOTKEY],
-                    quality_score=float(node[cst.QUALITY_SCORE]) if node[cst.QUALITY_SCORE] is not None else None,
+                    quality_score=float(
+                        node[cst.QUALITY_SCORE]) if node[cst.QUALITY_SCORE] is not None else None,
                 )
                 for node in node_scores_data
             ]
@@ -247,7 +249,11 @@ async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) 
             SELECT
                 COALESCE(AVG(tn.{cst.QUALITY_SCORE}), 0) as avg_quality_score,
                 COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as success_rate,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.8 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.8 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate,
+                COALESCE(COUNT(*), 0) as total_count,
+                COALESCE(SUM(tn.{cst.QUALITY_SCORE}), 0) as total_score,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END), 0) as total_success,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.8 THEN 1 END), 0) as total_quality
             FROM {cst.TASK_NODES_TABLE} tn
             JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
             WHERE tn.{cst.HOTKEY} = $1
@@ -332,8 +338,8 @@ async def get_node_model_metrics(hotkey: str, interval: str, psql_db: PSQLDB) ->
                 ORDER BY model_count DESC
                 LIMIT 1
             ), 'none') as modal_model,
-            COUNT(DISTINCT t.{cst.MODEL_ID}) as unique_models,
-            COUNT(DISTINCT t.{cst.DS_ID}) as unique_datasets
+            COUNT(DISTINCT CASE WHEN tn.{cst.QUALITY_SCORE} IS NOT NULL THEN t.{cst.MODEL_ID} END) as unique_models,
+            COUNT(DISTINCT CASE WHEN tn.{cst.QUALITY_SCORE} IS NOT NULL THEN t.{cst.DS_ID} END) as unique_datasets
         FROM {cst.TASK_NODES_TABLE} tn
         JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
         WHERE tn.{cst.HOTKEY} = $1

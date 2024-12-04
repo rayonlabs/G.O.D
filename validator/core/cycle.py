@@ -46,7 +46,7 @@ async def _run_task_prep(task: Task, keypair: Keypair) -> Task:
     test_data, synth_data, train_data = await prepare_task(
         dataset_name=task.ds_id, columns_to_sample=columns_to_sample, keypair=keypair
     )
-    task.hf_training_repo = train_data
+    task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
     task.synthetic_data = synth_data
     task.test_data = test_data
@@ -95,7 +95,8 @@ async def _select_miner_pool_and_add_to_task(
         task.task_id, config.psql_db
     )
 
-    already_assigned_hotkeys = [miner.hotkey for miner in miners_already_assigned]
+    already_assigned_hotkeys = [
+        miner.hotkey for miner in miners_already_assigned]
     logger.info(
         f"There are {len(already_assigned_hotkeys)} miners already assigned to this task"
     )
@@ -124,7 +125,8 @@ async def _select_miner_pool_and_add_to_task(
         # try:
         # TODO: Batch the boi
         if i > 0 and i % 5 == 0:
-            logger.info(f"We have made {i} offers so far for task {task.task_id}")
+            logger.info(
+                f"We have made {i} offers so far for task {task.task_id}")
         offer_response = await _make_offer(node, task_request, config)
 
         if offer_response.accepted is True:
@@ -163,7 +165,7 @@ async def _let_miners_know_to_start_training(
         no_input_format=task.no_input_format,
     )
 
-    dataset = task.hf_training_repo if task.hf_training_repo else "dataset error"
+    dataset = task.training_data if task.training_data else "dataset error"
     task_request_body = TrainRequest(
         dataset=dataset,
         model=task.model_id,
@@ -172,6 +174,7 @@ async def _let_miners_know_to_start_training(
         task_id=str(task.task_id),
         hours_to_complete=task.hours_to_complete,
     )
+
     logger.info(f"We are telling miners to start training there are {len(nodes)}")
 
     for node in nodes:
@@ -185,7 +188,8 @@ async def assign_miners(task: Task, config: Config):
     try:
         nodes = await nodes_sql.get_all_nodes(config.psql_db)
         task = await _select_miner_pool_and_add_to_task(task, nodes, config)
-        logger.info(f"After assigning miners here is the current task info {task}")
+        logger.info(
+            f"After assigning miners here is the current task info {task}")
         await tasks_sql.update_task(task, config.psql_db)
 
     except Exception as e:
@@ -212,7 +216,8 @@ def attempt_delay_task(task: Task):
             "Adding in a delay of 15 minutes for now since no miners accepted the task"
         )
 
-        task.delay_timestamp = task.delay_timestamp + datetime.timedelta(minutes=15)
+        task.delay_timestamp = task.delay_timestamp + \
+            datetime.timedelta(minutes=15)
     return task
 
 
@@ -261,7 +266,8 @@ async def _start_training_task(task: Task, config: Config) -> None:
     assigned_miners = await tasks_sql.get_nodes_assigned_to_task(
         str(task.task_id), config.psql_db
     )
-    logger.info(f"Here are the miners that have been assigned {assigned_miners}")
+    logger.info(
+        f"Here are the miners that have been assigned {assigned_miners}")
     await _let_miners_know_to_start_training(task, assigned_miners, config)
     task.status = TaskStatus.TRAINING
     await tasks_sql.update_task(task, config.psql_db)
@@ -292,7 +298,8 @@ async def _evaluate_task(task: Task, config: Config):
         task = await evaluate_and_score(task, config)
         await tasks_sql.update_task(task, config.psql_db)
     except Exception as e:
-        logger.error(f"Error evaluating task {task.task_id}: {e}", exc_info=True)
+        logger.error(
+            f"Error evaluating task {task.task_id}: {e}", exc_info=True)
         task.status = TaskStatus.FAILURE
         await tasks_sql.update_task(task, config.psql_db)
 
@@ -301,7 +308,8 @@ async def process_completed_tasks(config: Config) -> None:
     while True:
         completed_tasks = await tasks_sql.get_tasks_ready_to_evaluate(config.psql_db)
         if len(completed_tasks) > 0:
-            logger.info(f"There are {len(completed_tasks)} awaiting evaluation")
+            logger.info(
+                f"There are {len(completed_tasks)} awaiting evaluation")
             for task in completed_tasks:
                 await _evaluate_task(task, config)
         if len(completed_tasks) == 0:

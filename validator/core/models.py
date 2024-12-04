@@ -23,7 +23,7 @@ class Task(BaseModel):
     no_input_format: Optional[str] = None
     test_data: Optional[str] = None
     synthetic_data: Optional[str] = None
-    hf_training_repo: Optional[str] = None
+    training_data: Optional[str] = None
     assigned_miners: Optional[list[int]] = None
     miner_scores: Optional[list[float]] = None
     created_timestamp: Optional[datetime] = None
@@ -93,23 +93,31 @@ class MinerResults(BaseModel):
 
 
 class QualityMetrics(BaseModel):
+    total_score: float
+    total_count: int
+    total_success: int
+    total_quality: int
     avg_quality_score: float = Field(ge=0.0, le=1.0)
     success_rate: float = Field(ge=0.0, le=1.0)
     quality_rate: float = Field(ge=0.0, le=1.0)
 
+
 class WorkloadMetrics(BaseModel):
     competition_hours: int = Field(ge=0)
     total_params_billions: float = Field(ge=0.0)
+
 
 class ModelMetrics(BaseModel):
     modal_model: str
     unique_models: int = Field(ge=0)
     unique_datasets: int = Field(ge=0)
 
+
 class NodeStats(BaseModel):
     quality_metrics: QualityMetrics
     workload_metrics: WorkloadMetrics
     model_metrics: ModelMetrics
+
 
 class AllNodeStats(BaseModel):
     daily: NodeStats
@@ -118,19 +126,23 @@ class AllNodeStats(BaseModel):
     monthly: NodeStats
     all_time: NodeStats
 
+
 class LeaderboardRow(BaseModel):
     hotkey: str
     stats: AllNodeStats
+
 
 class DatasetUrls(BaseModel):
     test_url: str
     synthetic_url: Optional[str] = None
     train_url: str
 
+
 class DatasetFiles(BaseModel):
     prefix: str
     data: str
     temp_path: Optional[Path] = None
+
 
 class DatasetJsons(BaseModel):
     train_data: list[Any]

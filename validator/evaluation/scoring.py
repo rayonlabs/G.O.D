@@ -28,7 +28,7 @@ from validator.db.sql.tasks import get_nodes_assigned_to_task
 from validator.evaluation.docker_evaluation import run_evaluation_docker
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
-
+from validator.utils.minio import async_minio_client
 
 logger = get_logger(__name__)
 
@@ -329,6 +329,20 @@ async def _evaluate_submission(
     return synth_eval_result, test_eval_result
 
 
+async def _clear_up_s3(file_paths: list[str]) -> None:
+    for file_path in file_paths:
+        try:
+            logger.info(
+                f"files = {file_paths} and bucket is {cts.BUCKET_NAME}")
+          #  assert cts.BUCKET_NAME is not None 'bucket name needs setting to delete'
+            object_name = file_path.split(cts.BUCKET_NAME + "/")[-1]
+            logger.info(
+                f"Deleting file {object_name} from MinIO bucket {cts.BUCKET_NAME}")
+            await async_minio_client.delete_file(cts.BUCKET_NAME, object_name)
+        except Exception as e:
+            logger.error(f"Failed to delete file {file_path} from MinIO: {e}")
+
+
 async def _process_miner(miner: Node, task: Task, dataset_type: CustomDatasetType, config: Config) -> MinerResults:
     assert task.task_id is not None, "We should have a task id when processing the miner"
     submission_repo = await _get_submission_repo(miner, str(task.task_id), config)
@@ -485,6 +499,10 @@ async def evaluate_and_score(task: Task, config: Config) -> Task:
             "we are going to try again."
         )
     else:
+        if cts.DELETE_S3_AFTER_COMPLETE:
+
+            await _clear_up_s3(
+                [task.training_data, task.test_data, task.synthetic_data])
         task.status = TaskStatus.SUCCESS
         logger.info(
             f"Task {task.task_id} completed successfully with non-zero scores")

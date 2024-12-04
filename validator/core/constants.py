@@ -13,6 +13,7 @@ API_KEY = "api_key"
 COLDKEY = "coldkey"
 
 BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+DELETE_S3_AFTER_COMPLETE = True
 
 VALI_CONFIG_PATH = "validator/test_axolotl.yml"
 
@@ -30,8 +31,8 @@ GET_COLUMNS_FOR_DATASET_ENDPOINT = "https://content.gradients.io/dataset/{datase
 GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
 
-
 # task stuff
+
 HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME = 10
 NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 30
 
@@ -40,7 +41,7 @@ NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 30
 TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
 GET_SYNTH_DATA = True
-MAX_SYNTH_DATA_POINTS = 100
+MAX_SYNTH_DATA_POINTS = 300
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
 # synth stuff
