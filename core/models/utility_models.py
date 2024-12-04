@@ -76,5 +76,13 @@ class Message(BaseModel):
 
 
 class Prompts(BaseModel):
-    synth_data_creation_sys: str
-    synth_data_creation_prompt: str
+    # synthetic data generation prompts
+    # in-context learning prompts
+    in_context_learning_generation_sys: str
+    in_context_learning_generation_user: str
+    # correctness-focused prompts (step 1/2)
+    output_field_reformulation_sys: str
+    output_field_reformulation_user: str
+    # correctness-focused prompts (step 2/2)
+    input_field_generation_sys: str
+    input_field_generation_user: str

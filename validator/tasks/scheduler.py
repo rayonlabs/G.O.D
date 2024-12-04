@@ -26,7 +26,7 @@ async def _get_a_model() -> AsyncGenerator[str, None]:
         raise TypeError(
             "Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
     models: list[dict[str, Any]] = response
-    TEMP_MODEL_FAMILIES_ACCEPTED = ['llama', 'falcon', 'mistral', 'gemma', 'gemini',  'phi']
+    TEMP_MODEL_FAMILIES_ACCEPTED = ['qwen', 'llama', 'falcon', 'mistral', 'gemma', 'gemini',  'phi']
     model_ids = [
         model.get(csts.GET_ALL_MODELS_ID, "")
         for model in models 
