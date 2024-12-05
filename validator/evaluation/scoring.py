@@ -41,7 +41,7 @@ def get_task_work_score(task: Task) -> float:
     hours = task.hours_to_complete
     model = task.model_id
     model_size = re.search(r"(\d+)(?=[bB])", model)
-    model_size_value = int(model_size.group(1)) if model_size else 1
+    model_size_value = max(8, int(model_size.group(1)) if model_size else 1)
 
     return max(1, 2 * np.log(float(hours * model_size_value)))
 
