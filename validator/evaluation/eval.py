@@ -177,10 +177,7 @@ def evaluate_language_model_loss(
     language_model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     language_model.to(device)
-
-    losses, num_batches = _process_evaluation_batches(
-        language_model, eval_dataloader, device)
-
+    losses, num_batches = _process_evaluation_batches(language_model, eval_dataloader, device)
     evaluation_results = _calculate_evaluation_metrics(losses, num_batches)
     logger.info(f"Final evaluation results: {evaluation_results}")
 
