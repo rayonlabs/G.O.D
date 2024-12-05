@@ -46,7 +46,8 @@ def _load_and_update_evaluation_config(
 
 def _load_evaluation_dataset(evaluation_config: DictDefault, tokenizer: AutoTokenizer) -> Dataset:
     prepared_path = Path(evaluation_config.output_dir) / "prepared"
-    eval_dataset, _ = load_tokenized_prepared_datasets(tokenizer, evaluation_config, prepared_path)
+    eval_dataset, _ = load_tokenized_prepared_datasets(
+        tokenizer, evaluation_config, prepared_path)
     logger.info(f"Loaded evaluation dataset with {len(eval_dataset)} samples")
     return eval_dataset
 
@@ -77,8 +78,10 @@ def _collate_evaluation_batch(batch: list[dict[str, list[int]]], tokenizer: Auto
     attention_mask = [torch.tensor(item["attention_mask"]) for item in batch]
     labels = [torch.tensor(item["labels"]) for item in batch]
 
-    input_ids = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
-    attention_mask = pad_sequence(attention_mask, batch_first=True, padding_value=0)
+    input_ids = pad_sequence(input_ids, batch_first=True,
+                             padding_value=tokenizer.pad_token_id)
+    attention_mask = pad_sequence(
+        attention_mask, batch_first=True, padding_value=0)
     labels = pad_sequence(labels, batch_first=True, padding_value=-100)
 
     return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
@@ -108,7 +111,8 @@ def _compute_batch_loss(language_model: AutoModelForCausalLM, batch: dict, devic
     attention_mask = batch["attention_mask"].to(device)
     labels = batch["labels"].to(device)
 
-    outputs = language_model(input_ids=input_ids, attention_mask=attention_mask)
+    outputs = language_model(
+        input_ids=input_ids, attention_mask=attention_mask)
     logits = outputs.logits
 
     shift_logits = logits[..., :-1, :].contiguous()
@@ -123,17 +127,40 @@ def _compute_batch_loss(language_model: AutoModelForCausalLM, batch: dict, devic
     return loss.item()
 
 
-def _calculate_evaluation_metrics(total_loss: float, num_batches: int) -> dict[str, float]:
-    if num_batches > 0:
-        average_loss = total_loss / num_batches
-        logger.info(f"Average loss: {average_loss}")
-    else:
-        logger.error("No valid batches were processed during evaluation.")
-        average_loss = float("inf")
+def _calculate_evaluation_metrics(total_losses: list[float], num_batches: int) -> dict[str, float]:
+    valid_losses = [
+        loss for loss in total_losses if not torch.isnan(torch.tensor(loss))]
+    nan_count = len(total_losses) - len(valid_losses)
+    nan_percentage = (nan_count / num_batches) * 100 if num_batches > 0 else 0
+
+    if not valid_losses:
+        logger.error("No valid losses were found during evaluation.")
+        return {
+            "eval_loss": float("inf"),
+            "perplexity": float("inf"),
+            "valid_batches_percentage": 0
+        }
+
+    if nan_percentage > 5:
+        logger.error(f"Too many nan values ({nan_percentage:.2f}% of batches)")
+        return {
+            "eval_loss": float("inf"),
+            "perplexity": float("inf"),
+            "valid_batches_percentage": 100 - nan_percentage
+        }
+
+    average_loss = sum(valid_losses) / len(valid_losses)
+    logger.info(
+        f"Average loss: {average_loss} (calculated from {len(valid_losses)} valid batches)")
+
+    if nan_count > 0:
+        logger.warning(
+            f"Skipped {nan_count} batches with nan values ({nan_percentage:.2f}% of total)")
 
     return {
         "eval_loss": average_loss,
         "perplexity": torch.exp(torch.tensor(average_loss)).item(),
+        "valid_batches_percentage": 100 - nan_percentage
     }
 
 
@@ -147,13 +174,15 @@ def evaluate_language_model_loss(
 
     eval_dataset = _load_evaluation_dataset(evaluation_config, tokenizer)
     _log_dataset_and_model_info(eval_dataset, language_model, tokenizer)
-    eval_dataloader = _create_evaluation_dataloader(eval_dataset, evaluation_config, tokenizer)
+    eval_dataloader = _create_evaluation_dataloader(
+        eval_dataset, evaluation_config, tokenizer)
 
     language_model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     language_model.to(device)
 
-    total_loss, num_batches = _process_evaluation_batches(language_model, eval_dataloader, device)
+    total_loss, num_batches = _process_evaluation_batches(
+        language_model, eval_dataloader, device)
 
     evaluation_results = _calculate_evaluation_metrics(total_loss, num_batches)
     logger.info(f"Final evaluation results: {evaluation_results}")
@@ -193,8 +222,10 @@ def main():
         dataset_type = CustomDatasetType.model_validate_json(dataset_type_str)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    finetuned_model = AutoModelForCausalLM.from_pretrained(model, token=os.environ.get("HUGGINGFACE_TOKEN")).to(device)
-    tokenizer = AutoTokenizer.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
+    finetuned_model = AutoModelForCausalLM.from_pretrained(
+        model, token=os.environ.get("HUGGINGFACE_TOKEN")).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(
+        original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
