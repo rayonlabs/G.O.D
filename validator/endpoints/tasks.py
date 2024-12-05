@@ -68,7 +68,6 @@ async def get_tasks(
 
         task_status_responses.append(
             TaskStatusResponse(
-                success=True,
                 id=task["task_id"],
                 status=task["status"],
                 model_repo=task.get("model_id"),
@@ -80,10 +79,9 @@ async def get_tasks(
                 format_col=task.get("format"),
                 no_input_format_col=task.get("no_input_format"),
                 miners=[{"hotkey": miner.hotkey, "trust": miner.trust} for miner in miners],
-                dataset=task.get("ds_id"),
-                started=str(task["started_timestamp"]),
-                end=str(task["end_timestamp"]),
-                created=str(task["created_timestamp"]),
+                started=task.get("started_timestamp"),
+                end=task.get("end_timestamp"),
+                created=task.get("created_timestamp"),
                 hours_to_complete=task.get("hours_to_complete"),
                 winning_submission=winning_submission,
             )
@@ -175,7 +173,6 @@ async def get_task_status(
         )
 
     return TaskStatusResponse(
-        success=True,
         id=task_id,
         status=task.status,
         model_repo=task.model_id,

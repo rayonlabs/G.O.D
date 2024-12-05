@@ -7,6 +7,7 @@ from uuid import UUID
 from fiber.logging_utils import get_logger
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import model_validator
 
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
@@ -66,11 +67,13 @@ class MinerTaskResponse(BaseModel):
     message: str
     accepted: bool
 
+
 class DatasetRequest(BaseModel):
     instruction_col: str
-    input_col: str = ''
-    output_col: str = ''
-    system_col: Optional[str] = ''
+    input_col: str = ""
+    output_col: str = ""
+    system_col: Optional[str] = ""
+
 
 class TaskRequest(DatasetRequest):  # did not add format
     ds_repo: str
@@ -112,7 +115,6 @@ class NewTaskRequest(BaseModel):
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
-
 
 
 class GetTasksRequest(BaseModel):
@@ -168,14 +170,32 @@ class TaskStatusResponse(BaseModel):
     instruction_col: Optional[str]
     format_col: Optional[str]
     no_input_format_col: Optional[str]
-    started: str
-    end: str
-    created: str
+    started: Optional[str]
+    end: Optional[str]
+    created: Optional[str]
     hours_to_complete: int
     winning_submission: Optional[Union[WinningSubmission, None]] = None
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_success_based_on_status(cls, values):
+        if isinstance(values, dict):
+            status = values.get("status")
+            values["success"] = cls._is_task_status_successful(status)
+        return values
+
+    @classmethod
+    def _is_task_status_successful(cls, status: TaskStatus) -> bool:
+        failure_statuses = [
+            TaskStatus.PREP_TASK_FAILURE,
+            TaskStatus.NODE_TRAINING_FAILURE,
+            TaskStatus.FAILURE,
+            TaskStatus.FAILURE_FINDING_NODES,
+        ]
+        return status not in failure_statuses
 
 
 class TaskListResponse(BaseModel):
