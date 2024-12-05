@@ -138,7 +138,6 @@ def _calculate_evaluation_metrics(total_losses: list[float], num_batches: int) -
         return {
             "eval_loss": float("inf"),
             "perplexity": float("inf"),
-            "valid_batches_percentage": 0
         }
 
     if nan_percentage > 5:
@@ -146,7 +145,6 @@ def _calculate_evaluation_metrics(total_losses: list[float], num_batches: int) -
         return {
             "eval_loss": float("inf"),
             "perplexity": float("inf"),
-            "valid_batches_percentage": 100 - nan_percentage
         }
 
     average_loss = sum(valid_losses) / len(valid_losses)
@@ -160,7 +158,6 @@ def _calculate_evaluation_metrics(total_losses: list[float], num_batches: int) -
     return {
         "eval_loss": average_loss,
         "perplexity": torch.exp(torch.tensor(average_loss)).item(),
-        "valid_batches_percentage": 100 - nan_percentage
     }
 
 
