@@ -91,8 +91,8 @@ def _process_evaluation_batches(
     language_model: AutoModelForCausalLM,
     eval_dataloader: DataLoader,
     device: torch.device,
-) -> tuple[float, int]:
-    total_loss = 0.0
+) -> tuple[list[float], int]:
+    batch_losses = []  # Store individual batch losses instead of accumulating
     num_batches = 0
 
     with torch.no_grad():
@@ -100,10 +100,10 @@ def _process_evaluation_batches(
             logger.info(f"Processing batch {batch_idx + 1}")
             batch_loss = _compute_batch_loss(language_model, batch, device)
             logger.info(f"Batch {batch_idx + 1} loss: {batch_loss}")
-            total_loss += batch_loss
+            batch_losses.append(batch_loss)  # Append each loss to the list
             num_batches += 1
 
-    return total_loss, num_batches
+    return batch_losses, num_batches
 
 
 def _compute_batch_loss(language_model: AutoModelForCausalLM, batch: dict, device: torch.device) -> float:
@@ -178,10 +178,10 @@ def evaluate_language_model_loss(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     language_model.to(device)
 
-    total_loss, num_batches = _process_evaluation_batches(
+    losses, num_batches = _process_evaluation_batches(
         language_model, eval_dataloader, device)
 
-    evaluation_results = _calculate_evaluation_metrics(total_loss, num_batches)
+    evaluation_results = _calculate_evaluation_metrics(losses, num_batches)
     logger.info(f"Final evaluation results: {evaluation_results}")
 
     return evaluation_results
