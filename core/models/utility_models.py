@@ -34,6 +34,7 @@ class TaskStatus(str, Enum):
     READY = "ready"
     SUCCESS = "success"
     LOOKING_FOR_NODES = "looking_for_nodes"
+    DELAYED = "delayed"
     EVALUATING = "evaluating"
     TRAINING = "training"
     FAILURE = "failure"

@@ -175,7 +175,8 @@ async def _let_miners_know_to_start_training(
         hours_to_complete=task.hours_to_complete,
     )
 
-    logger.info(f"We are telling miners to start training there are {len(nodes)}")
+    logger.info(
+        f"We are telling miners to start training there are {len(nodes)}")
 
     for node in nodes:
         response = await process_non_stream_fiber(
@@ -202,22 +203,22 @@ async def assign_miners(task: Task, config: Config):
 
 def attempt_delay_task(task: Task):
     assert (
-        task.created_timestamp is not None and task.delay_timestamp is not None
+        task.created_timestamp is not None and task.delay_timestamp is not None and task.delay_times is not None
     ), "We wanted to check delay vs created timestamps but they are missing"
 
     if (
-        task.created_timestamp
-        + datetime.timedelta(hours=cst.MAX_TIME_DELAY_TO_FIND_MINERS)
-        < task.delay_timestamp
+        task.delay_times >= cst.MAX_DELAY_TIMES or not task.is_organic
     ):
         task.status = TaskStatus.FAILURE_FINDING_NODES
     else:
         logger.info(
-            "Adding in a delay of 15 minutes for now since no miners accepted the task"
+            f"Adding in a delay of {cst.TASK_TIME_DELAY} minutes for now since no miners accepted the task"
         )
 
         task.delay_timestamp = task.delay_timestamp + \
-            datetime.timedelta(minutes=15)
+            datetime.timedelta(minutes=cst.TASK_TIME_DELAY)
+        task.status = TaskStatus.DELAYED
+        task.delay_times += 1
     return task
 
 
@@ -317,10 +318,21 @@ async def process_completed_tasks(config: Config) -> None:
             await asyncio.sleep(30)
 
 
+async def _move_back_to_looking_for_nodes(task: Task, config: Config):
+    task.status = TaskStatus.LOOKING_FOR_NODES
+    await tasks_sql.update_task(task, config.psql_db)
+
+
+async def _check_delayed_tasks(config: Config):
+    finished_delay_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.DELAYED, psql_db=config.psql_db)
+    await asyncio.gather(*[_move_back_to_looking_for_nodes(task, config) for task in finished_delay_tasks])
+
+
 async def process_pending_tasks(config: Config) -> None:
     while True:
         try:
             await _process_selected_tasks(config)
+            await _check_delayed_tasks(config)
             await _find_miners_for_task(config)
             await _process_ready_to_train_tasks(config)
         except Exception as e:

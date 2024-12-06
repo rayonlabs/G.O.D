@@ -24,10 +24,12 @@ class Task(BaseModel):
     test_data: Optional[str] = None
     synthetic_data: Optional[str] = None
     training_data: Optional[str] = None
+    is_organic: bool = False
     assigned_miners: Optional[list[int]] = None
     miner_scores: Optional[list[float]] = None
     created_timestamp: Optional[datetime] = None
     delay_timestamp: Optional[datetime] = None
+    delay_times: Optional[int] = 0
     updated_timestamp: Optional[datetime] = None
     started_timestamp: Optional[datetime] = None
     end_timestamp: Optional[datetime] = None
