@@ -103,6 +103,11 @@ async def create_task(
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
 
+    # if there are any queued jobs that are organic we can't accept any more to avoid overloading the network
+    queued_tasks = await task_sql.get_tasks_with_status(TaskStatus.DELAYED, config.psql_db)
+    if len(queued_tasks) > 0:
+        return NewTaskResponse(success=False, task_id=None)
+
     logger.info(f"The request coming in {request}")
     task = Task(
         model_id=request.model_repo,
