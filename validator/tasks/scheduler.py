@@ -101,7 +101,7 @@ async def _add_new_task_to_network_if_not_enough(
     datasets: AsyncGenerator[str, None],
 ):
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
-    current_delayed_tasks = await get_tasks_with_status(TaskStatus.DELAYED, config.psql_db)
+    current_delayed_tasks = await get_tasks_with_status(TaskStatus.DELAYED, config.psql_db, include_not_ready_tasks=True)
     logger.info(f"We have {(len(current_delayed_tasks))} tasks in the queue")
     logger.info(
         f"There are {len(current_training_tasks)} running at the moment")

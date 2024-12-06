@@ -73,14 +73,14 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[Task]:
         return None
 
 
-async def get_tasks_with_status(status: str, psql_db: PSQLDB) -> List[Task]:
-    """Get all tasks with a specific status and delay_timestamp before current time"""
+async def get_tasks_with_status(status: str, psql_db: PSQLDB, include_not_ready_tasks=False) -> List[Task]:
+    """Get all tasks with a specific status and delay_timestamp before current time if even_not_ready is False"""
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
             SELECT * FROM {cst.TASKS_TABLE}
             WHERE {cst.STATUS} = $1
-            AND ({cst.DELAY_TIMESTAMP} IS NULL OR {cst.DELAY_TIMESTAMP} <= NOW())
+            {'' if include_not_ready_tasks else f"AND ({cst.DELAY_TIMESTAMP} IS NULL OR {cst.DELAY_TIMESTAMP} <= NOW())"}
         """
         rows = await connection.fetch(query, status)
         return [Task(**dict(row)) for row in rows]
