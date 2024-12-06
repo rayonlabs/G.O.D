@@ -22,6 +22,7 @@ RUN mkdir -p /root/.aws && \
 
 CMD echo 'Preparing data...' && \
     pip install mlflow && \
+    pip install protobuf && \
     pip install --upgrade huggingface_hub && \
     if [ -n "$HUGGINGFACE_TOKEN" ]; then \
         echo "Attempting to log in to Hugging Face" && \

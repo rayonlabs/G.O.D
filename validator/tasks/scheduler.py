@@ -6,6 +6,7 @@ from typing import Any
 from typing import AsyncGenerator
 
 from fiber.logging_utils import get_logger
+from substrateinterface import Keypair
 
 import validator.core.constants as csts
 from core.models.payload_models import DatasetRequest
@@ -14,14 +15,14 @@ from validator.core.config import Config
 from validator.core.models import Task
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
-from validator.utils.call_endpoint import process_non_stream_get
+from validator.utils.call_endpoint import call_content_service
 
 
 logger = get_logger(name="task synth")
 
 
-async def _get_a_model() -> AsyncGenerator[str, None]:
-    response = await process_non_stream_get(csts.GET_ALL_MODELS_ENDPOINT, None)
+async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:
+    response = await call_content_service(csts.GET_RANDOM_MODELS_ENDPOINT, keypair)
     if not isinstance(response, list):
         raise TypeError("Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
     models: list[dict[str, Any]] = response
@@ -36,8 +37,8 @@ async def _get_a_model() -> AsyncGenerator[str, None]:
         yield model_id
 
 
-async def _get_a_dataset() -> AsyncGenerator[str, None]:
-    response = await process_non_stream_get(csts.GET_ALL_DATASETS_ENDPOINT, None)
+async def _get_datasets(keypair: Keypair) -> AsyncGenerator[str, None]:
+    response = await call_content_service(csts.GET_RANDOM_DATASETS_ENDPOINT, keypair)
     if not isinstance(response, list):
         raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
     datasets: list[dict[str, Any]] = response
@@ -47,9 +48,9 @@ async def _get_a_dataset() -> AsyncGenerator[str, None]:
         yield ds_id
 
 
-async def _get_the_columns_for_dataset(dataset_id: str) -> DatasetRequest:
+async def _get_the_columns_for_dataset(dataset_id: str, keypair: Keypair) -> DatasetRequest:
     url = csts.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
-    response = await process_non_stream_get(url, None)
+    response = await call_content_service(url, keypair)
     if not isinstance(response, dict):
         raise TypeError(f"Expected dictionary response, got {type(response)}")
     try:
@@ -67,7 +68,7 @@ async def create_a_new_task(
     number_of_hours = random.randint(csts.MIN_COMPETITION_HOURS, csts.MAX_COMPETITION_HOURS)
     model_id = await anext(models)
     dataset_id = await anext(datasets)
-    columns = await _get_the_columns_for_dataset(dataset_id)
+    columns = await _get_the_columns_for_dataset(dataset_id, config.keypair)
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
@@ -101,8 +102,8 @@ async def _add_new_task_to_network_if_not_enough(
 
 async def synthetic_task_loop(config: Config):
     logger.info("Starting the synthetic task loop")
-    datasets = _get_a_dataset()
-    models = _get_a_model()
+    datasets = _get_datasets(config.keypair)
+    models = _get_models(config.keypair)
     while True:
         try:
             await _add_new_task_to_network_if_not_enough(config, models, datasets)
