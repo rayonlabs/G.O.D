@@ -325,6 +325,9 @@ async def _move_back_to_looking_for_nodes(task: Task, config: Config):
 
 async def _check_delayed_tasks(config: Config):
     finished_delay_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.DELAYED, psql_db=config.psql_db)
+    if len(finished_delay_tasks) > 0:
+        logger.info(
+            f"We have {len(finished_delay_tasks)} that we're not ready to offer to miners again")
     await asyncio.gather(*[_move_back_to_looking_for_nodes(task, config) for task in finished_delay_tasks])
 
 
