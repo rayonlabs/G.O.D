@@ -209,6 +209,12 @@ def attempt_delay_task(task: Task):
     if (
         task.delay_times >= cst.MAX_DELAY_TIMES or not task.is_organic
     ):
+        if task.is_organic:
+            logger.info(f"We have already delayed {task.delay_times}")
+        else:
+            logger.info(
+                "This is a synth task - no need to add a delay when the network is busy")
+
         task.status = TaskStatus.FAILURE_FINDING_NODES
     else:
         logger.info(
