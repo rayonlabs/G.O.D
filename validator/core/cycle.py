@@ -187,6 +187,7 @@ async def _let_miners_know_to_start_training(
 
 async def assign_miners(task: Task, config: Config):
     try:
+
         nodes = await nodes_sql.get_all_nodes(config.psql_db)
         task = await _select_miner_pool_and_add_to_task(task, nodes, config)
         logger.info(
@@ -247,6 +248,7 @@ async def prep_task(task: Task, config: Config):
         await tasks_sql.update_task(task, config.psql_db)
         task = await _run_task_prep(task, config.keypair)
         await tasks_sql.update_task(task, config.psql_db)
+        logger.info(f"After prep task we have {task}")
     except Exception:
         task.status = TaskStatus.PREP_TASK_FAILURE
         await tasks_sql.update_task(task, config.psql_db)
