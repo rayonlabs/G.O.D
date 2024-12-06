@@ -66,11 +66,13 @@ class MinerTaskResponse(BaseModel):
     message: str
     accepted: bool
 
+
 class DatasetRequest(BaseModel):
     instruction_col: str
-    input_col: str = ''
-    output_col: str = ''
-    system_col: Optional[str] = ''
+    input_col: Optional[str] = None
+    output_col: Optional[str] = None
+    system_col: Optional[str] = None
+
 
 class TaskRequest(DatasetRequest):  # did not add format
     ds_repo: str
@@ -112,7 +114,6 @@ class NewTaskRequest(BaseModel):
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
-
 
 
 class GetTasksRequest(BaseModel):

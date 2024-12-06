@@ -40,6 +40,7 @@ async def evaluate_model(request: EvaluationRequest) -> EvaluationResult:
 async def create_task(request: TaskRequest, config: Config = Depends(load_config)) -> TaskResponse:
     task_id = str(uuid.uuid4())
     columns = [request.system_col, request.instruction_col, request.input_col, request.output_col]
+    columns = [col for col in columns if col is not None]
     _, _ = await prepare_task(request.ds_repo, columns, request.model_repo, keypair=config.keypair)
     # create a job in the database
 

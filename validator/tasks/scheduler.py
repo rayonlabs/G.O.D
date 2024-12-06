@@ -23,17 +23,13 @@ logger = get_logger(name="task synth")
 async def _get_a_model() -> AsyncGenerator[str, None]:
     response = await process_non_stream_get(csts.GET_ALL_MODELS_ENDPOINT, None)
     if not isinstance(response, list):
-        raise TypeError(
-            "Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
+        raise TypeError("Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
     models: list[dict[str, Any]] = response
-    TEMP_MODEL_FAMILIES_ACCEPTED = ['qwen', 'llama', 'falcon', 'mistral', 'gemma', 'gemini',  'phi']
+    TEMP_MODEL_FAMILIES_ACCEPTED = ["qwen", "llama", "falcon", "mistral", "gemma", "gemini", "phi"]
     model_ids = [
         model.get(csts.GET_ALL_MODELS_ID, "")
-        for model in models 
-        if any(
-            family in model.get(csts.GET_ALL_MODELS_ID, "").lower() 
-            for family in TEMP_MODEL_FAMILIES_ACCEPTED
-        )
+        for model in models
+        if any(family in model.get(csts.GET_ALL_MODELS_ID, "").lower() for family in TEMP_MODEL_FAMILIES_ACCEPTED)
     ]
     random.shuffle(model_ids)
     for model_id in model_ids:
@@ -43,8 +39,7 @@ async def _get_a_model() -> AsyncGenerator[str, None]:
 async def _get_a_dataset() -> AsyncGenerator[str, None]:
     response = await process_non_stream_get(csts.GET_ALL_DATASETS_ENDPOINT, None)
     if not isinstance(response, list):
-        raise TypeError(
-            "Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
+        raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
     datasets: list[dict[str, Any]] = response
     dataset_ids = [ds.get(csts.GET_ALL_DATASETS_ID, "") for ds in datasets]
     random.shuffle(dataset_ids)
@@ -53,17 +48,14 @@ async def _get_a_dataset() -> AsyncGenerator[str, None]:
 
 
 async def _get_the_columns_for_dataset(dataset_id: str) -> DatasetRequest:
-    url = csts.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace(
-        "{dataset}", dataset_id)
+    url = csts.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
     response = await process_non_stream_get(url, None)
     if not isinstance(response, dict):
         raise TypeError(f"Expected dictionary response, got {type(response)}")
     try:
-        columns = DatasetRequest(**response)
+        columns = DatasetRequest.model_validate(response)
     except Exception as exc:
-        raise TypeError(
-            f"The get columns for dataset endpoint should return a DatasetRequest type: {exc}"
-        )
+        raise TypeError(f"The get columns for dataset endpoint should return a DatasetRequest type: {exc}")
     return columns
 
 
@@ -72,9 +64,7 @@ async def create_a_new_task(
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[str, None],
 ):
-    number_of_hours = random.randint(
-        csts.MIN_COMPETITION_HOURS, csts.MAX_COMPETITION_HOURS
-    )
+    number_of_hours = random.randint(csts.MIN_COMPETITION_HOURS, csts.MAX_COMPETITION_HOURS)
     model_id = await anext(models)
     dataset_id = await anext(datasets)
     columns = await _get_the_columns_for_dataset(dataset_id)
@@ -102,11 +92,8 @@ async def _add_new_task_to_network_if_not_enough(
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[str, None],
 ):
-    current_training_tasks = await get_tasks_with_status(
-        TaskStatus.TRAINING, config.psql_db
-    )
-    logger.info(
-        f"There are {len(current_training_tasks)} running at the moment")
+    current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
+    logger.info(f"There are {len(current_training_tasks)} running at the moment")
     if len(current_training_tasks) < csts.HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME:
         logger.info("This is less than the minimal - creating a new task")
         await create_a_new_task(config, models, datasets)
@@ -120,9 +107,7 @@ async def synthetic_task_loop(config: Config):
         try:
             await _add_new_task_to_network_if_not_enough(config, models, datasets)
             await asyncio.sleep(csts.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
-        except Exception as e:
-            logger.info(
-                f"Ah, that dataset was missing some details, trying another one next time.")
+        except Exception:
+            logger.info("Ah, that dataset was missing some details, trying another one next time.")
 
             await asyncio.sleep(5 * 60)
-
