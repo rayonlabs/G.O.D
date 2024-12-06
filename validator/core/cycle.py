@@ -38,6 +38,7 @@ def _get_total_dataset_size(repo_name: str) -> int:
 
 
 async def _run_task_prep(task: Task, keypair: Keypair) -> Task:
+    logger.info(f"The task coming into task prep is {task}")
     columns_to_sample = [
         i
         for i in [task.system, task.instruction, task.input, task.output]

@@ -11,6 +11,7 @@ from pydantic import Field
 
 
 class Task(BaseModel):
+    is_organic: bool
     task_id: Optional[UUID] = None
     model_id: str
     ds_id: str
@@ -24,7 +25,6 @@ class Task(BaseModel):
     test_data: Optional[str] = None
     synthetic_data: Optional[str] = None
     training_data: Optional[str] = None
-    is_organic: bool = False
     assigned_miners: Optional[list[int]] = None
     miner_scores: Optional[list[float]] = None
     created_timestamp: Optional[datetime] = None
