@@ -101,9 +101,11 @@ async def _add_new_task_to_network_if_not_enough(
     datasets: AsyncGenerator[str, None],
 ):
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
+    current_delayed_tasks = await get_tasks_with_status(TaskStatus.DELAYED, config.psql_db)
+    logger.info(f"We have {(len(current_delayed_tasks))} tasks in the queue")
     logger.info(
         f"There are {len(current_training_tasks)} running at the moment")
-    if len(current_training_tasks) < csts.HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME:
+    if len(current_delayed_tasks) == 0 and (current_training_tasks) < csts.HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME:
         logger.info("This is less than the minimal - creating a new task")
         await create_a_new_task(config, models, datasets)
 
