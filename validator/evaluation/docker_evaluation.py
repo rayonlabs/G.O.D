@@ -88,11 +88,11 @@ async def run_evaluation_docker(
             detach=True,
         )
 
-        log_task = asyncio.create_task(handle_logs(container))
+#        log_task = asyncio.create_task(handle_logs(container))
 
         result = await asyncio.to_thread(container.wait)
 
-        await log_task
+#        await log_task
 
         if result["StatusCode"] != 0:
             raise Exception(
