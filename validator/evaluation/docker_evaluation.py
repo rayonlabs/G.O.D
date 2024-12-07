@@ -29,11 +29,11 @@ async def async_stream_logs(container):
 
 
 async def get_evaluation_results(container):
-    """Extract evaluation results from container"""
-    tar_stream, * = await asyncio.to_thread(
+    archive_data = await asyncio.to_thread(
         container.get_archive,
         cst.CONTAINER_EVAL_RESULTS_PATH
     )
+    tar_stream = archive_data[0]
 
     file_like_object = io.BytesIO()
     for chunk in tar_stream:
