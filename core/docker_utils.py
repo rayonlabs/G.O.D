@@ -1,4 +1,5 @@
 from fiber.logging_utils import get_logger
+import asyncio
 
 
 logger = get_logger(__name__)
