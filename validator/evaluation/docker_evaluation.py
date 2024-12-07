@@ -7,7 +7,7 @@ from typing import Union
 import docker
 from fiber.logging_utils import get_logger
 from core import constants as cst
-from core.docker_utils import async_stream_logs
+from core.docker_utils import stream_logs
 from core.models.payload_models import EvaluationResult
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
@@ -88,8 +88,8 @@ async def run_evaluation_docker(
             ],
             detach=True,
         )
-
-        log_task = asyncio.create_task(async_stream_logs(container))
+        log_task = asyncio.create_task(
+            asyncio.to_thread(stream_logs, container))
         result = await asyncio.to_thread(container.wait)
         log_task.cancel()
 

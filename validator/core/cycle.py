@@ -332,7 +332,7 @@ async def _move_back_to_looking_for_nodes(task: Task, config: Config):
     await tasks_sql.update_task(task, config.psql_db)
 
 
-async def _check_delayed_tasks(config: Config):
+async def _handle_delayed_tasks(config: Config):
     finished_delay_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.DELAYED, psql_db=config.psql_db)
     logger.info(
         f"We have {len(finished_delay_tasks)} that we're ready to offer to miners again")
@@ -343,7 +343,7 @@ async def process_pending_tasks(config: Config) -> None:
     while True:
         try:
             await _process_selected_tasks(config)
-            await _check_delayed_tasks(config)
+            await _handle_delayed_tasks(config)
             await _find_miners_for_task(config)
             await _process_ready_to_train_tasks(config)
         except Exception as e:
