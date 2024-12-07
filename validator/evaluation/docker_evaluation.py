@@ -7,37 +7,13 @@ from typing import Union
 import docker
 from fiber.logging_utils import get_logger
 from core import constants as cst
-from core.docker_utils import stream_logs
+from core.docker_utils import async_stream_logs
 from core.models.payload_models import EvaluationResult
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
 
 logger = get_logger(__name__)
-
-
-async def async_stream_logs(container):
-    """Asynchronously stream container logs with buffering"""
-    buffer = ""
-    try:
-        def _stream_logs():
-            try:
-                for log_chunk in container.logs(stream=True, follow=True):
-                    nonlocal buffer
-                    log_text = log_chunk.decode("utf-8", errors="replace")
-                    buffer += log_text
-                    while "\n" in buffer:
-                        line, buffer = buffer.split("\n", 1)
-                        if line:
-                            logger.info(line)
-                if buffer:
-                    logger.info(buffer)
-            except Exception as e:
-                logger.error(f"Error streaming logs: {str(e)}")
-
-        await asyncio.to_thread(_stream_logs)
-    except Exception as e:
-        logger.error(f"Error in async log streaming: {str(e)}")
 
 
 async def get_evaluation_results(container):
@@ -101,7 +77,6 @@ async def run_evaluation_docker(
     }
 
     try:
-        # Run container
         container = await asyncio.to_thread(
             client.containers.run,
             cst.VALIDATOR_DOCKER_IMAGE,
@@ -114,11 +89,8 @@ async def run_evaluation_docker(
             detach=True,
         )
 
-        # Start log streaming as a task
         log_task = asyncio.create_task(async_stream_logs(container))
-
         result = await asyncio.to_thread(container.wait)
-
         log_task.cancel()
 
         if result["StatusCode"] != 0:
