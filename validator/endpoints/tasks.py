@@ -137,6 +137,7 @@ async def create_task(
 async def get_task_results(
     task_id: UUID,
     config: Config = Depends(get_config),
+    api_key: str = Depends(get_api_key),
 ) -> TaskResultResponse:
     try:
         scores = await submissions_and_scoring_sql.get_all_quality_scores_for_task(task_id, config.psql_db)
