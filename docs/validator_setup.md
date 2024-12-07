@@ -2,6 +2,9 @@
 
 Steps to set-up the validator.
 
+If you dont intend to utilise the bandwidth independently of the gradients platform,
+child hotkeying would not be a bad idea at all.
+
 ## Prerequisites
 
 - Docker

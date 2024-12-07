@@ -12,7 +12,8 @@ REDIS_KEY_COLDKEY_STAKE = "coldkey_stake"
 API_KEY = "api_key"
 COLDKEY = "coldkey"
 
-BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+
+BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 DELETE_S3_AFTER_COMPLETE = True
 
 VALI_CONFIG_PATH = "validator/test_axolotl.yml"
@@ -23,9 +24,8 @@ START_TRAINING_ENDPOINT = "/start_training/"
 TASK_OFFER_ENDPOINT = "/task_offer/"
 SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 
-
-GET_ALL_DATASETS_ENDPOINT = "https://content.gradients.io/datasets/random"
-GET_ALL_MODELS_ENDPOINT = "https://content.gradients.io/models/random"
+GET_RANDOM_DATASETS_ENDPOINT = "https://content.gradients.io/datasets/random"
+GET_RANDOM_MODELS_ENDPOINT = "https://content.gradients.io/models/random"
 GET_COLUMNS_FOR_DATASET_ENDPOINT = "https://content.gradients.io/dataset/{dataset}/columns/suggest"
 
 
@@ -34,8 +34,9 @@ GET_ALL_MODELS_ID = "model_id"
 
 # task stuff
 
-HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME = 10
-NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 30
+
+HOW_MANY_TASKS_MINIMAL_AT_THE_SAME_TIME = 3
+NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 90
 
 
 # data stuff
@@ -61,19 +62,23 @@ OUTPUT_REFORMULATION_PROBABILITY = 0.5
 
 # Task Stuff
 MINIMUM_MINER_POOL = 1
-MIN_IDEAL_NUM_MINERS_IN_POOL = 8
-MAX_IDEAL_NUM_MINERS_IN_POOL = 15
+MIN_IDEAL_NUM_MINERS_IN_POOL = 10
+MAX_IDEAL_NUM_MINERS_IN_POOL = 20
 MIN_COMPETITION_HOURS = 1
-MAX_COMPETITION_HOURS = 5
+MAX_COMPETITION_HOURS = 3
+TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
+# how many times in total do we attempt to delay an organic request looking for miners
+MAX_DELAY_TIMES = 6
+
 
 # scoring stuff
 SOFTMAX_TEMPERATURE = 0.5
-TEST_SCORE_WEIGHTING = 0.8  # synth will be (1 - this)
+TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 TARGET_SCORE_RATIO = 1
-MIN_TASK_SCORE = -0.001
+MIN_TASK_SCORE = -0.0001  # very tiny punishment while miners find their feet
 MAX_TASK_SCORE = 1.6
-TASK_SCORE_THRESHOLD = 0.8
-REWEIGHTING_EXP = 0.9
+TASK_SCORE_THRESHOLD = 0.9
+REWEIGHTING_EXP = 1.1  # how much of a drop off from leader
 SCORING_WINDOW = 3  # number of days over which we score
 
 # processing stuff

@@ -47,6 +47,8 @@ UPDATED_TIMESTAMP = "updated_timestamp"
 STARTED_TIMESTAMP = "started_timestamp"
 COMPLETED_TIMESTAMP = "completed_timestamp"
 END_TIMESTAMP = "end_timestamp"
+IS_ORGANIC = "is_organic"
+DELAY_TIMES = "delay_times"
 
 # Submissions Table Columns
 SUBMISSION_ID = "submission_id"

@@ -38,6 +38,7 @@ def _get_total_dataset_size(repo_name: str) -> int:
 
 
 async def _run_task_prep(task: Task, keypair: Keypair) -> Task:
+    logger.info(f"The task coming into task prep is {task}")
     columns_to_sample = [
         i
         for i in [task.system, task.instruction, task.input, task.output]
@@ -175,7 +176,8 @@ async def _let_miners_know_to_start_training(
         hours_to_complete=task.hours_to_complete,
     )
 
-    logger.info(f"We are telling miners to start training there are {len(nodes)}")
+    logger.info(
+        f"We are telling miners to start training, there are {len(nodes)}")
 
     for node in nodes:
         response = await process_non_stream_fiber(
@@ -186,6 +188,7 @@ async def _let_miners_know_to_start_training(
 
 async def assign_miners(task: Task, config: Config):
     try:
+
         nodes = await nodes_sql.get_all_nodes(config.psql_db)
         task = await _select_miner_pool_and_add_to_task(task, nodes, config)
         logger.info(
@@ -202,22 +205,28 @@ async def assign_miners(task: Task, config: Config):
 
 def attempt_delay_task(task: Task):
     assert (
-        task.created_timestamp is not None and task.delay_timestamp is not None
+        task.created_timestamp is not None and task.delay_timestamp is not None and task.delay_times is not None
     ), "We wanted to check delay vs created timestamps but they are missing"
 
     if (
-        task.created_timestamp
-        + datetime.timedelta(hours=cst.MAX_TIME_DELAY_TO_FIND_MINERS)
-        < task.delay_timestamp
+        task.delay_times >= cst.MAX_DELAY_TIMES or not task.is_organic
     ):
+        if task.is_organic:
+            logger.info(f"We have already delayed {task.delay_times}")
+        else:
+            logger.info(
+                "This is a synth task - no need to add a delay when the network is busy")
+
         task.status = TaskStatus.FAILURE_FINDING_NODES
     else:
         logger.info(
-            "Adding in a delay of 15 minutes for now since no miners accepted the task"
+            f"Adding in a delay of {cst.TASK_TIME_DELAY} minutes for now since no miners accepted the task"
         )
 
         task.delay_timestamp = task.delay_timestamp + \
-            datetime.timedelta(minutes=15)
+            datetime.timedelta(minutes=cst.TASK_TIME_DELAY)
+        task.status = TaskStatus.DELAYED
+        task.delay_times += 1
     return task
 
 
@@ -240,6 +249,7 @@ async def prep_task(task: Task, config: Config):
         await tasks_sql.update_task(task, config.psql_db)
         task = await _run_task_prep(task, config.keypair)
         await tasks_sql.update_task(task, config.psql_db)
+        logger.info(f"After prep task we have {task}")
     except Exception:
         task.status = TaskStatus.PREP_TASK_FAILURE
         await tasks_sql.update_task(task, config.psql_db)
@@ -317,10 +327,23 @@ async def process_completed_tasks(config: Config) -> None:
             await asyncio.sleep(30)
 
 
+async def _move_back_to_looking_for_nodes(task: Task, config: Config):
+    task.status = TaskStatus.LOOKING_FOR_NODES
+    await tasks_sql.update_task(task, config.psql_db)
+
+
+async def _handle_delayed_tasks(config: Config):
+    finished_delay_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.DELAYED, psql_db=config.psql_db)
+    logger.info(
+        f"We have {len(finished_delay_tasks)} that we're ready to offer to miners again")
+    await asyncio.gather(*[_move_back_to_looking_for_nodes(task, config) for task in finished_delay_tasks])
+
+
 async def process_pending_tasks(config: Config) -> None:
     while True:
         try:
             await _process_selected_tasks(config)
+            await _handle_delayed_tasks(config)
             await _find_miners_for_task(config)
             await _process_ready_to_train_tasks(config)
         except Exception as e:

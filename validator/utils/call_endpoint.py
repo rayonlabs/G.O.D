@@ -259,3 +259,20 @@ async def sign_up_cron_job(keypair: Keypair):
     while True:
         await sign_up_to_gradients(keypair)
         await asyncio.sleep(60 * 60 * 24)  # 3 hours
+
+
+@retry_with_backoff
+async def call_content_service(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any]:
+    """Make a signed request to the content service."""
+    headers = _get_headers_for_signed_https_request(keypair)
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.get(
+            url=endpoint,
+            headers=headers,
+            params=params
+        )
+        if response.status_code != 200:
+            logger.error(f"Error in content service response: {response.content}")
+            response.raise_for_status()
+        return response.json()
