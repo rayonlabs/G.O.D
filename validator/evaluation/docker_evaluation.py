@@ -63,12 +63,12 @@ async def run_evaluation_docker(
         )
         # NOTE: replace with asyncio.to_thread
 
-        log_thread = threading.Thread(target=stream_logs, args=(container,))
-        log_thread.start()
+#        log_thread = threading.Thread(target=stream_logs, args=(container,))
+#        log_thread.start()
 
         result = container.wait()
 
-        log_thread.join()
+#        log_thread.join()
 
         if result["StatusCode"] != 0:
             raise Exception(

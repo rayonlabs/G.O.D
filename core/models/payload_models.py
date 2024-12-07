@@ -31,7 +31,8 @@ class TrainRequest(BaseModel):
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
+    model: str = Field(...,
+                       description="Name or path of the model to be trained", min_length=1)
     dataset_type: DatasetType | CustomDatasetType
     file_format: FileFormat
     task_id: str
@@ -66,11 +67,13 @@ class MinerTaskResponse(BaseModel):
     message: str
     accepted: bool
 
+
 class DatasetRequest(BaseModel):
     instruction_col: str
     input_col: str = ''
     output_col: str = ''
     system_col: Optional[str] = ''
+
 
 class TaskRequest(DatasetRequest):  # did not add format
     ds_repo: str
@@ -114,14 +117,13 @@ class NewTaskRequest(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
-
 class GetTasksRequest(BaseModel):
     fingerprint: str
 
 
 class NewTaskResponse(BaseModel):
     success: bool
-    task_id: UUID
+    task_id: Optional[UUID] = None
 
 
 class WinningSubmission(BaseModel):
