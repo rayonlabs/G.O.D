@@ -177,7 +177,7 @@ async def _let_miners_know_to_start_training(
     )
 
     logger.info(
-        f"We are telling miners to start training there are {len(nodes)}")
+        f"We are telling miners to start training, there are {len(nodes)}")
 
     for node in nodes:
         response = await process_non_stream_fiber(
@@ -334,9 +334,8 @@ async def _move_back_to_looking_for_nodes(task: Task, config: Config):
 
 async def _check_delayed_tasks(config: Config):
     finished_delay_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.DELAYED, psql_db=config.psql_db)
-    if len(finished_delay_tasks) > 0:
-        logger.info(
-            f"We have {len(finished_delay_tasks)} that we're ready to offer to miners again")
+    logger.info(
+        f"We have {len(finished_delay_tasks)} that we're ready to offer to miners again")
     await asyncio.gather(*[_move_back_to_looking_for_nodes(task, config) for task in finished_delay_tasks])
 
 
