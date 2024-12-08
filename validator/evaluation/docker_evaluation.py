@@ -119,4 +119,5 @@ async def run_evaluation_docker(
             await cleanup_resources()
         except Exception as e:
             logger.info(f"A problem with cleaning up {e}")
+
         client.close()
