@@ -80,7 +80,7 @@ MIN_TASK_SCORE = -0.01  # very tiny punishment while miners find their feet
 MAX_TASK_SCORE = 1.6
 TASK_SCORE_THRESHOLD = 0.95
 REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
-SCORING_WINDOW = 3  # number of days over which we score
+SCORING_WINDOW = 7  # number of days over which we score
 
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
