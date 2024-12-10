@@ -99,7 +99,7 @@ class QualityMetrics(BaseModel):
     total_count: int
     total_success: int
     total_quality: int
-    avg_quality_score: float Field(ge=0.0)
+    avg_quality_score: float = Field(ge=0.0)
     success_rate: float = Field(ge=0.0, le=1.0)
     quality_rate: float = Field(ge=0.0, le=1.0)
 
