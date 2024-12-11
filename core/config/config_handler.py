@@ -4,7 +4,7 @@ import yaml
 from fiber.logging_utils import get_logger
 from transformers import AutoTokenizer
 
-from core.constants import REPO_ID
+import core.constants as cst
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
@@ -21,17 +21,12 @@ def create_dataset_entry(
     dataset_entry = {"path": dataset}
 
     if file_format == FileFormat.JSON:
-        dataset_entry = {
-            "path": f"/workspace/input_data/{os.path.basename(dataset)}"}
+        dataset_entry = {"path": f"/workspace/input_data/{os.path.basename(dataset)}"}
 
     if isinstance(dataset_type, DatasetType):
         dataset_entry["type"] = dataset_type.value
     elif isinstance(dataset_type, CustomDatasetType):
-        custom_type_dict = {
-            key: value
-            for key, value in dataset_type.model_dump().items()
-            if value is not None
-        }
+        custom_type_dict = {key: value for key, value in dataset_type.model_dump().items() if value is not None}
         dataset_entry.update(_process_custom_dataset_fields(custom_type_dict))
     else:
         raise ValueError("Invalid dataset_type provided.")
@@ -43,21 +38,28 @@ def create_dataset_entry(
     return dataset_entry
 
 
+def update_flash_attention(config: dict, model: str):
+    if any(model.lower() in model_name.lower() for model_name in cst.MODELS_WITH_FLASH_ATTENTION) and not any(
+        model.lower() in model_name.lower() for model_name in cst.LLAMA_MODELS_WO_FLASH_ATTENTION
+    ):
+        config["flash_attention"] = True
+    else:
+        config["flash_attention"] = False
+
+    return config
+
+
 def update_model_info(config: dict, model: str, job_id: str = ""):
     logger.info("WE ARE UPDATING THE MODEL INFO")
     tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         config["special_tokens"] = {"pad_token": tokenizer.eos_token}
 
-    if "llama" in model.lower() or "gemma" in model.lower() or "mistral" in model.lower() or "jamba" in model.lower():
-        config["flash_attention"] = True
-    else:
-        config["flash_attention"] = False
-
     config["base_model"] = model
     config["wandb_runid"] = job_id
     config["wandb_name"] = job_id
-    config["hub_model_id"] = f"{REPO_ID}/{job_id}"
+    config["hub_model_id"] = f"{cst.REPO_ID}/{job_id}"
+
     return config
 
 

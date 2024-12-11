@@ -10,6 +10,7 @@ from huggingface_hub import HfApi
 from core import constants as cst
 from core.config.config_handler import create_dataset_entry
 from core.config.config_handler import save_config
+from core.config.config_handler import update_flash_attention
 from core.config.config_handler import update_model_info
 from core.docker_utils import stream_logs
 from core.models.utility_models import CustomDatasetType
@@ -58,6 +59,7 @@ def _load_and_modify_config(
     dataset_entry = create_dataset_entry(dataset, dataset_type, file_format)
     config["datasets"].append(dataset_entry)
 
+    config = update_flash_attention(config, model)
     config = update_model_info(config, model, task_id)
     config["mlflow_experiment_name"] = dataset
 
@@ -88,23 +90,19 @@ def start_tuning_container(job: Job):
     config_filename = f"{job.job_id}.yml"
     config_path = os.path.join(cst.CONFIG_DIR, config_filename)
 
-    config = _load_and_modify_config(
-        job.dataset, job.model, job.dataset_type, job.file_format, job.job_id)
+    config = _load_and_modify_config(job.dataset, job.model, job.dataset_type, job.file_format, job.job_id)
     save_config(config, config_path)
 
     logger.info(config)
 
-    logger.info(os.path.basename(job.dataset)
-                if job.file_format != FileFormat.HF else "")
+    logger.info(os.path.basename(job.dataset) if job.file_format != FileFormat.HF else "")
 
     docker_env = DockerEnvironment(
         huggingface_token=cst.HUGGINGFACE_TOKEN,
         wandb_token=cst.WANDB_TOKEN,
         job_id=job.job_id,
-        dataset_type=job.dataset_type.value if isinstance(
-            job.dataset_type, DatasetType) else cst.CUSTOM_DATASET_TYPE,
-        dataset_filename=os.path.basename(
-            job.dataset) if job.file_format != FileFormat.HF else "",
+        dataset_type=job.dataset_type.value if isinstance(job.dataset_type, DatasetType) else cst.CUSTOM_DATASET_TYPE,
+        dataset_filename=os.path.basename(job.dataset) if job.file_format != FileFormat.HF else "",
     ).to_dict()
     logger.info(f"Docker environment: {docker_env}")
 
@@ -135,8 +133,7 @@ def start_tuning_container(job: Job):
             environment=docker_env,
             volumes=volume_bindings,
             runtime="nvidia",
-            device_requests=[docker.types.DeviceRequest(
-                count=1, capabilities=[["gpu"]])],
+            device_requests=[docker.types.DeviceRequest(count=1, capabilities=[["gpu"]])],
             detach=True,
             tty=True,
         )
@@ -147,8 +144,7 @@ def start_tuning_container(job: Job):
         result = container.wait()
 
         if result["StatusCode"] != 0:
-            raise DockerException(
-                f"Container exited with non-zero status code: {result['StatusCode']}")
+            raise DockerException(f"Container exited with non-zero status code: {result['StatusCode']}")
 
     except Exception as e:
         logger.error(f"Error processing job: {str(e)}")
@@ -158,17 +154,13 @@ def start_tuning_container(job: Job):
         repo = config.get("hub_model_id", None)
         if repo:
             hf_api = HfApi(token=cst.HUGGINGFACE_TOKEN)
-            hf_api.update_repo_visibility(
-                repo_id=repo, private=False, token=cst.HUGGINGFACE_TOKEN)
+            hf_api.update_repo_visibility(repo_id=repo, private=False, token=cst.HUGGINGFACE_TOKEN)
             logger.info(f"Successfully made repository {repo} public")
 
         if "container" in locals():
             try:
                 logger.info("Cleaning up HuggingFace cache...")
-                container.exec_run(
-                    "rm -rf /root/.cache/huggingface/hub/*",
-                    user="root"
-                )
+                container.exec_run("rm -rf /root/.cache/huggingface/hub/*", user="root")
             except Exception as e:
                 logger.warning(f"Failed to clean HuggingFace cache: {e}")
             finally:

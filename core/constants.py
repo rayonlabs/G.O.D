@@ -31,3 +31,6 @@ WANDB_TOKEN = os.getenv("WANDB_TOKEN")
 
 REPO_ID = os.getenv("REPO_ID")
 CUSTOM_DATASET_TYPE = "custom"
+
+MODELS_WITH_FLASH_ATTENTION = ["llama", "gemma", "mistral", "jamba"]
+LLAMA_MODELS_WO_FLASH_ATTENTION = ["NousResearch/CodeLlama", "NousResearch/Yarn-Llama"]

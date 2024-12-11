@@ -37,9 +37,7 @@ async def tune_model(
     global current_job_finish_time
     logger.info("Starting model tuning.")
 
-    current_job_finish_time = datetime.now() + timedelta(
-        hours=train_request.hours_to_complete
-    )
+    current_job_finish_time = datetime.now() + timedelta(hours=train_request.hours_to_complete)
     logger.info(f"Job received is {train_request}")
 
     try:
@@ -80,13 +78,9 @@ async def get_latest_model_submission(
 
     except FileNotFoundError as e:
         logger.error(f"No submission found for task {task_id}: {str(e)}")
-        raise HTTPException(
-            status_code=404, detail=f"No model submission found for task {task_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"No model submission found for task {task_id}")
     except Exception as e:
-        logger.error(
-            f"Error retrieving latest model submission for task {task_id}: {str(e)}"
-        )
+        logger.error(f"Error retrieving latest model submission for task {task_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving latest model submission: {str(e)}",
@@ -103,22 +97,15 @@ async def task_offer(
         # You will want to optimise this as a miner
         global current_job_finish_time
         current_time = datetime.now()
-        if 'llama' not in request.model.lower():
-                return MinerTaskResponse(
-                    message="I'm not yet optimised and only accept llama-type jobs", accepted=False
-                )
-        if (
-            current_job_finish_time is None
-            or current_time + timedelta(hours=1) > current_job_finish_time
-        ):
+        if "llama" not in request.model.lower():
+            return MinerTaskResponse(message="I'm not yet optimised and only accept llama-type jobs", accepted=False)
+        if current_job_finish_time is None or current_time + timedelta(hours=1) > current_job_finish_time:
             if request.hours_to_complete < 13:
                 logger.info("Accepting the offer - ty snr")
                 return MinerTaskResponse(message="Yes", accepted=True)
             else:
                 logger.info("Rejecting offer")
-                return MinerTaskResponse(
-                    message="I only accept small jobs", accepted=False
-                )
+                return MinerTaskResponse(message="I only accept small jobs", accepted=False)
         else:
             return MinerTaskResponse(
                 message=f"Currently busy with another job until {current_job_finish_time.isoformat()}",
@@ -131,9 +118,7 @@ async def task_offer(
     except Exception as e:
         logger.error(f"Unexpected error in task_offer: {str(e)}")
         logger.error(f"Error type: {type(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Error processing task offer: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error processing task offer: {str(e)}")
 
 
 def factory_router() -> APIRouter:
