@@ -23,6 +23,7 @@ class MinerTaskRequest(BaseModel):
     model: str
     hours_to_complete: int
     task_id: str
+    parameter_count: Optional[int] = None
 
 
 class TrainRequest(BaseModel):
@@ -31,12 +32,12 @@ class TrainRequest(BaseModel):
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    model: str = Field(...,
-                       description="Name or path of the model to be trained", min_length=1)
+    model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
     dataset_type: DatasetType | CustomDatasetType
     file_format: FileFormat
     task_id: str
     hours_to_complete: int
+    parameter_count: Optional[int] = None
 
 
 class TrainResponse(BaseModel):
@@ -73,7 +74,6 @@ class DatasetRequest(BaseModel):
     input_col: Optional[str] = None
     output_col: Optional[str] = None
     system_col: Optional[str] = None
-
 
 
 class TaskRequest(DatasetRequest):  # did not add format

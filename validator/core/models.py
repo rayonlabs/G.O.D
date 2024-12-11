@@ -37,6 +37,7 @@ class Task(BaseModel):
     hours_to_complete: int
     best_submission_repo: Optional[str] = None
     user_id: Optional[str] = None
+    parameter_count: Optional[int] = None
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
@@ -153,7 +154,12 @@ class DatasetJsons(BaseModel):
 
     def to_json_strings(self) -> dict[str, str]:
         return {
-            'train_data': json.dumps(self.train_data),
-            'test_data': json.dumps(self.test_data),
-            'synthetic_data': json.dumps(self.synthetic_data) if self.synthetic_data else ""
+            "train_data": json.dumps(self.train_data),
+            "test_data": json.dumps(self.test_data),
+            "synthetic_data": json.dumps(self.synthetic_data) if self.synthetic_data else "",
         }
+
+
+class MinimalModel(BaseModel):
+    model_id: str
+    parameter_count: Optional[int] = None

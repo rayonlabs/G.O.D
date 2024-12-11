@@ -49,6 +49,7 @@ COMPLETED_TIMESTAMP = "completed_timestamp"
 END_TIMESTAMP = "end_timestamp"
 IS_ORGANIC = "is_organic"
 DELAY_TIMES = "delay_times"
+PARAMETER_COUNT = "parameter_count"
 
 # Submissions Table Columns
 SUBMISSION_ID = "submission_id"

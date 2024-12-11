@@ -20,8 +20,9 @@ async def add_task(task: Task, psql_db: PSQLDB) -> Task:
         query = f"""
             INSERT INTO {cst.TASKS_TABLE}
             ({cst.MODEL_ID}, {cst.DS_ID}, {cst.SYSTEM}, {cst.INSTRUCTION}, {cst.INPUT}, {cst.STATUS},
-             {cst.HOURS_TO_COMPLETE}, {cst.OUTPUT}, {cst.FORMAT}, {cst.NO_INPUT_FORMAT}, {cst.USER_ID}, {cst.IS_ORGANIC})
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             {cst.HOURS_TO_COMPLETE}, {cst.OUTPUT}, {cst.FORMAT}, {cst.NO_INPUT_FORMAT}, {cst.USER_ID},
+             {cst.IS_ORGANIC}, {cst.PARAMETER_COUNT})
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING {cst.TASK_ID}
         """
         task_id = await connection.fetchval(
@@ -37,7 +38,8 @@ async def add_task(task: Task, psql_db: PSQLDB) -> Task:
             task.format,
             task.no_input_format,
             task.user_id,
-            task.is_organic
+            task.is_organic,
+            task.parameter_count,
         )
         return await get_task(task_id, psql_db)
 
@@ -105,8 +107,7 @@ async def get_tasks_with_miners(psql_db: PSQLDB) -> List[Dict]:
         """
         rows = await connection.fetch(query, NETUID)
         return [
-            {**dict(row), "miners": json.loads(row["miners"])
-             if isinstance(row["miners"], str) else row["miners"]}
+            {**dict(row), "miners": json.loads(row["miners"]) if isinstance(row["miners"], str) else row["miners"]}
             for row in rows
         ]
 
@@ -137,8 +138,7 @@ async def update_task(updated_task: Task, psql_db: PSQLDB) -> Task:
         connection: Connection
         async with connection.transaction():
             if updates:
-                set_clause = ", ".join(
-                    [f"{column} = ${i+2}" for i, column in enumerate(updates.keys())])
+                set_clause = ", ".join([f"{column} = ${i+2}" for i, column in enumerate(updates.keys())])
                 values = list(updates.values())
                 query = f"""
                     UPDATE {cst.TASKS_TABLE}
