@@ -19,15 +19,16 @@ async def add_task(task: Task, psql_db: PSQLDB) -> Task:
         connection: Connection
         query = f"""
             INSERT INTO {cst.TASKS_TABLE}
-            ({cst.MODEL_ID}, {cst.DS_ID}, {cst.SYSTEM}, {cst.INSTRUCTION}, {cst.INPUT}, {cst.STATUS},
+            ({cst.MODEL_ID}, {cst.DS_ID}, {cst.FILE_FORMAT}, {cst.SYSTEM}, {cst.INSTRUCTION}, {cst.INPUT}, {cst.STATUS},
              {cst.HOURS_TO_COMPLETE}, {cst.OUTPUT}, {cst.FORMAT}, {cst.NO_INPUT_FORMAT}, {cst.USER_ID}, {cst.IS_ORGANIC})
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING {cst.TASK_ID}
         """
         task_id = await connection.fetchval(
             query,
             task.model_id,
             task.ds_id,
+            task.file_format,
             task.system,
             task.instruction,
             task.input,

@@ -82,7 +82,6 @@ async def get_tasks(
                 no_input_format_col=task.get("no_input_format"),
                 miners=[{"hotkey": miner.hotkey, "trust": miner.trust}
                         for miner in miners],
-                dataset=task.get("ds_id"),
                 started=str(task["started_timestamp"]),
                 end=str(task["end_timestamp"]),
                 created=str(task["created_timestamp"]),
@@ -114,6 +113,7 @@ async def create_task(
     task = Task(
         model_id=request.model_repo,
         ds_id=request.ds_repo,
+        file_format=request.file_format,
         system=request.system_col,
         instruction=request.instruction_col,
         input=request.input_col,

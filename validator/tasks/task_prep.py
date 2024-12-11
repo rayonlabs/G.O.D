@@ -11,6 +11,8 @@ from fiber import Keypair
 from fiber.logging_utils import get_logger
 
 import validator.core.constants as cst
+from core.models.utility_models import FileFormat
+from core.utils import download_s3_file
 from validator.evaluation.utils import get_default_dataset_config
 from validator.synth.synth import generate_synthetic_dataset
 from validator.utils.cache_clear import delete_dataset_from_cache
@@ -36,14 +38,35 @@ async def upload_json_to_minio(file_path: str, bucket_name: str, object_name: st
         return False
 
 
-def train_test_split(dataset_name: str, test_size: float = None) -> DatasetDict:
+async def load_dataset_from_s3(dataset_url: str) -> Dataset | DatasetDict:
+    """Load a dataset from S3 storage."""
+    try:
+        local_file_path = await download_s3_file(dataset_url)
+        # Create temp directory and move file there
+        temp_dir = tempfile.mkdtemp()
+        filename = os.path.basename(local_file_path)
+        new_path = os.path.join(temp_dir, filename)
+        os.rename(local_file_path, new_path)
+        dataset = load_dataset(temp_dir)
+        # Cleanup
+        os.remove(new_path)  # needed to remove the directory
+        os.rmdir(temp_dir)
+        return dataset
+    except Exception as e:
+        logger.exception(f"Failed to load dataset from S3: {e}")
+        raise e
+
+
+async def train_test_split(dataset_name: str, file_format: FileFormat, test_size: float = None) -> DatasetDict:
     if test_size is None:
         test_size = cst.TRAIN_TEST_SPLIT_PERCENTAGE
-    logger.info(f"Loading dataset '{dataset_name}'")
+    logger.info(f"Loading dataset '{dataset_name}' from {file_format}")
     try:
-        config_name = get_default_dataset_config(dataset_name)
-        dataset = load_dataset(dataset_name, config_name,
-                               trust_remote_code=True)
+        if file_format == FileFormat.S3:
+            dataset = await load_dataset_from_s3(dataset_name)
+        else:
+            config_name = get_default_dataset_config(dataset_name)
+            dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
     except Exception as e:
         logger.exception(f"Failed to load dataset {dataset_name}: {e}")
         raise e
@@ -120,12 +143,13 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
 
 async def prepare_task(
     dataset_name: str,
+    file_format: FileFormat,
     columns_to_sample: List[str],
     keypair: Keypair
 ) -> tuple[str, str, str]:
 
     logger.info(f"Preparing {dataset_name}")
-    dataset_dict = train_test_split(dataset_name)
+    dataset_dict = await train_test_split(dataset_name, file_format)
     train_dataset = dataset_dict["train"]
     test_dataset = dataset_dict["test"]
 

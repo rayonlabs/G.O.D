@@ -24,17 +24,23 @@ from validator.evaluation.weight_setting import set_weights_periodically
 from validator.tasks.scheduler import synthetic_task_loop
 from validator.tasks.task_prep import prepare_task
 from validator.utils.call_endpoint import process_non_stream_fiber
+from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
 
 
-def _get_total_dataset_size(repo_name: str) -> int:
-    return sum(
-        info.dataset_size
-        for info in get_dataset_infos(repo_name).values()
-        if info.dataset_size
-    )
+async def _get_total_dataset_size(repo_name: str, file_format: FileFormat) -> int:
+    if file_format == FileFormat.S3:
+        bucket_name, object_name = async_minio_client.parse_s3_url(repo_name)
+        stats = await async_minio_client.get_stats(bucket_name, object_name)
+        return stats.size
+    else:
+        return sum(
+            info.dataset_size
+            for info in get_dataset_infos(repo_name).values()
+            if info.dataset_size
+        )
 
 
 async def _run_task_prep(task: Task, keypair: Keypair) -> Task:
@@ -45,7 +51,10 @@ async def _run_task_prep(task: Task, keypair: Keypair) -> Task:
         if i is not None
     ]
     test_data, synth_data, train_data = await prepare_task(
-        dataset_name=task.ds_id, columns_to_sample=columns_to_sample, keypair=keypair
+        dataset_name=task.ds_id,
+        file_format=task.file_format,
+        columns_to_sample=columns_to_sample,
+        keypair=keypair
     )
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
@@ -82,7 +91,7 @@ async def _select_miner_pool_and_add_to_task(
         return task
 
     selected_miners: list[str] = []
-    ds_size = _get_total_dataset_size(task.ds_id)
+    ds_size = await _get_total_dataset_size(task.ds_id, task.file_format)
     task_request = MinerTaskRequest(
         ds_size=ds_size,
         model=task.model_id,

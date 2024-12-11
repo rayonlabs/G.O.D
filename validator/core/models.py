@@ -9,12 +9,15 @@ from uuid import uuid4
 from pydantic import BaseModel
 from pydantic import Field
 
+from core.models.utility_models import FileFormat
+
 
 class Task(BaseModel):
     is_organic: bool
     task_id: Optional[UUID] = None
     model_id: str
     ds_id: str
+    file_format: FileFormat
     input: Optional[str] = None
     status: str
     system: Optional[str] = None

@@ -106,6 +106,7 @@ class SubmissionResponse(BaseModel):
 class NewTaskRequest(BaseModel):
     model_repo: str
     ds_repo: str
+    file_format: FileFormat = FileFormat.HF
     instruction_col: str
     input_col: Optional[str] = None
     hours_to_complete: int
