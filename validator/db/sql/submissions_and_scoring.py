@@ -252,11 +252,11 @@ async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) 
             SELECT
                 COALESCE(AVG(tn.{cst.QUALITY_SCORE}), 0) as avg_quality_score,
                 COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as success_rate,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.85 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.95 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate,
                 COALESCE(COUNT(*), 0) as total_count,
                 COALESCE(SUM(tn.{cst.QUALITY_SCORE}), 0) as total_score,
                 COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END), 0) as total_success,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.85 THEN 1 END), 0) as total_quality
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.95 THEN 1 END), 0) as total_quality
 
             FROM {cst.TASK_NODES_TABLE} tn
             JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
