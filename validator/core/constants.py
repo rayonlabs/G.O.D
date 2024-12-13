@@ -76,10 +76,10 @@ MAX_DELAY_TIMES = 6
 SOFTMAX_TEMPERATURE = 0.5
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 TARGET_SCORE_RATIO = 1
-MIN_TASK_SCORE = -0.05  # very tiny punishment while miners find their feet
+MIN_TASK_SCORE = -0.1  # very tiny punishment while miners find their feet
 MAX_TASK_SCORE = 1.6
 TASK_SCORE_THRESHOLD = 0.9
-REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
+REWEIGHTING_EXP = 0.6  # how much of a drop off from leader
 SCORING_WINDOW = 7  # number of days over which we score
 
 # processing stuff
