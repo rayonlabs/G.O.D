@@ -110,7 +110,8 @@ async def get_task_details_by_account(
     page: int = 1,
     config: Config = Depends(get_config),
 ) -> List[TaskDetails]:
-    tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, page)
+    offset = (page - 1) * limit
+    tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
 
     task_status_responses = [
         TaskDetails(
