@@ -316,15 +316,21 @@ async def _handle_delayed_tasks(config: Config):
     await asyncio.gather(*[_move_back_to_looking_for_nodes(task, config) for task in finished_delay_tasks])
 
 
+<<<<<<< HEAD
 async def _move_to_preevaluation_status(task, config):
     task.status = TaskStatus.PREEVALUATION
     logger.info(f"Changing status to {task.status}", create_extra_log(task_id=task.task_id))
+=======
+async def _move_back_to_preevaluation_status(task, config):
+    task.status = TaskStatus.PREEVALUATION
+>>>>>>> aad92fc (adding in preevaluation)
     await tasks_sql.update_task(task, config.psql_db)
 
 
 async def _move_any_evaluating_tasks_to_pending_evaluation(config: Config):
     stopped_mid_evaluation = await tasks_sql.get_tasks_with_status(TaskStatus.EVALUATING, psql_db=config.psql_db)
     logger.info(f"WE  ARE MOVING {len(stopped_mid_evaluation)} TASKS TO PREEVALUATION")
+<<<<<<< HEAD
     await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in stopped_mid_evaluation])
 
 
@@ -340,6 +346,9 @@ async def _move_any_prep_data_to_pending(config):
 
 async def _move_to_preevaluation(tasks: list[RawTask], config: Config):
     await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
+=======
+    await asyncio.gather(*[_move_back_to_preevaluation_status(task, config) for task in stopped_mid_evaluation])
+>>>>>>> aad92fc (adding in preevaluation)
 
 
 async def process_pending_tasks(config: Config) -> None:
@@ -355,8 +364,13 @@ async def process_pending_tasks(config: Config) -> None:
             await asyncio.sleep(30)
 
 
+<<<<<<< HEAD
 async def move_tasks_to_preevaluation_loop(config: Config):
     #    await _move_any_evaluating_tasks_to_pending_evaluation(config)
+=======
+async def process_completed_tasks(config: Config) -> None:
+    await _move_any_evaluating_tasks_to_pending_evaluation(config)
+>>>>>>> aad92fc (adding in preevaluation)
     while True:
         completed_tasks = await tasks_sql.get_tasks_ready_to_evaluate(config.psql_db)
         if completed_tasks:

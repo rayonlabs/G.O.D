@@ -106,6 +106,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     if len(train_dataset) == 0:
         raise ValueError("Cannot split an empty dataset")
 
+<<<<<<< HEAD
     try:
         num_synthetic_samples = min(cst.MAX_SYNTH_DATA_POINTS, int(len(train_dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE))
         dataset_length = len(train_dataset)
@@ -124,6 +125,10 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     )
 
     return remaining_train_dataset, synthetic_dataset
+=======
+    logger.info("We have a train and synth dataset ready")
+    return train_dataset, synthetic_data
+>>>>>>> aad92fc (adding in preevaluation)
 
 
 async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair: Keypair) -> tuple[str, str, str]:
@@ -150,9 +155,14 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
         else:
             logger.info("Skipping synthetic data generation", extra=create_extra_log())
     except Exception as e:
+<<<<<<< HEAD
         # if for some reason the api is down, we move some of the train over to be synth
 
         logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}", extra=create_extra_log())
+=======
+        logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
+
+>>>>>>> aad92fc (adding in preevaluation)
         train_dataset, synthetic_data = assign_some_of_the_train_to_synth(train_dataset)
 
     if synthetic_data is None:
