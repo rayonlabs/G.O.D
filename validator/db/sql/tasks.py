@@ -10,8 +10,9 @@ from fiber.logging_utils import get_logger
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
-from validator.core.models import RawTask, TrainingTaskStatus
+from validator.core.models import RawTask
 from validator.core.models import Task
+from validator.core.models import TrainingTaskStatus
 from validator.db.database import PSQLDB
 
 
@@ -393,9 +394,9 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
             LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
             WHERE tasks.{cst.STATUS} = $1
             AND tasks.{cst.IS_ORGANIC} = true
-            AND tasks.{cst.CREATED_AT} >= NOW() - INTERVAL '$2 hours'
+            AND tasks.{cst.CREATED_AT} >= NOW() - $2 * INTERVAL '1 hour'
             ORDER BY tasks.{cst.CREATED_AT} DESC
         """
 
-        rows = await connection.fetch(query, TaskStatus.COMPLETED.value, hours)
+        rows = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
         return [Task(**dict(row)) for row in rows]
