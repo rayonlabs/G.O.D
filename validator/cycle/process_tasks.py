@@ -316,7 +316,7 @@ async def _handle_delayed_tasks(config: Config):
     await asyncio.gather(*[_move_back_to_looking_for_nodes(task, config) for task in finished_delay_tasks])
 
 
-async def _move_back_to_preevaluation_status(task, config):
+async def _move_to_preevaluation_status(task, config):
     task.status = TaskStatus.PREEVALUATION
     logger.info(f"Moving this one back {task}")
     await tasks_sql.update_task(task, config.psql_db)
@@ -325,7 +325,7 @@ async def _move_back_to_preevaluation_status(task, config):
 async def _move_any_evaluating_tasks_to_pending_evaluation(config: Config):
     stopped_mid_evaluation = await tasks_sql.get_tasks_with_status(TaskStatus.EVALUATING, psql_db=config.psql_db)
     logger.info(f"WE  ARE MOVING {len(stopped_mid_evaluation)} TASKS TO PREEVALUATION")
-    await asyncio.gather(*[_move_back_to_preevaluation_status(task, config) for task in stopped_mid_evaluation])
+    await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in stopped_mid_evaluation])
 
 
 async def _move_back_to_pending_status(task, config):
@@ -336,6 +336,10 @@ async def _move_back_to_pending_status(task, config):
 async def _move_any_prep_data_to_pending(config):
     stopped_in_prep = await tasks_sql.get_tasks_with_status(TaskStatus.PREPARING_DATA, psql_db=config.psql_db)
     await asyncio.gather(*[_move_back_to_pending_status(task, config) for task in stopped_in_prep])
+
+
+async def _move_to_preevaluation(tasks: list[RawTask], config: Config):
+    await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
 
 
 async def process_pending_tasks(config: Config) -> None:
@@ -355,6 +359,8 @@ async def process_completed_tasks(config: Config) -> None:
     await _move_any_evaluating_tasks_to_pending_evaluation(config)
     while True:
         completed_tasks = await tasks_sql.get_tasks_ready_to_evaluate(config.psql_db)
+        await _move_to_preevaluation(completed_tasks, config)
+
         if len(completed_tasks) > 0:
             logger.info(f"There are {len(completed_tasks)} awaiting evaluation")
             for task in completed_tasks:
