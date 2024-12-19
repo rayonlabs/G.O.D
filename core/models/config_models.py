@@ -33,6 +33,7 @@ class ValidatorConfig(BaseConfig):
     s3_compatible_access_key: str
     s3_compatible_secret_key: str
     s3_bucket_name: str
+    s3_region: str = "us-east-1"
     frontend_api_key: str
     validator_port: str
     set_metagraph_weights: bool

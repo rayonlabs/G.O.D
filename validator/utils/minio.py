@@ -13,8 +13,16 @@ logger = get_logger(__name__)
 # TODO: TODO: TODO: BIN ALL OF THIS PLZ :PRAY:
 ## WW: Looks like the best GPT code to date
 
+
 class AsyncMinioClient:
-    def __init__(self, endpoint, access_key, secret_key, secure=True, region="us-east-1"):
+    def __init__(
+        self,
+        endpoint,
+        access_key,
+        secret_key,
+        region,
+        secure=True,
+    ):
         self.endpoint = endpoint
         self.client = Minio(
             endpoint,
@@ -32,8 +40,7 @@ class AsyncMinioClient:
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(self.executor, func, *args)
-            logger.info(
-                f"The bucket_name is {bucket_name} and the result was {result}")
+            logger.info(f"The bucket_name is {bucket_name} and the result was {result}")
             return result
         except Exception as e:
             logger.info(f"There was an issue with uploading file to s3. {e}")
@@ -81,9 +88,8 @@ class AsyncMinioClient:
 S3_COMPATIBLE_ENDPOINT = os.getenv("S3_COMPATIBLE_ENDPOINT", "localhost:9000")
 S3_COMPATIBLE_ACCESS_KEY = os.getenv("S3_COMPATIBLE_ACCESS_KEY", "minioadmin")
 S3_COMPATIBLE_SECRET_KEY = os.getenv("S3_COMPATIBLE_SECRET_KEY", "minioadmin")
+S3_REGION = os.getenv("S3_REGION", "us-east-1")
 
 async_minio_client = AsyncMinioClient(
-    endpoint=S3_COMPATIBLE_ENDPOINT,
-    access_key=S3_COMPATIBLE_ACCESS_KEY,
-    secret_key=S3_COMPATIBLE_SECRET_KEY
+    endpoint=S3_COMPATIBLE_ENDPOINT, access_key=S3_COMPATIBLE_ACCESS_KEY, secret_key=S3_COMPATIBLE_SECRET_KEY, region=S3_REGION
 )
