@@ -1,0 +1,22 @@
+apiVersion: 1
+
+deleteDatasources:
+  - name: Loki
+  - name: Prometheus
+  - name: Jaeger
+  - name: Tempo
+  - name: Redis
+
+datasources:
+  - name: Loki
+    type: loki
+    url: http://loki:3100
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:9090
+  - name: Tempo
+    type: tempo
+    url: http://tempo:3200
+  - name: Redis
+    type: redis-datasource
+    url: redis://redis:6379
