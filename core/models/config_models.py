@@ -33,7 +33,6 @@ class ValidatorConfig(BaseConfig):
     s3_compatible_access_key: str
     s3_compatible_secret_key: str
     s3_bucket_name: str
-    s3_region: str = "us-east-1"
     frontend_api_key: str
     validator_port: str
     set_metagraph_weights: bool
@@ -43,3 +42,4 @@ class ValidatorConfig(BaseConfig):
     localhost: bool = False
     env_file: str = ".vali.env"
     hf_datasets_trust_remote_code = True
+    s3_region: str = "us-east-1"
