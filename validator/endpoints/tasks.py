@@ -19,13 +19,14 @@ from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
+from validator.core.constants import MAX_CONCURRENT_JOBS
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
-from validator.core.models import RawTask, TrainingTaskStatus
+from validator.core.models import RawTask
+from validator.core.models import TrainingTaskStatus
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
-from validator.core.constants import MAX_CONCURRENT_JOBS
 
 
 logger = get_logger(__name__)
@@ -39,6 +40,7 @@ GET_NETWORK_STATUS = "/v1/network/status"
 GET_NODE_RESULTS_ENDPOINT = "/v1/tasks/node_results/{hotkey}"
 DELETE_TASK_ENDPOINT = "/v1/tasks/delete/{task_id}"
 LEADERBOARD_ENDPOINT = "/v1/leaderboard"
+COMPLETED_ORGANIC_TASKS_ENDPOINT = "/v1/tasks/organic/completed"
 
 
 async def delete_task(
@@ -214,6 +216,38 @@ async def get_network_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def get_completed_organic_tasks(
+    config: Config = Depends(get_config),
+) -> List[TaskDetails]:
+    """Get all completed organic tasks from the last 5 hours"""
+    tasks = await task_sql.get_completed_organic_tasks(config.psql_db)
+
+    task_details = [
+        TaskDetails(
+            id=task.task_id,
+            account_id=task.account_id,
+            status=task.status,
+            base_model_repository=task.model_id,
+            ds_repo=task.ds_id,
+            field_input=task.field_input,
+            field_system=task.field_system,
+            field_instruction=task.field_instruction,
+            field_output=task.field_output,
+            format=task.format,
+            no_input_format=task.no_input_format,
+            system_format=task.system_format,
+            created_at=task.created_at,
+            started_at=task.started_at,
+            finished_at=task.termination_at,
+            hours_to_complete=task.hours_to_complete,
+            trained_model_repository=task.trained_model_repository,
+        )
+        for task in tasks
+    ]
+
+    return task_details
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Gradients On Demand"], dependencies=[Depends(get_api_key)])
     router.add_api_route(TASKS_CREATE_ENDPOINT, create_task, methods=["POST"])
@@ -224,7 +258,9 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_TASKS_BY_ACCOUNT_ENDPOINT, get_task_details_by_account, methods=["GET"])
     router.add_api_route(LEADERBOARD_ENDPOINT, get_leaderboard, methods=["GET"])
     router.add_api_route(GET_NETWORK_STATUS, get_network_status, methods=["GET"])
+    router.add_api_route(COMPLETED_ORGANIC_TASKS_ENDPOINT, get_completed_organic_tasks, methods=["GET"])
     logger.info("Router routes at end of factory:")
     for route in router.routes:
         logger.info(f"- {route.path} [{route.methods}]")
+
     return router
