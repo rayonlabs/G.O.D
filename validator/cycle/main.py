@@ -30,7 +30,7 @@ async def run_validator_cycles() -> None:
         set_weights_periodically(config),
         process_completed_tasks(config),
         process_pending_tasks(config),
-        sign_up_cron_job(config.keypair),
+    #    sign_up_cron_job(config.keypair),
     )
 
 
