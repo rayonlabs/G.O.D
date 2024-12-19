@@ -10,8 +10,9 @@ from fiber.logging_utils import get_logger
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
-from validator.core.models import RawTask, TrainingTaskStatus
+from validator.core.models import RawTask
 from validator.core.models import Task
+from validator.core.models import TrainingTaskStatus
 from validator.db.database import PSQLDB
 
 
@@ -362,4 +363,40 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
         """
 
         rows = await connection.fetch(query, account_id, limit, offset)
+        return [Task(**dict(row)) for row in rows]
+
+
+async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[Task]:
+    """Get completed organic tasks from the specified timeframe
+
+    Args:
+        psql_db: Database connection
+        hours: Number of hours to look back (default: 5)
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            WITH victorious_repo AS (
+                SELECT submissions.{cst.TASK_ID}, submissions.{cst.REPO}
+                FROM {cst.SUBMISSIONS_TABLE} submissions
+                JOIN {cst.TASK_NODES_TABLE} task_nodes
+                ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
+                AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
+                AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
+                AND task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
+                ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
+                LIMIT 1
+            )
+            SELECT
+                tasks.*,
+                victorious_repo.{cst.REPO} as trained_model_repository
+            FROM {cst.TASKS_TABLE} tasks
+            LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+            WHERE tasks.{cst.STATUS} = $1
+            AND tasks.{cst.IS_ORGANIC} = true
+            AND tasks.{cst.CREATED_AT} >= NOW() - $2 * INTERVAL '1 hour'
+            ORDER BY tasks.{cst.CREATED_AT} DESC
+        """
+
+        rows = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
         return [Task(**dict(row)) for row in rows]

@@ -13,7 +13,8 @@ nohup.out
 axolotl/*
 axolotl
 postgres_data/*
-postgres_data
+postgres_data*
+
 
 postgres_data
 postgres_data/*
