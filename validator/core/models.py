@@ -213,7 +213,10 @@ class DatasetJsons(BaseModel):
         }
 
 
-class TrainingTaskStatus(BaseModel):
+class NetworkStats(BaseModel):
     number_of_jobs_training: int
+    number_of_jobs_preevaluation: int
+    number_of_jobs_evaluating: int
+    number_of_jobs_success: int
     next_training_end: datetime | None
     job_can_be_made: bool = True

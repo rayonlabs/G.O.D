@@ -10,7 +10,8 @@ from fiber.logging_utils import get_logger
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
-from validator.core.models import RawTask, TrainingTaskStatus
+from validator.core.models import NetworkStats
+from validator.core.models import RawTask
 from validator.core.models import Task
 from validator.db.database import PSQLDB
 
@@ -169,19 +170,31 @@ async def get_synthetic_set_for_task(task_id: str, psql_db: PSQLDB):
         return await connection.fetchval(query, task_id)
 
 
-async def get_training_tasks_stats(psql_db: PSQLDB) -> TrainingTaskStatus:
+async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
             SELECT
-                COUNT(*) as number_of_jobs_training,
-                MIN(termination_at) as next_training_end
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $1) as number_of_jobs_training,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $2) as number_of_jobs_preevaluation,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $3) as number_of_jobs_evaluating,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $4) as number_of_jobs_success,
+                MIN(termination_at) FILTER (WHERE {cst.STATUS} = $1) as next_training_end
             FROM {cst.TASKS_TABLE}
-            WHERE {cst.STATUS} = $1
         """
-        row = await connection.fetchrow(query, TaskStatus.TRAINING.value)
-        return TrainingTaskStatus(
-            number_of_jobs_training=row["number_of_jobs_training"], next_training_end=row["next_training_end"]
+        row = await connection.fetchrow(
+            query,
+            TaskStatus.TRAINING.value,
+            TaskStatus.PREEVALUATION.value,
+            TaskStatus.EVALUATING.value,
+            TaskStatus.SUCCESS.value,
+        )
+        return NetworkStats(
+            number_of_jobs_training=row["number_of_jobs_training"],
+            number_of_jobs_preevaluation=row["number_of_jobs_preevaluation"],
+            number_of_jobs_evaluating=row["number_of_jobs_evaluating"],
+            number_of_jobs_success=row["number_of_jobs_success"],
+            next_training_end=row["next_training_end"],
         )
 
 
