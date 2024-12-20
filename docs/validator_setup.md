@@ -32,7 +32,7 @@ You know how to do this, don't you ;)
 
 3. Create and set up the `.vali.env` file:
 
-Within this you'll be asked for the gpu(s) you'd like to use for validation if you want to use more than one or a particular gpu index. 
+Within this you'll be asked for the gpu(s) you'd like to use for validation. If you select the default, then gpu at index [0] will be used to evaluate all models. However, you can select whichever you'd like "3,4,5" would mean that evaluation jobs are spread between your third, fourth and fifth gpu, for example.
 
 ```bash
 task config
