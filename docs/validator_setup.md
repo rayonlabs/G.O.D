@@ -11,6 +11,7 @@ child hotkeying would not be a bad idea at all.
 - Hugging Face account
 - s3 bucket [Backblaze B2 example](s3_setup.md)
 
+
 ## Setup Steps
 
 0. Clone the repo
@@ -30,6 +31,8 @@ task bootstrap
 You know how to do this, don't you ;)
 
 3. Create and set up the `.vali.env` file:
+
+Within this you'll be asked for the gpu(s) you'd like to use for validation if you want to use more than one or a particular gpu index. 
 
 ```bash
 task config
