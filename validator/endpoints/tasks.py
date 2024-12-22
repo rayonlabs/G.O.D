@@ -207,10 +207,10 @@ async def get_network_status(
 ) -> NetworkStats:
     try:
         logger.debug("IN get network status")
-        stats = await task_sql.get_current_task_stats(config.psql_db)
-        if stats.number_of_jobs_training >= MAX_CONCURRENT_JOBS:
-            stats.job_can_be_made = False
-        return stats
+        current_task_stats = await task_sql.get_current_task_stats(config.psql_db)
+        if current_task_stats.number_of_jobs_training >= MAX_CONCURRENT_JOBS:
+            current_task_stats.job_can_be_made = False
+        return current_task_stats
     except Exception as e:
         logger.info(f"There was an issue with getting training status {e}")
         raise HTTPException(status_code=500, detail=str(e))
