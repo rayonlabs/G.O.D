@@ -220,11 +220,10 @@ async def get_completed_organic_tasks(
     hours: int | None = None,
     config: Config = Depends(get_config),
 ) -> List[TaskDetails]:
-    """Get all completed organic tasks from the specified timeframe
+    """Get all completed organic tasks from the last N hours
 
     Args:
-        hours: Number of hours to look back (defaults to config value)
-        config: Application configuration
+        hours: Number of hours to look back
     """
     lookup_hours = hours if hours is not None else config.default_organic_task_history_hours
     tasks = await task_sql.get_completed_organic_tasks(config.psql_db, lookup_hours)
