@@ -265,4 +265,5 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_TASKS_BY_ACCOUNT_ENDPOINT, get_task_details_by_account, methods=["GET"])
     router.add_api_route(LEADERBOARD_ENDPOINT, get_leaderboard, methods=["GET"])
     router.add_api_route(GET_NETWORK_STATUS, get_network_status, methods=["GET"])
+    router.add_api_route(COMPLETED_ORGANIC_TASKS_ENDPOINT, get_completed_organic_tasks, methods=["GET"])
     return router
