@@ -412,8 +412,8 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
             LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
             WHERE tasks.{cst.STATUS} = $1
             AND tasks.{cst.IS_ORGANIC} = true
-            AND tasks.{cst.COMPLETED_AT} >= NOW() - $2 * INTERVAL '1 hour'
-            ORDER BY tasks.{cst.COMPLETED_AT} DESC
+            AND tasks.{cst.TERMINATION_AT} >= NOW() - $2 * INTERVAL '1 hour'
+            ORDER BY tasks.{cst.TERMINATION_AT} DESC
         """
 
         rows = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
