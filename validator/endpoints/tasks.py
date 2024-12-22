@@ -1,11 +1,11 @@
 from datetime import datetime
 from datetime import timedelta
-from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Response
 from fiber.logging_utils import get_logger
 
@@ -113,7 +113,7 @@ async def get_task_details_by_account(
     limit: int = 100,
     page: int = 1,
     config: Config = Depends(get_config),
-) -> List[TaskDetails]:
+) -> list[TaskDetails]:
     offset = (page - 1) * limit
     tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
 
@@ -187,7 +187,7 @@ async def get_miner_breakdown(
 
 async def get_leaderboard(
     config: Config = Depends(get_config),
-) -> List[LeaderboardRow]:
+) -> list[LeaderboardRow]:
     nodes = await get_all_nodes(config.psql_db)
     leaderboard_rows = []
 
@@ -217,12 +217,11 @@ async def get_network_status(
 
 
 async def get_completed_organic_tasks(
-    hours: int | None = None,
+    hours: int = Query(default=5, description="Number of hours to look back for completed organic tasks", ge=1),
     config: Config = Depends(get_config),
-) -> List[TaskDetails]:
+) -> list[TaskDetails]:
     """Get all completed organic tasks from the last N hours"""
-    lookup_hours = hours if hours is not None else config.default_organic_task_history_hours
-    tasks = await task_sql.get_completed_organic_tasks(config.psql_db, lookup_hours)
+    tasks = await task_sql.get_completed_organic_tasks(config.psql_db, hours)
 
     task_details = [
         TaskDetails(

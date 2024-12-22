@@ -35,7 +35,6 @@ class Config:
     set_metagraph_weights_with_high_updated_to_not_dereg: bool
     testnet: bool = os.getenv("SUBTENSOR_NETWORK", "").lower() == "test"
     debug: bool = os.getenv("ENV", "prod").lower() != "prod"
-    default_organic_task_history_hours: int = 5
 
 
 _config = None
@@ -74,8 +73,6 @@ def load_config() -> Config:
             os.getenv("SET_METAGRAPH_WEIGHTS_WITH_HIGH_UPDATED_TO_NOT_DEREG", "false").lower() == "true"
         )
 
-        default_organic_task_history_hours = int(os.getenv("DEFAULT_ORGANIC_TASK_HISTORY_HOURS", "5"))
-
         _config = Config(
             substrate=substrate,
             keypair=keypair,
@@ -88,6 +85,5 @@ def load_config() -> Config:
             httpx_client=httpx_client,
             debug=dev_env,
             set_metagraph_weights_with_high_updated_to_not_dereg=set_metagraph_weights_with_high_updated_to_not_dereg,
-            default_organic_task_history_hours=default_organic_task_history_hours,
         )
     return _config
