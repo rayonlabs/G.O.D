@@ -57,7 +57,7 @@ async def refresh_nodes_periodically(config: Config) -> None:
         try:
             logger.info("Attempting to refresh nodes with the metagraph")
             # 1 minute timeout
-            await asyncio.wait_for(_get_and_store_nodes(config), timeout=60)
+            await asyncio.wait_for(_get_and_store_nodes(config), timeout=5 * 60)
             await asyncio.sleep(60 * 15)  # 15 minutes
             logger.info("Node refresh cycle complete! Waiting 15 minutes before next refresh...")
         except asyncio.TimeoutError:
