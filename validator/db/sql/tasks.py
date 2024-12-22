@@ -354,21 +354,27 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
         connection: Connection
         query = f"""
             WITH victorious_repo AS (
-                SELECT submissions.{cst.TASK_ID}, submissions.{cst.REPO}
+                SELECT
+                    submissions.{cst.TASK_ID},
+                    submissions.{cst.REPO},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY submissions.{cst.TASK_ID}
+                        ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
+                    ) AS rn
                 FROM {cst.SUBMISSIONS_TABLE} submissions
                 JOIN {cst.TASK_NODES_TABLE} task_nodes
-                ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
-                AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
-                AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
-                AND task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
-                ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
-                LIMIT 1
+                    ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
+                   AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
+                   AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
+                WHERE task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
             )
             SELECT
                 tasks.*,
-                victorious_repo.{cst.REPO} as trained_model_repository
+                victorious_repo.{cst.REPO} AS trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
-            LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+            LEFT JOIN victorious_repo
+                ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+               AND victorious_repo.rn = 1
             WHERE tasks.{cst.ACCOUNT_ID} = $1
             ORDER BY tasks.{cst.CREATED_AT} DESC
             LIMIT $2 OFFSET $3
