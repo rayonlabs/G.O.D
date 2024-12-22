@@ -395,21 +395,28 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
         connection: Connection
         query = f"""
             WITH victorious_repo AS (
-                SELECT submissions.{cst.TASK_ID}, submissions.{cst.REPO}
+                SELECT
+                    submissions.{cst.TASK_ID},
+                    submissions.{cst.REPO},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY submissions.{cst.TASK_ID}
+                        ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
+                    ) AS rn
                 FROM {cst.SUBMISSIONS_TABLE} submissions
                 JOIN {cst.TASK_NODES_TABLE} task_nodes
-                ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
-                AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
-                AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
+                    ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
+                    AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
+                    AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
                 WHERE task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
                 ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
-                LIMIT 1
             )
             SELECT
                 tasks.*,
                 victorious_repo.{cst.REPO} as trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
-            LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+            LEFT JOIN victorious_repo
+                ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+                AND victorious_repo.rn = 1
             WHERE tasks.{cst.STATUS} = $1
             AND tasks.{cst.IS_ORGANIC} = true
             AND tasks.{cst.TERMINATION_AT} >= NOW() - $2 * INTERVAL '1 hour'
