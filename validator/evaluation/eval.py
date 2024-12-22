@@ -9,7 +9,6 @@ import yaml
 from axolotl.utils.data import load_tokenized_prepared_datasets
 from axolotl.utils.dict import DictDefault
 from fiber.logging_utils import get_logger
-from peft import PeftModel
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
