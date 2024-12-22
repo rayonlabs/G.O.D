@@ -1,12 +1,14 @@
+import asyncio
 import re
 from datetime import datetime
 from datetime import timedelta
-import asyncio
+
 import numpy as np
 from fiber.chain.models import Node
 from fiber.logging_utils import get_logger
 from scipy.stats import gmean
 
+import validator.core.constants as cts
 from core.models.payload_models import EvaluationResult
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
@@ -20,7 +22,6 @@ from validator.core.models import RawTask
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
-import validator.core.constants as cts
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
@@ -321,7 +322,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
             logger.error(f"Failed to delete file {file_path} from MinIO: {e}")
 
 
-async def _process_miner(
+async def _evaluate_miner_result(
     miner: Node, task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
 ) -> MinerResults:
     assert task.task_id is not None, "We should have a task id when processing the miner"
@@ -457,7 +458,7 @@ async def process_miners_batch(
     results = []
     for batch in batches:
         batch_results = await asyncio.gather(
-            *[_process_miner(miner, task, dataset_type, config, gpu_list) for miner, gpu_list in batch]
+            *[_evaluate_miner_result(miner, task, dataset_type, config, gpu_list) for miner, gpu_list in batch]
         )
         results.extend(batch_results)
 
@@ -474,8 +475,7 @@ async def evaluate_and_score(task: RawTask, config: Config) -> RawTask:
     dataset_type = _get_dataset_type(task)
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
-    gpu_ids = [i for i in range(len(cts.GPU_IDS))]
-    task_results = await process_miners_batch(miner_pool, task, dataset_type, config, gpu_ids)
+    task_results = await process_miners_batch(miner_pool, task, dataset_type, config, cts.GPU_IDS)
     logger.info("Checking for duplicates ...")
     keep_submission = await handle_duplicate_submissions(task_results)
     task_results = zero_duplicate_scores(task_results, keep_submission)

@@ -8,15 +8,14 @@ from datasets import DatasetDict
 from datasets import concatenate_datasets
 from datasets import load_dataset
 from fiber import Keypair
-from fiber.logging_utils import get_logger
 
 import validator.core.constants as cst
 from validator.augmentation.augmentation import generate_augmented_dataset
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
-from validator.utils.minio import async_minio_client
 from validator.utils.logging import create_extra_log
 from validator.utils.logging import logger
+from validator.utils.minio import async_minio_client
 
 
 async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
@@ -93,7 +92,15 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
 
 def change_to_json_format(dataset: Dataset, columns: List[str]):
     try:
-        return [{col: str(row[col]) if row[col] is not None else "" for col in columns if col in row} for row in dataset]
+        result = []
+        for row in dataset:
+            row_dict = {}
+            for col in columns:
+                if col in row:
+                    value = row[col]
+                    row_dict[col] = str(value) if value is not None else ""
+            result.append(row_dict)
+        return result
     except Exception as e:
         logger.error(f"Error converting to JSON format: {str(e)}")
         return []
@@ -105,7 +112,6 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
 
     if len(train_dataset) == 0:
         raise ValueError("Cannot split an empty dataset")
-
     try:
         num_synthetic_samples = min(cst.MAX_SYNTH_DATA_POINTS, int(len(train_dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE))
         dataset_length = len(train_dataset)
