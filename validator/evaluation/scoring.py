@@ -2,13 +2,12 @@ import asyncio
 import re
 from datetime import datetime
 from datetime import timedelta
-
+import asyncio
 import numpy as np
 from fiber.chain.models import Node
 from fiber.logging_utils import get_logger
 from scipy.stats import gmean
 
-import validator.core.constants as cts
 from core.models.payload_models import EvaluationResult
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
@@ -22,6 +21,7 @@ from validator.core.models import RawTask
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
+import validator.core.constants as cts
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score

@@ -10,8 +10,10 @@ from fiber.logging_utils import get_logger
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
+
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
+
 from validator.core.models import Task
 from validator.db.database import PSQLDB
 
@@ -168,6 +170,7 @@ async def get_synthetic_set_for_task(task_id: str, psql_db: PSQLDB):
             WHERE {cst.TASK_ID} = $1
         """
         return await connection.fetchval(query, task_id)
+
 
 
 async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:

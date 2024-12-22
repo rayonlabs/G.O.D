@@ -24,6 +24,7 @@ from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
+from validator.core.models import TrainingTaskStatus
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes

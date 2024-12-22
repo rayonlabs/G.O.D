@@ -2,6 +2,7 @@ import json
 from contextvars import ContextVar
 from logging import Formatter
 from logging import Logger
+
 from logging import LogRecord
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -48,6 +49,7 @@ def setup_json_logger(name: str) -> Logger:
     except Exception as e:
         print(f"Error setting up logging: {str(e)}")
         raise
+
 
 
 # we add the current task_id to all logs that are with the task context

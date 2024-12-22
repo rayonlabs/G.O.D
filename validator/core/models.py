@@ -212,7 +212,6 @@ class DatasetJsons(BaseModel):
             "synthetic_data": json.dumps(self.synthetic_data) if self.synthetic_data else "",
         }
 
-
 class NetworkStats(BaseModel):
     number_of_jobs_training: int
     number_of_jobs_preevaluation: int

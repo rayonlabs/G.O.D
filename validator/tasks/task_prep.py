@@ -18,6 +18,7 @@ from validator.utils.logging import logger
 from validator.utils.minio import async_minio_client
 
 
+
 async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", prefix=prefix)
     with open(temp_file.name, "w") as f:
@@ -101,6 +102,7 @@ def change_to_json_format(dataset: Dataset, columns: List[str]):
                     row_dict[col] = str(value) if value is not None else ""
             result.append(row_dict)
         return result
+
     except Exception as e:
         logger.error(f"Error converting to JSON format: {str(e)}")
         return []
