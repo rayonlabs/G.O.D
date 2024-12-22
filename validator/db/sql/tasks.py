@@ -13,7 +13,6 @@ from core.models.utility_models import TaskStatus
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
 from validator.core.models import Task
-from validator.core.models import TrainingTaskStatus
 from validator.db.database import PSQLDB
 
 
