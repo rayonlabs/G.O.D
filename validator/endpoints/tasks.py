@@ -40,6 +40,7 @@ GET_NETWORK_STATUS = "/v1/network/status"
 GET_NODE_RESULTS_ENDPOINT = "/v1/tasks/node_results/{hotkey}"
 DELETE_TASK_ENDPOINT = "/v1/tasks/delete/{task_id}"
 LEADERBOARD_ENDPOINT = "/v1/leaderboard"
+COMPLETED_ORGANIC_TASKS_ENDPOINT = "/v1/tasks/organic/completed"
 
 
 async def delete_task(
@@ -213,6 +214,45 @@ async def get_network_status(
     except Exception as e:
         logger.info(f"There was an issue with getting training status {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def get_completed_organic_tasks(
+    hours: int | None = None,
+    config: Config = Depends(get_config),
+) -> List[TaskDetails]:
+    """Get all completed organic tasks from the specified timeframe
+
+    Args:
+        hours: Number of hours to look back (defaults to config value)
+        config: Application configuration
+    """
+    lookup_hours = hours if hours is not None else config.default_organic_task_history_hours
+    tasks = await task_sql.get_completed_organic_tasks(config.psql_db, lookup_hours)
+
+    task_details = [
+        TaskDetails(
+            id=task.task_id,
+            account_id=task.account_id,
+            status=task.status,
+            base_model_repository=task.model_id,
+            ds_repo=task.ds_id,
+            field_input=task.field_input,
+            field_system=task.field_system,
+            field_instruction=task.field_instruction,
+            field_output=task.field_output,
+            format=task.format,
+            no_input_format=task.no_input_format,
+            system_format=task.system_format,
+            created_at=task.created_at,
+            started_at=task.started_at,
+            finished_at=task.termination_at,
+            hours_to_complete=task.hours_to_complete,
+            trained_model_repository=task.trained_model_repository,
+        )
+        for task in tasks
+    ]
+
+    return task_details
 
 
 def factory_router() -> APIRouter:
