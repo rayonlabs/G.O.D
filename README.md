@@ -7,7 +7,7 @@
 
 
 ## Setup Guides
- 
+
 - [Miner Setup Guide](docs/miner_setup.md)
 - [Validator Setup Guide](docs/validator_setup.md)
 
