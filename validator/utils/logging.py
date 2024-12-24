@@ -4,11 +4,12 @@ from contextvars import ContextVar
 from logging import Formatter
 from logging import Logger
 from logging import LogRecord
-from logging import getLogger as fiber_get_logger
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 from typing import Optional
+
+from fiber.logging_utils import get_logger as fiber_get_logger
 
 
 current_context = ContextVar[dict[str, Any]]("current_context", default={})
