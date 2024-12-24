@@ -106,6 +106,7 @@ def setup_logging():
     root_logger = logging.getLogger()
 
     fiber_logger = fiber_get_logger("root")
+    root_logger.setLevel(fiber_logger.level)
     for handler in fiber_logger.handlers:
         root_logger.addHandler(handler)
 
