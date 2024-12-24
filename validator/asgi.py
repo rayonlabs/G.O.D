@@ -9,17 +9,19 @@ from validator.utils.util import try_db_connections
 load_dotenv(os.getenv("ENV_FILE", ".env"))
 
 from contextlib import asynccontextmanager
+from logging import getLogger
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fiber.logging_utils import get_logger
 
 from validator.core.config import load_config
 from validator.endpoints.health import factory_router as health_router
 from validator.endpoints.tasks import factory_router as tasks_router
+from validator.utils.logging import setup_logging
 
 
-logger = get_logger(__name__)
+setup_logging()
+logger = getLogger(__name__)
 
 
 @asynccontextmanager

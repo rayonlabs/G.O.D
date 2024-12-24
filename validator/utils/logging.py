@@ -1,76 +1,136 @@
 import json
+import logging
 from contextvars import ContextVar
 from logging import Formatter
 from logging import Logger
 from logging import LogRecord
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
+from typing import Optional
 
-from fiber.logging_utils import get_logger
+from fiber.logging_utils import get_logger as fiber_get_logger
 
 
-def create_extra_log(**tags: str | None) -> dict[str, dict[str, str | None]]:
+current_context = ContextVar[dict[str, Any]]("current_context", default={})
+
+
+def add_context_tag(key: str, value: Any) -> None:
+    """Add or update a tag in the current logging context"""
     try:
-        context_task_id = current_task_id.get()
-        if context_task_id is not None:
-            tags["task_id"] = context_task_id
+        context = current_context.get()
+        new_context = {**context, key: value}
+        current_context.set(new_context)
+    except LookupError:
+        current_context.set({key: value})
+
+
+def remove_context_tag(key: str) -> None:
+    """Remove a tag from the current logging context"""
+    try:
+        context = current_context.get()
+        if key in context:
+            new_context = context.copy()
+            del new_context[key]
+            current_context.set(new_context)
     except LookupError:
         pass
-    return {"tags": {k: v for k, v in tags.items() if v is not None}}
+
+
+def clear_context() -> None:
+    """
+    Removes all tags from the current logging context.
+    """
+    current_context.set({})
+
+
+def get_context_tag(key: str) -> Optional[Any]:
+    """Get a tag value from the current logging context"""
+    try:
+        context = current_context.get()
+        return context.get(key)
+    except LookupError:
+        return None
 
 
 class JSONFormatter(Formatter):
     def format(self, record: LogRecord) -> str:
-        tags = record.__dict__.get("tags", {}) if hasattr(record, "tags") else {}
+        if not hasattr(record, "tags"):
+            try:
+                context = current_context.get()
+                record.tags = {k: v for k, v in context.items() if v is not None}
+            except LookupError:
+                record.tags = {}
+
         clean_level = record.levelname.replace("\u001b[32m", "").replace("\u001b[1m", "").replace("\u001b[0m", "")
-        log_data: dict[str, str | dict] = {
+        log_data: dict[str, Any] = {
             "timestamp": self.formatTime(record),
             "level": clean_level,
             "message": record.getMessage(),
             "logger": record.name,
-            "tags": tags,
+            "tags": record.tags,
         }
         return json.dumps(log_data)
 
 
-def setup_json_logger(name: str) -> Logger:
+class LogContext:
+    def __init__(self, **tags: Any):
+        self.tags = tags
+        self.token = None
+
+    def __enter__(self):
+        try:
+            current = current_context.get()
+            new_context = {**current, **self.tags}
+        except LookupError:
+            new_context = self.tags
+        self.token = current_context.set(new_context)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.token:
+            current_context.reset(self.token)
+
+
+class ContextLogger(Logger):
+    def _log(
+        self,
+        level: int,
+        msg: object,
+        args: tuple,
+        exc_info: Optional[Exception] = None,
+        extra: Optional[dict] = None,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+    ) -> None:
+        if extra is None:
+            try:
+                context = current_context.get()
+                extra = {"tags": {k: v for k, v in context.items() if v is not None}}
+            except LookupError:
+                extra = {"tags": {}}
+
+        super()._log(level, msg, args, exc_info, extra, stack_info, stacklevel)
+
+
+def setup_logging():
+    """Initialize logging configuration for the entire application"""
+    logging.setLoggerClass(ContextLogger)
+    root_logger = logging.getLogger()
+
+    fiber_logger = fiber_get_logger("root")
+    root_logger.setLevel(fiber_logger.level)
+    for handler in fiber_logger.handlers:
+        root_logger.addHandler(handler)
+
     base_dir = Path(__file__).parent.parent.parent
     log_dir = base_dir / "validator" / "logs"
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "validator.log"
-        logger = get_logger(name)
         file_handler = RotatingFileHandler(filename=str(log_file), maxBytes=100 * 1024 * 1024, backupCount=3)
         file_handler.setFormatter(JSONFormatter())
-        logger.addHandler(file_handler)
-        logger.info("Logging initialized", extra={"tags": {"setup": "complete"}})
-        return logger
+        root_logger.addHandler(file_handler)
     except Exception as e:
         print(f"Error setting up logging: {str(e)}")
         raise
-
-
-# we add the current task_id to all logs that are with the task context
-current_task_id = ContextVar[str | None]("current_task_id", default=None)
-
-
-# works like ->
-#   async with TaskContext("task-123"):
-#        # Inside this block, current_task_id.get() will return "task-123"
-#        logger.info("Doing something")
-class TaskContext:
-    def __init__(self, task_id: str | None):
-        self.task_id = task_id
-        self.token = None
-
-    async def __aenter__(self):
-        if self.task_id:
-            self.token = current_task_id.set(self.task_id)
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.token:
-            current_task_id.reset(self.token)
-
-
-logger = setup_json_logger(__name__)

@@ -11,14 +11,15 @@ from validator.db.database import PSQLDB
 load_dotenv()
 
 
+from logging import getLogger
+
 from fiber.chain import chain_utils
 from fiber.chain import interface
-from fiber.logging_utils import get_logger
 from substrateinterface import Keypair
 from substrateinterface import SubstrateInterface
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass

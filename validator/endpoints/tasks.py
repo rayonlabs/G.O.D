@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timedelta
+from logging import getLogger
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -7,7 +8,6 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Response
-from fiber.logging_utils import get_logger
 
 from core.models.payload_models import AllOfNodeResults
 from core.models.payload_models import LeaderboardRow
@@ -29,7 +29,7 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 TASKS_CREATE_ENDPOINT = "/v1/tasks/create"

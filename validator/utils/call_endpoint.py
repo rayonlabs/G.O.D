@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+from logging import getLogger
 from typing import Any
 from typing import Optional
 
@@ -12,7 +13,6 @@ import urllib3
 from fiber import Keypair
 from fiber.chain import chain_utils
 from fiber.chain.models import Node
-from fiber.logging_utils import get_logger
 from fiber.validator import client
 from tenacity import retry
 from tenacity import retry_if_exception_type
@@ -26,7 +26,7 @@ from validator.core.constants import NINETEEN_API_KEY
 from validator.core.constants import PROMPT_GEN_ENDPOINT
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 # Create a retry decorator with exponential backoff
 retry_with_backoff = retry(

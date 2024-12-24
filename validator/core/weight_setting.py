@@ -4,13 +4,13 @@ Calculates and schedules weights every SCORING_PERIOD
 
 import asyncio
 import os
+from logging import getLogger
 
 from dotenv import load_dotenv
 from fiber.chain import fetch_nodes
 from fiber.chain import weights
 from fiber.chain.interface import get_substrate
 from fiber.chain.models import Node
-from fiber.logging_utils import get_logger
 
 from core import constants as ccst
 from validator.core.config import Config
@@ -24,7 +24,7 @@ from validator.utils.query_substrate import query_substrate
 load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 TIME_PER_BLOCK: int = 500
@@ -35,9 +35,7 @@ async def _get_weights_to_set(config: Config) -> list[PeriodScore] | None:
 
 
 async def _get_and_set_weights(config: Config) -> bool:
-    validator_node_id = await get_vali_node_id(
-        config.substrate, config.keypair.ss58_address
-    )
+    validator_node_id = await get_vali_node_id(config.substrate, config.keypair.ss58_address)
     if validator_node_id is None:
         raise ValueError("Validator node id not found")
     node_results = await _get_weights_to_set(config)
@@ -50,9 +48,7 @@ async def _get_and_set_weights(config: Config) -> bool:
 
     logger.info("Weights calculated, about to set...")
 
-    all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(
-        config.substrate, config.netuid
-    )
+    all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
     all_node_ids = [node.node_id for node in all_nodes]
     all_node_weights = [0.0 for _ in all_nodes]
     for node_result in node_results:
@@ -63,9 +59,7 @@ async def _get_and_set_weights(config: Config) -> bool:
 
     logger.info(f"Node ids: {all_node_ids}")
     logger.info(f"Node weights: {all_node_weights}")
-    logger.info(
-        f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}"
-    )
+    logger.info(f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}")
     logger.info(
         f"Everything going in is {weights.set_node_weights} {config.substrate} {config.keypair}"
         f" {all_node_ids} {all_node_weights} {config.netuid} {ccst.VERSION_KEY} {validator_node_id}"
@@ -98,14 +92,10 @@ async def _get_and_set_weights(config: Config) -> bool:
 
 
 async def _set_metagraph_weights(config: Config) -> None:
-    nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(
-        config.substrate, config.netuid
-    )
+    nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
     node_ids = [node.node_id for node in nodes]
     node_weights = [node.incentive for node in nodes]
-    validator_node_id = await get_vali_node_id(
-        config.substrate, config.keypair.ss58_address
-    )
+    validator_node_id = await get_vali_node_id(config.substrate, config.keypair.ss58_address)
     if validator_node_id is None:
         raise ValueError("Validator node id not found")
 
@@ -139,15 +129,11 @@ async def set_weights_periodically(config: Config, just_once: bool = False) -> N
     )
 
     if uid is None:
-        raise ValueError(
-            f"Can't find hotkey {config.keypair.ss58_address} for our keypair on netuid: {config.netuid}."
-        )
+        raise ValueError(f"Can't find hotkey {config.keypair.ss58_address} for our keypair on netuid: {config.netuid}.")
 
     consecutive_failures = 0
     while True:
-        substrate, current_block = query_substrate(
-            substrate, "System", "Number", [], return_value=True
-        )
+        substrate, current_block = query_substrate(substrate, "System", "Number", [], return_value=True)
         substrate, last_updated_value = query_substrate(
             substrate,
             "SubtensorModule",
@@ -158,9 +144,7 @@ async def set_weights_periodically(config: Config, just_once: bool = False) -> N
         updated: float = current_block - last_updated_value[uid].value
         logger.info(f"Last updated: {updated} for my uid: {uid}")
         if updated < 150:
-            logger.info(
-                f"Last updated: {updated} - sleeping for a bit as we set recently..."
-            )
+            logger.info(f"Last updated: {updated} - sleeping for a bit as we set recently...")
             await asyncio.sleep(12 * 25)  # sleep for 25 blocks
             continue
 
@@ -176,9 +160,7 @@ async def set_weights_periodically(config: Config, just_once: bool = False) -> N
 
         if success:
             consecutive_failures = 0
-            logger.info(
-                "Successfully set weights! Sleeping for 25 blocks before next check..."
-            )
+            logger.info("Successfully set weights! Sleeping for 25 blocks before next check...")
             if just_once:
                 return
             await asyncio.sleep(12 * 25)
@@ -189,18 +171,14 @@ async def set_weights_periodically(config: Config, just_once: bool = False) -> N
             logger.info("Failed to set weights, will try again...")
             await asyncio.sleep(12 * 1)
         else:
-            logger.info(
-                f"Failed to set weights {consecutive_failures} times in a row - sleeping for a bit..."
-            )
+            logger.info(f"Failed to set weights {consecutive_failures} times in a row - sleeping for a bit...")
             await asyncio.sleep(12 * 25)  # Try again in 25 blocks
 
         if consecutive_failures == 1 or updated < 3000:
             continue
 
         if just_once or config.set_metagraph_weights_with_high_updated_to_not_dereg:
-            logger.warning(
-                "Setting metagraph weights as our updated value is getting too high!"
-            )
+            logger.warning("Setting metagraph weights as our updated value is getting too high!")
             if just_once:
                 logger.warning("Please exit if you do not want to do this!!!")
                 await asyncio.sleep(4)
