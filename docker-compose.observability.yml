@@ -1,0 +1,81 @@
+services:
+  grafana:
+    container_name: god-grafana
+    image: grafana/grafana
+    restart: always
+    environment:
+      # these are the defaults, you should probably change them in deployment
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USERNAME:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: redis-datasource
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./config/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/otel.yaml
+      - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./config/grafana-validator-general.json:/var/lib/grafana/dashboards/grafana-validator-general.json
+      - ./config/grafana-validator-errors.json:/var/lib/grafana/dashboards/grafana-validator-errors.json
+    ports:
+      - ${GRAFANA_PORT:-3000}:3000
+
+  otel-collector:
+    container_name: god-otel-collector
+    image: otel/opentelemetry-collector-contrib:0.106.1
+    restart: always
+    volumes:
+      - ./config/otel-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - "0.0.0.0:4317:4317"
+
+  tempo-init:
+    scale: 0
+    container_name: god-tempo-init
+    image: grafana/tempo:latest
+    restart: on-failure
+    user: root
+    entrypoint:
+      - "chown"
+      - "10001:10001"
+      - "/var/tempo"
+    volumes:
+      - tempo:/var/tempo
+
+  tempo:
+    scale: 0
+    container_name: god-tempo
+    image: grafana/tempo:latest
+    restart: always
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - tempo:/var/tempo
+      - ./config/tempo-config.yaml:/etc/tempo.yaml
+    depends_on:
+      - tempo-init
+      - redis
+
+  loki:
+    container_name: god-loki
+    image: grafana/loki:main
+    restart: always
+    volumes:
+      - loki:/loki
+      - ./config/loki-config.yaml:/etc/loki/local-config.yaml
+
+  prometheus:
+    container_name: god-prometheus
+    image: prom/prometheus
+    restart: always
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/console
+    volumes:
+      - prometheus:/prometheus
+      - ./config/prometheus-config.yaml:/etc/prometheus/prometheus.yml
+
+volumes:
+  grafana:
+  tempo:
+  loki:
+  prometheus:

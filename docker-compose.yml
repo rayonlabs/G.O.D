@@ -1,5 +1,7 @@
-services:
+include:
+  - ./docker-compose.observability.yml
 
+services:
   postgresql:
     image: postgres:latest
     volumes:
