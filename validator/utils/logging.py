@@ -105,13 +105,10 @@ def setup_logging():
     """Initialize logging configuration for the entire application"""
     root_logger = logging.getLogger()
 
-    # Configure the root logger with Fiber's settings
     fiber_logger = fiber_get_logger("root")
-    # Copy Fiber's handlers to root logger
     for handler in fiber_logger.handlers:
         root_logger.addHandler(handler)
 
-    # Add the JSON file handler to root logger
     base_dir = Path(__file__).parent.parent.parent
     log_dir = base_dir / "validator" / "logs"
     try:
@@ -124,7 +121,6 @@ def setup_logging():
         print(f"Error setting up logging: {str(e)}")
         raise
 
-    # Monkey patch the Logger class to include context tags
     def _log_with_context(self, *args, **kwargs):
         if "extra" not in kwargs:
             try:
