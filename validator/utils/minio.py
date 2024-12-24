@@ -2,12 +2,12 @@ import asyncio
 import datetime
 import os
 from concurrent.futures import ThreadPoolExecutor
+from logging import getLogger
 
-from fiber.logging_utils import get_logger
 from minio import Minio
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 # NOTE: This all needs rewriting to be honest
 # TODO: TODO: TODO: BIN ALL OF THIS PLZ :PRAY:

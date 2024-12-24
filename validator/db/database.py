@@ -1,15 +1,15 @@
 import os
 import socket
+from logging import getLogger
 from typing import Any
 
 import asyncpg
 from asyncpg import Pool
 from asyncpg.pool import PoolAcquireContext
 from dotenv import load_dotenv
-from fiber.logging_utils import get_logger
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 load_dotenv()

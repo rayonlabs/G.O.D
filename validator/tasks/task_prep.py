@@ -14,7 +14,6 @@ import validator.core.constants as cst
 from validator.augmentation.augmentation import generate_augmented_dataset
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
-from validator.utils.logging import create_extra_log
 from validator.utils.minio import async_minio_client
 
 
@@ -39,12 +38,12 @@ async def upload_json_to_minio(file_path: str, bucket_name: str, object_name: st
 def train_test_split(dataset_name: str, test_size: float = None) -> DatasetDict:
     if test_size is None:
         test_size = cst.TRAIN_TEST_SPLIT_PERCENTAGE
-    logger.info(f"Loading dataset '{dataset_name}'", extra=create_extra_log())
+    logger.info(f"Loading dataset '{dataset_name}'")
     try:
         config_name = get_default_dataset_config(dataset_name)
         dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
     except Exception as e:
-        logger.exception(f"Failed to load dataset {dataset_name}: {e}", extra=create_extra_log())
+        logger.exception(f"Failed to load dataset {dataset_name}: {e}")
         raise e
 
     if isinstance(dataset, DatasetDict):
@@ -52,16 +51,16 @@ def train_test_split(dataset_name: str, test_size: float = None) -> DatasetDict:
     else:
         combined_dataset = dataset
 
-    logger.info(f"Combined dataset size: {len(combined_dataset)}", extra=create_extra_log())
-    logger.info(f"Splitting combined dataset into train and test with test size {test_size}", extra=create_extra_log())
+    logger.info(f"Combined dataset size: {len(combined_dataset)}")
+    logger.info(f"Splitting combined dataset into train and test with test size {test_size}")
 
     test_size = min(
         int(len(combined_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE),
         cst.MAX_SYNTH_DATA_POINTS,
     )
     split_dataset = combined_dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
-    logger.info(f"Train set size: {len(split_dataset['train'])}", extra=create_extra_log())
-    logger.info(f"Test set size: {len(split_dataset['test'])}", extra=create_extra_log())
+    logger.info(f"Train set size: {len(split_dataset['train'])}")
+    logger.info(f"Test set size: {len(split_dataset['test'])}")
 
     return split_dataset
 
@@ -71,7 +70,7 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
         cst.MAX_SYNTH_DATA_POINTS,
         int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
     )
-    logger.info(f"Generating {num_samples} additional synthetic data points", extra=create_extra_log())
+    logger.info(f"Generating {num_samples} additional synthetic data points")
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
 
     sampled_data = sampled_data.remove_columns([col for col in sampled_data.column_names if col not in columns_to_sample])
@@ -80,10 +79,7 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
     try:
         sampled_data_list = list(sampled_data)
     except Exception as e:
-        logger.info(
-            f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}",
-            extra=create_extra_log(),
-        )
+        logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
         return None
 
     synthetic_data = await generate_augmented_dataset(
@@ -122,21 +118,20 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
         synthetic_dataset = train_dataset.select(range(split_index, dataset_length))
         remaining_train_dataset = train_dataset.select(range(split_index))
     except Exception as e:
-        logger.info(f"There was an issue with the split {e} ", extra=create_extra_log())
+        logger.info(f"There was an issue with the split {e} ")
 
     logger.info(
         f"Taking {num_synthetic_samples} samples from the train set to be synthetic data. "
         f"Original size: {dataset_length}, "
         f"Training size: {len(remaining_train_dataset)}, "
-        f"Synthetic size: {len(synthetic_dataset)}",
-        extra=create_extra_log(),
+        f"Synthetic size: {len(synthetic_dataset)}"
     )
 
     return remaining_train_dataset, synthetic_dataset
 
 
 async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair: Keypair) -> tuple[str, str, str]:
-    logger.info(f"Preparing {dataset_name}", extra=create_extra_log())
+    logger.info(f"Preparing {dataset_name}")
     dataset_dict = train_test_split(dataset_name)
     train_dataset = dataset_dict["train"]
     test_dataset = dataset_dict["test"]
@@ -144,7 +139,7 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
     synthetic_data = []
     try:
         if cst.GET_SYNTH_DATA:
-            logger.info("Generating additional synthetic data", extra=create_extra_log())
+            logger.info("Generating additional synthetic data")
 
             synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair)
 
@@ -157,15 +152,15 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
             # for i, example in enumerate(synthetic_dataset.select(range(2))):
             #     logger.info(f"Example {i + 1}: {example}")
         else:
-            logger.info("Skipping synthetic data generation", extra=create_extra_log())
+            logger.info("Skipping synthetic data generation")
     except Exception as e:
         # if for some reason the api is down, we move some of the train over to be synth
 
-        logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}", extra=create_extra_log())
+        logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
         train_dataset, synthetic_data = assign_some_of_the_train_to_synth(train_dataset)
 
     if synthetic_data is None:
-        logger.info("There was not enough synthetic data created we are instead grabbing from train ", extra=create_extra_log())
+        logger.info("There was not enough synthetic data created we are instead grabbing from train ")
         train_dataset, synthetic_data = assign_some_of_the_train_to_synth(train_dataset)
 
     try:
@@ -173,7 +168,7 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
         test_data_json = change_to_json_format(test_dataset, columns_to_sample)
         synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample) if synthetic_data else []
     except Exception as e:
-        logger.info(f"There was a problem going to json {e}", extra=create_extra_log())
+        logger.info(f"There was a problem going to json {e}")
 
     train_json_path = await save_json_to_temp_file(train_data_json, prefix="train_data_")
     test_json_path = await save_json_to_temp_file(test_data_json, prefix="test_data_")
@@ -186,10 +181,7 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
         if synthetic_data
         else None
     )
-    logger.info(
-        f"Train json url: {train_json_url}\nTest json url: {test_json_url}\nSynth json url: {synth_json_url}",
-        extra=create_extra_log(),
-    )
+    logger.info(f"Train json url: {train_json_url}\nTest json url: {test_json_url}\nSynth json url: {synth_json_url}")
 
     if not train_json_url:
         raise Exception("Failed to upload training data to MinIO storage")

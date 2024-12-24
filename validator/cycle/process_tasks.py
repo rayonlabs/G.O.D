@@ -22,7 +22,7 @@ from validator.evaluation.scoring import evaluate_and_score
 from validator.tasks.task_prep import prepare_task
 from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
-from validator.utils.logging import create_extra_log
+from validator.utils.logging import add_context_tag
 
 
 logger = getLogger(__name__)
@@ -41,22 +41,17 @@ async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
     )
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
+    add_context_tag("status", task.status.value)
     task.synthetic_data = synth_data
     task.test_data = test_data
-    logger.info(
-        "Data creation is complete - now time to find some miners",
-        extra=create_extra_log(status=task.status),
-    )
+    logger.info("Data creation is complete - now time to find some miners")
     return task
 
 
 # TODO: Improve by batching these up
 async def _make_offer(node: Node, request: MinerTaskRequest, config: Config) -> MinerTaskResponse:
     response = await process_non_stream_fiber(cst.TASK_OFFER_ENDPOINT, config, node, request.model_dump(), timeout=3)
-    logger.info(
-        f"The response from make offer for node {node.node_id} was {response}",
-        extra=create_extra_log(node_hotkey=node.hotkey, status=TaskStatus.LOOKING_FOR_NODES.value),
-    )
+    logger.info(f"The response from make offer for node {node.node_id} was {response}")
     if response is None:
         response = {}
     return MinerTaskResponse(
@@ -67,10 +62,7 @@ async def _make_offer(node: Node, request: MinerTaskRequest, config: Config) -> 
 
 async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], config: Config) -> RawTask:
     if len(nodes) < cst.MINIMUM_MINER_POOL:
-        logger.warning(
-            f"Not enough nodes available. Need at least {cst.MINIMUM_MINER_POOL}, but only have {len(nodes)}.",
-            extra=create_extra_log(status=task.status),
-        )
+        logger.warning(f"Not enough nodes available. Need at least {cst.MINIMUM_MINER_POOL}, but only have {len(nodes)}.")
         task = _attempt_delay_task(task)
         return task
 
@@ -82,26 +74,17 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         hours_to_complete=task.hours_to_complete,
         task_id=str(task.task_id),
     )
-    logger.info(
-        f"We are offering the following task to the miners: {task_request.model_dump()}",
-        extra=create_extra_log(task_status=task.status),
-    )
+    logger.info(f"We are offering the following task to the miners: {task_request.model_dump()}")
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
 
     already_assigned_hotkeys = [miner.hotkey for miner in miners_already_assigned]
-    logger.info(
-        f"There are {len(already_assigned_hotkeys)} miners already assigned to this task",
-        extra=create_extra_log(task_status=task.status),
-    )
+    logger.info(f"There are {len(already_assigned_hotkeys)} miners already assigned to this task")
 
     # Filter out nodes that are already assigned to this task - this will occur if we had to restart a task due to all miners
     # failing
     available_nodes = [node for node in nodes if node.hotkey not in already_assigned_hotkeys]
     if not available_nodes:
-        logger.error(
-            "No nodes available to assign to the task! Why not?!",
-            extra=create_extra_log(status=task.status),
-        )
+        logger.error("No nodes available to assign to the task! Why not?!")
         task = _attempt_delay_task(task)
         await tasks_sql.update_task(task, config.psql_db)
         return task
@@ -116,36 +99,27 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         # try:
         # TODO: Batch the boi
         if i > 0 and i % 5 == 0:
-            logger.info(
-                f"We have made {i} offers so far for task {task.task_id}",
-                extra=create_extra_log(status=task.status),
-            )
+            logger.info(f"We have made {i} offers so far for task {task.task_id}")
         offer_response = await _make_offer(node, task_request, config)
 
         if offer_response.accepted is True:
             selected_miners.append(node.hotkey)
             await tasks_sql.assign_node_to_task(str(task.task_id), node, config.psql_db)
-            logger.info(
-                f"The miner {node.node_id} has officially been assigned the task {task.task_id}!!",
-                extra=create_extra_log(node_hotkey=node.hotkey, status=task.status),
-            )
+            logger.info(f"The miner {node.node_id} has officially been assigned the task {task.task_id}!!")
 
     if len(selected_miners) < cst.MINIMUM_MINER_POOL:
         logger.warning(
             f"Not enough miners accepted the task. We only have {len(selected_miners)} but we "
-            f"need at least {cst.MINIMUM_MINER_POOL}",
-            extra=create_extra_log(status=task.status),
+            f"need at least {cst.MINIMUM_MINER_POOL}"
         )
         task = _attempt_delay_task(task)
         return task
     else:
         task.assigned_miners = selected_miners
-        logger.info(
-            f"We have {len(selected_miners)} miners assigned to the task - which is enough to get going 🚀",
-            extra=create_extra_log(status=task.status),
-        )
+        logger.info(f"We have {len(selected_miners)} miners assigned to the task - which is enough to get going 🚀")
         task.status = TaskStatus.READY
-        logger.info("Task status should be READY", extra=create_extra_log(status=task.status))
+        add_context_tag("status", task.status.value)
+        logger.info("Task status should be READY")
         return task
 
 
@@ -169,17 +143,11 @@ async def _let_miners_know_to_start_training(task: RawTask, nodes: list[Node], c
         hours_to_complete=task.hours_to_complete,
     )
 
-    logger.info(
-        f"We are telling miners to start training, there are {len(nodes)}",
-        extra=create_extra_log(status=task.status),
-    )
+    logger.info(f"We are telling miners to start training, there are {len(nodes)}")
 
     for node in nodes:
         response = await process_non_stream_fiber(cst.START_TRAINING_ENDPOINT, config, node, task_request_body.model_dump())
-        logger.info(
-            f"The response we got from {node.node_id} was {response}",
-            extra=create_extra_log(node_hokey=node.hotkey, status=task.status),
-        )
+        logger.info(f"The response we got from {node.node_id} was {response}")
 
 
 async def _find_and_select_miners_for_task(task: RawTask, config: Config):
@@ -187,18 +155,11 @@ async def _find_and_select_miners_for_task(task: RawTask, config: Config):
         try:
             nodes = await nodes_sql.get_all_nodes(config.psql_db)
             task = await _select_miner_pool_and_add_to_task(task, nodes, config)
-            logger.info(
-                f"After assigning miners here is the current task info {task}",
-                extra=create_extra_log(status=task.status),
-            )
+            logger.info(f"After assigning miners here is the current task info {task}")
             await tasks_sql.update_task(task, config.psql_db)
 
         except Exception as e:
-            logger.error(
-                f"Error assigning miners to task {task.task_id}: {e}",
-                exc_info=True,
-                extra=create_extra_log(status=task.status),
-            )
+            logger.error(f"Error assigning miners to task {task.task_id}: {e}", exc_info=True)
             task = _attempt_delay_task(task)
             await tasks_sql.update_task(task, config.psql_db)
 
@@ -210,25 +171,17 @@ def _attempt_delay_task(task: RawTask):
 
     if task.times_delayed >= cst.MAX_DELAY_TIMES or not task.is_organic:
         if task.is_organic:
-            logger.info(
-                f"We have already delayed {task.times_delayed}",
-                extra=create_extra_log(status=task.status),
-            )
+            logger.info(f"We have already delayed {task.times_delayed}")
         else:
-            logger.info(
-                "This is a synth task - no need to add a delay when the network is busy",
-                extra=create_extra_log(status=task.status),
-            )
+            logger.info("This is a synth task - no need to add a delay when the network is busy")
 
         task.status = TaskStatus.FAILURE_FINDING_NODES
+        add_context_tag("status", task.status.value)
     else:
-        logger.info(
-            f"Adding in a delay of {cst.TASK_TIME_DELAY} minutes for now since no miners accepted the task",
-            extra=create_extra_log(status=task.status),
-        )
-
+        logger.info(f"Adding in a delay of {cst.TASK_TIME_DELAY} minutes for now since no miners accepted the task")
         task.next_delay_at = task.next_delay_at + datetime.timedelta(minutes=cst.TASK_TIME_DELAY)
         task.status = TaskStatus.DELAYED
+        add_context_tag("status", task.status.value)
         task.times_delayed += 1
     return task
 
@@ -244,12 +197,14 @@ async def _prep_task(task: RawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
             task.status = TaskStatus.PREPARING_DATA
+            add_context_tag("status", task.status.value)
             await tasks_sql.update_task(task, config.psql_db)
             task = await _run_task_prep(task, config.keypair)
-            logger.info(f"THE TASK HAS BEEN PREPPED {task}", extra=create_extra_log(status=task.status))
+            logger.info(f"THE TASK HAS BEEN PREPPED {task}")
             await tasks_sql.update_task(task, config.psql_db)
         except Exception:
             task.status = TaskStatus.PREP_TASK_FAILURE
+            add_context_tag("status", task.status.value)
             await tasks_sql.update_task(task, config.psql_db)
 
 
@@ -266,14 +221,12 @@ async def _start_training_task(task: RawTask, config: Config) -> None:
         task.started_at = datetime.datetime.now(datetime.timezone.utc)
         task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
         assigned_miners = await tasks_sql.get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
-        logger.info(
-            f"Here are the miners that have been assigned {assigned_miners}",
-            extra=create_extra_log(status=task.status),
-        )
+        logger.info(f"Here are the miners that have been assigned {assigned_miners}")
         await _let_miners_know_to_start_training(task, assigned_miners, config)
         task.status = TaskStatus.TRAINING
+        add_context_tag("status", task.status.value)
         await tasks_sql.update_task(task, config.psql_db)
-        logger.info("SUCCESS IN STARTING TRAINING", extra=create_extra_log(status=task.status))
+        logger.info("SUCCESS IN STARTING TRAINING")
 
 
 async def _process_ready_to_train_tasks(config: Config):
@@ -291,25 +244,21 @@ async def _process_ready_to_train_tasks(config: Config):
 async def _evaluate_task(task: RawTask, config: Config):
     try:
         task.status = TaskStatus.EVALUATING
+        add_context_tag("status", task.status.value)
         await tasks_sql.update_task(task, config.psql_db)
         task = await evaluate_and_score(task, config)
         await tasks_sql.update_task(task, config.psql_db)
     except Exception as e:
-        logger.error(
-            f"Error evaluating task {task.task_id}: {e}",
-            exc_info=True,
-            extra=create_extra_log(status=task.status),
-        )
+        logger.error(f"Error evaluating task {task.task_id}: {e}", exc_info=True)
         task.status = TaskStatus.FAILURE
+        add_context_tag("status", task.status.value)
         await tasks_sql.update_task(task, config.psql_db)
 
 
 async def _move_back_to_looking_for_nodes(task: RawTask, config: Config):
-    logger.info(
-        "Moving back from delay to looking for nodes",
-        extra=create_extra_log(task_id=str(task.task_id), status=task.status),
-    )
+    logger.info("Moving back from delay to looking for nodes")
     task.status = TaskStatus.LOOKING_FOR_NODES
+    add_context_tag("status", task.status.value)
     await tasks_sql.update_task(task, config.psql_db)
 
 
@@ -321,7 +270,8 @@ async def _handle_delayed_tasks(config: Config):
 
 async def _move_to_preevaluation_status(task, config):
     task.status = TaskStatus.PREEVALUATION
-    logger.info(f"Changing status to {task.status}", create_extra_log(task_id=task.task_id))
+    add_context_tag("status", task.status.value)
+    logger.info(f"Changing status to {task.status}")
     await tasks_sql.update_task(task, config.psql_db)
 
 
@@ -333,6 +283,7 @@ async def _move_any_evaluating_tasks_to_pending_evaluation(config: Config):
 
 async def _move_back_to_pending_status(task, config):
     task.status = TaskStatus.PENDING
+    add_context_tag("status", task.status.value)
     await tasks_sql.update_task(task, config.psql_db)
 
 
@@ -375,7 +326,8 @@ async def evaluate_tasks_loop(config: Config):
         if tasks_to_evaluate:
             logger.info(f"There are {len(tasks_to_evaluate)} tasks awaiting evaluation")
             for task in tasks_to_evaluate:
-                await _evaluate_task(task, config)
+                with LogContext(task_id=str(task.task_id)):
+                    await _evaluate_task(task, config)
         else:
             logger.info("No tasks awaiting evaluation - waiting 30 seconds")
             await asyncio.sleep(30)

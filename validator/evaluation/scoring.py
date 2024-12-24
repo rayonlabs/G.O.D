@@ -2,10 +2,10 @@ import asyncio
 import re
 from datetime import datetime
 from datetime import timedelta
+from logging import getLogger
 
 import numpy as np
 from fiber.chain.models import Node
-from fiber.logging_utils import get_logger
 from scipy.stats import gmean
 
 import validator.core.constants as cts
@@ -29,10 +29,12 @@ from validator.db.sql.tasks import get_nodes_assigned_to_task
 from validator.evaluation.docker_evaluation import run_evaluation_docker
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
+from validator.utils.logging import LogContext
+from validator.utils.logging import add_context_tag
 from validator.utils.minio import async_minio_client
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 def get_task_work_score(task: RawTask) -> float:
@@ -326,32 +328,33 @@ async def _evaluate_miner_result(
     miner: Node, task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
 ) -> MinerResults:
     assert task.task_id is not None, "We should have a task id when processing the miner"
-    submission_repo = await _get_submission_repo(miner, str(task.task_id), config)
-    logger.info(f"Found repo {submission_repo}")
-    if not submission_repo:
-        return _create_failed_miner_result(miner.hotkey)
+    with LogContext(task_id=str(task.task_id), miner_hotkey=miner.hotkey, gpu_ids=gpu_ids):
+        submission_repo = await _get_submission_repo(miner, str(task.task_id), config)
+        logger.info(f"Found repo {submission_repo}")
+        if not submission_repo:
+            return _create_failed_miner_result(miner.hotkey)
 
-    try:
-        submission = Submission(
-            task_id=task.task_id,
-            hotkey=miner.hotkey,
-            repo=submission_repo,
-            created_on=datetime.now(),
-            updated_on=datetime.now(),
-        )
+        try:
+            submission = Submission(
+                task_id=task.task_id,
+                hotkey=miner.hotkey,
+                repo=submission_repo,
+                created_on=datetime.now(),
+                updated_on=datetime.now(),
+            )
 
-        synth_result, test_result = await _evaluate_submission(task, submission_repo, dataset_type, gpu_ids)
+            synth_result, test_result = await _evaluate_submission(task, submission_repo, dataset_type, gpu_ids)
 
-        return MinerResults(
-            hotkey=miner.hotkey,
-            test_loss=float(test_result.eval_loss),
-            synth_loss=float(synth_result.eval_loss),
-            is_finetune=test_result.is_finetune,
-            submission=submission,
-        )
-    except Exception as e:
-        logger.error(f"Error evaluating miner {miner.hotkey}: {e}")
-        return _create_failed_miner_result(miner.hotkey)
+            return MinerResults(
+                hotkey=miner.hotkey,
+                test_loss=float(test_result.eval_loss),
+                synth_loss=float(synth_result.eval_loss),
+                is_finetune=test_result.is_finetune,
+                submission=submission,
+            )
+        except Exception as e:
+            logger.error(f"Error evaluating miner {miner.hotkey}: {e}")
+            return _create_failed_miner_result(miner.hotkey)
 
 
 async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_db) -> None:
@@ -489,6 +492,7 @@ async def evaluate_and_score(task: RawTask, config: Config) -> RawTask:
     all_scores_zero = False
     if all_scores_zero:
         task.status = TaskStatus.NODE_TRAINING_FAILURE
+        add_context_tag(status=task.status.value)
         logger.info(
             f"All scores are zero for task {task.task_id}, setting status to LOOKING FOR NODES to find new miner since"
             "we are going to try again."
@@ -497,5 +501,6 @@ async def evaluate_and_score(task: RawTask, config: Config) -> RawTask:
         if cts.DELETE_S3_AFTER_COMPLETE:
             await _clear_up_s3([task.training_data, task.test_data, task.synthetic_data])
         task.status = TaskStatus.SUCCESS
+        add_context_tag(status=task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
     return task

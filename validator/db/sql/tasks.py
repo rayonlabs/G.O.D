@@ -1,3 +1,4 @@
+from logging import getLogger
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -5,7 +6,6 @@ from uuid import UUID
 
 from asyncpg.connection import Connection
 from fiber.chain.models import Node
-from fiber.logging_utils import get_logger
 
 import validator.db.constants as cst
 from core.constants import NETUID
@@ -16,7 +16,7 @@ from validator.core.models import Task
 from validator.db.database import PSQLDB
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 async def add_task(task: RawTask, psql_db: PSQLDB) -> RawTask:

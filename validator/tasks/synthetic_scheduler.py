@@ -2,10 +2,10 @@ import asyncio
 import random
 from datetime import datetime
 from datetime import timedelta
+from logging import getLogger
 from typing import Any
 from typing import AsyncGenerator
 
-from fiber.logging_utils import get_logger
 from substrateinterface import Keypair
 
 import validator.core.constants as cst
@@ -18,7 +18,7 @@ from validator.db.sql.tasks import get_tasks_with_status
 from validator.utils.call_endpoint import call_content_service
 
 
-logger = get_logger(name="task synth")
+logger = getLogger(name="task synth")
 
 
 async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:

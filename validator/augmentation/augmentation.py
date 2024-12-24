@@ -1,12 +1,12 @@
 import asyncio
 import json
 import random
+from logging import getLogger
 from typing import List
 
 import yaml
 from datasets import load_dataset
 from fiber import Keypair
-from fiber.logging_utils import get_logger
 
 from core.models.utility_models import Message
 from core.models.utility_models import Prompts
@@ -21,7 +21,7 @@ from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.call_endpoint import post_to_nineteen_ai
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 def load_prompts() -> Prompts:

@@ -1,11 +1,10 @@
 import asyncio
-
-from fiber.logging_utils import get_logger
+from logging import getLogger
 
 from validator.tasks.task_prep import prepare_task
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 async def main():

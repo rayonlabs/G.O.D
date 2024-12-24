@@ -1,10 +1,10 @@
+from logging import getLogger
 from typing import Any
 
-from fiber.logging_utils import get_logger
 from substrateinterface import SubstrateInterface
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 def query_substrate(substrate: SubstrateInterface, module: str, method: str, params: list[Any], return_value: bool = True) -> Any:

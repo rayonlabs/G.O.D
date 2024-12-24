@@ -1,12 +1,12 @@
 import os
+from logging import getLogger
 
 from datasets import get_dataset_config_names
-from fiber.logging_utils import get_logger
 from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalLM) -> bool:

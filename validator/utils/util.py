@@ -1,9 +1,9 @@
-from fiber.logging_utils import get_logger
+from logging import getLogger
 
 from validator.core.config import Config
 
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 async def try_db_connections(config: Config) -> None:
