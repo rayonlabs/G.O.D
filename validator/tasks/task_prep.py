@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+from logging import getLogger
 from typing import List
 
 from datasets import Dataset
@@ -14,8 +15,10 @@ from validator.augmentation.augmentation import generate_augmented_dataset
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import create_extra_log
-from validator.utils.logging import logger
 from validator.utils.minio import async_minio_client
+
+
+logger = getLogger(__name__)
 
 
 async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:

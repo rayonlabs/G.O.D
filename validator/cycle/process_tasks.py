@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import random
+from logging import getLogger
 
 from datasets import get_dataset_infos
 from fiber import Keypair
@@ -20,9 +21,11 @@ from validator.core.models import RawTask
 from validator.evaluation.scoring import evaluate_and_score
 from validator.tasks.task_prep import prepare_task
 from validator.utils.call_endpoint import process_non_stream_fiber
-from validator.utils.logging import TaskContext
+from validator.utils.logging import LogContext
 from validator.utils.logging import create_extra_log
-from validator.utils.logging import logger
+
+
+logger = getLogger(__name__)
 
 
 def _get_total_dataset_size(repo_name: str) -> int:
@@ -180,7 +183,7 @@ async def _let_miners_know_to_start_training(task: RawTask, nodes: list[Node], c
 
 
 async def _find_and_select_miners_for_task(task: RawTask, config: Config):
-    async with TaskContext(str(task.task_id)):
+    with LogContext(task_id=str(task.task_id)):
         try:
             nodes = await nodes_sql.get_all_nodes(config.psql_db)
             task = await _select_miner_pool_and_add_to_task(task, nodes, config)
@@ -238,7 +241,7 @@ async def _find_miners_for_task(config: Config):
 
 
 async def _prep_task(task: RawTask, config: Config):
-    async with TaskContext(str(task.task_id)):
+    with LogContext(task_id=str(task.task_id)):
         try:
             task.status = TaskStatus.PREPARING_DATA
             await tasks_sql.update_task(task, config.psql_db)
@@ -259,7 +262,7 @@ async def _processing_pending_tasks(config: Config):
 
 
 async def _start_training_task(task: RawTask, config: Config) -> None:
-    async with TaskContext(str(task.task_id)):
+    with LogContext(task_id=str(task.task_id)):
         task.started_at = datetime.datetime.now(datetime.timezone.utc)
         task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
         assigned_miners = await tasks_sql.get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
