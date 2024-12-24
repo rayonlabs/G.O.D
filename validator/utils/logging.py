@@ -53,15 +53,6 @@ def get_context_tag(key: str) -> Optional[Any]:
         return None
 
 
-def create_extra_log(**tags: Any) -> dict[str, dict[str, Any]]:
-    try:
-        context = current_context.get()
-        combined_tags = {**context, **tags}
-    except LookupError:
-        combined_tags = tags
-    return {"tags": {k: v for k, v in combined_tags.items() if v is not None}}
-
-
 class JSONFormatter(Formatter):
     def format(self, record: LogRecord) -> str:
         if not hasattr(record, "tags"):
@@ -101,8 +92,30 @@ class LogContext:
             current_context.reset(self.token)
 
 
+class ContextLogger(Logger):
+    def _log(
+        self,
+        level: int,
+        msg: object,
+        args: tuple,
+        exc_info: Optional[Exception] = None,
+        extra: Optional[dict] = None,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+    ) -> None:
+        if extra is None:
+            try:
+                context = current_context.get()
+                extra = {"tags": {k: v for k, v in context.items() if v is not None}}
+            except LookupError:
+                extra = {"tags": {}}
+
+        super()._log(level, msg, args, exc_info, extra, stack_info, stacklevel)
+
+
 def setup_logging():
     """Initialize logging configuration for the entire application"""
+    logging.setLoggerClass(ContextLogger)
     root_logger = logging.getLogger()
 
     fiber_logger = fiber_get_logger("root")
@@ -121,15 +134,3 @@ def setup_logging():
     except Exception as e:
         print(f"Error setting up logging: {str(e)}")
         raise
-
-    def _log_with_context(self, *args, **kwargs):
-        if "extra" not in kwargs:
-            try:
-                context = current_context.get()
-                kwargs["extra"] = {"tags": {k: v for k, v in context.items() if v is not None}}
-            except LookupError:
-                kwargs["extra"] = {"tags": {}}
-        return original_log(self, *args, **kwargs)
-
-    original_log = Logger._log
-    Logger._log = _log_with_context
