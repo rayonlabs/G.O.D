@@ -262,7 +262,7 @@ async def update_training_repo_backup(
 
     task.training_repo_backup = training_repo
     await task_sql.update_task(task, config.psql_db)
-    return Response(success=True)
+    return Response(status_code=200)
 
 
 def factory_router() -> APIRouter:
