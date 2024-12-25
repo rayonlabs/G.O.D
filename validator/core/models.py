@@ -220,3 +220,44 @@ class NetworkStats(BaseModel):
     number_of_jobs_success: int
     next_training_end: datetime | None
     job_can_be_made: bool = True
+
+
+class ColumnPickerResponse(BaseModel):
+    field_instruction: str
+    field_output: str
+    field_input: str | None = None
+
+    def validate_columns_ok(self, sparse_columns: list[str], non_sparse_columns: list[str]) -> bool:
+        """
+        Validates that the columns in the response are valid.
+        This means they exist in the dataset and are not duplicated.
+        Also, the instruction and output columns must come from the non-sparse columns.
+
+        Args:
+            sparse_columns: List of sparse column names from the dataset
+            non_sparse_columns: List of non-sparse column names from the dataset
+
+        Returns:
+            bool: True if all columns exist, False otherwise
+        """
+        field_input_ok = self.field_input in (sparse_columns + non_sparse_columns) if self.field_input else True
+        field_instruction_ok = self.field_instruction in non_sparse_columns
+        field_output_ok = self.field_output in non_sparse_columns if self.field_output else True
+
+        # Only check for duplicates among non-None columns
+        columns = [col for col in [self.field_input, self.field_instruction, self.field_output] if col is not None]
+        if len(columns) != len(set(columns)):
+            return False
+
+        return field_input_ok and field_instruction_ok and field_output_ok
+
+
+class DatasetWithPreview(DatasetData):
+    preview: list[dict] | None = None
+
+
+class SuitableDataset(BaseModel):
+    dataset_id: str
+    sparse_columns: list[str]
+    non_sparse_columns: list[str]
+    preview: list[dict] | None = None

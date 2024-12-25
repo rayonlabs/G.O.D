@@ -80,3 +80,70 @@ input_field_generation_user: >
 
   Generate the remaining fields, ensuring they are consistent with the given {output_field} field and the overall description.
   Return your response in JSON format with the {output_field} field included.
+
+auto_column_pick: >-
+  Task: Analyze the given dataset columns and identify the best columns for LLM training format.
+
+  The response schema is:
+  ```json
+  {{
+      "field_instruction": "column_name",
+      "field_input": "column_name",
+      "field_output": "column_name"
+  }}
+  ```
+
+
+  There are two different formats we can use:
+  1. instruction_input_output
+  2. instruction_output
+
+  For the instruction_input_output format, the instruction column should contain clear directives or questions, and the input column should contain the corresponding context or input. The output column should contain the corresponding responses or answers.
+
+  For the instruction_output format, the instruction column should contain clear directives or questions, and the output column should contain the corresponding responses or answers. Choose this format only if there is no natural input column that would provide additional context.
+
+
+  Example 1:
+  Input:
+  - dense_columns: ["question", "choices", "correct_answer"]
+  - sparse_columns: []
+  Output:
+  ```json
+  {{
+      "field_instruction": "question",
+      "field_input": "choices",
+      "field_output": "correct_answer"
+  }}
+  ```
+
+
+  Example 2:
+  Input:
+  - dense_columns: ["question", "answer", "category"]
+  - sparse_columns: []
+  Output:
+  ```json
+  {{
+      "field_instruction": "question",
+      "field_output": "answer"
+  }}
+  ```
+
+  Keep in mind that the preview data is only a small sample of the dataset. Therefore it may have no values for input columns as they can be sparse.
+  If you recognize the column name to be input, you should choose it even if the values are missing.
+
+    Rules:
+  - The output column must come from the dense columns.
+  - The instruction column must come from the dense columns.
+  - The input column can come from the dense or sparse columns.
+  - A column can only be used once.
+
+  Now, provide the appropriate mapping based on the rules above.
+  Remember, the instruction and output columns are required. Input is optional but good to have.
+  Make sure to output your answer in JSON format:
+
+  Input:
+  dataset_name: {dataset_name}
+  sparse_columns: {sparse_columns}
+  dense_columns: {dense_columns}
+  preview_data: {preview_data}

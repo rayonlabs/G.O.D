@@ -109,3 +109,6 @@ class Prompts(BaseModel):
     # correctness-focused prompts (step 2/2)
     input_field_generation_sys: str
     input_field_generation_user: str
+
+    # column picker prompts
+    auto_column_pick: str

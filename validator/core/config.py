@@ -37,6 +37,9 @@ class Config:
     testnet: bool = os.getenv("SUBTENSOR_NETWORK", "").lower() == "test"
     debug: bool = os.getenv("ENV", "prod").lower() != "prod"
 
+    # Column picker config
+    use_local_column_picker: bool = True
+
 
 _config = None
 

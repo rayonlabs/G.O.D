@@ -4,7 +4,6 @@ import random
 from logging import getLogger
 from typing import List
 
-import yaml
 from datasets import load_dataset
 from fiber import Keypair
 
@@ -13,21 +12,15 @@ from core.models.utility_models import Prompts
 from core.models.utility_models import Role
 from validator.core.constants import MAX_SYNTH_DATA_POINTS
 from validator.core.constants import OUTPUT_REFORMULATION_PROBABILITY
-from validator.core.constants import PROMPT_PATH
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
 from validator.core.constants import SYNTH_MODEL
 from validator.core.constants import SYNTH_MODEL_TEMPERATURE
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.call_endpoint import post_to_nineteen_ai
+from validator.utils.prompts import load_prompts
 
 
 logger = getLogger(__name__)
-
-
-def load_prompts() -> Prompts:
-    with open(PROMPT_PATH, "r") as file:
-        prompts_dict = yaml.safe_load(file)
-    return Prompts(**prompts_dict)
 
 
 def load_and_sample_dataset(dataset_name: str, columns_to_sample: List[str]) -> List[dict]:
