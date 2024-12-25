@@ -55,10 +55,32 @@ def calculate_adjusted_task_score(quality_score: float, task_work_score: float) 
     return max(cts.MIN_TASK_SCORE, quality_score - cts.TASK_SCORE_THRESHOLD) * task_work_score
 
 
+def compute_time_decay_weight(
+    task_completion_time: datetime,
+    reference_time: datetime | None = None,
+) -> float:
+    """
+    Computes an polynomial decay weight for a task based on its completion time,
+    and ignores tasks older than the cutoff_days.
+    """
+    if reference_time is None:
+        reference_time = datetime.now()
+
+    days_elapsed = (reference_time - task_completion_time).total_seconds() / (3600 * 24)
+
+    if days_elapsed > cts.SCORING_WINDOW:
+        return 0.0
+
+    fraction = min(days_elapsed / cts.SCORING_WINDOW, 1)
+    return (1 - fraction) ** cts.SCORING_DECAY_STEEPNESS
+
+
 def update_node_aggregation(
-    node_aggregations: dict[str, NodeAggregationResult], node_score: TaskNode, task_work_score: float
+    node_aggregations: dict[str, NodeAggregationResult],
+    node_score: TaskNode,
+    task_work_score: float,
+    task_completion_time: datetime,
 ) -> None:
-    """Update node aggregation results with new scores for a particular task."""
     assert isinstance(node_score.hotkey, str), "hotkey is string"
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
 
@@ -68,7 +90,10 @@ def update_node_aggregation(
     node_result = node_aggregations[node_score.hotkey]
     adjusted_score = calculate_adjusted_task_score(node_score.quality_score, task_work_score)
 
-    node_result.summed_adjusted_task_scores += adjusted_score
+    time_weight = compute_time_decay_weight(task_completion_time)
+    weighted_adjusted_score = adjusted_score * time_weight
+
+    node_result.summed_adjusted_task_scores += weighted_adjusted_score
     node_result.task_raw_scores.append(node_score.quality_score)
     node_result.task_work_scores.append(task_work_score)
 
@@ -135,8 +160,12 @@ async def scoring_aggregation_from_date(psql_db: str) -> list[PeriodScore]:
 
     for task_res in task_results:
         task_work_score = get_task_work_score(task_res.task)
+        task_completion_time = task_res.task.completed_at
+        if task_completion_time is None:
+            logger.debug(f"This task {task_res} did not have a completion time, when it should have")
+            continue
         for node_score in task_res.node_scores:
-            update_node_aggregation(node_aggregations, node_score, task_work_score)
+            update_node_aggregation(node_aggregations, node_score, task_work_score, task_completion_time)
 
     final_scores = calculate_node_quality_scores(node_aggregations)
     final_scores = normalise_scores(final_scores)

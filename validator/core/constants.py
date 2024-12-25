@@ -44,6 +44,7 @@ GET_COLUMNS_FOR_DATASET_ENDPOINT = f"{CONTENT_BASE_URL}/dataset/{{dataset}}/colu
 
 GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
+GET_PARAMETER_COUNT = "parameter_count"
 
 # task stuff
 HOW_MANY_TASKS_ALLOWED_AT_ONCE = 10
@@ -91,8 +92,9 @@ TARGET_SCORE_RATIO = 1.05
 MIN_TASK_SCORE = 0.0  # very tiny punishment while miners find their feet
 MAX_TASK_SCORE = 1.6
 TASK_SCORE_THRESHOLD = 0.9
-REWEIGHTING_EXP = 0.4  # how much of a drop off from leader
-SCORING_WINDOW = 7  # number of days over which we score
+REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
+SCORING_WINDOW = 14  # number of days over which we score
+SCORING_DECAY_STEEPNESS = 0.75
 
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
