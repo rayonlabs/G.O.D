@@ -43,8 +43,6 @@ _config = None
 def load_config() -> Config:
     global _config
     if _config is None:
-
-
         subtensor_network = os.getenv("SUBTENSOR_NETWORK")
         subtensor_address = os.getenv("SUBTENSOR_ADDRESS") or None
         dev_env = os.getenv("ENV", "prod").lower() != "prod"

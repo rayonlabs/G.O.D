@@ -1,3 +1,4 @@
+import asyncio
 import re
 from datetime import datetime
 from datetime import timedelta
@@ -444,6 +445,7 @@ def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dic
     return task_results
 
 
+
 async def process_miners_pool(
     miners: list[Node],
     task: RawTask,
@@ -513,6 +515,7 @@ async def process_miners_pool(
                 if miner.hotkey not in [r.hotkey for r in results]
             ])
 
+
     return results
 
 
@@ -527,6 +530,7 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
     task_results = await process_miners_pool(miner_pool, task, dataset_type, config, gpu_ids)
+
     logger.info("Checking for duplicates ...")
     keep_submission = await handle_duplicate_submissions(task_results)
     task_results = zero_duplicate_scores(task_results, keep_submission)

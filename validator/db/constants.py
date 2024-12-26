@@ -25,7 +25,7 @@ PROTOCOL = "protocol"
 OUR_VALIDATOR = "our_validator"
 CREATED_TIMESTAMP = "created_timestamp"
 UPDATED_TIMESTAMP = "updated_timestamp"
-ASSIGNED_MINERS  = "assigned_miners"
+ASSIGNED_MINERS = "assigned_miners"
 
 # Task Table Columns
 TASK_ID = "task_id"

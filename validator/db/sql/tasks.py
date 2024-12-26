@@ -10,7 +10,10 @@ from fiber.logging_utils import get_logger
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
-from validator.core.models import RawTask, TrainingTaskStatus
+
+from validator.core.models import NetworkStats
+from validator.core.models import RawTask
+
 from validator.core.models import Task
 from validator.db.database import PSQLDB
 
@@ -169,19 +172,34 @@ async def get_synthetic_set_for_task(task_id: str, psql_db: PSQLDB):
         return await connection.fetchval(query, task_id)
 
 
-async def get_training_tasks_stats(psql_db: PSQLDB) -> TrainingTaskStatus:
+
+async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
+
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
             SELECT
-                COUNT(*) as number_of_jobs_training,
-                MIN(termination_at) as next_training_end
+
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $1) as number_of_jobs_training,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $2) as number_of_jobs_preevaluation,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $3) as number_of_jobs_evaluating,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $4) as number_of_jobs_success,
+                MIN(termination_at) FILTER (WHERE {cst.STATUS} = $1) as next_training_end
             FROM {cst.TASKS_TABLE}
-            WHERE {cst.STATUS} = $1
         """
-        row = await connection.fetchrow(query, TaskStatus.TRAINING.value)
-        return TrainingTaskStatus(
-            number_of_jobs_training=row["number_of_jobs_training"], next_training_end=row["next_training_end"]
+        row = await connection.fetchrow(
+            query,
+            TaskStatus.TRAINING.value,
+            TaskStatus.PREEVALUATION.value,
+            TaskStatus.EVALUATING.value,
+            TaskStatus.SUCCESS.value,
+        )
+        return NetworkStats(
+            number_of_jobs_training=row["number_of_jobs_training"],
+            number_of_jobs_preevaluation=row["number_of_jobs_preevaluation"],
+            number_of_jobs_evaluating=row["number_of_jobs_evaluating"],
+            number_of_jobs_success=row["number_of_jobs_success"],
+            next_training_end=row["next_training_end"],
         )
 
 
@@ -341,25 +359,74 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
         connection: Connection
         query = f"""
             WITH victorious_repo AS (
-                SELECT submissions.{cst.TASK_ID}, submissions.{cst.REPO}
+                SELECT
+                    submissions.{cst.TASK_ID},
+                    submissions.{cst.REPO},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY submissions.{cst.TASK_ID}
+                        ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
+                    ) AS rn
                 FROM {cst.SUBMISSIONS_TABLE} submissions
                 JOIN {cst.TASK_NODES_TABLE} task_nodes
-                ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
-                AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
-                AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
-                AND task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
-                ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
-                LIMIT 1
+                    ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
+                   AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
+                   AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
+                WHERE task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
             )
             SELECT
                 tasks.*,
-                victorious_repo.{cst.REPO} as trained_model_repository
+                victorious_repo.{cst.REPO} AS trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
-            LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+            LEFT JOIN victorious_repo
+                ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+               AND victorious_repo.rn = 1
             WHERE tasks.{cst.ACCOUNT_ID} = $1
             ORDER BY tasks.{cst.CREATED_AT} DESC
             LIMIT $2 OFFSET $3
         """
 
         rows = await connection.fetch(query, account_id, limit, offset)
+        return [Task(**dict(row)) for row in rows]
+
+
+async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[Task]:
+    """Get completed organic tasks from the specified timeframe
+
+    Args:
+        psql_db: Database connection
+        hours: Number of hours to look back (default: 5)
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            WITH victorious_repo AS (
+                SELECT
+                    submissions.{cst.TASK_ID},
+                    submissions.{cst.REPO},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY submissions.{cst.TASK_ID}
+                        ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
+                    ) AS rn
+                FROM {cst.SUBMISSIONS_TABLE} submissions
+                JOIN {cst.TASK_NODES_TABLE} task_nodes
+                    ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
+                    AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
+                    AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
+                WHERE task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
+                ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
+            )
+            SELECT
+                tasks.*,
+                victorious_repo.{cst.REPO} as trained_model_repository
+            FROM {cst.TASKS_TABLE} tasks
+            LEFT JOIN victorious_repo
+                ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+                AND victorious_repo.rn = 1
+            WHERE tasks.{cst.STATUS} = $1
+            AND tasks.{cst.IS_ORGANIC} = true
+            AND tasks.{cst.TERMINATION_AT} >= NOW() - $2 * INTERVAL '1 hour'
+            ORDER BY tasks.{cst.TERMINATION_AT} DESC
+        """
+
+        rows = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
         return [Task(**dict(row)) for row in rows]

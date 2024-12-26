@@ -8,8 +8,6 @@ from pathlib import Path
 from fiber.logging_utils import get_logger
 
 
-current_task_id = ContextVar[str | None]("current_task_id", default=None)
-
 
 def create_extra_log(**tags: str | None) -> dict[str, dict[str, str | None]]:
     try:
@@ -35,7 +33,8 @@ class JSONFormatter(Formatter):
         return json.dumps(log_data)
 
 
-def setup_json_logger(name: str):
+
+def setup_json_logger(name: str) -> Logger:
     base_dir = Path(__file__).parent.parent.parent
     log_dir = base_dir / "validator" / "logs"
     try:
@@ -52,6 +51,15 @@ def setup_json_logger(name: str):
         raise
 
 
+
+# we add the current task_id to all logs that are with the task context
+current_task_id = ContextVar[str | None]("current_task_id", default=None)
+
+
+# works like ->
+#   async with TaskContext("task-123"):
+#        # Inside this block, current_task_id.get() will return "task-123"
+#        logger.info("Doing something")
 class TaskContext:
     def __init__(self, task_id: str | None):
         self.task_id = task_id
