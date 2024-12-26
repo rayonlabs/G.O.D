@@ -96,16 +96,17 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
     i = 0
     while len(selected_miners) < num_of_miners_to_try_for and available_nodes:
         node = available_nodes.pop()
-        # try:
-        # TODO: Batch the boi
-        if i > 0 and i % 5 == 0:
-            logger.info(f"We have made {i} offers so far for task {task.task_id}")
-        offer_response = await _make_offer(node, task_request, config)
+        with LogContext(node_id=node.node_id, miner_hotkey=node.hotkey):
+            # try:
+            # TODO: Batch the boi
+            if i > 0 and i % 5 == 0:
+                logger.info(f"We have made {i} offers so far for task {task.task_id}")
+            offer_response = await _make_offer(node, task_request, config)
 
-        if offer_response.accepted is True:
-            selected_miners.append(node.hotkey)
-            await tasks_sql.assign_node_to_task(str(task.task_id), node, config.psql_db)
-            logger.info(f"The miner {node.node_id} has officially been assigned the task {task.task_id}!!")
+            if offer_response.accepted is True:
+                selected_miners.append(node.hotkey)
+                await tasks_sql.assign_node_to_task(str(task.task_id), node, config.psql_db)
+                logger.info(f"The miner {node.node_id} has officially been assigned the task {task.task_id}!!")
 
     if len(selected_miners) < cst.MINIMUM_MINER_POOL:
         logger.warning(
