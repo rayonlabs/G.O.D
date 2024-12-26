@@ -37,7 +37,7 @@ PROD_CONTENT_BASE_URL = "https://dev.content.gradients.io"
 # 241 is testnet
 CONTENT_BASE_URL = DEV_CONTENT_BASE_URL if NETUID == 241 else PROD_CONTENT_BASE_URL
 
-GET_RANDOM_DATASETS_ENDPOINT = f"{CONTENT_BASE_URL}/datasets/random"
+GET_DATASETS_ENDPOINT = f"{CONTENT_BASE_URL}/datasets/with-preview"
 GET_RANDOM_MODELS_ENDPOINT = f"{CONTENT_BASE_URL}/models/random"
 GET_COLUMNS_FOR_DATASET_ENDPOINT = f"{CONTENT_BASE_URL}/dataset/{{dataset}}/columns/suggest"
 
@@ -57,19 +57,24 @@ GET_SYNTH_DATA = True
 MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
+
+# Column picker config
+COLUMN_PICKER_MODEL_TEMPERATURE = 0.5
+COLUMN_PICKER_MODEL = "llama-3-1-70b"
+COLUMN_PICKER_NUM_PREVIEW_ROWS = 5
+
 # synth stuff
 SYNTH_GEN_BATCH_SIZE = 10
 SYNTH_MODEL_TEMPERATURE = 0.4
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
-
-
 SYNTH_MODEL = "chat-llama-3-2-3b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
+
 # Probability for using output reformulation method
 OUTPUT_REFORMULATION_PROBABILITY = 0.5
 
