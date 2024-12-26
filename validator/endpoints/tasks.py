@@ -24,7 +24,6 @@ from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
-from validator.core.models import TrainingTaskStatus
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
@@ -114,7 +113,7 @@ async def get_task_details_by_account(
     limit: int = 100,
     page: int = 1,
     config: Config = Depends(get_config),
-) -> List[TaskDetails]:
+) -> list[TaskDetails]:
     offset = (page - 1) * limit
     tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
 
