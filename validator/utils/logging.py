@@ -6,16 +6,15 @@ from logging import Logger
 from logging import LogRecord
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
 from typing import Optional
 
 from fiber.logging_utils import get_logger as fiber_get_logger
 
 
-current_context = ContextVar[dict[str, Any]]("current_context", default={})
+current_context = ContextVar[dict[str, str | dict]]("current_context", default={})
 
 
-def add_context_tag(key: str, value: Any) -> None:
+def add_context_tag(key: str, value: str | dict) -> None:
     """Add or update a tag in the current logging context"""
     try:
         context = current_context.get()
@@ -44,7 +43,7 @@ def clear_context() -> None:
     current_context.set({})
 
 
-def get_context_tag(key: str) -> Optional[Any]:
+def get_context_tag(key: str) -> Optional[str | dict]:
     """Get a tag value from the current logging context"""
     try:
         context = current_context.get()
@@ -63,7 +62,7 @@ class JSONFormatter(Formatter):
                 record.tags = {}
 
         clean_level = record.levelname.replace("\u001b[32m", "").replace("\u001b[1m", "").replace("\u001b[0m", "")
-        log_data: dict[str, Any] = {
+        log_data: dict[str, str | dict] = {
             "timestamp": self.formatTime(record),
             "level": clean_level,
             "message": record.getMessage(),
@@ -74,7 +73,7 @@ class JSONFormatter(Formatter):
 
 
 class LogContext:
-    def __init__(self, **tags: Any):
+    def __init__(self, **tags: str | dict):
         self.tags = tags
         self.token = None
 
