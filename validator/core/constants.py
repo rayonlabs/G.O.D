@@ -57,22 +57,24 @@ GET_SYNTH_DATA = True
 MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
+
+# Column picker config
+COLUMN_PICKER_MODEL_TEMPERATURE = 0.5
+COLUMN_PICKER_MODEL = "llama-3-1-70b"
+COLUMN_PICKER_NUM_PREVIEW_ROWS = 5
+
 # synth stuff
 SYNTH_GEN_BATCH_SIZE = 10
 SYNTH_MODEL_TEMPERATURE = 0.4
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
-
-# column picker stuff
-COLUMN_PICKER_NUM_PREVIEW_ROWS = 5
-
-
 SYNTH_MODEL = "chat-llama-3-2-3b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
+
 # Probability for using output reformulation method
 OUTPUT_REFORMULATION_PROBABILITY = 0.5
 

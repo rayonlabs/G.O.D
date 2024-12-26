@@ -5,9 +5,9 @@ from logging import getLogger
 from fastapi import HTTPException
 
 from validator.core.config import Config
+from validator.core.constants import COLUMN_PICKER_MODEL
+from validator.core.constants import COLUMN_PICKER_MODEL_TEMPERATURE
 from validator.core.constants import COLUMN_PICKER_NUM_PREVIEW_ROWS
-from validator.core.constants import SYNTH_MODEL
-from validator.core.constants import SYNTH_MODEL_TEMPERATURE
 from validator.core.models import ColumnPickerResponse
 from validator.core.models import SuitableDataset
 from validator.utils.call_endpoint import post_to_nineteen_ai
@@ -51,8 +51,8 @@ async def pick_columns_locally(
 ) -> ColumnPickerResponse:
     prompt = create_prompt(dataset)
     payload = {
-        "model": SYNTH_MODEL,
-        "temperature": SYNTH_MODEL_TEMPERATURE,
+        "model": COLUMN_PICKER_MODEL,
+        "temperature": COLUMN_PICKER_MODEL_TEMPERATURE,
         "messages": [{"role": "user", "content": prompt}],
     }
 
