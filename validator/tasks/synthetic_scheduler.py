@@ -40,10 +40,30 @@ async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:
 
 
 async def _get_datasets(keypair: Keypair) -> AsyncGenerator[SuitableDataset, None]:
-    response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair)
-    if not isinstance(response, list):
-        raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
-    datasets: list[SuitableDataset] = [SuitableDataset.model_validate(ds) for ds in response]
+    page = 1
+    limit = 10
+
+    datasets: list[SuitableDataset | None] = []
+
+    while True:
+        try:
+            response = await call_content_service(cst.GET_DATASETS_ENDPOINT, keypair, params={"limit": limit, "page": page})
+
+            if not isinstance(response, list) or len(response) == 0:
+                break
+
+            datasets.extend([SuitableDataset.model_validate(dataset) for dataset in response])
+            page += 1
+        except Exception as e:
+            logger.error(f"Error fetching datasets: {e}")
+            break
+
+    datasets = [dataset for dataset in datasets if dataset]
+    if len(datasets) == 0:
+        raise ValueError("No datasets found")
+
+    logger.info(f"Found {len(datasets)} datasets")
+
     random.shuffle(datasets)
     for dataset in datasets:
         yield dataset

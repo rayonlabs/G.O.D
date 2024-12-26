@@ -37,7 +37,7 @@ PROD_CONTENT_BASE_URL = "https://dev.content.gradients.io"
 # 241 is testnet
 CONTENT_BASE_URL = DEV_CONTENT_BASE_URL if NETUID == 241 else PROD_CONTENT_BASE_URL
 
-GET_RANDOM_DATASETS_ENDPOINT = f"{CONTENT_BASE_URL}/datasets/random"
+GET_DATASETS_ENDPOINT = f"{CONTENT_BASE_URL}/datasets/with-preview"
 GET_RANDOM_MODELS_ENDPOINT = f"{CONTENT_BASE_URL}/models/random"
 GET_COLUMNS_FOR_DATASET_ENDPOINT = f"{CONTENT_BASE_URL}/dataset/{{dataset}}/columns/suggest"
 
