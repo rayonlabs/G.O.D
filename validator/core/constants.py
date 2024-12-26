@@ -44,7 +44,7 @@ GET_COLUMNS_FOR_DATASET_ENDPOINT = f"{CONTENT_BASE_URL}/dataset/{{dataset}}/colu
 
 GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
-GET_PARAMETER_COUNT = "parameter_count"
+
 
 # task stuff
 HOW_MANY_TASKS_ALLOWED_AT_ONCE = 10
