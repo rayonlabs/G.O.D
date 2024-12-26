@@ -1,12 +1,12 @@
 import json
 from contextvars import ContextVar
 from logging import Formatter
+from logging import Logger
 from logging import LogRecord
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from fiber.logging_utils import get_logger
-
 
 
 def create_extra_log(**tags: str | None) -> dict[str, dict[str, str | None]]:
