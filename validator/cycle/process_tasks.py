@@ -63,7 +63,7 @@ async def _make_offer(node: Node, request: MinerTaskRequest, config: Config) -> 
     )
 
 
-def _calculate_selection_probabilities(nodes: list[Node], random_weight: float = 0.02):
+def _calculate_selection_probabilities(nodes: list[Node], random_weight: float = 0.005):
     incentives = np.array([node.incentive for node in nodes])
     normalized_incentives = incentives / np.sum(incentives)
     random_probs = np.random.random(len(nodes))
@@ -118,7 +118,6 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
     while available_indices and len(selected_miners) < num_of_miners_to_try_for:
         current_nodes = [available_nodes[i] for i in available_indices]
         current_probs = _calculate_selection_probabilities(current_nodes)
-        logger.info(f"Here are the current probs {current_probs}")
         selected_idx_position = np.random.choice(len(available_indices), p=current_probs)
         logger.info(f"We picked the node with prob {current_probs[selected_idx_position]}")
         original_idx = available_indices.pop(selected_idx_position)
