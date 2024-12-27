@@ -275,39 +275,69 @@ def _create_failed_miner_result(hotkey: str) -> MinerResults:
 async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str | None:
     url = f"{cts.SUBMISSION_ENDPOINT}{task_id}"
     try:
-        return str(await process_non_stream_fiber_get(url, config, miner))
+        repo = str(await process_non_stream_fiber_get(url, config, miner))
+        return None if repo == "None" else repo
     except Exception as e:
         logger.error(f"Failed to get submission for miner {miner.hotkey}: {e}")
         return None
 
 
-async def _evaluate_submission(
-    task: RawTask, submission_repo: str, dataset_type: CustomDatasetType, gpu_ids: list[int]
-) -> tuple[EvaluationResult, EvaluationResult]:
+async def _evaluate_submissions(
+    task: RawTask, submission_repos: list[str], dataset_type: CustomDatasetType, gpu_ids: list[int]
+) -> dict[str, tuple[EvaluationResult, EvaluationResult] | Exception]:
+    """Evaluate same task submissions within same docker container.
+    Docker evaluations with an exception will return the Exception for the repo."""
     evaluation_params = {
         "file_format": FileFormat.JSON,
         "original_model": task.model_id,
-        "model": submission_repo,
+        "models": submission_repos,
         "dataset_type": dataset_type,
         "gpu_ids": gpu_ids,
     }
 
     assert task.synthetic_data is not None, "Synthetic data shouldn't be none"
     assert task.test_data is not None, "Test data shouldn't be none"
+
     logger.info("Starting synth evaluation")
     synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-    synth_eval_result = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
+    synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
 
-    if not synth_eval_result.is_finetune:
-        return (
-            EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-            EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+    results: dict[str, tuple[EvaluationResult, EvaluationResult] | Exception] = {}
+
+    finetuned_repos = []
+    for repo in submission_repos:
+        if isinstance(synth_eval_results.get(repo), Exception):
+            results[repo] = synth_eval_results[repo]
+            continue
+
+        synth_result = synth_eval_results[repo]
+        if not synth_result.is_finetune:
+            results[repo] = (
+                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0)
+            )
+        else:
+            finetuned_repos.append(repo)
+
+    if finetuned_repos:
+        test_data_filepath = await download_s3_file(task.test_data)
+        test_eval_results = await run_evaluation_docker(
+            dataset=test_data_filepath,
+            models=finetuned_repos,
+            **{k: v for k, v in evaluation_params.items() if k != 'models'}
         )
 
-    test_data_filepath = await download_s3_file(task.test_data)
-    test_eval_result = await run_evaluation_docker(dataset=test_data_filepath, **evaluation_params)
+        for repo in finetuned_repos:
+            if isinstance(test_eval_results.get(repo), Exception):
+                results[repo] = test_eval_results[repo]
+            else:
+                results[repo] = (synth_eval_results[repo], test_eval_results[repo])
 
-    return synth_eval_result, test_eval_result
+    for repo in submission_repos:
+        if repo not in results:
+            results[repo] = Exception("Evaluation failed to complete")
+
+    return results
 
 
 async def _clear_up_s3(file_paths: list[str]) -> None:
@@ -320,38 +350,6 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
             await async_minio_client.delete_file(cts.BUCKET_NAME, object_name)
         except Exception as e:
             logger.error(f"Failed to delete file {file_path} from MinIO: {e}")
-
-
-async def _evaluate_miner_result(
-    miner: Node, task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
-) -> MinerResults:
-    assert task.task_id is not None, "We should have a task id when processing the miner"
-    submission_repo = await _get_submission_repo(miner, str(task.task_id), config)
-    logger.info(f"Found repo {submission_repo}")
-    if not submission_repo:
-        return _create_failed_miner_result(miner.hotkey)
-
-    try:
-        submission = Submission(
-            task_id=task.task_id,
-            hotkey=miner.hotkey,
-            repo=submission_repo,
-            created_on=datetime.now(),
-            updated_on=datetime.now(),
-        )
-
-        synth_result, test_result = await _evaluate_submission(task, submission_repo, dataset_type, gpu_ids)
-
-        return MinerResults(
-            hotkey=miner.hotkey,
-            test_loss=float(test_result.eval_loss),
-            synth_loss=float(synth_result.eval_loss),
-            is_finetune=test_result.is_finetune,
-            submission=submission,
-        )
-    except Exception as e:
-        logger.error(f"Error evaluating miner {miner.hotkey}: {e}")
-        return _create_failed_miner_result(miner.hotkey)
 
 
 async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_db) -> None:
@@ -447,25 +445,81 @@ def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dic
     return task_results
 
 
-async def process_miners_batch(
-    miners: list[Node], task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
-) -> list[MinerResults]:
-    batches = []
-    for i in range(0, len(miners), len(gpu_ids)):
-        batch = [(miner, [gpu_id]) for miner, gpu_id in zip(miners[i : i + len(gpu_ids)], gpu_ids)]
-        batches.append(batch)
 
-    results = []
-    for batch in batches:
-        batch_results = await asyncio.gather(
-            *[_evaluate_miner_result(miner, task, dataset_type, config, gpu_list) for miner, gpu_list in batch]
-        )
-        results.extend(batch_results)
+async def process_miners_pool(
+    miners: list[Node],
+    task: RawTask,
+    dataset_type: CustomDatasetType,
+    config: Config,
+    gpu_ids: list[int]
+) -> list[MinerResults]:
+    """Process same task miners"""
+    assert task.task_id is not None, "We should have a task id when processing miners"
+
+    miner_repos: dict[str, str] = {}
+    for miner in miners:
+        repo = await _get_submission_repo(miner, str(task.task_id), config)
+        if repo is not None:
+            miner_repos[miner.hotkey] = repo
+        logger.info(f"Found repo {repo} for miner {miner.hotkey}")
+
+    results = [
+        _create_failed_miner_result(miner.hotkey)
+        for miner in miners
+        if miner.hotkey not in miner_repos
+    ]
+
+    if miner_repos:
+        try:
+            eval_results = await _evaluate_submissions(
+                task=task,
+                submission_repos=list(miner_repos.values()),
+                dataset_type=dataset_type,
+                gpu_ids=gpu_ids
+            )
+
+            for miner in miners:
+                if miner.hotkey not in miner_repos:
+                    continue
+
+                repo = miner_repos[miner.hotkey]
+                eval_result = eval_results.get(repo)
+
+                if isinstance(eval_result, Exception):
+                    logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
+                    results.append(_create_failed_miner_result(miner.hotkey))
+                    continue
+
+                synth_result, test_result = eval_result
+                submission = Submission(
+                    task_id=task.task_id,
+                    hotkey=miner.hotkey,
+                    repo=repo,
+                    created_on=datetime.now(),
+                    updated_on=datetime.now(),
+                )
+
+                results.append(MinerResults(
+                    hotkey=miner.hotkey,
+                    test_loss=float(test_result.eval_loss),
+                    synth_loss=float(synth_result.eval_loss),
+                    is_finetune=test_result.is_finetune,
+                    submission=submission,
+                ))
+
+        except Exception as e:
+            logger.error(f"Error during batch evaluation: {e}")
+            results.extend([
+                _create_failed_miner_result(miner.hotkey)
+                for miner in miners
+                if miner.hotkey not in [r.hotkey for r in results]
+            ])
+
 
     return results
 
 
-async def evaluate_and_score(task: RawTask, config: Config) -> RawTask:
+async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) -> RawTask:
     """Main function to evaluate and score task submissions."""
     assert task.task_id is not None, "Task ID must be present"
     assert task.synthetic_data is not None, "Synthetic data must be present"
@@ -475,7 +529,8 @@ async def evaluate_and_score(task: RawTask, config: Config) -> RawTask:
     dataset_type = _get_dataset_type(task)
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
-    task_results = await process_miners_batch(miner_pool, task, dataset_type, config, cts.GPU_IDS)
+    task_results = await process_miners_pool(miner_pool, task, dataset_type, config, gpu_ids)
+
     logger.info("Checking for duplicates ...")
     keep_submission = await handle_duplicate_submissions(task_results)
     task_results = zero_duplicate_scores(task_results, keep_submission)

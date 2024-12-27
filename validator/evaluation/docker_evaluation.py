@@ -7,6 +7,7 @@ from typing import Union
 
 import docker
 from fiber.logging_utils import get_logger
+from pydantic import TypeAdapter
 
 from core import constants as cst
 from core.docker_utils import stream_logs
@@ -46,12 +47,13 @@ async def get_evaluation_results(container):
 
 async def run_evaluation_docker(
     dataset: str,
-    model: str,
+    models: list[str],
     original_model: str,
     dataset_type: Union[DatasetType, CustomDatasetType],
     file_format: FileFormat,
     gpu_ids: list[int],
-) -> EvaluationResult:
+) -> dict[str, Union[EvaluationResult, Exception]]:
+
     client = docker.from_env()
 
     if isinstance(dataset_type, DatasetType):
@@ -63,7 +65,7 @@ async def run_evaluation_docker(
 
     environment = {
         "DATASET": dataset,
-        "MODEL": model,
+        "MODELS": ",".join(models),
         "ORIGINAL_MODEL": original_model,
         "DATASET_TYPE": dataset_type_str,
         "FILE_FORMAT": file_format.value,
@@ -103,9 +105,17 @@ async def run_evaluation_docker(
         if result["StatusCode"] != 0:
             raise Exception(f"Container exited with status {result['StatusCode']}")
 
-        eval_results = await get_evaluation_results(container)
+        eval_results_dict = await get_evaluation_results(container)
 
-        return EvaluationResult(**eval_results)
+
+        processed_results = {}
+        for repo, result in eval_results_dict.items():
+            if isinstance(result, str) and not isinstance(result, dict):
+                processed_results[repo] = Exception(result)
+            else:
+                processed_results[repo] = TypeAdapter(EvaluationResult).validate_python(result)
+
+        return processed_results
 
     except Exception as e:
         logger.error(f"Failed to retrieve evaluation results: {str(e)}")
