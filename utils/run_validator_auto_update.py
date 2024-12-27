@@ -3,11 +3,10 @@ import os
 import subprocess
 import time
 
-from core.constants import VALIDATOR_DOCKER_IMAGE
-
 
 def pull_latest_docker_images():
-    os.system(f"docker pull {VALIDATOR_DOCKER_IMAGE}")
+    os.system(f"docker pull weightswandering/tuning_vali:latest
+}")
 
 
 def should_update_local(local_commit: str, remote_commit: str) -> bool:
