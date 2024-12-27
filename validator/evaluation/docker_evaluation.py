@@ -62,16 +62,19 @@ async def run_evaluation_docker(
     else:
         raise ValueError("Invalid dataset_type provided.")
 
+    dataset_filename = os.path.basename(dataset)
+    dataset_dir = os.path.dirname(os.path.abspath(dataset))
+
     environment = {
-        "DATASET": dataset,
+        "DATASET": f"/workspace/input_data/{dataset_filename}",  # Now uses the mounted path
         "MODELS": ",".join(models),
         "ORIGINAL_MODEL": original_model,
         "DATASET_TYPE": dataset_type_str,
         "FILE_FORMAT": file_format.value,
         "JOB_ID": "dummy",
     }
+    logger.info(f"Here are the models {models}")
 
-    dataset_dir = os.path.dirname(os.path.abspath(dataset))
     volume_bindings = {
         dataset_dir: {
             "bind": "/workspace/input_data",

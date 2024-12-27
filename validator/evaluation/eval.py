@@ -221,10 +221,7 @@ def main():
                 is_finetune = True
             except Exception as lora_error:
                 logger.info(f"Loading full model... failed to load as LoRA: {lora_error}")
-                finetuned_model = AutoModelForCausalLM.from_pretrained(
-                    repo,
-                    token=os.environ.get("HUGGINGFACE_TOKEN")
-                )
+                finetuned_model = AutoModelForCausalLM.from_pretrained(repo, token=os.environ.get("HUGGINGFACE_TOKEN"))
                 try:
                     is_finetune = model_is_a_finetune(original_model, finetuned_model)
                 except Exception as e:
@@ -253,8 +250,7 @@ def main():
         os.makedirs(output_dir)
 
     serializable_results = {
-        repo: (str(result) if isinstance(result, Exception) else result)
-        for repo, result in results_dict.items()
+        repo: (str(result) if isinstance(result, Exception) else result) for repo, result in results_dict.items()
     }
 
     with open(output_file, "w") as f:
