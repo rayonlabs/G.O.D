@@ -356,7 +356,7 @@ async def process_pending_tasks(config: Config) -> None:
 
 
 async def move_tasks_to_preevaluation_loop(config: Config):
-    # await _move_any_evaluating_tasks_to_pending_evaluation(config)
+    await _move_any_evaluating_tasks_to_pending_evaluation(config)
     while True:
         completed_tasks = await tasks_sql.get_tasks_ready_to_evaluate(config.psql_db)
         if completed_tasks:
