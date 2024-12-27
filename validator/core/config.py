@@ -64,7 +64,7 @@ def load_config() -> Config:
             try:
                 substrate = interface.get_substrate(subtensor_network=subtensor_network, subtensor_address=subtensor_address)
             except websocket._exceptions.WebSocketBadStatusException as e:
-                logger.error(f"Failed to get substrate: {e}. Sleeping for 20 second and trying again...")
+                logger.error(f"Failed to get substrate: {e}. Sleeping for 20 seconds and then trying again...")
                 time.sleep(20)
                 substrate = interface.get_substrate(subtensor_network=subtensor_network, subtensor_address=subtensor_address)
         else:
