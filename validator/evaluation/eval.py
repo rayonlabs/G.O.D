@@ -9,7 +9,6 @@ import yaml
 from axolotl.utils.data import load_tokenized_prepared_datasets
 from axolotl.utils.dict import DictDefault
 from fiber.logging_utils import get_logger
-from peft import PeftModel
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -90,16 +89,15 @@ def _process_evaluation_batches(
     eval_dataloader: DataLoader,
     device: torch.device,
 ) -> tuple[list[float], int]:
-    batch_losses = []
+    batch_losses = []  # Store individual batch losses instead of accumulating
     num_batches = 0
 
-    language_model.eval()
     with torch.no_grad():
         for batch_idx, batch in enumerate(eval_dataloader):
             logger.info(f"Processing batch {batch_idx + 1}")
             batch_loss = _compute_batch_loss(language_model, batch, device)
             logger.info(f"Batch {batch_idx + 1} loss: {batch_loss}")
-            batch_losses.append(batch_loss)
+            batch_losses.append(batch_loss)  # Append each loss to the list
             num_batches += 1
 
     return batch_losses, num_batches
@@ -168,6 +166,7 @@ def evaluate_language_model_loss(
     _log_dataset_and_model_info(eval_dataset, language_model, tokenizer)
     eval_dataloader = _create_evaluation_dataloader(eval_dataset, evaluation_config, tokenizer)
 
+    language_model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     language_model.to(device)
     losses, num_batches = _process_evaluation_batches(language_model, eval_dataloader, device)
@@ -190,11 +189,12 @@ def evaluate_finetuned_model(
 
 def main():
     dataset = os.environ.get("DATASET")
+    model = os.environ.get("MODEL")
     original_model = os.environ.get("ORIGINAL_MODEL")
     dataset_type_str = os.environ.get("DATASET_TYPE", "")
     file_format_str = os.environ.get("FILE_FORMAT")
-    models_str = os.environ.get("MODELS", "")  # Comma-separated list of LoRA repos
-    if not all([dataset, original_model, file_format_str, models_str]):
+
+    if not all([dataset, model, original_model, file_format_str]):
         logger.error("Missing required environment variables.")
         exit(1)
 
@@ -205,63 +205,43 @@ def main():
     except ValueError:
         dataset_type = CustomDatasetType.model_validate_json(dataset_type_str)
 
-    base_model = AutoModelForCausalLM.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    finetuned_model = AutoModelForCausalLM.from_pretrained(model, token=os.environ.get("HUGGINGFACE_TOKEN")).to(device)
     tokenizer = AutoTokenizer.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
+    try:
+        is_finetune = model_is_a_finetune(original_model, finetuned_model)
+    except Exception as e:  # What is this supposed to be catching?
+        logger.info(f"Problem with detection of finetune: {e}")
+        logger.info("Assuming False")
+        is_finetune = False
 
-    lora_repos = [m.strip() for m in models_str.split(",") if m.strip()]
+    results = evaluate_finetuned_model(
+        dataset_name=dataset,
+        finetuned_model=finetuned_model,
+        dataset_type=dataset_type,
+        file_format=file_format,
+        tokenizer=tokenizer,
+    )
 
-    results_dict = {}
-    for repo in lora_repos:
-        try:
-            try:
-                finetuned_model = PeftModel.from_pretrained(base_model, repo, is_trainable=False)
-                is_finetune = True
-            except Exception as lora_error:
-                logger.info(f"Loading full model... failed to load as LoRA: {lora_error}")
-                finetuned_model = AutoModelForCausalLM.from_pretrained(
-                    repo,
-                    token=os.environ.get("HUGGINGFACE_TOKEN")
-                )
-                try:
-                    is_finetune = model_is_a_finetune(original_model, finetuned_model)
-                except Exception as e:
-                    logger.info(f"Problem with detection of finetune for {repo}: {e}")
-                    logger.info("Assuming False")
-                    is_finetune = False
-
-            finetuned_model.eval()
-
-            results = evaluate_finetuned_model(
-                dataset_name=dataset,
-                finetuned_model=finetuned_model,
-                dataset_type=dataset_type,
-                file_format=file_format,
-                tokenizer=tokenizer,
-            )
-            results["is_finetune"] = is_finetune
-            results_dict[repo] = results
-        except Exception as e:
-            logger.error(f"Error evaluating {repo}: {e}")
-            results_dict[repo] = e
+    results["is_finetune"] = is_finetune
 
     output_file = "/aplp/evaluation_results.json"
     output_dir = os.path.dirname(output_file)
+
+    # Create directory if it doesn't exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    serializable_results = {
-        repo: (str(result) if isinstance(result, Exception) else result)
-        for repo, result in results_dict.items()
-    }
-
+    # Write the results to the file
     with open(output_file, "w") as f:
-        json.dump(serializable_results, f, indent=2)
+        json.dump(results, f)
 
     logger.info(f"Evaluation results saved to {output_file}")
-    logger.info(json.dumps(serializable_results, indent=2))
+
+    logger.info(json.dumps(results))
 
 
 if __name__ == "__main__":

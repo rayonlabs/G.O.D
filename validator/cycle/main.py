@@ -5,7 +5,6 @@ load_dotenv(".vali.env")
 
 import asyncio
 
-
 from validator.core.config import load_config
 from validator.core.refresh_nodes import refresh_nodes_periodically
 from validator.cycle.process_tasks import process_completed_tasks

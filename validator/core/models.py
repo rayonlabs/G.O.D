@@ -213,7 +213,6 @@ class DatasetJsons(BaseModel):
         }
 
 
-
 class NetworkStats(BaseModel):
     number_of_jobs_training: int
     number_of_jobs_preevaluation: int
