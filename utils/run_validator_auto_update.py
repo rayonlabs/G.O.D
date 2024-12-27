@@ -3,8 +3,6 @@ import os
 import subprocess
 import time
 
-from core.constants import VALIDATOR_DOCKER_IMAGE
-
 
 def pull_latest_docker_images():
     os.system("docker pull weightswandering/tuning_vali:latest")
