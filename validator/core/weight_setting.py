@@ -140,7 +140,9 @@ async def set_weights_periodically(config: Config, just_once: bool = False) -> N
         substrate, weights_set_rate_limit = query_substrate(
             substrate, "SubtensorModule", "WeightsSetRateLimit", [config.netuid], return_value=True
         )
-        logger.info(f"Last updated: {updated} for my uid: {uid}")
+        logger.info(
+            f"My Validator Node ID: {uid}. Last updated {updated} blocks ago. Weights set rate limit: {weights_set_rate_limit}."
+        )
 
         if updated < weights_set_rate_limit:
             logger.info("Sleeping for a bit as we set recently...")
