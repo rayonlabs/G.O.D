@@ -26,7 +26,7 @@ from validator.utils.logging import logger
 
 
 def _get_total_dataset_size(repo_name: str) -> int:
-    return sum(info.dataset_size for info in get_dataset_infos(repo_name).values() if info.dataset_size)
+    return int(sum(info.dataset_size for info in get_dataset_infos(repo_name).values() if info.dataset_size))
 
 
 async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
