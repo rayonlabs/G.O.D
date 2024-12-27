@@ -92,10 +92,10 @@ def update_node_aggregation(
     node_result = node_aggregations[node_score.hotkey]
     adjusted_score = calculate_adjusted_task_score(node_score.quality_score, task_work_score)
 
-    time_weight = compute_time_decay_weight(task_completion_time)
-    weighted_adjusted_score = adjusted_score * time_weight
+   # time_weight = compute_time_decay_weight(task_completion_time)
+   # weighted_adjusted_score = adjusted_score * time_weight
 
-    node_result.summed_adjusted_task_scores += weighted_adjusted_score
+    node_result.summed_adjusted_task_scores += adjusted_score
     node_result.task_raw_scores.append(node_score.quality_score)
     node_result.task_work_scores.append(task_work_score)
 
