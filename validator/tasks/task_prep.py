@@ -18,7 +18,6 @@ from validator.utils.logging import logger
 from validator.utils.minio import async_minio_client
 
 
-
 async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", prefix=prefix)
     with open(temp_file.name, "w") as f:
@@ -89,7 +88,6 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
     )
 
     return synthetic_data
-
 
 def change_to_json_format(dataset: Dataset, columns: List[str]):
     try:

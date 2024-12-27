@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import random
 
+import numpy as np
 from datasets import get_dataset_infos
 from fiber import Keypair
 from fiber.chain.models import Node
@@ -62,6 +63,15 @@ async def _make_offer(node: Node, request: MinerTaskRequest, config: Config) -> 
     )
 
 
+def _calculate_selection_probabilities(nodes: list[Node], random_weight: float = 0.02):
+    incentives = np.array([node.incentive for node in nodes])
+    normalized_incentives = incentives / np.sum(incentives)
+    random_probs = np.random.random(len(nodes))
+    random_probs = random_probs / np.sum(random_probs)
+    selection_probs = (1 - random_weight) * normalized_incentives + random_weight * random_probs
+    return selection_probs / np.sum(selection_probs)
+
+
 async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], config: Config) -> RawTask:
     if len(nodes) < cst.MINIMUM_MINER_POOL:
         logger.warning(
@@ -104,19 +114,14 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         return task
 
     num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
-    random.shuffle(available_nodes)
+    available_indices = list(range(len(available_nodes)))
+    while available_indices and len(selected_miners) < num_of_miners_to_try_for:
+        current_nodes = [available_nodes[i] for i in available_indices]
+        current_probs = _calculate_selection_probabilities(current_nodes)
+        selected_idx_position = np.random.choice(len(available_indices), p=current_probs)
+        original_idx = available_indices.pop(selected_idx_position)
+        node = available_nodes[original_idx]
 
-    # TODO: Improve by selecting high score miners first, then lower score miners, etc
-    i = 0
-    while len(selected_miners) < num_of_miners_to_try_for and available_nodes:
-        node = available_nodes.pop()
-        # try:
-        # TODO: Batch the boi
-        if i > 0 and i % 5 == 0:
-            logger.info(
-                f"We have made {i} offers so far for task {task.task_id}",
-                extra=create_extra_log(status=task.status),
-            )
         offer_response = await _make_offer(node, task_request, config)
 
         if offer_response.accepted is True:
@@ -372,13 +377,8 @@ async def evaluate_tasks_loop(config: Config):
         if tasks_to_evaluate:
             logger.info(f"There are {len(tasks_to_evaluate)} tasks awaiting evaluation")
             for i in range(0, len(tasks_to_evaluate), len(cst.GPU_IDS)):
-                batch = [(task, [gpu_id]) for task, gpu_id in zip(
-                    tasks_to_evaluate[i:i + len(cst.GPU_IDS)],
-                    cst.GPU_IDS
-                )]
-                await asyncio.gather(
-                    *[_evaluate_task(task, gpu_list, config) for task, gpu_list in batch]
-                )
+                batch = [(task, [gpu_id]) for task, gpu_id in zip(tasks_to_evaluate[i : i + len(cst.GPU_IDS)], cst.GPU_IDS)]
+                await asyncio.gather(*[_evaluate_task(task, gpu_list, config) for task, gpu_list in batch])
 
         else:
             logger.info("No tasks awaiting evaluation - waiting 30 seconds")
