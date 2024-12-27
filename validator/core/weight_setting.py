@@ -144,7 +144,7 @@ async def set_weights_periodically(config: Config, just_once: bool = False) -> N
             f"My Validator Node ID: {uid}. Last updated {updated} blocks ago. Weights set rate limit: {weights_set_rate_limit}."
         )
 
-        if updated < weights_set_rate_limit:
+        if updated < weights_set_rate_limit -100000:
             logger.info("Sleeping for a bit as we set recently...")
             await asyncio.sleep((weights_set_rate_limit - updated + 1) * 12)
             continue
