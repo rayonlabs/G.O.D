@@ -119,9 +119,9 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         current_nodes = [available_nodes[i] for i in available_indices]
         current_probs = _calculate_selection_probabilities(current_nodes)
         selected_idx_position = np.random.choice(len(available_indices), p=current_probs)
-        logger.info(f"We picked the node with prob {current_probs[selected_idx_position]}")
         original_idx = available_indices.pop(selected_idx_position)
         node = available_nodes[original_idx]
+        logger.info(f"We picked the node {node.node_id} with prob {current_probs[selected_idx_position]}")
 
         offer_response = await _make_offer(node, task_request, config)
 
