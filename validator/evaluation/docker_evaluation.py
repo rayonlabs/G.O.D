@@ -53,7 +53,6 @@ async def run_evaluation_docker(
     file_format: FileFormat,
     gpu_ids: list[int],
 ) -> dict[str, Union[EvaluationResult, Exception]]:
-
     client = docker.from_env()
 
     if isinstance(dataset_type, DatasetType):
@@ -69,6 +68,7 @@ async def run_evaluation_docker(
         "ORIGINAL_MODEL": original_model,
         "DATASET_TYPE": dataset_type_str,
         "FILE_FORMAT": file_format.value,
+        "JOB_ID": "dummy",
     }
 
     dataset_dir = os.path.dirname(os.path.abspath(dataset))
@@ -106,7 +106,6 @@ async def run_evaluation_docker(
             raise Exception(f"Container exited with status {result['StatusCode']}")
 
         eval_results_dict = await get_evaluation_results(container)
-
 
         processed_results = {}
         for repo, result in eval_results_dict.items():
