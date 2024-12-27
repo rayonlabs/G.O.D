@@ -17,8 +17,6 @@ from validator.utils.logging import create_extra_log
 from validator.utils.logging import logger
 from validator.utils.minio import async_minio_client
 
-from validator.utils.logging import create_extra_log
-from validator.utils.logging import logger
 
 
 async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
