@@ -39,7 +39,6 @@ def run_auto_updater():
                 os.system("./utils/autoupdate_validator_steps.sh")
                 time.sleep(20)
 
-        pull_latest_docker_images()
         time.sleep(10)
 
 
