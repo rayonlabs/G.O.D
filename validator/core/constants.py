@@ -96,6 +96,7 @@ REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
 SCORING_WINDOW = 14  # number of days over which we score
 SCORING_DECAY_STEEPNESS = 1.5
 
+
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
 MAX_CONCURRENT_TASK_PREPS = 3
