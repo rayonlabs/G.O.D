@@ -13,6 +13,8 @@ from logging import getLogger
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from scalar_fastapi import get_scalar_api_reference
 
 from validator.core.config import load_config
 from validator.endpoints.health import factory_router as health_router
@@ -45,6 +47,12 @@ def factory() -> FastAPI:
     logger.debug("Entering factory function")
     app = FastAPI(lifespan=lifespan)
 
+    app.add_api_route(
+        "/scalar",
+        lambda: get_scalar_api_reference(openapi_url=app.openapi_url, title=app.title),
+        methods=["GET"],
+    )
+
     app.include_router(health_router())
     app.include_router(tasks_router())
 
@@ -55,6 +63,8 @@ def factory() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    FastAPIInstrumentor().instrument_app(app)
 
     logger.debug(f"App created with {len(app.routes)} routes")
     return app

@@ -11,6 +11,17 @@ requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "namoray", email = "namoray@rayonlabs.ai" }]
 dependencies = [
+    "opentelemetry-distro==0.47b0",
+    "opentelemetry-exporter-otlp-proto-http==1.26.0",
+    "opentelemetry-instrumentation-asgi==0.47b0",
+    "opentelemetry-instrumentation-asyncio==0.47b0",
+    "opentelemetry-instrumentation-asyncpg==0.47b0",
+    "opentelemetry-instrumentation-fastapi==0.47b0",
+    "opentelemetry-instrumentation-httpx==0.47b0",
+    "opentelemetry-instrumentation-logging==0.47b0",
+    "opentelemetry-instrumentation-redis==0.47b0",
+    "opentelemetry-instrumentation-system-metrics==0.47b0",
+    "scalar-fastapi==1.0.3",
     "fastapi>=0.110.3,<0.113.0",
     "uvicorn>=0.30.5,<0.32.0",
     "fiber @ git+https://github.com/rayonlabs/fiber.git@feature/cr3",
@@ -31,7 +42,7 @@ dependencies = [
     "pandas==2.2.3",
     "tiktoken==0.8.0",
     "sentencepiece==0.2.0",
-    "protobuf==5.29.1",
+    "protobuf==4.25.5",
 ]
 
 [project.optional-dependencies]
