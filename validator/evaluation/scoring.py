@@ -65,6 +65,8 @@ def compute_time_decay_weight(
     """
     if reference_time is None:
         reference_time = datetime.now()
+    reference_time = reference_time.replace(tzinfo=None)
+    task_completion_time = task_completion_time.replace(tzinfo=None)
 
     days_elapsed = (reference_time - task_completion_time).total_seconds() / (3600 * 24)
 
