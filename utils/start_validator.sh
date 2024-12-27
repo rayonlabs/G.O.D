@@ -8,6 +8,7 @@ VALIDATOR_PORT=$(grep VALIDATOR_PORT .vali.env | cut -d '=' -f2)
 pm2 delete validator || true
 pm2 delete validator_api || true
 pm2 delete validator_cycle || true
+pm2 delete weight_setter || true
 
 # Start the validator service
 pm2 start \
@@ -21,3 +22,7 @@ pm2 start \
 pm2 start \
     "python -m validator.cycle.main" \
     --name validator_cycle
+
+pm2 start \
+    "python -m validator.core.weight_setting" \
+    --name weight_setter
