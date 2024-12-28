@@ -62,6 +62,25 @@ async def _make_offer(node: Node, request: MinerTaskRequest, config: Config) -> 
     )
 
 
+def _calculate_selection_probabilities(nodes, base_prob=0.0001):
+    num_nodes = len(nodes)
+
+    if base_prob * num_nodes > 1:
+        raise ValueError("Base probability is too large for the number of nodes.")
+
+    incentives = [node.incentive for node in nodes]
+    if sum(incentives) <= 0:
+        # Uniform distribution if sum of incentives is <= 0
+        return [1 / num_nodes] * num_nodes
+    # if the base prob is 0.0001 then approx 25% of the probability comes from uniform assignment
+    base_probs = [base_prob] * num_nodes
+    remaining_prob_mass = 1 - sum(base_probs)
+    normalized_incentives = [incentive / sum(incentives) for incentive in incentives]
+    # we then add on additional probability to be picked based on current incentive
+    incentive_probs = [normalized_incentive * remaining_prob_mass for normalized_incentive in normalized_incentives]
+    return [base + incentive for base, incentive in zip(base_probs, incentive_probs)]
+
+
 async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], config: Config) -> RawTask:
     if len(nodes) < cst.MINIMUM_MINER_POOL:
         logger.warning(
@@ -104,19 +123,15 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         return task
 
     num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
-    random.shuffle(available_nodes)
+    available_indices = list(range(len(available_nodes)))
+    while available_indices and len(selected_miners) < num_of_miners_to_try_for:
+        current_nodes = [available_nodes[i] for i in available_indices]
+        current_probs = _calculate_selection_probabilities(current_nodes)
+        selected_idx_position = random.choices(range(len(available_indices)), weights=current_probs, k=1)[0]
+        original_idx = available_indices.pop(selected_idx_position)
+        node = available_nodes[original_idx]
+        logger.info(f"We picked the node {node.node_id} with prob {current_probs[selected_idx_position]}")
 
-    # TODO: Improve by selecting high score miners first, then lower score miners, etc
-    i = 0
-    while len(selected_miners) < num_of_miners_to_try_for and available_nodes:
-        node = available_nodes.pop()
-        # try:
-        # TODO: Batch the boi
-        if i > 0 and i % 5 == 0:
-            logger.info(
-                f"We have made {i} offers so far for task {task.task_id}",
-                extra=create_extra_log(status=task.status),
-            )
         offer_response = await _make_offer(node, task_request, config)
 
         if offer_response.accepted is True:
@@ -372,13 +387,8 @@ async def evaluate_tasks_loop(config: Config):
         if tasks_to_evaluate:
             logger.info(f"There are {len(tasks_to_evaluate)} tasks awaiting evaluation")
             for i in range(0, len(tasks_to_evaluate), len(cst.GPU_IDS)):
-                batch = [(task, [gpu_id]) for task, gpu_id in zip(
-                    tasks_to_evaluate[i:i + len(cst.GPU_IDS)],
-                    cst.GPU_IDS
-                )]
-                await asyncio.gather(
-                    *[_evaluate_task(task, gpu_list, config) for task, gpu_list in batch]
-                )
+                batch = [(task, [gpu_id]) for task, gpu_id in zip(tasks_to_evaluate[i : i + len(cst.GPU_IDS)], cst.GPU_IDS)]
+                await asyncio.gather(*[_evaluate_task(task, gpu_list, config) for task, gpu_list in batch])
 
         else:
             logger.info("No tasks awaiting evaluation - waiting 30 seconds")
