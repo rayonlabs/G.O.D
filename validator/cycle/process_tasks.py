@@ -70,8 +70,8 @@ def _calculate_selection_probabilities(nodes, base_prob=0.0001):
 
     incentives = [node.incentive for node in nodes]
     if sum(incentives) <= 0:
-        return [1 / num_nodes] * num_nodes  # Uniform distribution if sum of incentives is <= 0
-    # all miners have a base_prob chance of being picked
+        # Uniform distribution if sum of incentives is <= 0
+        return [1 / num_nodes] * num_nodes
     # if the base prob is 0.0001 then approx 25% of the probability comes from uniform assignment
     base_probs = [base_prob] * num_nodes
     remaining_prob_mass = 1 - sum(base_probs)
