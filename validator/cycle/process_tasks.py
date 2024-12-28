@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import random
 
-import numpy as np
 from datasets import get_dataset_infos
 from fiber import Keypair
 from fiber.chain.models import Node
@@ -63,13 +62,23 @@ async def _make_offer(node: Node, request: MinerTaskRequest, config: Config) -> 
     )
 
 
-def _calculate_selection_probabilities(nodes: list[Node], random_weight: float = 0.005):
-    incentives = np.array([node.incentive for node in nodes])
-    normalized_incentives = incentives / np.sum(incentives)
-    random_probs = np.random.random(len(nodes))
-    random_probs = random_probs / np.sum(random_probs)
-    selection_probs = (1 - random_weight) * normalized_incentives + random_weight * random_probs
-    return selection_probs / np.sum(selection_probs)
+def _calculate_selection_probabilities(nodes, base_prob=0.0001):
+    num_nodes = len(nodes)
+
+    if base_prob * num_nodes > 1:
+        raise ValueError("Base probability is too large for the number of nodes.")
+
+    incentives = [node.incentive for node in nodes]
+    if sum(incentives) <= 0:
+        return [1 / num_nodes] * num_nodes  # Uniform distribution if sum of incentives is <= 0
+    # all miners have a base_prob chance of being picked
+    # if the base prob is 0.0001 then approx 25% of the probability comes from uniform assignment
+    base_probs = [base_prob] * num_nodes
+    remaining_prob_mass = 1 - sum(base_probs)
+    normalized_incentives = [incentive / sum(incentives) for incentive in incentives]
+    # we then add on additional probability to be picked based on current incentive
+    incentive_probs = [normalized_incentive * remaining_prob_mass for normalized_incentive in normalized_incentives]
+    return [base + incentive for base, incentive in zip(base_probs, incentive_probs)]
 
 
 async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], config: Config) -> RawTask:
@@ -118,7 +127,7 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
     while available_indices and len(selected_miners) < num_of_miners_to_try_for:
         current_nodes = [available_nodes[i] for i in available_indices]
         current_probs = _calculate_selection_probabilities(current_nodes)
-        selected_idx_position = np.random.choice(len(available_indices), p=current_probs)
+        selected_idx_position = random.choices(range(len(available_indices)), weights=current_probs, k=1)[0]
         original_idx = available_indices.pop(selected_idx_position)
         node = available_nodes[original_idx]
         logger.info(f"We picked the node {node.node_id} with prob {current_probs[selected_idx_position]}")
