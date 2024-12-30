@@ -1,4 +1,3 @@
-from logging import getLogger
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -14,9 +13,10 @@ from validator.core.models import NetworkStats
 from validator.core.models import RawTask
 from validator.core.models import Task
 from validator.db.database import PSQLDB
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def add_task(task: RawTask, psql_db: PSQLDB) -> RawTask:

@@ -1,10 +1,10 @@
 import asyncio
-from logging import getLogger
 
 from validator.tasks.task_prep import prepare_task
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def main():

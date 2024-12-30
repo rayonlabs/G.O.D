@@ -6,7 +6,6 @@ migrating the old nodes to history in the process
 import asyncio
 from datetime import datetime
 from datetime import timedelta
-from logging import getLogger
 
 from fiber.chain import fetch_nodes
 from fiber.chain.models import Node
@@ -16,9 +15,10 @@ from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_last_updated_time_for_nodes
 from validator.db.sql.nodes import insert_nodes
 from validator.db.sql.nodes import migrate_nodes_to_history
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def _fetch_nodes_from_substrate(config: Config) -> list[Node]:

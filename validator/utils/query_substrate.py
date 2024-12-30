@@ -1,10 +1,11 @@
-from logging import getLogger
 from typing import Any
 
 from substrateinterface import SubstrateInterface
 
+from validator.utils.logging import get_logger
 
-logger = getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 def query_substrate(substrate: SubstrateInterface, module: str, method: str, params: list[Any], return_value: bool = True) -> Any:

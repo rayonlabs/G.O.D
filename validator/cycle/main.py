@@ -1,7 +1,5 @@
 from dotenv import load_dotenv
 
-from validator.utils.logging import setup_logging
-
 
 load_dotenv(".vali.env")
 
@@ -17,7 +15,6 @@ from validator.utils.util import try_db_connections
 
 
 async def run_validator_cycles() -> None:
-    setup_logging()
     config = load_config()
     await try_db_connections(config)
 

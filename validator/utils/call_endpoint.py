@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import time
-from logging import getLogger
 from typing import Any
 from typing import Optional
 
@@ -24,9 +23,10 @@ from validator.core.config import Config
 from validator.core.constants import GRADIENTS_ENDPOINT
 from validator.core.constants import NINETEEN_API_KEY
 from validator.core.constants import PROMPT_GEN_ENDPOINT
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 # Create a retry decorator with exponential backoff
 retry_with_backoff = retry(

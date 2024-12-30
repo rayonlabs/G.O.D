@@ -2,7 +2,6 @@ import asyncio
 import random
 from datetime import datetime
 from datetime import timedelta
-from logging import getLogger
 from typing import Any
 from typing import AsyncGenerator
 
@@ -16,9 +15,10 @@ from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
 from validator.utils.call_endpoint import call_content_service
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(name="task synth")
+logger = get_logger(name="task synth")
 
 
 async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:

@@ -2,12 +2,13 @@ import asyncio
 import datetime
 import os
 from concurrent.futures import ThreadPoolExecutor
-from logging import getLogger
 
 from minio import Minio
 
+from validator.utils.logging import get_logger
 
-logger = getLogger(__name__)
+
+logger = get_logger(__name__)
 
 # NOTE: This all needs rewriting to be honest
 # TODO: TODO: TODO: BIN ALL OF THIS PLZ :PRAY:

@@ -2,7 +2,6 @@ import asyncio
 import re
 from datetime import datetime
 from datetime import timedelta
-from logging import getLogger
 
 import numpy as np
 from fiber.chain.models import Node
@@ -31,10 +30,11 @@ from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
+from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def get_task_work_score(task: RawTask) -> float:

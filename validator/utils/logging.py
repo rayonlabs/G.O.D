@@ -1,11 +1,7 @@
-import json
 import logging
 from contextvars import ContextVar
-from logging import Formatter
 from logging import Logger
 from logging import LogRecord
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
 from typing import Optional
 
 from fiber.logging_utils import get_logger as fiber_get_logger
@@ -52,26 +48,6 @@ def get_context_tag(key: str) -> Optional[str | dict]:
         return None
 
 
-class JSONFormatter(Formatter):
-    def format(self, record: LogRecord) -> str:
-        if not hasattr(record, "tags"):
-            try:
-                context = current_context.get()
-                record.tags = {k: v for k, v in context.items() if v is not None}
-            except LookupError:
-                record.tags = {}
-
-        clean_level = record.levelname.replace("\u001b[32m", "").replace("\u001b[1m", "").replace("\u001b[0m", "")
-        log_data: dict[str, str | dict] = {
-            "timestamp": self.formatTime(record),
-            "level": clean_level,
-            "message": record.getMessage(),
-            "logger": record.name,
-            "tags": record.tags,
-        }
-        return json.dumps(log_data)
-
-
 class LogContext:
     def __init__(self, **tags: str | dict):
         self.tags = tags
@@ -91,45 +67,23 @@ class LogContext:
             current_context.reset(self.token)
 
 
-class ContextLogger(Logger):
-    def _log(
-        self,
-        level: int,
-        msg: object,
-        args: tuple,
-        exc_info: Optional[Exception] = None,
-        extra: Optional[dict] = None,
-        stack_info: bool = False,
-        stacklevel: int = 1,
-    ) -> None:
-        if extra is None:
-            try:
-                context = current_context.get()
-                extra = {"tags": {k: v for k, v in context.items() if v is not None}}
-            except LookupError:
-                extra = {"tags": {}}
-
-        super()._log(level, msg, args, exc_info, extra, stack_info, stacklevel)
+class ContextTagsFilter(logging.Filter):
+    def filter(self, record: LogRecord) -> bool:
+        try:
+            context = current_context.get()
+            for key, value in context.items():
+                if isinstance(value, dict):
+                    for sub_key, sub_value in value.items():
+                        if isinstance(sub_value, (bool, str, int, float)):
+                            setattr(record, f"ctx_{key}_{sub_key}", str(sub_value))
+                elif isinstance(value, (bool, str, int, float)):
+                    setattr(record, f"ctx_{key}", str(value))
+        except LookupError:
+            pass
+        return True
 
 
-def setup_logging():
-    """Initialize logging configuration for the entire application"""
-    logging.setLoggerClass(ContextLogger)
-    root_logger = logging.getLogger()
-
-    fiber_logger = fiber_get_logger("root")
-    root_logger.setLevel(fiber_logger.level)
-    for handler in fiber_logger.handlers:
-        root_logger.addHandler(handler)
-
-    base_dir = Path(__file__).parent.parent.parent
-    log_dir = base_dir / "validator" / "logs"
-    try:
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / "validator.log"
-        file_handler = RotatingFileHandler(filename=str(log_file), maxBytes=100 * 1024 * 1024, backupCount=3)
-        file_handler.setFormatter(JSONFormatter())
-        root_logger.addHandler(file_handler)
-    except Exception as e:
-        print(f"Error setting up logging: {str(e)}")
-        raise
+def get_logger(name: str) -> Logger:
+    logger = fiber_get_logger(name)
+    logger.addFilter(ContextTagsFilter())
+    return logger

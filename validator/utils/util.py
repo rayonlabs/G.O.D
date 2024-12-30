@@ -1,9 +1,8 @@
-from logging import getLogger
-
 from validator.core.config import Config
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def try_db_connections(config: Config) -> None:

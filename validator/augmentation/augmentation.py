@@ -1,7 +1,6 @@
 import asyncio
 import json
 import random
-from logging import getLogger
 from typing import List
 
 import yaml
@@ -19,9 +18,10 @@ from validator.core.constants import SYNTH_MODEL
 from validator.core.constants import SYNTH_MODEL_TEMPERATURE
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.call_endpoint import post_to_nineteen_ai
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def load_prompts() -> Prompts:

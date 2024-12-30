@@ -1,6 +1,5 @@
 import os
 import socket
-from logging import getLogger
 from typing import Any
 
 import asyncpg
@@ -8,8 +7,10 @@ from asyncpg import Pool
 from asyncpg.pool import PoolAcquireContext
 from dotenv import load_dotenv
 
+from validator.utils.logging import get_logger
 
-logger = getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 load_dotenv()

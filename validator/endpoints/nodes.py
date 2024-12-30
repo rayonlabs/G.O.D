@@ -1,5 +1,3 @@
-from logging import getLogger
-
 from fastapi import APIRouter
 from fastapi import Body
 from fastapi import Depends
@@ -8,9 +6,10 @@ from fiber.chain.models import Node
 from validator.core.config import Config
 from validator.core.dependencies import get_config
 from validator.db import sql
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # This is only for dev purposes.

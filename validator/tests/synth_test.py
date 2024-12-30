@@ -1,11 +1,11 @@
 import asyncio
-from logging import getLogger
 
 from validator.synth.synth import generate_augmented_dataset
 from validator.synth.synth import load_and_sample_dataset
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def main():

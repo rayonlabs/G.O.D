@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import random
-from logging import getLogger
 
 from datasets import get_dataset_infos
 from fiber import Keypair
@@ -23,9 +22,10 @@ from validator.tasks.task_prep import prepare_task
 from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _get_total_dataset_size(repo_name: str) -> int:

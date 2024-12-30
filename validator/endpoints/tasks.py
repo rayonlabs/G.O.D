@@ -1,6 +1,5 @@
 from datetime import datetime
 from datetime import timedelta
-from logging import getLogger
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -27,9 +26,10 @@ from validator.core.models import RawTask
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 TASKS_CREATE_ENDPOINT = "/v1/tasks/create"

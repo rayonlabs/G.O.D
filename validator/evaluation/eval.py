@@ -1,6 +1,5 @@
 import json
 import os
-from logging import getLogger
 from pathlib import Path
 from typing import Union
 
@@ -21,9 +20,10 @@ from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
 from validator.core import constants as cst
 from validator.evaluation.utils import model_is_a_finetune
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _load_and_update_evaluation_config(

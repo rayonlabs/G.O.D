@@ -3,7 +3,6 @@ import io
 import json
 import os
 import tarfile
-from logging import getLogger
 from typing import Union
 
 import docker
@@ -14,9 +13,10 @@ from core.models.payload_models import EvaluationResult
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
+from validator.utils.logging import get_logger
 
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def get_evaluation_results(container):

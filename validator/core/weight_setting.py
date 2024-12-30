@@ -4,7 +4,6 @@ Calculates and schedules weights every SCORING_PERIOD
 
 import asyncio
 import os
-from logging import getLogger
 
 from dotenv import load_dotenv
 from fiber.chain import fetch_nodes
@@ -24,7 +23,10 @@ from validator.utils.query_substrate import query_substrate
 load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
 
 
-logger = getLogger(__name__)
+from validator.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 TIME_PER_BLOCK: int = 500
