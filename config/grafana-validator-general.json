@@ -50,7 +50,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "builder",
-          "expr": "{service_name=~\"validator|validator_cycle\"} | label_format level=detected_level | line_format `{{.service_name }} - {{__line__}}`",
+          "expr": "{service_name=~\"validator|validator_cycle\"} | ctx_task_id =~ `.*$task_id.*` | ctx_miner_hotkey =~ `.*$miner_hotkey.*` | label_format level=detected_level | line_format `{{.service_name }} - {{__line__}}`",
           "legendFormat": "",
           "queryType": "range",
           "refId": "A"
@@ -64,7 +64,36 @@
   "schemaVersion": 39,
   "tags": [],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Task ID",
+        "name": "task_id",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Miner Hotkey",
+        "name": "miner_hotkey",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
   },
   "time": {
     "from": "now-5m",

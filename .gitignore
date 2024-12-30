@@ -15,7 +15,7 @@ axolotl
 postgres_data/*
 postgres_data
 
-postgres_data
+postgres_data*
 postgres_data/*
 
 todo.md
