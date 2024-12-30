@@ -6,6 +6,7 @@ import tarfile
 from typing import Union
 
 import docker
+from pydantic import TypeAdapter
 
 from core import constants as cst
 from core.docker_utils import stream_logs
@@ -46,12 +47,12 @@ async def get_evaluation_results(container):
 
 async def run_evaluation_docker(
     dataset: str,
-    model: str,
+    models: list[str],
     original_model: str,
     dataset_type: Union[DatasetType, CustomDatasetType],
     file_format: FileFormat,
     gpu_ids: list[int],
-) -> EvaluationResult:
+) -> dict[str, Union[EvaluationResult, Exception]]:
     client = docker.from_env()
 
     if isinstance(dataset_type, DatasetType):
@@ -61,15 +62,19 @@ async def run_evaluation_docker(
     else:
         raise ValueError("Invalid dataset_type provided.")
 
+    dataset_filename = os.path.basename(dataset)
+    dataset_dir = os.path.dirname(os.path.abspath(dataset))
+
     environment = {
-        "DATASET": dataset,
-        "MODEL": model,
+        "DATASET": f"/workspace/input_data/{dataset_filename}",  # Now uses the mounted path
+        "MODELS": ",".join(models),
         "ORIGINAL_MODEL": original_model,
         "DATASET_TYPE": dataset_type_str,
         "FILE_FORMAT": file_format.value,
+        "JOB_ID": "dummy",
     }
+    logger.info(f"Here are the models {models}")
 
-    dataset_dir = os.path.dirname(os.path.abspath(dataset))
     volume_bindings = {
         dataset_dir: {
             "bind": "/workspace/input_data",
@@ -103,9 +108,16 @@ async def run_evaluation_docker(
         if result["StatusCode"] != 0:
             raise Exception(f"Container exited with status {result['StatusCode']}")
 
-        eval_results = await get_evaluation_results(container)
+        eval_results_dict = await get_evaluation_results(container)
 
-        return EvaluationResult(**eval_results)
+        processed_results = {}
+        for repo, result in eval_results_dict.items():
+            if isinstance(result, str) and not isinstance(result, dict):
+                processed_results[repo] = Exception(result)
+            else:
+                processed_results[repo] = TypeAdapter(EvaluationResult).validate_python(result)
+
+        return processed_results
 
     except Exception as e:
         logger.error(f"Failed to retrieve evaluation results: {str(e)}")

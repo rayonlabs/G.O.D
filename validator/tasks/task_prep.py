@@ -108,7 +108,6 @@ def change_to_json_format(dataset: Dataset, columns: List[str]):
 def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     if not isinstance(train_dataset, Dataset):
         raise TypeError("train_dataset must be an instance of datasets.Dataset")
-
     if len(train_dataset) == 0:
         raise ValueError("Cannot split an empty dataset")
     try:

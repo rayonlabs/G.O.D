@@ -24,7 +24,7 @@ dependencies = [
     "scalar-fastapi==1.0.3",
     "fastapi>=0.110.3,<0.113.0",
     "uvicorn>=0.30.5,<0.32.0",
-    "fiber @ git+https://github.com/rayonlabs/fiber.git@feature/cr3",
+    "fiber @ git+https://github.com/rayonlabs/fiber.git@2.1.0",
     "asyncpg==0.29.0",
     "httpx==0.27.0",
     "loguru==0.7.2",
@@ -42,7 +42,8 @@ dependencies = [
     "pandas==2.2.3",
     "tiktoken==0.8.0",
     "sentencepiece==0.2.0",
-    "protobuf==4.25.5",
+    "protobuf==5.29.1",
+    "peft",
 ]
 
 [project.optional-dependencies]
