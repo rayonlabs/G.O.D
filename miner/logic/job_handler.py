@@ -159,9 +159,7 @@ def start_tuning_container(job: Job):
 
         if "container" in locals():
             try:
-                logger.info("Cleaning up HuggingFace cache...")
-                container.exec_run("rm -rf /root/.cache/huggingface/hub/*", user="root")
-            except Exception as e:
-                logger.warning(f"Failed to clean HuggingFace cache: {e}")
-            finally:
                 container.remove(force=True)
+                logger.info("Container removed")
+            except Exception as e:
+                logger.warning(f"Failed to remove container: {e}")

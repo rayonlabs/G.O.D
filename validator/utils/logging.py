@@ -33,6 +33,7 @@ class JSONFormatter(Formatter):
         return json.dumps(log_data)
 
 
+
 def setup_json_logger(name: str) -> Logger:
     base_dir = Path(__file__).parent.parent.parent
     log_dir = base_dir / "validator" / "logs"
@@ -48,6 +49,7 @@ def setup_json_logger(name: str) -> Logger:
     except Exception as e:
         print(f"Error setting up logging: {str(e)}")
         raise
+
 
 
 # we add the current task_id to all logs that are with the task context

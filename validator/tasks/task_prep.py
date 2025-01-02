@@ -18,6 +18,7 @@ from validator.utils.logging import logger
 from validator.utils.minio import async_minio_client
 
 
+
 async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", prefix=prefix)
     with open(temp_file.name, "w") as f:
@@ -109,7 +110,6 @@ def change_to_json_format(dataset: Dataset, columns: List[str]):
 def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     if not isinstance(train_dataset, Dataset):
         raise TypeError("train_dataset must be an instance of datasets.Dataset")
-
     if len(train_dataset) == 0:
         raise ValueError("Cannot split an empty dataset")
     try:

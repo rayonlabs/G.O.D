@@ -285,11 +285,11 @@ async def _process_ready_to_train_tasks(config: Config):
         await asyncio.sleep(30)
 
 
-async def _evaluate_task(task: RawTask, config: Config):
+async def _evaluate_task(task: RawTask, gpu_ids: list[int], config: Config):
     try:
         task.status = TaskStatus.EVALUATING
         await tasks_sql.update_task(task, config.psql_db)
-        task = await evaluate_and_score(task, config)
+        task = await evaluate_and_score(task, gpu_ids, config)
         await tasks_sql.update_task(task, config.psql_db)
     except Exception as e:
         logger.error(
@@ -371,8 +371,15 @@ async def evaluate_tasks_loop(config: Config):
         tasks_to_evaluate = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=config.psql_db)
         if tasks_to_evaluate:
             logger.info(f"There are {len(tasks_to_evaluate)} tasks awaiting evaluation")
-            for task in tasks_to_evaluate:
-                await _evaluate_task(task, config)
+            for i in range(0, len(tasks_to_evaluate), len(cst.GPU_IDS)):
+                batch = [(task, [gpu_id]) for task, gpu_id in zip(
+                    tasks_to_evaluate[i:i + len(cst.GPU_IDS)],
+                    cst.GPU_IDS
+                )]
+                await asyncio.gather(
+                    *[_evaluate_task(task, gpu_list, config) for task, gpu_list in batch]
+                )
+
         else:
             logger.info("No tasks awaiting evaluation - waiting 30 seconds")
             await asyncio.sleep(30)

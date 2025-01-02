@@ -1,7 +1,9 @@
 import os
+import time
 from dataclasses import dataclass
 
 import httpx
+import websocket
 from dotenv import load_dotenv
 from redis.asyncio import Redis
 
@@ -59,7 +61,12 @@ def load_config() -> Config:
 
         refresh_nodes: bool = os.getenv("REFRESH_NODES", "true").lower() == "true"
         if refresh_nodes:
-            substrate = interface.get_substrate(subtensor_network=subtensor_network, subtensor_address=subtensor_address)
+            try:
+                substrate = interface.get_substrate(subtensor_network=subtensor_network, subtensor_address=subtensor_address)
+            except websocket._exceptions.WebSocketBadStatusException as e:
+                logger.error(f"Failed to get substrate: {e}. Sleeping for 20 seconds and then trying again...")
+                time.sleep(20)
+                substrate = interface.get_substrate(subtensor_network=subtensor_network, subtensor_address=subtensor_address)
         else:
             # this is only used for testing
             substrate = None

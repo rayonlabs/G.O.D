@@ -8,7 +8,6 @@ import os
 from dotenv import load_dotenv
 from fiber.chain import fetch_nodes
 from fiber.chain import weights
-from fiber.chain.interface import get_substrate
 from fiber.chain.models import Node
 from fiber.logging_utils import get_logger
 
@@ -118,7 +117,7 @@ async def _set_metagraph_weights(config: Config) -> None:
 
 # To improve: use activity cutoff & The epoch length to set weights at the perfect times
 async def set_weights_periodically(config: Config, just_once: bool = False) -> None:
-    substrate = get_substrate(subtensor_address=config.substrate.url)
+    substrate = config.substrate
     substrate, uid = query_substrate(
         substrate,
         "SubtensorModule",
