@@ -31,7 +31,7 @@ SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 
 # TODO update when live
 DEV_CONTENT_BASE_URL = "https://dev.content.gradients.io"
-PROD_CONTENT_BASE_URL = "https://dev.content.gradients.io"
+PROD_CONTENT_BASE_URL = "https://content.gradients.io"
 
 
 # 241 is testnet
