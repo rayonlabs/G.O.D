@@ -152,7 +152,7 @@ class TaskDetails(BaseModel):
     finished_at: datetime | None
     created_at: datetime
     hours_to_complete: int
-    trained_model_repository: str | None
+    trained_model_repository: str | None = Field(None, description="The winning model repository or backup repository if set")
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
