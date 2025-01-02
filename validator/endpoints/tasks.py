@@ -72,6 +72,7 @@ async def create_task(
     task = RawTask(
         model_id=request.model_repo,
         ds_id=request.ds_repo,
+        file_format=request.file_format,
         field_system=request.field_system,
         field_instruction=request.field_instruction,
         field_input=request.field_input,
