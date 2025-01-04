@@ -1,4 +1,5 @@
 import re
+import os
 from datetime import datetime
 from datetime import timedelta
 
@@ -320,6 +321,7 @@ async def _evaluate_submissions(
     logger.info("Starting synth evaluation")
     synthetic_data_filepath = await download_s3_file(task.synthetic_data)
     synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
+    os.remove(synthetic_data_filepath)
 
     finetuned_repos = []
     for repo in repos_to_evaluate:
@@ -341,6 +343,7 @@ async def _evaluate_submissions(
         test_eval_results = await run_evaluation_docker(
             dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
         )
+        os.remove(test_data_filepath)
 
         for repo in finetuned_repos:
             if isinstance(test_eval_results.get(repo), Exception):

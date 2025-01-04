@@ -26,7 +26,6 @@ def delete_dataset_from_cache(dataset_name):
     lock_pattern = os.path.join(cache_dir, f"*cache_huggingface_datasets_{dataset_name}*.lock")
 
     deleted = False
-    cleanup_temp_files()
 
     if os.path.exists(dataset_path):
         try:

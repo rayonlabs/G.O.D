@@ -189,6 +189,7 @@ async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair:
     if not synth_json_url and synthetic_data:
         raise Exception("Failed to upload synthetic data to MinIO storage")
 
+    os.remove(train_json_path)
     os.remove(test_json_path)
     if synth_json_path:
         os.remove(synth_json_path)
