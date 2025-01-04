@@ -42,7 +42,6 @@ dependencies = [
     "pandas==2.2.3",
     "tiktoken==0.8.0",
     "sentencepiece==0.2.0",
-    "protobuf==5.29.1",
     "peft",
 ]
 
