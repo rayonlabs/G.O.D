@@ -91,7 +91,7 @@ TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 TARGET_SCORE_RATIO = 1.05
 MIN_TASK_SCORE = 0.0  # very tiny punishment while miners find their feet
 MAX_TASK_SCORE = 1.6
-TASK_SCORE_THRESHOLD = 0.8
+TASK_SCORE_THRESHOLD = 0.85
 REWEIGHTING_EXP = 0.4  # how much of a drop off from leader
 SCORING_WINDOW = 7  # number of days over which we score
 
