@@ -69,6 +69,8 @@ class NewTaskRequest(BaseModel):
     field_system: str | None = Field(None, description="The column name for the system (prompt)", examples=["system"])
 
     ds_repo: str = Field(..., description="The repository for the dataset", examples=["yahma/alpaca-cleaned"])
+    file_format: FileFormat = Field(FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF,
+                                                                                                      FileFormat.S3])
     model_repo: str = Field(..., description="The repository for the model", examples=["Qwen/Qwen2.5-Coder-32B-Instruct"])
 
     hours_to_complete: int = Field(..., description="The number of hours to complete the task", examples=[1])

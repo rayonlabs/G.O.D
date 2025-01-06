@@ -10,6 +10,8 @@ from datasets import load_dataset
 from fiber import Keypair
 
 import validator.core.constants as cst
+from core.models.utility_models import FileFormat
+from core.utils import download_s3_file
 from validator.augmentation.augmentation import generate_augmented_dataset
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
@@ -35,13 +37,33 @@ async def upload_json_to_minio(file_path: str, bucket_name: str, object_name: st
         return False
 
 
-def train_test_split(dataset_name: str, test_size: float = None) -> DatasetDict:
+async def load_dataset_from_s3(dataset_url: str) -> Dataset | DatasetDict:
+    """Load a dataset from S3 storage."""
+    try:
+          with tempfile.TemporaryDirectory() as temp_dir:
+            local_file_path = await download_s3_file(dataset_url)
+            filename = os.path.basename(local_file_path)
+            new_path = os.path.join(temp_dir, filename)
+
+            os.rename(local_file_path, new_path)
+            dataset = load_dataset(temp_dir)
+
+            return dataset
+    except Exception as e:
+        logger.exception(f"Failed to load dataset from S3: {e}")
+        raise e
+
+
+async def train_test_split(dataset_name: str, file_format: FileFormat, test_size: float = None) -> DatasetDict:
     if test_size is None:
         test_size = cst.TRAIN_TEST_SPLIT_PERCENTAGE
     logger.info(f"Loading dataset '{dataset_name}'")
     try:
-        config_name = get_default_dataset_config(dataset_name)
-        dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
+        if file_format == FileFormat.S3:
+            dataset = await load_dataset_from_s3(dataset_name)
+        else:
+            config_name = get_default_dataset_config(dataset_name)
+            dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
     except Exception as e:
         logger.exception(f"Failed to load dataset {dataset_name}: {e}")
         raise e
@@ -129,9 +151,15 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     return remaining_train_dataset, synthetic_dataset
 
 
-async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair: Keypair) -> tuple[str, str, str]:
+async def prepare_task(
+    dataset_name: str,
+    file_format: FileFormat,
+    columns_to_sample: List[str],
+    keypair: Keypair
+) -> tuple[str, str, str]:
+
     logger.info(f"Preparing {dataset_name}")
-    dataset_dict = train_test_split(dataset_name)
+    dataset_dict = await train_test_split(dataset_name, file_format)
     train_dataset = dataset_dict["train"]
     test_dataset = dataset_dict["test"]
 
