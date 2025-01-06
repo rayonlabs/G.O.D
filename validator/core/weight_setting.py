@@ -4,6 +4,7 @@ Calculates and schedules weights every SCORING_PERIOD
 
 import asyncio
 import os
+from datetime import datetime
 
 from dotenv import load_dotenv
 from fiber.chain import fetch_nodes
@@ -31,6 +32,38 @@ logger = get_logger(__name__)
 
 
 TIME_PER_BLOCK: int = 500
+
+
+def _dance_the_uid_weights(node_weights: list[float]) -> list[float]:
+    """
+    Adjusts node weights based on the current hour of the day.
+    Experiment to help commit reveal
+
+    Args:
+        node_weights (list[float]): List of node weights.
+
+    Returns:
+        list[float]: Adjusted list of node weights.
+    """
+
+    MAX_MULTIPLIER = 5
+
+    hour_of_the_day = datetime.now().hour
+    groups = [(0, 49), (50, 99), (100, 149), (150, 199), (200, 256)]
+
+    group = groups[hour_of_the_day % len(groups)]
+
+    multipliers = [
+        MAX_MULTIPLIER if group[0] <= i <= group[1] else 1
+        for i in range(len(node_weights))
+    ]
+
+    adjusted_weights = [
+        node_weights[i] * multipliers[i]
+        for i in range(len(node_weights))
+    ]
+
+    return adjusted_weights
 
 
 async def _get_weights_to_set(config: Config) -> list[PeriodScore] | None:
@@ -64,6 +97,8 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
         f"Everything going in is {weights.set_node_weights} {config.substrate} {config.keypair}"
         f" {all_node_ids} {all_node_weights} {config.netuid} {ccst.VERSION_KEY} {validator_node_id}"
     )
+
+    all_node_weights = _dance_the_uid_weights(all_node_weights)
 
     try:
         success = await asyncio.to_thread(
