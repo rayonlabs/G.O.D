@@ -299,7 +299,7 @@ async def _evaluate_submissions(
             logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
             results[repo] = (
                 EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0)
+                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
             )
         else:
             repos_to_evaluate.append(repo)
@@ -371,7 +371,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
 
 
 async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_db) -> None:
-    assert task.task_id is not None, "task id needs to be seet to update scores"
+    assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
         if result.score is None:
             continue
@@ -543,21 +543,19 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
     logger.info("Calculating final scores...")
     task_results = add_raw_scores_to_miner_results(task_results)
     task_results = adjust_miner_scores_to_be_relative_to_other_comps(task_results)
-    await _update_scores(task, task_results, config.psql_db)
-    # all_scores_zero = all(result.score == 0.0 for result in task_results)
-    # for now we just let them fail, need to come back to decide whether we wanna restart the job
-    all_scores_zero = False
+
+    all_scores_zero = all(result.score == 0.0 for result in task_results)
+
     if all_scores_zero:
         task.status = TaskStatus.NODE_TRAINING_FAILURE
         add_context_tag("status", task.status.value)
-        logger.info(
-            f"All scores are zero for task {task.task_id}, setting status to LOOKING FOR NODES to find new miner since"
-            "we are going to try again."
-        )
+        logger.info(f"All scores are zero for task {task.task_id} . The miner scores will not be updated.")
     else:
-        if cts.DELETE_S3_AFTER_COMPLETE:
-            await _clear_up_s3([task.training_data, task.test_data, task.synthetic_data])
+        await _update_scores(task, task_results, config.psql_db)
         task.status = TaskStatus.SUCCESS
         add_context_tag("status", task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
+
+    if cts.DELETE_S3_AFTER_COMPLETE:
+        await _clear_up_s3([task.training_data, task.test_data, task.synthetic_data])
     return task
