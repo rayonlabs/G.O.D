@@ -252,7 +252,8 @@ async def _process_ready_to_train_tasks(config: Config):
 
 
 async def _evaluate_task(task: RawTask, gpu_ids: list[int], config: Config):
-    with LogContext(task_id=str(task.task_id)):
+    gpu_ids_str = "," + ",".join(str(gpu_id) for gpu_id in gpu_ids) + ","
+    with LogContext(task_id=str(task.task_id), gpu_ids=gpu_ids_str):
         try:
             task.status = TaskStatus.EVALUATING
             add_context_tag("status", task.status.value)

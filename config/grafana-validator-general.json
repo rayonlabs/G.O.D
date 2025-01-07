@@ -1,71 +1,64 @@
 {
   "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
+    "list": [{
+      "builtIn": 1,
+      "datasource": {
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
+      "enable": true,
+      "hide": true,
+      "iconColor": "rgba(0, 211, 255, 1)",
+      "name": "Annotations & Alerts",
+      "type": "dashboard"
+    }]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 3,
   "links": [],
-  "panels": [
-    {
+  "panels": [{
+    "datasource": {
+      "type": "loki",
+      "uid": "P8E80F9AEF21F6940"
+    },
+    "gridPos": {
+      "h": 48,
+      "w": 24,
+      "x": 0,
+      "y": 36
+    },
+    "id": 2,
+    "options": {
+      "dedupStrategy": "none",
+      "enableLogDetails": true,
+      "prettifyLogMessage": false,
+      "showCommonLabels": false,
+      "showLabels": false,
+      "showTime": true,
+      "sortOrder": "Descending",
+      "wrapLogMessage": false
+    },
+    "targets": [{
       "datasource": {
         "type": "loki",
         "uid": "P8E80F9AEF21F6940"
       },
-      "gridPos": {
-        "h": 48,
-        "w": 24,
-        "x": 0,
-        "y": 36
-      },
-      "id": 2,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": false
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
-          },
-          "editorMode": "builder",
-          "expr": "{service_name=~\"validator|validator_cycle\"} |= `$search_in_line` | ctx_task_id =~ `.*$task_id.*` | ctx_miner_hotkey =~ `.*$miner_hotkey.*` | label_format level=detected_level | line_format `{{.service_name }} - {{__line__}}`",
-          "legendFormat": "",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Validator Logs",
-      "type": "logs"
-    }
-  ],
+      "editorMode": "builder",
+      "expr": "{service_name=~\"validator|validator_cycle\"} |= `$search_in_line` | ctx_task_id =~ `.*$task_id.*` | ctx_miner_hotkey =~ `.*$miner_hotkey.*` | ctx_gpu_ids =~ `.*,$gpu_id,.*` | label_format level=detected_level | line_format `{{.service_name }} - {{__line__}}`",
+      "legendFormat": "",
+      "queryType": "range",
+      "refId": "A"
+    }],
+    "title": "Validator Logs",
+    "type": "logs"
+  }],
   "refresh": "5s",
   "schemaVersion": 39,
   "tags": [],
   "templating": {
-    "list": [
-      {
+    "list": [{
         "current": {
           "selected": false,
           "text": "",
@@ -102,6 +95,20 @@
         "hide": 0,
         "label": "Miner Hotkey",
         "name": "miner_hotkey",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "GPU ID",
+        "name": "gpu_id",
         "options": [],
         "query": "",
         "skipUrlSync": false,
