@@ -108,8 +108,8 @@ async def _add_new_task_to_network_if_not_enough(
 
 async def schedule_synthetics_periodically(config: Config):
     logger.info("Starting the synthetic schedule loop...")
-    datasets = _get_datasets(config.keypair)
-    models = _get_models(config.keypair)
+    datasets = await _get_datasets(config.keypair)
+    models = await _get_models(config.keypair)
 
     current_try = 0
     while True:
