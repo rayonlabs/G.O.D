@@ -110,12 +110,18 @@ async def schedule_synthetics_periodically(config: Config):
     logger.info("Starting the synthetic schedule loop...")
     datasets = _get_datasets(config.keypair)
     models = _get_models(config.keypair)
+
+    current_try = 0
     while True:
         try:
-            logger.info("We are attempting to create a new task")
+            logger.info(f"Try {current_try+1}/{cst.NUM_SYNTH_RETRIES+1} - We are attempting to create a new task")
             await _add_new_task_to_network_if_not_enough(config, models, datasets)
-            await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
+            current_try = 0
         except Exception as e:
-            logger.info(f"Ah, that dataset was missing some details, trying another one next time. {e}")
-
-            await asyncio.sleep(5 * 60)
+            if current_try == cst.NUM_SYNTH_RETRIES:
+                logger.info(f"Synthetic task creation failed too many times, giving up for now. {e}")
+            else:
+                logger.info(f"Synthetic task creation try {current_try+1}/{cst.NUM_SYNTH_RETRIES+1} failed, retrying... {e}")
+                current_try += 1
+        finally:
+            await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
