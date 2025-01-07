@@ -9,7 +9,6 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
       GF_INSTALL_PLUGINS: redis-datasource
     volumes:
-      - grafana:/var/lib/grafana
       - ./config/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/otel.yaml
       - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
       - ./config/grafana-validator-general.json:/var/lib/grafana/dashboards/grafana-validator-general.json
@@ -75,7 +74,6 @@ services:
       - ./config/prometheus-config.yaml:/etc/prometheus/prometheus.yml
 
 volumes:
-  grafana:
   tempo:
   loki:
   prometheus:
