@@ -23,26 +23,13 @@ from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
-from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
 
 
-async def _get_total_dataset_size(repo_name: str, file_format: FileFormat) -> int:
-    if file_format == FileFormat.S3:
-        bucket_name, object_name = async_minio_client.parse_s3_url(repo_name)
-        stats = await async_minio_client.get_stats(bucket_name, object_name)
-        size = stats.size
-    else:
-        loop = asyncio.get_running_loop()
-        dataset_infos = await loop.run_in_executor(None, get_dataset_infos, repo_name)
-        size = sum(
-            info.dataset_size
-            for info in dataset_infos.values()
-            if info.dataset_size
-        )
-    return int(size)
+def _get_total_dataset_size(repo_name: str) -> int:
+    return int(sum(info.dataset_size for info in get_dataset_infos(repo_name).values() if info.dataset_size))
 
 
 async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
@@ -50,10 +37,7 @@ async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
         i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
     ]
     test_data, synth_data, train_data = await prepare_task(
-        dataset_name=task.ds_id,
-        file_format=task.file_format,
-        columns_to_sample=columns_to_sample,
-        keypair=keypair
+        dataset_name=task.ds_id, columns_to_sample=columns_to_sample, keypair=keypair
     )
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
@@ -62,7 +46,6 @@ async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
     task.test_data = test_data
     logger.info("Data creation is complete - now time to find some miners")
     return task
-
 
 
 # TODO: Improve by batching these up
@@ -84,7 +67,7 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         return task
 
     selected_miners: list[str] = []
-    ds_size = await _get_total_dataset_size(task.ds_id, task.file_format)
+    ds_size = _get_total_dataset_size(task.ds_id)
     task_request = MinerTaskRequest(
         ds_size=ds_size,
         model=task.model_id,

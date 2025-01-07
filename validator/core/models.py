@@ -8,8 +8,6 @@ from uuid import uuid4
 from pydantic import BaseModel
 from pydantic import Field
 
-from core.models.utility_models import FileFormat
-
 
 class TokenizerConfig(BaseModel):
     bos_token: str | None = None
@@ -67,7 +65,6 @@ class RawTask(BaseModel):
     task_id: UUID | None = None
     model_id: str
     ds_id: str
-    file_format: FileFormat
     status: str
     account_id: UUID
     times_delayed: int = 0
@@ -214,6 +211,7 @@ class DatasetJsons(BaseModel):
             "test_data": json.dumps(self.test_data),
             "synthetic_data": json.dumps(self.synthetic_data) if self.synthetic_data else "",
         }
+
 
 
 class NetworkStats(BaseModel):

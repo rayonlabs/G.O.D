@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import os
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urlparse
 
 from minio import Minio
 
@@ -68,15 +67,6 @@ class AsyncMinioClient:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.executor, func, *args)
 
-    async def get_stats(self, bucket_name: str, object_name: str):
-        """Get stats for an object in MinIO storage."""
-        func = self.client.stat_object
-        args = (bucket_name, object_name)
-        logger.info("Getting stats for object")
-        loop = asyncio.get_event_loop()
-        stats = await loop.run_in_executor(self.executor, func, *args)
-        return stats
-
     async def ensure_bucket_exists(self, bucket_name):
         exists = await self.client.bucket_exists(bucket_name)
         if not exists:
@@ -91,13 +81,6 @@ class AsyncMinioClient:
 
     def get_public_url(self, bucket_name, object_name):
         return f"https://{self.endpoint}/{bucket_name}/{object_name}"
-
-    def parse_s3_url(self, url: str) -> tuple[str, str]:
-        """Extract bucket name and object name from S3 URL."""
-        parsed_url = urlparse(url)
-        bucket_name = parsed_url.hostname.split('.')[0]
-        object_name = parsed_url.path.lstrip('/').split('?')[0]
-        return bucket_name, object_name
 
     def __del__(self):
         self.executor.shutdown(wait=False)

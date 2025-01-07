@@ -9,8 +9,10 @@ from fiber.chain.models import Node
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
+
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
+
 from validator.core.models import Task
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
@@ -25,11 +27,11 @@ async def add_task(task: RawTask, psql_db: PSQLDB) -> RawTask:
         connection: Connection
         query = f"""
             INSERT INTO {cst.TASKS_TABLE}
-            ({cst.ACCOUNT_ID}, {cst.MODEL_ID}, {cst.DS_ID}, {cst.FILE_FORMAT},
-             {cst.FIELD_SYSTEM}, {cst.FIELD_INSTRUCTION}, {cst.FIELD_INPUT},
-             {cst.STATUS}, {cst.HOURS_TO_COMPLETE}, {cst.FIELD_OUTPUT}, {cst.FORMAT},
+            ({cst.ACCOUNT_ID}, {cst.MODEL_ID}, {cst.DS_ID}, {cst.FIELD_SYSTEM},
+            {cst.FIELD_INSTRUCTION}, {cst.FIELD_INPUT}, {cst.STATUS},
+             {cst.HOURS_TO_COMPLETE}, {cst.FIELD_OUTPUT}, {cst.FORMAT},
              {cst.NO_INPUT_FORMAT}, {cst.IS_ORGANIC}, {cst.CREATED_AT})
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING *
         """
         task = await connection.fetchrow(
@@ -37,7 +39,6 @@ async def add_task(task: RawTask, psql_db: PSQLDB) -> RawTask:
             task.account_id,
             task.model_id,
             task.ds_id,
-            task.file_format,
             task.field_system,
             task.field_instruction,
             task.field_input,
