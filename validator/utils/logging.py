@@ -4,6 +4,7 @@ from logging import Logger
 from logging import LogRecord
 from typing import Optional
 
+from docker.models.containers import Container
 from fiber.logging_utils import get_logger as fiber_get_logger
 
 
@@ -48,6 +49,14 @@ def get_context_tag(key: str) -> Optional[str | dict]:
         return None
 
 
+def get_all_context_tags() -> dict:
+    """Get all tags from the current logging context"""
+    try:
+        return current_context.get()
+    except LookupError:
+        return {}
+
+
 class LogContext:
     def __init__(self, **tags: str | dict):
         self.tags = tags
@@ -81,6 +90,28 @@ class ContextTagsFilter(logging.Filter):
         except LookupError:
             pass
         return True
+
+
+def stream_container_logs(container: Container, log_context: dict | None = None):
+    logger = get_logger(__name__)
+
+    if not log_context:
+        log_context = {}
+
+    with LogContext(**log_context):
+        buffer = ""
+        try:
+            for log_chunk in container.logs(stream=True, follow=True):
+                log_text = log_chunk.decode("utf-8", errors="replace")
+                buffer += log_text
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    if line:
+                        logger.info(line)
+            if buffer:
+                logger.info(buffer)
+        except Exception as e:
+            logger.error(f"Error streaming logs: {str(e)}")
 
 
 def get_logger(name: str) -> Logger:

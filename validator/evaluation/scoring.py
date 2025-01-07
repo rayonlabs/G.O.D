@@ -28,6 +28,7 @@ from validator.db.sql.tasks import get_nodes_assigned_to_task
 from validator.evaluation.docker_evaluation import run_evaluation_docker
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
+from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
@@ -207,13 +208,14 @@ def adjust_miner_scores_to_be_relative_to_other_comps(miner_results: list[MinerR
     logger.info(f"Geometric mean: {geometric_mean:.4f}")
 
     for res in miner_results:
-        if res.is_finetune and res.score is not None and not np.isnan(res.score):
-            original_score = res.score
-            res.score = min(float(res.score / geometric_mean), cts.MAX_TASK_SCORE)
-            logger.info(f"Miner {res.hotkey}: {original_score:.4f} -> {res.score:.4f}")
-        else:
-            res.score = 0.0
-            logger.info(f"Miner {res.hotkey}: score set to 0.0 (non-finetuned or invalid)")
+        with LogContext(miner_hotkey=res.hotkey):
+            if res.is_finetune and res.score is not None and not np.isnan(res.score):
+                original_score = res.score
+                res.score = min(float(res.score / geometric_mean), cts.MAX_TASK_SCORE)
+                logger.info(f"Miner {res.hotkey}: {original_score:.4f} -> {res.score:.4f}")
+            else:
+                res.score = 0.0
+                logger.info(f"Miner {res.hotkey}: score set to 0.0 (non-finetuned or invalid)")
 
     return miner_results
 
@@ -223,9 +225,10 @@ def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[M
     logger.info("Beginning score calculation...")
 
     for result in miner_results:
-        if not result.is_finetune:
-            result.score = 0.0
-            logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
+        with LogContext(miner_hotkey=result.hotkey):
+            if not result.is_finetune:
+                result.score = 0.0
+                logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
 
     finetuned_results = [
         res for res in miner_results if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
@@ -241,19 +244,20 @@ def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[M
     logger.info(f"Using scale factor: {scale_factor} (calculated from {len(finetuned_results)} finetuned submissions)")
 
     for result in miner_results:
-        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
-            weighted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss)
-            result.score = calculate_scaled_score(weighted_loss, scale_factor)
-            logger.info(
-                f"Miner {result.hotkey} (finetuned):"
-                f" test_loss={result.test_loss:.4f}"
-                f" synth_loss={result.synth_loss:.4f}"
-                f" weighted_loss={weighted_loss:.4f}"
-                f" score={result.score:.4f}"
-            )
-        else:
-            result.score = 0.0
-            logger.info(f"Miner {result.hotkey}: score=0.0 (non-finetuned or invalid losses)")
+        with LogContext(miner_hotkey=result.hotkey):
+            if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
+                weighted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss)
+                result.score = calculate_scaled_score(weighted_loss, scale_factor)
+                logger.info(
+                    f"Miner {result.hotkey} (finetuned):"
+                    f" test_loss={result.test_loss:.4f}"
+                    f" synth_loss={result.synth_loss:.4f}"
+                    f" weighted_loss={weighted_loss:.4f}"
+                    f" score={result.score:.4f}"
+                )
+            else:
+                result.score = 0.0
+                logger.info(f"Miner {result.hotkey}: score=0.0 (non-finetuned or invalid losses)")
 
     return miner_results
 
@@ -299,7 +303,7 @@ async def _evaluate_submissions(
             logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
             results[repo] = (
                 EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0)
+                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
             )
         else:
             repos_to_evaluate.append(repo)
@@ -373,16 +377,17 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
 async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_db) -> None:
     assert task.task_id is not None, "task id needs to be seet to update scores"
     for result in task_results:
-        if result.score is None:
-            continue
+        with LogContext(miner_hotkey=result.hotkey):
+            if result.score is None:
+                continue
 
-        await set_task_node_quality_score(
-            task_id=task.task_id, hotkey=result.hotkey, quality_score=float(result.score), psql_db=psql_db
-        )
+            await set_task_node_quality_score(
+                task_id=task.task_id, hotkey=result.hotkey, quality_score=float(result.score), psql_db=psql_db
+            )
 
-        if result.submission:
-            result.submission.score = result.score
-            await add_submission(result.submission, psql_db)
+            if result.submission:
+                result.submission.score = result.score
+                await add_submission(result.submission, psql_db)
 
 
 async def get_repo_creation_time(repo_name: str) -> datetime:
@@ -443,12 +448,13 @@ async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict
             earliest_hotkey, earliest_repo, duplicates = await get_earliest_submission(submissions)
 
             for hotkey, repo in duplicates:
-                keep_submission[hotkey] = False
-                logger.warning(
-                    f"Setting score to 0 for node {hotkey} (repo: {repo}) "
-                    f"as it has identical losses to earlier submission "
-                    f"from node {earliest_hotkey} (repo: {earliest_repo})"
-                )
+                with LogContext(miner_hotkey=hotkey):
+                    keep_submission[hotkey] = False
+                    logger.warning(
+                        f"Setting score to 0 for node {hotkey} (repo: {repo}) "
+                        f"as it has identical losses to earlier submission "
+                        f"from node {earliest_hotkey} (repo: {earliest_repo})"
+                    )
 
     return keep_submission
 
@@ -471,10 +477,11 @@ async def process_miners_pool(
 
     miner_repos: dict[str, str] = {}
     for miner in miners:
-        repo = await _get_submission_repo(miner, str(task.task_id), config)
-        if repo is not None:
-            miner_repos[miner.hotkey] = repo
-        logger.info(f"Found repo {repo} for miner {miner.hotkey}")
+        with LogContext(miner_hotkey=miner.hotkey):
+            repo = await _get_submission_repo(miner, str(task.task_id), config)
+            if repo is not None:
+                miner_repos[miner.hotkey] = repo
+            logger.info(f"Found repo {repo} for miner {miner.hotkey}")
 
     results = [_create_failed_miner_result(miner.hotkey) for miner in miners if miner.hotkey not in miner_repos]
 
@@ -485,35 +492,36 @@ async def process_miners_pool(
             )
 
             for miner in miners:
-                if miner.hotkey not in miner_repos:
-                    continue
+                with LogContext(miner_hotkey=miner.hotkey):
+                    if miner.hotkey not in miner_repos:
+                        continue
 
-                repo = miner_repos[miner.hotkey]
-                eval_result = eval_results.get(repo)
+                    repo = miner_repos[miner.hotkey]
+                    eval_result = eval_results.get(repo)
 
-                if isinstance(eval_result, Exception):
-                    logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
-                    results.append(_create_failed_miner_result(miner.hotkey))
-                    continue
+                    if isinstance(eval_result, Exception):
+                        logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
+                        results.append(_create_failed_miner_result(miner.hotkey))
+                        continue
 
-                synth_result, test_result = eval_result
-                submission = Submission(
-                    task_id=task.task_id,
-                    hotkey=miner.hotkey,
-                    repo=repo,
-                    created_on=datetime.now(),
-                    updated_on=datetime.now(),
-                )
-
-                results.append(
-                    MinerResults(
+                    synth_result, test_result = eval_result
+                    submission = Submission(
+                        task_id=task.task_id,
                         hotkey=miner.hotkey,
-                        test_loss=float(test_result.eval_loss),
-                        synth_loss=float(synth_result.eval_loss),
-                        is_finetune=test_result.is_finetune,
-                        submission=submission,
+                        repo=repo,
+                        created_on=datetime.now(),
+                        updated_on=datetime.now(),
                     )
-                )
+
+                    results.append(
+                        MinerResults(
+                            hotkey=miner.hotkey,
+                            test_loss=float(test_result.eval_loss),
+                            synth_loss=float(synth_result.eval_loss),
+                            is_finetune=test_result.is_finetune,
+                            submission=submission,
+                        )
+                    )
 
         except Exception as e:
             logger.error(f"Error during batch evaluation: {e}")

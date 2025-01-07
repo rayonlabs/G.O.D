@@ -37,11 +37,7 @@ async def _get_total_dataset_size(repo_name: str, file_format: FileFormat) -> in
     else:
         loop = asyncio.get_running_loop()
         dataset_infos = await loop.run_in_executor(None, get_dataset_infos, repo_name)
-        size = sum(
-            info.dataset_size
-            for info in dataset_infos.values()
-            if info.dataset_size
-        )
+        size = sum(info.dataset_size for info in dataset_infos.values() if info.dataset_size)
     return int(size)
 
 
@@ -50,10 +46,7 @@ async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
         i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
     ]
     test_data, synth_data, train_data = await prepare_task(
-        dataset_name=task.ds_id,
-        file_format=task.file_format,
-        columns_to_sample=columns_to_sample,
-        keypair=keypair
+        dataset_name=task.ds_id, file_format=task.file_format, columns_to_sample=columns_to_sample, keypair=keypair
     )
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
@@ -62,7 +55,6 @@ async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
     task.test_data = test_data
     logger.info("Data creation is complete - now time to find some miners")
     return task
-
 
 
 # TODO: Improve by batching these up
@@ -260,17 +252,18 @@ async def _process_ready_to_train_tasks(config: Config):
 
 
 async def _evaluate_task(task: RawTask, gpu_ids: list[int], config: Config):
-    try:
-        task.status = TaskStatus.EVALUATING
-        add_context_tag("status", task.status.value)
-        await tasks_sql.update_task(task, config.psql_db)
-        task = await evaluate_and_score(task, gpu_ids, config)
-        await tasks_sql.update_task(task, config.psql_db)
-    except Exception as e:
-        logger.error(f"Error evaluating task {task.task_id}: {e}", exc_info=True)
-        task.status = TaskStatus.FAILURE
-        add_context_tag("status", task.status.value)
-        await tasks_sql.update_task(task, config.psql_db)
+    with LogContext(task_id=str(task.task_id)):
+        try:
+            task.status = TaskStatus.EVALUATING
+            add_context_tag("status", task.status.value)
+            await tasks_sql.update_task(task, config.psql_db)
+            task = await evaluate_and_score(task, gpu_ids, config)
+            await tasks_sql.update_task(task, config.psql_db)
+        except Exception as e:
+            logger.error(f"Error evaluating task {task.task_id}: {e}", exc_info=True)
+            task.status = TaskStatus.FAILURE
+            add_context_tag("status", task.status.value)
+            await tasks_sql.update_task(task, config.psql_db)
 
 
 async def _move_back_to_looking_for_nodes(task: RawTask, config: Config):
