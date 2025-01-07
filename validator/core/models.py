@@ -67,7 +67,7 @@ class RawTask(BaseModel):
     task_id: UUID | None = None
     model_id: str
     ds_id: str
-    file_format: FileFormat
+    file_format: FileFormat = FileFormat.HF
     status: str
     account_id: UUID
     times_delayed: int = 0
