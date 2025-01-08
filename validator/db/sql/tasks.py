@@ -89,16 +89,29 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
     return [RawTask(**dict(row)) for row in rows]
 
 
-async def assign_node_to_task(task_id: str, node: Node, psql_db: PSQLDB, expected_repo_name: str) -> None:
+async def assign_node_to_task(task_id: str, node: Node, psql_db: PSQLDB) -> None:
     """Assign a node to a task"""
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
             INSERT INTO {cst.TASK_NODES_TABLE}
-            ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID}, {cst.EXPECTED_REPO_NAME})
+            ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID}, )
             VALUES ($1, $2, $3, $4)
         """
-        await connection.execute(query, task_id, node.hotkey, NETUID, expected_repo_name)
+        await connection.execute(query, task_id, node.hotkey, NETUID)
+
+
+async def set_expected_repo_name(task_id: str, node: Node, psql_db: PSQLDB, expected_repo_name: str) -> None:
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            UPDATE {cst.TASK_NODES_TABLE}
+            SET {cst.EXPECTED_REPO_NAME} = $1
+            WHERE {cst.TASK_ID} = $2
+            AND {cst.HOTKEY} = $3
+            AND {cst.NETUID} = $4
+        """
+        await connection.execute(query, expected_repo_name, task_id, node.hotkey, NETUID)
 
 
 async def update_task(updated_task: RawTask, psql_db: PSQLDB) -> RawTask:

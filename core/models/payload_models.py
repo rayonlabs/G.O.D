@@ -22,7 +22,6 @@ class MinerTaskRequest(BaseModel):
     model: str
     hours_to_complete: int
     task_id: str
-    expected_repo_name: str
 
 
 class TrainRequest(BaseModel):
@@ -36,6 +35,7 @@ class TrainRequest(BaseModel):
     file_format: FileFormat
     task_id: str
     hours_to_complete: int
+    expected_repo_name: str
 
 
 class TrainResponse(BaseModel):
