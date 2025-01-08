@@ -390,8 +390,8 @@ async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_d
                 await add_submission(result.submission, psql_db)
 
 
-async def get_repo_creation_time(repo_name: str) -> datetime:
-    """Get the creation timestamp of a Hugging Face repository."""
+async def get_repo_timestamps(repo_name: str) -> tuple[datetime, datetime]:
+    """Get the creation and last modified timestamps of a Hugging Face repository."""
     try:
         clean_name = repo_name.replace("https://huggingface.co/", "")
         parts = clean_name.split("/")
@@ -403,10 +403,12 @@ async def get_repo_creation_time(repo_name: str) -> datetime:
             logger.debug(f"Fetching creation time from: {url}")
             response = await process_non_stream_get(url, None)
             if response:
-                return datetime.fromisoformat(response["createdAt"].replace("Z", "+00:00"))
+                created_at = datetime.fromisoformat(response["createdAt"].replace("Z", "+00:00"))
+                modified_at = datetime.fromisoformat(response["lastModified"].replace("Z", "+00:00"))
+                return created_at, modified_at
     except Exception as e:
-        logger.error(f"Error fetching repo creation time for {repo_name}: {e}")
-    return datetime.max
+        logger.error(f"Error fetching repo times for {repo_name}: {e}")
+    return datetime.max, datetime.max
 
 
 def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float], list[tuple[str, str]]]:
@@ -427,8 +429,8 @@ async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[s
     """Determine earliest submission and list of duplicates."""
     timestamps = []
     for hotkey, repo in submissions:
-        creation_time = await get_repo_creation_time(repo)
-        timestamps.append((hotkey, repo, creation_time))
+        _, last_modification_time = await get_repo_timestamps(repo)
+        timestamps.append((hotkey, repo, last_modification_time))
 
     timestamps.sort(key=lambda x: x[2])
     earliest_hotkey, earliest_repo, _ = timestamps[0]
@@ -459,7 +461,41 @@ async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict
     return keep_submission
 
 
-def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dict[str, bool]) -> list[MinerResults]:
+async def is_repo_modified_after_submission(repo: str, submission_time: datetime) -> bool:
+    try:
+        _, last_modified = await get_repo_timestamps(repo)
+
+        tolerance = timedelta(seconds=cts.SUBMISSION_TIME_TOLERANCE_SECONDS)
+        submission_time_with_tolerance = submission_time + tolerance
+
+        if last_modified > submission_time_with_tolerance:
+            logger.warning(
+                f"Repository {repo} was modified after submission. "
+                f"Submission time: {submission_time}, "
+                f"Last modified: {last_modified}"
+            )
+            return True
+
+        return False
+
+    except Exception as e:
+        logger.error(f"Error checking modification time for {repo}: {e}")
+        return False
+
+
+async def handle_modified_submissions(task_results: list[MinerResults]) -> dict[str, bool]:
+    keep_submission = {result.hotkey: True for result in task_results}
+    for result in task_results:
+        if await is_repo_modified_after_submission(result.submission.repo):
+            keep_submission[result.hotkey] = False
+            logger.warning(
+                f"Setting score to 0 for node {result.hotkey} (repo: {result.submission.repo}) "
+                f"as it was modified after submission"
+            )
+    return keep_submission
+
+
+def zero_scores_for_invalid_submissions(task_results: list[MinerResults], keep_submission: dict[str, bool]) -> list[MinerResults]:
     """Zero out scores for duplicate submissions."""
     for result in task_results:
         if not keep_submission[result.hotkey]:
@@ -545,8 +581,16 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
     task_results = await process_miners_pool(miner_pool, task, dataset_type, config, gpu_ids)
 
     logger.info("Checking for duplicates ...")
-    keep_submission = await handle_duplicate_submissions(task_results)
-    task_results = zero_duplicate_scores(task_results, keep_submission)
+    keep_original_submissions = await handle_duplicate_submissions(task_results)
+
+    keep_non_modified_submissions = await handle_modified_submissions(task_results)
+
+    keep_submissions = {
+        hotkey: keep_original_submissions[hotkey] and keep_non_modified_submissions[hotkey]
+        for hotkey in keep_original_submissions.keys()
+    }
+
+    task_results = zero_scores_for_invalid_submissions(task_results, keep_submissions)
 
     logger.info("Calculating final scores...")
     task_results = add_raw_scores_to_miner_results(task_results)
