@@ -57,6 +57,7 @@ async def tune_model(
         model=train_request.model,
         dataset_type=train_request.dataset_type,
         file_format=train_request.file_format,
+        expected_repo_name=train_request.expected_repo_name,
     )
     logger.info(f"Created job {job}")
     worker_config.trainer.enqueue_job(job)
