@@ -78,7 +78,13 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
 
     selected_miners: list[str] = []
     ds_size = await _get_total_dataset_size(task.ds_id, task.file_format)
-
+    task_request = MinerTaskRequest(
+        ds_size=ds_size,
+        model=task.model_id,
+        hours_to_complete=task.hours_to_complete,
+        task_id=str(task.task_id),
+    )
+    logger.info(f"We are offering the following task to the miners: {task_request.model_dump()}")
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
 
     already_assigned_hotkeys = [miner.hotkey for miner in miners_already_assigned]
@@ -105,13 +111,6 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
             # TODO: Batch the boi
             if i > 0 and i % 5 == 0:
                 logger.info(f"We have made {i} offers so far for task {task.task_id}")
-
-            task_request = MinerTaskRequest(
-                ds_size=ds_size,
-                model=task.model_id,
-                hours_to_complete=task.hours_to_complete,
-                task_id=str(task.task_id),
-            )
 
             offer_response = await _make_offer(node, task_request, config)
 
