@@ -89,15 +89,16 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
     return [RawTask(**dict(row)) for row in rows]
 
 
-async def assign_node_to_task(task_id: str, node: Node, psql_db: PSQLDB) -> None:
+async def assign_node_to_task(task_id: str, node: Node, psql_db: PSQLDB, expected_repo_name: str) -> None:
     """Assign a node to a task"""
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
-            INSERT INTO {cst.TASK_NODES_TABLE} ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID})
-            VALUES ($1, $2, $3)
+            INSERT INTO {cst.TASK_NODES_TABLE}
+            ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID}, {cst.EXPECTED_REPO_NAME})
+            VALUES ($1, $2, $3, $4)
         """
-        await connection.execute(query, task_id, node.hotkey, NETUID)
+        await connection.execute(query, task_id, node.hotkey, NETUID, expected_repo_name)
 
 
 async def update_task(updated_task: RawTask, psql_db: PSQLDB) -> RawTask:
@@ -171,9 +172,7 @@ async def get_synthetic_set_for_task(task_id: str, psql_db: PSQLDB):
         return await connection.fetchval(query, task_id)
 
 
-
 async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
-
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -429,3 +428,13 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
 
         rows = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
         return [Task(**dict(row)) for row in rows]
+
+
+async def get_expected_repo_name(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> str | None:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.EXPECTED_REPO_NAME}
+            FROM {cst.TASK_NODES_TABLE}
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2 AND {cst.NETUID} = $3
+        """
+        return await connection.fetchval(query, task_id, hotkey, NETUID)

@@ -24,6 +24,7 @@ from validator.core.models import TaskResults
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
+from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
 from validator.evaluation.docker_evaluation import run_evaluation_docker
 from validator.utils.call_endpoint import process_non_stream_fiber_get
@@ -478,8 +479,20 @@ async def process_miners_pool(
     miner_repos: dict[str, str] = {}
     for miner in miners:
         with LogContext(miner_hotkey=miner.hotkey):
+            expected_name = await get_expected_repo_name(task.task_id, miner.hotkey, config.psql_db)
             repo = await _get_submission_repo(miner, str(task.task_id), config)
             if repo is not None:
+                repo_parts = repo.split("/")
+                if len(repo_parts) >= 2:
+                    submitted_name = repo_parts[-1]
+
+                    if expected_name and submitted_name != expected_name:
+                        logger.warning(
+                            f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
+                            f"but expected {expected_name}. Marking as failed."
+                        )
+                        continue
+
                 miner_repos[miner.hotkey] = repo
             logger.info(f"Found repo {repo} for miner {miner.hotkey}")
 
