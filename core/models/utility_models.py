@@ -85,6 +85,7 @@ class Job(BaseModel):
     file_format: FileFormat
     status: JobStatus = JobStatus.QUEUED
     error_message: str | None = None
+    expected_repo_name: str | None = None
 
 
 class Role(str, Enum):
