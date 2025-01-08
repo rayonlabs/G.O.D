@@ -1,4 +1,5 @@
 import os
+import uuid
 
 import yaml
 from fiber.logging_utils import get_logger
@@ -53,7 +54,7 @@ def update_model_info(config: dict, model: str, job_id: str = ""):
     config["base_model"] = model
     config["wandb_runid"] = job_id
     config["wandb_name"] = job_id
-    config["hub_model_id"] = f"{cst.REPO_ID}/{job_id}"
+    config["hub_model_id"] = f"{cst.REPO_ID}/{uuid.uuid4()}"
 
     return config
 
