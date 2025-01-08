@@ -432,7 +432,7 @@ async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[s
 
     timestamps.sort(key=lambda x: x[2])
     earliest_hotkey, earliest_repo, _ = timestamps[0]
-    duplicates = [(hotkey, repo) for hotkey, repo, _ in timestamps[1:]]
+    duplicates = [(hotkey, repo) for hotkey, repo, _ in timestamps]
 
     return earliest_hotkey, earliest_repo, duplicates
 
