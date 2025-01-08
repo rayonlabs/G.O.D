@@ -95,8 +95,8 @@ async def assign_node_to_task(task_id: str, node: Node, psql_db: PSQLDB) -> None
         connection: Connection
         query = f"""
             INSERT INTO {cst.TASK_NODES_TABLE}
-            ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID}, )
-            VALUES ($1, $2, $3, $4)
+            ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID})
+            VALUES ($1, $2, $3)
         """
         await connection.execute(query, task_id, node.hotkey, NETUID)
 
