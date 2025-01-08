@@ -94,7 +94,6 @@ MAX_TASK_SCORE = 1.6
 TASK_SCORE_THRESHOLD = 0.85
 REWEIGHTING_EXP = 0.4  # how much of a drop off from leader
 SCORING_WINDOW = 7  # number of days over which we score
-SUBMISSION_TIME_TOLERANCE_SECONDS = 5 * 60
 
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5

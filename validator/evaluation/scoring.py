@@ -461,40 +461,6 @@ async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict
     return keep_submission
 
 
-async def is_repo_modified_after_submission(repo: str, submission_time: datetime) -> bool:
-    try:
-        _, last_modified = await get_repo_timestamps(repo)
-
-        tolerance = timedelta(seconds=cts.SUBMISSION_TIME_TOLERANCE_SECONDS)
-        submission_time_with_tolerance = submission_time + tolerance
-
-        if last_modified > submission_time_with_tolerance:
-            logger.warning(
-                f"Repository {repo} was modified after submission. "
-                f"Submission time: {submission_time}, "
-                f"Last modified: {last_modified}"
-            )
-            return True
-
-        return False
-
-    except Exception as e:
-        logger.error(f"Error checking modification time for {repo}: {e}")
-        return False
-
-
-async def handle_modified_submissions(task_results: list[MinerResults]) -> dict[str, bool]:
-    keep_submission = {result.hotkey: True for result in task_results}
-    for result in task_results:
-        if await is_repo_modified_after_submission(result.submission.repo):
-            keep_submission[result.hotkey] = False
-            logger.warning(
-                f"Setting score to 0 for node {result.hotkey} (repo: {result.submission.repo}) "
-                f"as it was modified after submission"
-            )
-    return keep_submission
-
-
 def zero_scores_for_invalid_submissions(task_results: list[MinerResults], keep_submission: dict[str, bool]) -> list[MinerResults]:
     """Zero out scores for duplicate submissions."""
     for result in task_results:
@@ -581,16 +547,9 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
     task_results = await process_miners_pool(miner_pool, task, dataset_type, config, gpu_ids)
 
     logger.info("Checking for duplicates ...")
-    keep_original_submissions = await handle_duplicate_submissions(task_results)
+    original_submissions_to_keep = await handle_duplicate_submissions(task_results)
 
-    keep_non_modified_submissions = await handle_modified_submissions(task_results)
-
-    keep_submissions = {
-        hotkey: keep_original_submissions[hotkey] and keep_non_modified_submissions[hotkey]
-        for hotkey in keep_original_submissions.keys()
-    }
-
-    task_results = zero_scores_for_invalid_submissions(task_results, keep_submissions)
+    task_results = zero_scores_for_invalid_submissions(task_results, original_submissions_to_keep)
 
     logger.info("Calculating final scores...")
     task_results = add_raw_scores_to_miner_results(task_results)
