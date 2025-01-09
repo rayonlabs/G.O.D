@@ -54,7 +54,7 @@ def update_model_info(config: dict, model: str, job_id: str = "", expected_repo_
     config["base_model"] = model
     config["wandb_runid"] = job_id
     config["wandb_name"] = job_id
-    config["hub_model_id"] = f"{cst.REPO_ID}/{expected_repo_name or uuid.uuid4()}"
+    config["hub_model_id"] = f"{cst.REPO_ID}/{expected_repo_name or str(uuid.uuid4())}"
 
     return config
 
