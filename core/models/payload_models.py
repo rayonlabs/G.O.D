@@ -8,7 +8,6 @@ from pydantic import Field
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
-from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
@@ -36,6 +35,7 @@ class TrainRequest(BaseModel):
     file_format: FileFormat
     task_id: str
     hours_to_complete: int
+    expected_repo_name: str | None = None
 
 
 class TrainResponse(BaseModel):
@@ -69,8 +69,9 @@ class NewTaskRequest(BaseModel):
     field_system: str | None = Field(None, description="The column name for the system (prompt)", examples=["system"])
 
     ds_repo: str = Field(..., description="The repository for the dataset", examples=["yahma/alpaca-cleaned"])
-    file_format: FileFormat = Field(FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF,
-                                                                                                      FileFormat.S3])
+    file_format: FileFormat = Field(
+        FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
     model_repo: str = Field(..., description="The repository for the model", examples=["Qwen/Qwen2.5-Coder-32B-Instruct"])
 
     hours_to_complete: int = Field(..., description="The number of hours to complete the task", examples=[1])

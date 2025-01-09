@@ -45,7 +45,7 @@ def update_flash_attention(config: dict, model: str):
     return config
 
 
-def update_model_info(config: dict, model: str, job_id: str = ""):
+def update_model_info(config: dict, model: str, job_id: str = "", expected_repo_name: str | None = None):
     logger.info("WE ARE UPDATING THE MODEL INFO")
     tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
@@ -54,7 +54,7 @@ def update_model_info(config: dict, model: str, job_id: str = ""):
     config["base_model"] = model
     config["wandb_runid"] = job_id
     config["wandb_name"] = job_id
-    config["hub_model_id"] = f"{cst.REPO_ID}/{uuid.uuid4()}"
+    config["hub_model_id"] = f"{cst.REPO_ID}/{expected_repo_name or str(uuid.uuid4())}"
 
     return config
 
