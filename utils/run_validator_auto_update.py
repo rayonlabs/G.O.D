@@ -44,8 +44,8 @@ def run_auto_updater():
             process = subprocess.Popen(reset_cmd.split(), stdout=subprocess.PIPE)
             output, error = process.communicate()
             if not error:
-                pull_latest_docker_images()
                 clean_hf_datasets_cache()
+                pull_latest_docker_images()
                 os.system("./utils/autoupdate_validator_steps.sh")
                 time.sleep(20)
 
