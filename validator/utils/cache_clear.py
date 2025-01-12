@@ -73,3 +73,14 @@ def delete_model_from_cache(model_name):
         logger.info(f"Deleted model '{model_name}' from cache.")
     else:
         logger.info(f"Model '{model_name}' not found in cache.")
+
+
+def clean_all_hf_datasets_cache():
+    """Clean the entire Huggingface datasets cache directory."""
+    try:
+        hf_cache_path = os.path.expanduser("~/.cache/huggingface/datasets/")
+        if os.path.exists(hf_cache_path):
+            shutil.rmtree(hf_cache_path)
+            logger.info(f"Cleaned Huggingface datasets cache at {hf_cache_path}")
+    except Exception as e:
+        logger.error(f"Error cleaning Huggingface datasets cache: {e}")

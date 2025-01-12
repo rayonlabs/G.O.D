@@ -19,6 +19,7 @@ from validator.core.config import Config
 from validator.core.models import RawTask
 from validator.evaluation.scoring import evaluate_and_score
 from validator.tasks.task_prep import prepare_task
+from validator.utils.cache_clear import clean_all_hf_datasets_cache
 from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
@@ -340,6 +341,7 @@ async def evaluate_tasks_loop(config: Config):
             for i in range(0, len(tasks_to_evaluate), len(cst.GPU_IDS)):
                 batch = [(task, [gpu_id]) for task, gpu_id in zip(tasks_to_evaluate[i : i + len(cst.GPU_IDS)], cst.GPU_IDS)]
                 await asyncio.gather(*[_evaluate_task(task, gpu_list, config) for task, gpu_list in batch])
+                clean_all_hf_datasets_cache()
 
         else:
             logger.info("No tasks awaiting evaluation - waiting 30 seconds")
