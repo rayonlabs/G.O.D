@@ -78,7 +78,7 @@ fiber-post-ip --netuid 56 --subtensor.network finney --external_port 7999 --wall
 
 **FOR DEV**
 ```bash
-fiber-post-ip --netuid 176 --subtensor.network test --external_port 7999 --wallet.name default --wallet.hotkey default --external_ip [YOUR-IP]
+fiber-post-ip --netuid 241 --subtensor.network test --external_port 7999 --wallet.name default --wallet.hotkey default --external_ip [YOUR-IP]
 ```
 
 
