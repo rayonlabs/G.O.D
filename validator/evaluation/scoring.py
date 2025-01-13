@@ -102,7 +102,7 @@ def calculate_node_quality_scores(
     return final_scores
 
 
-def normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
+def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     """Normalise scores and update node emission values. Now < 0 maps to zero"""
     assert period_scores, "Period scores list cannot be empty"
     valid_scores = [ps.quality_score for ps in period_scores if ps.quality_score is not None]
@@ -141,7 +141,7 @@ async def scoring_aggregation_from_date(psql_db: str) -> list[PeriodScore]:
             update_node_aggregation(node_aggregations, node_score, task_work_score)
 
     final_scores = calculate_node_quality_scores(node_aggregations)
-    final_scores = normalise_scores(final_scores)
+    final_scores = _normalise_scores(final_scores)
     return final_scores
 
 
@@ -228,6 +228,7 @@ def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[M
         with LogContext(miner_hotkey=result.hotkey):
             if not result.is_finetune:
                 result.score = 0.0
+                result.score_reason = result.score_reason or "Non-finetuned submission"
                 logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
 
     finetuned_results = [
@@ -248,16 +249,24 @@ def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[M
             if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
                 weighted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss)
                 result.score = calculate_scaled_score(weighted_loss, scale_factor)
+                result.score_reason = "Computed score based on loss"
                 logger.info(
                     f"Miner {result.hotkey} (finetuned):"
                     f" test_loss={result.test_loss:.4f}"
                     f" synth_loss={result.synth_loss:.4f}"
                     f" weighted_loss={weighted_loss:.4f}"
                     f" score={result.score:.4f}"
+                    f" score_reason={result.score_reason}"
                 )
             else:
                 result.score = 0.0
-                logger.info(f"Miner {result.hotkey}: score=0.0 (non-finetuned or invalid losses)")
+                if not result.score_reason:
+                    if result.is_finetune:
+                        result.score_reason = result.score_reason or "Invalid loss"
+                    else:
+                        result.score_reason = result.score_reason or "Non-finetuned submission"
+
+                logger.info(f"Miner {result.hotkey}: score=0.0, score_reason={result.score_reason}")
 
     return miner_results
 
@@ -273,8 +282,9 @@ def _get_dataset_type(task: RawTask) -> CustomDatasetType:
     )
 
 
-def _create_failed_miner_result(hotkey: str) -> MinerResults:
-    return MinerResults(hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, submission=None)
+def _create_failed_miner_result(hotkey: str, reason: str) -> MinerResults:
+    """Create a failed miner result with zero score."""
+    return MinerResults(hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason)
 
 
 async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str | None:
@@ -375,7 +385,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
 
 
 async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_db) -> None:
-    assert task.task_id is not None, "task id needs to be seet to update scores"
+    assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
         with LogContext(miner_hotkey=result.hotkey):
             if result.score is None:
@@ -387,7 +397,8 @@ async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_d
                 quality_score=float(result.score),
                 test_loss=result.test_loss,
                 synth_loss=result.synth_loss,
-                psql_db=psql_db
+                score_reason=result.score_reason,
+                psql_db=psql_db,
             )
 
             if result.submission:
@@ -471,6 +482,7 @@ def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dic
             result.test_loss = np.nan
             result.synth_loss = np.nan
             result.is_finetune = False
+            result.score_reason = result.score_reason or "Duplicated submission"
     return task_results
 
 
@@ -488,7 +500,11 @@ async def process_miners_pool(
                 miner_repos[miner.hotkey] = repo
             logger.info(f"Found repo {repo} for miner {miner.hotkey}")
 
-    results = [_create_failed_miner_result(miner.hotkey) for miner in miners if miner.hotkey not in miner_repos]
+    results = [
+        _create_failed_miner_result(miner.hotkey, reason="No repo submitted")
+        for miner in miners
+        if miner.hotkey not in miner_repos
+    ]
 
     if miner_repos:
         try:
@@ -506,7 +522,7 @@ async def process_miners_pool(
 
                     if isinstance(eval_result, Exception):
                         logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
-                        results.append(_create_failed_miner_result(miner.hotkey))
+                        results.append(_create_failed_miner_result(miner.hotkey, reason="Evaluation failed"))
                         continue
 
                     synth_result, test_result = eval_result
@@ -531,7 +547,11 @@ async def process_miners_pool(
         except Exception as e:
             logger.error(f"Error during batch evaluation: {e}")
             results.extend(
-                [_create_failed_miner_result(miner.hotkey) for miner in miners if miner.hotkey not in [r.hotkey for r in results]]
+                [
+                    _create_failed_miner_result(miner.hotkey, reason="Evaluation failed")
+                    for miner in miners
+                    if miner.hotkey not in [r.hotkey for r in results]
+                ]
             )
 
     return results

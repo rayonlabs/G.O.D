@@ -65,6 +65,7 @@ CREATED_ON = "created_on"
 TASK_NODE_QUALITY_SCORE = "quality_score"
 TEST_LOSS = "test_loss"
 SYNTH_LOSS = "synth_loss"
+SCORE_REASON = "score_reason"
 
 # Common Column Names (shared between tables)
 QUALITY_SCORE = "quality_score"  # Used in both submissions and task_nodes

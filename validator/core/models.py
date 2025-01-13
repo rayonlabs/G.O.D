@@ -153,6 +153,7 @@ class MinerResults(BaseModel):
     is_finetune: bool
     score: float | None = 0.0
     submission: Submission | None = None
+    score_reason: str | None = None
 
 
 class QualityMetrics(BaseModel):

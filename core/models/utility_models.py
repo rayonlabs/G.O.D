@@ -59,6 +59,7 @@ class MinerTaskResult(BaseModel):
     quality_score: float
     test_loss: float | None
     synth_loss: float | None
+    score_reason: str | None
 
 
 # NOTE: Confusing name with the class above
