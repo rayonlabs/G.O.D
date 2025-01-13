@@ -173,12 +173,21 @@ async def get_all_scores_and_losses_for_task(task_id: UUID, psql_db: PSQLDB) -> 
             AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
         """
         rows = await connection.fetch(query, task_id, NETUID)
+
+        def clean_float(value):
+            if value is None:
+                return None
+            if isinstance(value, float):
+                if value in (float("inf"), float("-inf")) or value != value:  # value != value checks for NaN
+                    return None
+            return value
+
         return [
             {
                 cst.HOTKEY: row[cst.HOTKEY],
-                cst.TASK_NODE_QUALITY_SCORE: row[cst.TASK_NODE_QUALITY_SCORE],
-                cst.TEST_LOSS: row[cst.TEST_LOSS],
-                cst.SYNTH_LOSS: row[cst.SYNTH_LOSS],
+                cst.TASK_NODE_QUALITY_SCORE: clean_float(row[cst.TASK_NODE_QUALITY_SCORE]),
+                cst.TEST_LOSS: clean_float(row[cst.TEST_LOSS]),
+                cst.SYNTH_LOSS: clean_float(row[cst.SYNTH_LOSS]),
                 cst.SCORE_REASON: row[cst.SCORE_REASON],
             }
             for row in rows
