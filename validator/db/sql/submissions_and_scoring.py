@@ -178,7 +178,7 @@ async def get_all_scores_and_losses_for_task(task_id: UUID, psql_db: PSQLDB) -> 
             if value is None:
                 return None
             if isinstance(value, float):
-                if value in (float("inf"), float("-inf")) or value != value:  # value != value checks for NaN
+                if value in (float("inf"), float("-inf")) or value != value:
                     return None
             return value
 
