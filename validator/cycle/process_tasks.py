@@ -20,6 +20,7 @@ from validator.core.config import Config
 from validator.core.models import RawTask
 from validator.evaluation.scoring import evaluate_and_score
 from validator.tasks.task_prep import prepare_task
+from validator.utils.cache_clear import clean_all_hf_datasets_cache
 from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
@@ -229,6 +230,7 @@ async def _processing_pending_tasks(config: Config):
     pending_tasks = await tasks_sql.get_tasks_with_status(status=TaskStatus.PENDING, psql_db=config.psql_db)
     logger.info(f"Found {len(pending_tasks)} pending tasks! Will prep them all now...")
     await asyncio.gather(*[_prep_task(task, config) for task in pending_tasks[: cst.MAX_CONCURRENT_TASK_PREPS]])
+    clean_all_hf_datasets_cache()
 
 
 async def _start_training_task(task: RawTask, config: Config) -> None:

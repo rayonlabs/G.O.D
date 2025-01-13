@@ -383,7 +383,12 @@ async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_d
                 continue
 
             await set_task_node_quality_score(
-                task_id=task.task_id, hotkey=result.hotkey, quality_score=float(result.score), psql_db=psql_db
+                task_id=task.task_id,
+                hotkey=result.hotkey,
+                quality_score=float(result.score),
+                test_loss=result.test_loss,
+                synth_loss=result.synth_loss,
+                psql_db=psql_db
             )
 
             if result.submission:
@@ -433,7 +438,7 @@ async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[s
 
     timestamps.sort(key=lambda x: x[2])
     earliest_hotkey, earliest_repo, _ = timestamps[0]
-    duplicates = [(hotkey, repo) for hotkey, repo, _ in timestamps[1:]]
+    duplicates = [(hotkey, repo) for hotkey, repo, _ in timestamps]
 
     return earliest_hotkey, earliest_repo, duplicates
 

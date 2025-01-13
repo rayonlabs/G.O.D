@@ -57,6 +57,8 @@ class WinningSubmission(BaseModel):
 class MinerTaskResult(BaseModel):
     hotkey: str
     quality_score: float
+    test_loss: float | None
+    synth_loss: float | None
 
 
 # NOTE: Confusing name with the class above

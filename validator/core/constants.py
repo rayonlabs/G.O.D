@@ -47,7 +47,7 @@ GET_ALL_MODELS_ID = "model_id"
 
 
 HOW_MANY_TASKS_ALLOWED_AT_ONCE = 15
-NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 15
+NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 10
 
 
 # data stuff
@@ -58,6 +58,7 @@ MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
 # synth stuff
+NUM_SYNTH_RETRIES = 3
 SYNTH_GEN_BATCH_SIZE = 10
 SYNTH_MODEL_TEMPERATURE = 0.4
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
@@ -92,7 +93,8 @@ TARGET_SCORE_RATIO = 1.05
 MIN_TASK_SCORE = 0.0  # very tiny punishment while miners find their feet
 MAX_TASK_SCORE = 1.6
 TASK_SCORE_THRESHOLD = 0.85
-REWEIGHTING_EXP = 0.6  # how much of a drop off from leader
+REWEIGHTING_EXP = 0.65  # how much of a drop off from leader
+
 SCORING_WINDOW = 7  # number of days over which we score
 
 # processing stuff

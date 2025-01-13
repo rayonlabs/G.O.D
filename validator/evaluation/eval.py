@@ -1,5 +1,6 @@
 import json
 import os
+from math import ceil
 from pathlib import Path
 from typing import Union
 
@@ -31,6 +32,7 @@ def _load_and_update_evaluation_config(
     dataset_name: str,
     dataset_type: Union[DatasetType, CustomDatasetType],
     file_format: FileFormat,
+    finetuned_model: AutoModelForCausalLM,
     config_path: str,
 ) -> DictDefault:
     with open(config_path, "r") as file:
@@ -42,6 +44,11 @@ def _load_and_update_evaluation_config(
         file_format=file_format,
     )
     config_dict["datasets"] = [dataset_entry]
+    if (
+        finetuned_model.config.max_position_embeddings
+        and finetuned_model.config.max_position_embeddings < 2 * config_dict["sequence_len"]
+    ):
+        config_dict["sequence_len"] = ceil(finetuned_model.config.max_position_embeddings / 2)
     return DictDefault(config_dict)
 
 
@@ -94,7 +101,7 @@ def _process_evaluation_batches(
     batch_losses = []
     num_batches = 0
     consecutive_nans = 0
-    max_consecutive_nans = evaluation_config.get('max_consecutive_nans')
+    max_consecutive_nans = evaluation_config.get("max_consecutive_nans")
 
     language_model.eval()
     with torch.no_grad():
@@ -107,7 +114,7 @@ def _process_evaluation_batches(
                 consecutive_nans += 1
                 if consecutive_nans >= max_consecutive_nans:
                     logger.error(f"Stopping evaluation early: {max_consecutive_nans} consecutive NaN losses detected")
-                    return [float('nan')], 1
+                    return [float("nan")], 1
             else:
                 consecutive_nans = 0
 
@@ -153,7 +160,7 @@ def _calculate_evaluation_metrics(
             "perplexity": float("inf"),
         }
 
-    if nan_percentage > evaluation_config.get('max_nan_percentage'):
+    if nan_percentage > evaluation_config.get("max_nan_percentage"):
         logger.error(f"Too many nan values ({nan_percentage:.2f}% of batches)")
         return {
             "eval_loss": float("inf"),
@@ -200,7 +207,9 @@ def evaluate_finetuned_model(
     file_format: FileFormat,
     tokenizer: AutoTokenizer,
 ) -> dict[str, float]:
-    evaluation_config = _load_and_update_evaluation_config(dataset_name, dataset_type, file_format, cst.VALI_CONFIG_PATH)
+    evaluation_config = _load_and_update_evaluation_config(
+        dataset_name, dataset_type, file_format, finetuned_model, cst.VALI_CONFIG_PATH
+    )
     return evaluate_language_model_loss(evaluation_config, finetuned_model, tokenizer)
 
 

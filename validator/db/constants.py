@@ -54,6 +54,7 @@ TERMINATION_AT = "termination_at"
 IS_ORGANIC = "is_organic"
 TIMES_DELAYED = "times_delayed"
 ASSIGNED_MINERS = "assigned_miners"
+TRAINING_REPO_BACKUP = "training_repo_backup"
 
 # Submissions Table Columns
 SUBMISSION_ID = "submission_id"
@@ -62,7 +63,12 @@ CREATED_ON = "created_on"
 
 # Task Nodes Table Columns
 TASK_NODE_QUALITY_SCORE = "quality_score"
+
 EXPECTED_REPO_NAME = "expected_repo_name"
+
+TEST_LOSS = "test_loss"
+SYNTH_LOSS = "synth_loss"
+
 
 # Common Column Names (shared between tables)
 QUALITY_SCORE = "quality_score"  # Used in both submissions and task_nodes

@@ -18,38 +18,38 @@ from validator.utils.call_endpoint import call_content_service
 from validator.utils.logging import get_logger
 
 
-logger = get_logger(name="task synth")
+logger = get_logger(__name__)
 
 
 async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:
-    response = await call_content_service(cst.GET_RANDOM_MODELS_ENDPOINT, keypair)
-    if not isinstance(response, list):
-        raise TypeError("Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
-    models: list[dict[str, Any]] = response
-    TEMP_MODEL_FAMILIES_ACCEPTED = ["qwen", "llama", "falcon", "mistral", "gemma", "gemini", "phi"]
-    model_ids = [
-        model.get(cst.GET_ALL_MODELS_ID, "")
-        for model in models
-        if any(family in model.get(cst.GET_ALL_MODELS_ID, "").lower() for family in TEMP_MODEL_FAMILIES_ACCEPTED)
-    ]
-    random.shuffle(model_ids)
-    for model_id in model_ids:
-        yield model_id
+    while True:
+        response = await call_content_service(cst.GET_RANDOM_MODELS_ENDPOINT, keypair)
+        if not isinstance(response, list):
+            raise TypeError("Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
+        models: list[dict[str, Any]] = response
+        model_ids = [model.get(cst.GET_ALL_MODELS_ID, "") for model in models]
+        random.shuffle(model_ids)
+        for model_id in model_ids:
+            yield model_id
 
 
 async def _get_datasets(keypair: Keypair) -> AsyncGenerator[str, None]:
-    response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair)
-    if not isinstance(response, list):
-        raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
-    datasets: list[dict[str, Any]] = response
-    dataset_ids = [ds.get(cst.GET_ALL_DATASETS_ID, "") for ds in datasets]
-    random.shuffle(dataset_ids)
-    for ds_id in dataset_ids:
-        yield ds_id
+    while True:
+        response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair)
+        if not isinstance(response, list):
+            raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
+
+        datasets: list[dict[str, Any]] = response
+        dataset_ids = [ds.get(cst.GET_ALL_DATASETS_ID, "") for ds in datasets]
+        random.shuffle(dataset_ids)
+
+        for ds_id in dataset_ids:
+            yield ds_id
 
 
 async def _get_columns_for_dataset(dataset_id: str, keypair: Keypair) -> DatasetColumnsResponse:
     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
+    logger.info(f"Getting columns for dataset {dataset_id}")
     response = await call_content_service(url, keypair)
     if not isinstance(response, dict):
         raise TypeError(f"Expected dictionary response, got {type(response)}")
@@ -110,12 +110,19 @@ async def schedule_synthetics_periodically(config: Config):
     logger.info("Starting the synthetic schedule loop...")
     datasets = _get_datasets(config.keypair)
     models = _get_models(config.keypair)
+
+    current_try = 0
     while True:
         try:
-            logger.info("We are attempting to create a new task")
+            logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
             await _add_new_task_to_network_if_not_enough(config, models, datasets)
+            current_try = 0
             await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
         except Exception as e:
-            logger.info(f"Ah, that dataset was missing some details, trying another one next time. {e}")
-
-            await asyncio.sleep(5 * 60)
+            if current_try < cst.NUM_SYNTH_RETRIES - 1:
+                logger.info(f"Synthetic task creation try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} failed, retrying... {e}")
+                current_try += 1
+            else:
+                logger.info(f"Synthetic task creation failed after {cst.NUM_SYNTH_RETRIES} attempts, giving up for now. {e}")
+                current_try = 0
+                await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)

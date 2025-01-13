@@ -84,6 +84,7 @@ class RawTask(BaseModel):
     training_data: str | None = None
     assigned_miners: list[int] | None = None
     miner_scores: list[float] | None = None
+    training_repo_backup: str | None = None
 
     created_at: datetime
     next_delay_at: datetime | None = None

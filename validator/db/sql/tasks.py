@@ -325,7 +325,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> Task:
             )
             SELECT
                 tasks.*,
-                victorious_repo.repo as trained_model_repository
+                COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
             LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
             WHERE tasks.{cst.TASK_ID} = $1
@@ -354,7 +354,7 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[
             )
             SELECT
                 tasks.*,
-                victorious_repo.{cst.REPO} as trained_model_repository
+                COALESCE(tasks.training_repo_backup, victorious_repo.{cst.REPO}) as trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
             LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
             ORDER BY tasks.{cst.CREATED_AT} DESC
@@ -386,7 +386,7 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
             )
             SELECT
                 tasks.*,
-                victorious_repo.{cst.REPO} AS trained_model_repository
+                COALESCE(tasks.training_repo_backup, victorious_repo.{cst.REPO}) AS trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
             LEFT JOIN victorious_repo
                 ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
@@ -428,7 +428,7 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
             )
             SELECT
                 tasks.*,
-                victorious_repo.{cst.REPO} as trained_model_repository
+                COALESCE(tasks.training_repo_backup, victorious_repo.{cst.REPO}) as trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
             LEFT JOIN victorious_repo
                 ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
