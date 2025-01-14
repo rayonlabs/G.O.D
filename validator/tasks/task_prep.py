@@ -202,7 +202,8 @@ async def prepare_task(
 
     await _check_file_size(train_json_size, "train_data")
     await _check_file_size(test_json_size, "test_data")
-    await _check_file_size(synth_json_size, "synth_data")
+    if synth_json_size:
+        await _check_file_size(synth_json_size, "synth_data")
 
     train_json_url = await upload_json_to_minio(train_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_train_data.json")
     test_json_url = await upload_json_to_minio(test_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_test_data.json")
