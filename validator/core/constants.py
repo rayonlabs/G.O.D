@@ -80,7 +80,7 @@ MINIMUM_MINER_POOL = 1
 MIN_IDEAL_NUM_MINERS_IN_POOL = 9
 MAX_IDEAL_NUM_MINERS_IN_POOL = 18
 MIN_COMPETITION_HOURS = 1
-MAX_COMPETITION_HOURS = 5
+MAX_COMPETITION_HOURS = 12
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 # how many times in total do we attempt to delay an organic request looking for miners
 MAX_DELAY_TIMES = 6

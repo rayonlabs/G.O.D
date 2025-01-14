@@ -46,8 +46,7 @@ def get_task_work_score(task: RawTask) -> float:
     hours = task.hours_to_complete
     model = task.model_id
     model_size = re.search(r"(\d+)(?=[bB])", model)
-    model_size_value = max(8, int(model_size.group(1)) if model_size else 1)
-
+    model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
     return max(1, 2 * np.log(float(hours * model_size_value)))
 
 
@@ -388,7 +387,7 @@ async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_d
                 quality_score=float(result.score),
                 test_loss=result.test_loss,
                 synth_loss=result.synth_loss,
-                psql_db=psql_db
+                psql_db=psql_db,
             )
 
             if result.submission:
