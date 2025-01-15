@@ -199,6 +199,7 @@ def prepare_image_task_request(task: ImageRawTask) -> TrainRequestDiffusion:
         task_id=task.task_id,
         hours_to_complete=task.hours_to_complete,
         dataset_zip=task.ds,
+        # where do we get this from in the task definition?
         hf_repo="not sure what this is",
         hf_folder="or this",
     )
