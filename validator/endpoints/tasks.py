@@ -12,8 +12,10 @@ from core.models.payload_models import AllOfNodeResults
 from core.models.payload_models import LeaderboardRow
 from core.models.payload_models import NewTaskRequest
 from core.models.payload_models import NewTaskResponse
+from core.models.payload_models import NewTaskWithFixedDatasetsRequest
 from core.models.payload_models import TaskDetails
 from core.models.payload_models import TaskResultResponse
+from core.models.utility_models import FileFormat
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
@@ -33,6 +35,7 @@ logger = get_logger(__name__)
 
 
 TASKS_CREATE_ENDPOINT = "/v1/tasks/create"
+TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"
 GET_TASKS_BY_ACCOUNT_ENDPOINT = "/v1/tasks/account/{account_id}"
 GET_TASK_DETAILS_ENDPOINT = "/v1/tasks/{task_id}"
 GET_TASKS_RESULTS_ENDPOINT = "/v1/tasks/breakdown/{task_id}"
@@ -89,6 +92,41 @@ async def create_task(
     )
 
     task = await task_sql.add_task(task, config.psql_db)
+
+    logger.info(task.task_id)
+    return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
+
+
+async def create_task_with_fixed_datasets(
+    request: NewTaskWithFixedDatasetsRequest,
+    config: Config = Depends(get_config),
+) -> NewTaskResponse:
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
+
+    task = RawTask(
+        model_id=request.model_repo,
+        ds_id=request.ds_repo or request.training_data,
+        file_format=request.file_format if request.ds_repo else FileFormat.S3,
+        field_system=request.field_system,
+        field_instruction=request.field_instruction,
+        field_input=request.field_input,
+        field_output=request.field_output,
+        format=request.format,
+        is_organic=True,
+        no_input_format=request.no_input_format,
+        status=TaskStatus.LOOKING_FOR_NODES,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=request.hours_to_complete,
+        account_id=request.account_id,
+    )
+
+    task = await task_sql.add_task(task, config.psql_db)
+    task.training_data = request.training_data
+    task.synthetic_data = request.synthetic_data
+    task.test_data = request.test_data
+    await task_sql.update_task(task, config.psql_db)
 
     logger.info(task.task_id)
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
@@ -269,6 +307,7 @@ async def update_training_repo_backup(
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Gradients On Demand"], dependencies=[Depends(get_api_key)])
     router.add_api_route(TASKS_CREATE_ENDPOINT, create_task, methods=["POST"])
+    router.add_api_route(TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT, create_task_with_fixed_datasets, methods=["POST"])
     router.add_api_route(GET_TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])
     router.add_api_route(DELETE_TASK_ENDPOINT, delete_task, methods=["DELETE"])
     router.add_api_route(GET_TASKS_RESULTS_ENDPOINT, get_miner_breakdown, methods=["GET"])

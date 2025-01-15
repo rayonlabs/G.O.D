@@ -22,11 +22,12 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
+async def save_json_to_temp_file(data: List[dict], prefix: str) -> tuple[str, int]:
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", prefix=prefix)
     with open(temp_file.name, "w") as f:
         json.dump(data, f)
-    return temp_file.name
+    file_size = os.path.getsize(temp_file.name)
+    return temp_file.name, file_size
 
 
 async def upload_json_to_minio(file_path: str, bucket_name: str, object_name: str) -> str | bool:
@@ -40,7 +41,7 @@ async def upload_json_to_minio(file_path: str, bucket_name: str, object_name: st
 async def load_dataset_from_s3(dataset_url: str) -> Dataset | DatasetDict:
     """Load a dataset from S3 storage."""
     try:
-          with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             local_file_path = await download_s3_file(dataset_url)
             filename = os.path.basename(local_file_path)
             new_path = os.path.join(temp_dir, filename)
@@ -152,12 +153,8 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
 
 
 async def prepare_task(
-    dataset_name: str,
-    file_format: FileFormat,
-    columns_to_sample: List[str],
-    keypair: Keypair
+    dataset_name: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair
 ) -> tuple[str, str, str]:
-
     logger.info(f"Preparing {dataset_name}")
     dataset_dict = await train_test_split(dataset_name, file_format)
     train_dataset = dataset_dict["train"]
@@ -197,9 +194,16 @@ async def prepare_task(
     except Exception as e:
         logger.info(f"There was a problem going to json {e}")
 
-    train_json_path = await save_json_to_temp_file(train_data_json, prefix="train_data_")
-    test_json_path = await save_json_to_temp_file(test_data_json, prefix="test_data_")
-    synth_json_path = await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_") if synthetic_data else None
+    train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
+    test_json_path, test_json_size = await save_json_to_temp_file(test_data_json, prefix="test_data_")
+    synth_json_path, synth_json_size = (
+        await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_") if synthetic_data else None
+    )
+
+    await _check_file_size(train_json_size, "train_data")
+    await _check_file_size(test_json_size, "test_data")
+    if synth_json_size:
+        await _check_file_size(synth_json_size, "synth_data")
 
     train_json_url = await upload_json_to_minio(train_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_train_data.json")
     test_json_url = await upload_json_to_minio(test_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_test_data.json")
@@ -228,3 +232,10 @@ async def prepare_task(
         synth_json_url.strip('"'),
         train_json_url.strip('"'),
     )
+
+
+async def _check_file_size(file_size: int, file_type: str) -> None:
+    if file_size > cst.MAX_FILE_SIZE_BYTES:
+        raise ValueError(
+            f"{file_type} data size ({file_size} bytes) exceeds maximum allowed size " f"of {cst.MAX_FILE_SIZE_BYTES} bytes"
+        )

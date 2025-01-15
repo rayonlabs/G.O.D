@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import random
+import uuid
 
 from datasets import get_dataset_infos
 from fiber import Keypair
@@ -111,6 +112,7 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
             # TODO: Batch the boi
             if i > 0 and i % 5 == 0:
                 logger.info(f"We have made {i} offers so far for task {task.task_id}")
+
             offer_response = await _make_offer(node, task_request, config)
 
             if offer_response.accepted is True:
@@ -130,7 +132,6 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         logger.info(f"We have {len(selected_miners)} miners assigned to the task - which is enough to get going 🚀")
         task.status = TaskStatus.READY
         add_context_tag("status", task.status.value)
-        logger.info("Task status should be READY")
         return task
 
 
@@ -145,20 +146,24 @@ async def _let_miners_know_to_start_training(task: RawTask, nodes: list[Node], c
     )
 
     dataset = task.training_data if task.training_data else "dataset error"
-    task_request_body = TrainRequest(
-        dataset=dataset,
-        model=task.model_id,
-        dataset_type=dataset_type,
-        file_format=FileFormat.S3,
-        task_id=str(task.task_id),
-        hours_to_complete=task.hours_to_complete,
-    )
 
     logger.info(f"We are telling miners to start training, there are {len(nodes)}")
 
     for node in nodes:
-        response = await process_non_stream_fiber(cst.START_TRAINING_ENDPOINT, config, node, task_request_body.model_dump())
-        logger.info(f"The response we got from {node.node_id} was {response}")
+        with LogContext(node_id=node.node_id, miner_hotkey=node.hotkey):
+            expected_repo_name = str(uuid.uuid4())
+            await tasks_sql.set_expected_repo_name(str(task.task_id), node, config.psql_db, expected_repo_name)
+            task_request_body = TrainRequest(
+                dataset=dataset,
+                model=task.model_id,
+                dataset_type=dataset_type,
+                file_format=FileFormat.S3,
+                task_id=str(task.task_id),
+                hours_to_complete=task.hours_to_complete,
+                expected_repo_name=expected_repo_name,
+            )
+            response = await process_non_stream_fiber(cst.START_TRAINING_ENDPOINT, config, node, task_request_body.model_dump())
+            logger.info(f"The response we got from {node.node_id} was {response}")
 
 
 async def _find_and_select_miners_for_task(task: RawTask, config: Config):

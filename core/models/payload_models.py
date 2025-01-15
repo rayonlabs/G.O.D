@@ -38,6 +38,7 @@ class TrainRequest(BaseModel):
     expected_repo_name: str | None = None
 
 
+
 class TrainResponse(BaseModel):
     message: str
     task_id: UUID
@@ -81,6 +82,13 @@ class NewTaskRequest(BaseModel):
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
+
+
+class NewTaskWithFixedDatasetsRequest(NewTaskRequest):
+    ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
+    training_data: str = Field(..., description="The prepared training dataset")
+    synthetic_data: str = Field(..., description="The prepared synthetic dataset")
+    test_data: str = Field(..., description="The prepared test dataset")
 
 
 class NewTaskResponse(BaseModel):
