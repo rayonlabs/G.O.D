@@ -50,7 +50,7 @@ class ImageTaskConfig(TaskConfig):
     eval_container: Callable = run_evaluation_docker
     synth_data_function: Callable | None = None
     data_size_function: Callable = get_total_text_dataset_size
-    task_prep_function: Callable = run_text_task_prep
+    task_prep_function: Callable = run_image_task_prep
     task_request_prepare_function: Callable = prepare_text_task_request
 
 
@@ -59,7 +59,7 @@ class TextTaskConfig(TaskConfig):
     eval_container: Callable = run_evaluation_docker_diffusion
     synth_data_function: Callable | None = get_additional_synth_data
     data_size_function: Callable = get_total_text_dataset_size
-    task_prep_function: Callable = run_image_task_prep
+    task_prep_function: Callable = run_text_task_prep
     task_request_prepare_function: Callable = prepare_image_task_request
 
 
