@@ -36,7 +36,6 @@ class TaskType(str, Enum):
 # data types
 class TaskConfig(BaseModel):
     task_type: TaskType = Field(..., description="The type of task.")
-    synth_task_function: Callable = Field(..., description="Function used to create synth tasks for miners")
     eval_container: Callable = Field(..., description="Function to evaluate the task")
     synth_data_function: Callable | None = Field(..., description="Function to evaluate the task")
     data_size_function: Callable = Field(..., description="The function used to determine the dataset size")
@@ -49,7 +48,6 @@ class TaskConfig(BaseModel):
 
 class ImageTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.IMAGE
-    synth_task_function: Callable = create_synthetic_text_task
     eval_container: Callable = run_evaluation_docker
     synth_data_function: Callable | None = None
     data_size_function: Callable = get_total_text_dataset_size
