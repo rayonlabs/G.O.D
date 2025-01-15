@@ -16,7 +16,6 @@ from validator.cycle.process_tasks import run_image_task_prep
 from validator.cycle.process_tasks import run_text_task_prep
 from validator.evaluation.docker_evaluation import run_evaluation_docker
 from validator.evaluation.docker_evaluation import run_evaluation_docker_diffusion
-from validator.tasks.synthetic_scheduler import create_synthetic_text_task
 from validator.tasks.task_prep import get_additional_synth_data
 
 
@@ -57,7 +56,6 @@ class ImageTaskConfig(TaskConfig):
 
 class TextTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.TEXT
-    synth_task_function: Callable = create_synthetic_text_task  # change me to the diffusion synth function
     eval_container: Callable = run_evaluation_docker_diffusion
     synth_data_function: Callable | None = get_additional_synth_data
     data_size_function: Callable = get_total_text_dataset_size
