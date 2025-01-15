@@ -1,12 +1,12 @@
 import json
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
 from pydantic import BaseModel
-from enum import Enum
 from pydantic import Field
 
 
@@ -70,6 +70,8 @@ class RawTask(BaseModel):
     is_organic: bool
     task_id: UUID | None = None
     status: str
+    model_id: str
+    ds: str
     account_id: UUID
     times_delayed: int = 0
     hours_to_complete: int
@@ -91,8 +93,6 @@ class RawTask(BaseModel):
 
 
 class TextRawTask(RawTask):
-    model_id: str
-    ds_id: str
     field_system: str | None = None
     field_instruction: str
     field_input: str | None = None
@@ -104,9 +104,7 @@ class TextRawTask(RawTask):
 
 
 class ImageRawTask(RawTask):
-    model_id: str
     model_filename: str
-    ds_url: str
 
 
 # NOTE: As time goes on we will expand this class to be more of a 'submitted task'?
@@ -114,11 +112,14 @@ class ImageRawTask(RawTask):
 class Task(RawTask):
     trained_model_repository: str | None = None
 
+
 class TextTask(TextRawTask):
     trained_model_repository: str | None = None
 
+
 class ImageTask(ImageRawTask):
-    trained_model_repository: str | None = None   
+    trained_model_repository: str | None = None
+
 
 class PeriodScore(BaseModel):
     quality_score: float

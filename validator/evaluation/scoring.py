@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from datetime import timedelta
+from typing import Union
 
 import numpy as np
 from fiber.chain.models import Node
@@ -12,8 +13,10 @@ from core.models.payload_models import EvaluationResult
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import get_task_config
 from core.utils import download_s3_file
 from validator.core.config import Config
+from validator.core.models import ImageRawTask
 from validator.core.models import MinerResults
 from validator.core.models import NodeAggregationResult
 from validator.core.models import PeriodScore
@@ -21,6 +24,7 @@ from validator.core.models import RawTask
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
+from validator.core.models import TextRawTask
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
@@ -34,7 +38,7 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-def get_task_work_score(task: RawTask) -> float:
+def get_task_work_score(task: Union[ImageRawTask, TextRawTask]) -> float:
     """Calculate work score for a task based on hours and model size."""
     assert task.hours_to_complete > 0, "Hours to complete must be positive"
     assert task.model_id, "Model ID must be present"
@@ -256,7 +260,7 @@ def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[M
     return miner_results
 
 
-def _get_dataset_type(task: RawTask) -> CustomDatasetType:
+def _get_dataset_type(task: TextRawTask) -> CustomDatasetType:
     return CustomDatasetType(
         field_system=task.field_system,
         field_instruction=task.field_instruction,
@@ -282,7 +286,10 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str
 
 
 async def _evaluate_submissions(
-    task: RawTask, submission_repos: list[str], dataset_type: CustomDatasetType, gpu_ids: list[int]
+    task: Union[TextRawTask, ImageRawTask],
+    submission_repos: list[str],
+    dataset_type: CustomDatasetType | None,
+    gpu_ids: list[int],
 ) -> dict[str, tuple[EvaluationResult, EvaluationResult] | Exception]:
     """Evaluate same task submissions within same docker container.
     Docker evaluations with an exception will return the Exception for the repo."""
@@ -294,41 +301,53 @@ async def _evaluate_submissions(
         "gpu_ids": gpu_ids,
     }
 
-    assert task.synthetic_data is not None, "Synthetic data shouldn't be none"
     assert task.test_data is not None, "Test data shouldn't be none"
-
-    logger.info("Starting synth evaluation")
-    synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-    synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
-
     results: dict[str, tuple[EvaluationResult, EvaluationResult] | Exception] = {}
 
-    finetuned_repos = []
-    for repo in submission_repos:
-        if isinstance(synth_eval_results.get(repo), Exception):
-            results[repo] = synth_eval_results[repo]
-            continue
+    if isinstance(task, TextRawTask):
+        assert task.synthetic_data is not None, "Synth data shouldn't be none for text tasks"
+        logger.info("Starting synth evaluation")
+        synthetic_data_filepath = await download_s3_file(task.synthetic_data)
+        synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
 
-        synth_result = synth_eval_results[repo]
-        if not synth_result.is_finetune:
-            results[repo] = (
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-            )
+        finetuned_repos: list[str] = []
+        for repo in submission_repos:
+            if isinstance(synth_eval_results.get(repo), Exception):
+                results[repo] = synth_eval_results[repo]
+                continue
+
+            synth_result = synth_eval_results[repo]
+            if not synth_result.is_finetune:
+                results[repo] = (
+                    EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                    EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                )
+            else:
+                finetuned_repos.append(repo)
         else:
-            finetuned_repos.append(repo)
+            # we need to set the submission repos for the diffusion task, feels like this could be tidied up
+            finetuned_repos = submission_repos
 
     if finetuned_repos:
         test_data_filepath = await download_s3_file(task.test_data)
-        test_eval_results = await run_evaluation_docker(
-            dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
+        test_eval_results = await get_task_config(task).eval_container(
+            # TODO, might be forcing it too much here, we would expect the inputs to be the same
+            # might be better to not add the container bits in the task config and just use isinstance
+            dataset=test_data_filepath,
+            models=finetuned_repos,
+            **{k: v for k, v in evaluation_params.items() if k != "models"},
         )
 
         for repo in finetuned_repos:
+            # puke, tidy me porfa
             if isinstance(test_eval_results.get(repo), Exception):
                 results[repo] = test_eval_results[repo]
             else:
-                results[repo] = (synth_eval_results[repo], test_eval_results[repo])
+                if isinstance(task, ImageRawTask):
+                    # very sloppy for now, will eval out the same, would be nicer to accept just test for diffusion
+                    results[repo] = (test_eval_results[repo], test_eval_results[repo])
+                else:
+                    results[repo] = (synth_eval_results[repo], test_eval_results[repo])
 
     for repo in submission_repos:
         if repo not in results:
@@ -443,7 +462,11 @@ def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dic
 
 
 async def process_miners_pool(
-    miners: list[Node], task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
+    miners: list[Node],
+    task: Union[ImageRawTask, TextRawTask],
+    dataset_type: CustomDatasetType | None,
+    config: Config,
+    gpu_ids: list[int],
 ) -> list[MinerResults]:
     """Process same task miners"""
     assert task.task_id is not None, "We should have a task id when processing miners"
@@ -503,14 +526,16 @@ async def process_miners_pool(
     return results
 
 
-async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) -> RawTask:
+async def evaluate_and_score(task: Union[TextRawTask, ImageRawTask], gpu_ids: list[int], config: Config) -> RawTask:
     """Main function to evaluate and score task submissions."""
     assert task.task_id is not None, "Task ID must be present"
-    assert task.synthetic_data is not None, "Synthetic data must be present"
     assert task.test_data is not None, "Test data must be present"
 
     miner_pool = await get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
-    dataset_type = _get_dataset_type(task)
+    if isinstance(task, TextRawTask):
+        dataset_type = _get_dataset_type(task)
+    else:
+        dataset_type = None
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
     task_results = await process_miners_pool(miner_pool, task, dataset_type, config, gpu_ids)

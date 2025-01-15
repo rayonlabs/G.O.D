@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import random
+from typing import Union
 
 from datasets import get_dataset_infos
 from fiber import Keypair
@@ -9,32 +10,50 @@ from fiber.chain.models import Node
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.tasks as tasks_sql
-from core.models.payload_models import MinerTaskRequest
+from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
-from core.models.payload_models import TrainRequest
+from core.models.payload_models import TrainRequestDiffusion
+from core.models.payload_models import TrainRequestText
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import get_task_config
 from validator.core.config import Config
+from validator.core.models import ImageRawTask
 from validator.core.models import RawTask
+from validator.core.models import TextRawTask
 from validator.evaluation.scoring import evaluate_and_score
-from validator.tasks.task_prep import prepare_task
+from validator.tasks.task_prep import prepare_text_task
 from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import TaskContext
 from validator.utils.logging import create_extra_log
 from validator.utils.logging import logger
 
 
-def _get_total_dataset_size(repo_name: str) -> int:
+def get_total_text_dataset_size(repo_name: str) -> int:
     return int(sum(info.dataset_size for info in get_dataset_infos(repo_name).values() if info.dataset_size))
 
 
-async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
+# TODO - how best to implement this - should we not save this when we create the task and have it as an attribute?
+def get_total_image_dataset_size(repo_name: str) -> int:
+    return 100
+
+
+async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawTask:
+    task.status = TaskStatus.LOOKING_FOR_NODES
+
+
+#    raw_data = await download_s3_file(task.ds)
+# implement me as you have in your testing in terms of how you would expect this
+# after you've downloaded, just need to split it and then reupload as a train and test
+
+
+async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask:
     columns_to_sample = [
         i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
     ]
-    test_data, synth_data, train_data = await prepare_task(
-        dataset_name=task.ds_id, columns_to_sample=columns_to_sample, keypair=keypair
+    test_data, synth_data, train_data = await prepare_text_task(
+        dataset_name=task.ds, columns_to_sample=columns_to_sample, keypair=keypair
     )
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
@@ -48,7 +67,7 @@ async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
 
 
 # TODO: Improve by batching these up
-async def _make_offer(node: Node, request: MinerTaskRequest, config: Config) -> MinerTaskResponse:
+async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> MinerTaskResponse:
     response = await process_non_stream_fiber(cst.TASK_OFFER_ENDPOINT, config, node, request.model_dump(), timeout=3)
     logger.info(
         f"The response from make offer for node {node.node_id} was {response}",
@@ -62,7 +81,9 @@ async def _make_offer(node: Node, request: MinerTaskRequest, config: Config) -> 
     )
 
 
-async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], config: Config) -> RawTask:
+async def _select_miner_pool_and_add_to_task(
+    task: Union[TextRawTask, ImageRawTask], nodes: list[Node], config: Config
+) -> Union[TextRawTask, ImageRawTask]:
     if len(nodes) < cst.MINIMUM_MINER_POOL:
         logger.warning(
             f"Not enough nodes available. Need at least {cst.MINIMUM_MINER_POOL}, but only have {len(nodes)}.",
@@ -72,12 +93,13 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         return task
 
     selected_miners: list[str] = []
-    ds_size = _get_total_dataset_size(task.ds_id)
-    task_request = MinerTaskRequest(
+    ds_size = get_task_config(task).data_size_function(task.ds)
+    task_request = MinerTaskOffer(
         ds_size=ds_size,
         model=task.model_id,
         hours_to_complete=task.hours_to_complete,
         task_id=str(task.task_id),
+        task_type=get_task_config(task).task_type,
     )
     logger.info(
         f"We are offering the following task to the miners: {task_request.model_dump()}",
@@ -146,7 +168,7 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         return task
 
 
-async def _let_miners_know_to_start_training(task: RawTask, nodes: list[Node], config: Config):
+def prepare_text_task_request(task: TextRawTask) -> TrainRequestText:
     dataset_type = CustomDatasetType(
         field_system=task.field_system,
         field_input=task.field_input,
@@ -157,7 +179,7 @@ async def _let_miners_know_to_start_training(task: RawTask, nodes: list[Node], c
     )
 
     dataset = task.training_data if task.training_data else "dataset error"
-    task_request_body = TrainRequest(
+    task_request_body = TrainRequestText(
         dataset=dataset,
         model=task.model_id,
         dataset_type=dataset_type,
@@ -165,6 +187,25 @@ async def _let_miners_know_to_start_training(task: RawTask, nodes: list[Node], c
         task_id=str(task.task_id),
         hours_to_complete=task.hours_to_complete,
     )
+
+    return task_request_body
+
+
+# probs better to be Image not Diffusion for consistency
+def prepare_image_task_request(task: ImageRawTask) -> TrainRequestDiffusion:
+    # TODO MISSING STUFF THAT I DON'T KNOW ABOUT
+    return TrainRequestDiffusion(
+        model=task.model_filename,
+        task_id=task.task_id,
+        hours_to_complete=task.hours_to_complete,
+        dataset_zip=task.ds,
+        hf_repo="not sure what this is",
+        hf_folder="or this",
+    )
+
+
+async def _let_miners_know_to_start_training(task: Union[ImageRawTask, TextRawTask], nodes: list[Node], config: Config):
+    task_request_body = get_task_config(task).task_request_prepare_function(task)
 
     logger.info(
         f"We are telling miners to start training, there are {len(nodes)}",
@@ -179,7 +220,7 @@ async def _let_miners_know_to_start_training(task: RawTask, nodes: list[Node], c
         )
 
 
-async def _find_and_select_miners_for_task(task: RawTask, config: Config):
+async def _find_and_select_miners_for_task(task: Union[TextRawTask, ImageRawTask], config: Config):
     async with TaskContext(str(task.task_id)):
         try:
             nodes = await nodes_sql.get_all_nodes(config.psql_db)
@@ -200,7 +241,7 @@ async def _find_and_select_miners_for_task(task: RawTask, config: Config):
             await tasks_sql.update_task(task, config.psql_db)
 
 
-def _attempt_delay_task(task: RawTask):
+def _attempt_delay_task(task: Union[TextRawTask, ImageRawTask]):
     assert (
         task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None
     ), "We wanted to check delay vs created timestamps but they are missing"
@@ -242,7 +283,7 @@ async def _prep_task(task: RawTask, config: Config):
         try:
             task.status = TaskStatus.PREPARING_DATA
             await tasks_sql.update_task(task, config.psql_db)
-            task = await _run_task_prep(task, config.keypair)
+            task = await get_task_config(task).task_prep_function(task, config.keypair)
             logger.info(f"THE TASK HAS BEEN PREPPED {task}", extra=create_extra_log(status=task.status))
             await tasks_sql.update_task(task, config.psql_db)
         except Exception:

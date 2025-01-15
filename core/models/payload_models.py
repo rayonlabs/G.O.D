@@ -18,7 +18,7 @@ from validator.core.models import AllNodeStats
 logger = get_logger(__name__)
 
 
-class MinerTaskRequest(BaseModel):
+class MinerTaskOffer(BaseModel):
     ds_size: int
     model: str
     hours_to_complete: int
@@ -119,6 +119,7 @@ class NewTaskRequest(BaseModel):
     account_id: UUID
     hours_to_complete: int = Field(..., description="The number of hours to complete the task", examples=[1])
 
+
 class NewTaskRequestText(NewTaskRequest):
     field_instruction: str = Field(..., description="The column name for the instruction", examples=["instruction"])
     field_input: str | None = Field(None, description="The column name for the input", examples=["input"])
@@ -133,10 +134,12 @@ class NewTaskRequestText(NewTaskRequest):
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
 
+
 class NewTaskRequestImage(NewTaskRequest):
     ds_url: str = Field(..., description="The S3 URL for the dataset")
     model_repo: str = Field(..., description="The repository for the model")
     model_filename: str = Field(..., description="The filename for the model safetensors file in the repo")
+
 
 class NewTaskResponse(BaseModel):
     success: bool = Field(..., description="Whether the task was created successfully")
@@ -170,6 +173,7 @@ class TaskDetails(BaseModel):
     hours_to_complete: int
     trained_model_repository: str | None
 
+
 class TextTaskDetails(TaskDetails):
     base_model_repository: str
     ds_repo: str
@@ -191,10 +195,12 @@ class TextTaskDetails(TaskDetails):
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
 
+
 class ImageTaskDetails(TaskDetails):
     ds_url: str = Field(..., description="The S3 URL for the dataset")
     base_model_repository: str = Field(..., description="The repository for the model")
     model_filename: str = Field(..., description="The filename for the model safetensors file in the repo")
+
 
 class TaskListResponse(BaseModel):
     success: bool

@@ -10,7 +10,7 @@ from datasets import load_dataset
 from fiber import Keypair
 
 import validator.core.constants as cst
-from validator.augmentation.augmentation import generate_augmented_dataset
+from validator.augmentation.augmentation import generate_augmented_text_dataset
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import create_extra_log
@@ -83,7 +83,7 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
         )
         return None
 
-    synthetic_data = await generate_augmented_dataset(
+    synthetic_data = await generate_augmented_text_dataset(
         sampled_data_list, column_to_reformulate=column_to_reformulate, keypair=keypair
     )
 
@@ -131,7 +131,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     return remaining_train_dataset, synthetic_dataset
 
 
-async def prepare_task(dataset_name: str, columns_to_sample: List[str], keypair: Keypair) -> tuple[str, str, str]:
+async def prepare_text_task(dataset_name: str, columns_to_sample: List[str], keypair: Keypair) -> tuple[str, str, str]:
     logger.info(f"Preparing {dataset_name}", extra=create_extra_log())
     dataset_dict = train_test_split(dataset_name)
     train_dataset = dataset_dict["train"]

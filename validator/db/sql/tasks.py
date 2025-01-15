@@ -11,18 +11,19 @@ from fiber.logging_utils import get_logger
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
+from validator.core.models import ImageRawTask
+from validator.core.models import ImageTask
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
-from validator.core.models import TextRawTask
-from validator.core.models import ImageRawTask
-from validator.core.models import TaskType
 from validator.core.models import Task
+from validator.core.models import TaskType
+from validator.core.models import TextRawTask
 from validator.core.models import TextTask
-from validator.core.models import ImageTask
 from validator.db.database import PSQLDB
 
 
 logger = get_logger(__name__)
+
 
 async def add_task(task: Union[TextRawTask, ImageRawTask], psql_db: PSQLDB) -> Union[TextRawTask, ImageRawTask]:
     """Add a new task"""
@@ -58,7 +59,7 @@ async def add_task(task: Union[TextRawTask, ImageRawTask], psql_db: PSQLDB) -> U
 
             if task.task_type.value == TaskType.TEXTTASK.value:
                 specific_task = TextRawTask(**task.dict())
-                
+
                 query_text_tasks = f"""
                     INSERT INTO {cst.TEXT_TASKS_TABLE}
                     ({cst.TASK_ID}, {cst.MODEL_ID}, {cst.DS_ID}, {cst.FIELD_SYSTEM},
@@ -96,7 +97,7 @@ async def add_task(task: Union[TextRawTask, ImageRawTask], psql_db: PSQLDB) -> U
                 )
             else:
                 raise ValueError(f"Unsupported task type: {task.task_type}")
-        
+
         return RawTask(**task_record)
 
 
@@ -118,8 +119,10 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node
         return [Node(**dict(row)) for row in rows]
 
 
-async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False) -> List[RawTask]:
-    """Get all tasks with a specific status and delay_timestamp before current time if even_not_ready is False"""
+async def get_tasks_with_status(
+    status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False
+) -> List[Union[TextRawTask, ImageRawTask]]:
+    """Get all tasks with a specific status and delay_timestamp before current time if include_not_ready_tasks is False."""
 
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
@@ -127,14 +130,46 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
 
     async with await psql_db.connection() as connection:
         connection: Connection
-        query = f"""
+        base_query = f"""
             SELECT * FROM {cst.TASKS_TABLE}
             WHERE {cst.STATUS} = $1
             {delay_timestamp_clause}
         """
-        rows = await connection.fetch(query, status.value)
-    logger.info(f"We got {len(rows)} tasks which are current in status {status.value}")
-    return [RawTask(**dict(row)) for row in rows]
+        base_rows = await connection.fetch(base_query, status.value)
+
+        tasks = []
+        for row in base_rows:
+            task_type = row[cst.TASK_TYPE]
+            if task_type == TaskType.TEXTTASK.value:
+                specific_query = f"""
+                    SELECT t.*, tt.model_id, tt.ds_id, tt.field_system,
+                           tt.field_instruction, tt.field_input, tt.field_output,
+                           tt.format, tt.no_input_format, tt.synthetic_data
+                    FROM {cst.TASKS_TABLE} t
+                    LEFT JOIN {cst.TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
+                    WHERE t.{cst.TASK_ID} = $1
+                """
+            elif task_type == TaskType.IMAGETASK.value:
+                specific_query = f"""
+                    SELECT t.*, it.model_id, it.model_filename, it.ds_url
+                    FROM {cst.TASKS_TABLE} t
+                    LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
+                    WHERE t.{cst.TASK_ID} = $1
+                """
+            else:
+                logger.warning(f"Unknown task type {task_type} for task_id {row[cst.TASK_ID]}")
+                continue
+
+            specific_row = await connection.fetchrow(specific_query, row[cst.TASK_ID])
+            if specific_row:
+                task_data = dict(specific_row)
+                if task_type == TaskType.TEXTTASK.value:
+                    tasks.append(TextRawTask(**task_data))
+                elif task_type == TaskType.IMAGETASK.value:
+                    tasks.append(ImageRawTask(**task_data))
+
+        logger.info(f"Retrieved {len(tasks)} tasks with status {status.value}")
+        return tasks
 
 
 async def assign_node_to_task(task_id: str, node: Node, psql_db: PSQLDB) -> None:
@@ -318,12 +353,12 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[Union[TextRawTask
             SELECT * FROM {cst.TASKS_TABLE} WHERE {cst.TASK_ID} = $1
         """
         base_row = await connection.fetchrow(base_query, task_id)
-        
+
         if not base_row:
             return None
 
         task_type = base_row[cst.TASK_TYPE]
-        
+
         if task_type == TaskType.TEXTTASK.value:
             specific_query = f"""
                 SELECT t.*, tt.model_id, tt.ds_id, tt.field_system,
@@ -355,7 +390,6 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[Union[TextRawTask
             return ImageRawTask(**full_task_data)
 
 
-
 async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Dict]:
     """Retrieve the winning submission for a task based on the highest quality score in task_nodes."""
     async with await psql_db.connection() as connection:
@@ -383,7 +417,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> Union[TextTask, Imag
             SELECT * FROM {cst.TASKS_TABLE} WHERE {cst.TASK_ID} = $1
         """
         base_row = await connection.fetchrow(base_query, task_id)
-        
+
         if not base_row:
             return None
 
@@ -449,7 +483,6 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> Union[TextTask, Imag
             return TextTask(**full_task_data)
         elif task_type == TaskType.IMAGETASK.value:
             return ImageTask(**full_task_data)
-
 
 
 async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[Task]:

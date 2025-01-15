@@ -1,7 +1,7 @@
 from datetime import datetime
 from datetime import timedelta
-from uuid import UUID
 from typing import Union
+from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -11,15 +11,14 @@ from fastapi import Response
 from fiber.logging_utils import get_logger
 
 from core.models.payload_models import AllOfNodeResults
+from core.models.payload_models import ImageTaskDetails
 from core.models.payload_models import LeaderboardRow
-from core.models.payload_models import NewTaskRequest
-from core.models.payload_models import NewTaskRequestText
 from core.models.payload_models import NewTaskRequestImage
+from core.models.payload_models import NewTaskRequestText
 from core.models.payload_models import NewTaskResponse
 from core.models.payload_models import TaskDetails
-from core.models.payload_models import TextTaskDetails
-from core.models.payload_models import ImageTaskDetails
 from core.models.payload_models import TaskResultResponse
+from core.models.payload_models import TextTaskDetails
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
@@ -27,11 +26,10 @@ from validator.core.config import Config
 from validator.core.constants import MAX_CONCURRENT_JOBS
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
-from validator.core.models import NetworkStats
-from validator.core.models import RawTask
-from validator.core.models import TextTask
 from validator.core.models import ImageTask
+from validator.core.models import NetworkStats
 from validator.core.models import TaskType
+from validator.core.models import TextTask
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
@@ -93,13 +91,14 @@ async def create_task_text(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        task_type=TaskType.TEXTTASK
+        task_type=TaskType.TEXTTASK,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(task.task_id)
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
+
 
 async def create_task_image(
     request: NewTaskRequestImage,
@@ -124,7 +123,7 @@ async def create_task_image(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        task_type=TaskType.IMAGETASK
+        task_type=TaskType.IMAGETASK,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -211,7 +210,7 @@ async def get_task_details(
             finished_at=task.termination_at,
             hours_to_complete=task.hours_to_complete,
             trained_model_repository=task.trained_model_repository,
-            task_type=task.task_type
+            task_type=task.task_type,
         )
     else:
         return ImageTaskDetails(
@@ -226,7 +225,7 @@ async def get_task_details(
             finished_at=task.termination_at,
             hours_to_complete=task.hours_to_complete,
             trained_model_repository=task.trained_model_repository,
-            task_type=task.task_type
+            task_type=task.task_type,
         )
 
 
