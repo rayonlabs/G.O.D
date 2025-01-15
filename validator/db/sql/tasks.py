@@ -71,7 +71,7 @@ async def add_task(task: Union[TextRawTask, ImageRawTask], psql_db: PSQLDB) -> U
                     query_text_tasks,
                     task_record["task_id"],
                     specific_task.model_id,
-                    specific_task.ds_id,
+                    specific_task.ds,
                     specific_task.field_system,
                     specific_task.field_instruction,
                     specific_task.field_input,
@@ -122,8 +122,6 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node
 async def get_tasks_with_status(
     status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False
 ) -> List[Union[TextRawTask, ImageRawTask]]:
-    """Get all tasks with a specific status and delay_timestamp before current time if include_not_ready_tasks is False."""
-
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
     )
