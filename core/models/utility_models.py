@@ -9,6 +9,7 @@ from pydantic import Field
 
 from validator.core.models import ImageRawTask
 from validator.core.models import TextRawTask
+from validator.cycle.process_tasks import get_total_image_dataset_size
 from validator.cycle.process_tasks import get_total_text_dataset_size
 from validator.cycle.process_tasks import prepare_image_task_request
 from validator.cycle.process_tasks import prepare_text_task_request
@@ -49,9 +50,9 @@ class ImageTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.IMAGE
     eval_container: Callable = run_evaluation_docker
     synth_data_function: Callable | None = None
-    data_size_function: Callable = get_total_text_dataset_size
+    data_size_function: Callable = get_total_image_dataset_size
     task_prep_function: Callable = run_image_task_prep
-    task_request_prepare_function: Callable = prepare_text_task_request
+    task_request_prepare_function: Callable = prepare_image_task_request
 
 
 class TextTaskConfig(TaskConfig):
@@ -60,7 +61,7 @@ class TextTaskConfig(TaskConfig):
     synth_data_function: Callable | None = get_additional_synth_data
     data_size_function: Callable = get_total_text_dataset_size
     task_prep_function: Callable = run_text_task_prep
-    task_request_prepare_function: Callable = prepare_image_task_request
+    task_request_prepare_function: Callable = prepare_text_task_request
 
 
 def get_task_config(task: Union[TextRawTask, ImageRawTask]) -> TaskConfig:
