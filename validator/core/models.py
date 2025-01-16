@@ -229,11 +229,11 @@ class NetworkStats(BaseModel):
 
 class HotkeyDetails(BaseModel):
     hotkey: str
-    quality_score: float
-    test_loss: float
-    synth_loss: float
-    repo: str
-    rank: int
+    quality_score: float | None
+    test_loss: float | None
+    synth_loss: float | None
+    repo: str | None
+    rank: int | None
     score_reason: str | None = None
     offer_response: dict | None = None
 
