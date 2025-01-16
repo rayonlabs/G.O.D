@@ -2,6 +2,7 @@ import json
 
 from asyncpg import Connection
 from fastapi import Depends
+from fastapi import HTTPException
 
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
@@ -49,6 +50,8 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
             WHERE {cst.TASK_ID} = $1
         """
         task_raw = await connection.fetchrow(query, task_id)
+        if task_raw is None:
+            raise HTTPException(status_code=404, detail="Task not found")
         task = Task(**task_raw)
 
         # NOTE: If the task is not finished, remove details about synthetic data & test data?
