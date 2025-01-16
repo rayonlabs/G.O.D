@@ -61,6 +61,7 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
         ]:
             task.synthetic_data = None
             task.test_data = None
+            task.training_data = None
 
         query = f"""
             SELECT
