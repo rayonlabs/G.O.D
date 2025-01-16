@@ -41,10 +41,7 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
         connection: Connection
 
         query = f"""
-            SELECT {cst.TASK_ID}, {cst.DS_ID}, {cst.MODEL_ID}, {cst.FILE_FORMAT}, {cst.FIELD_SYSTEM},
-            {cst.FIELD_INSTRUCTION}, {cst.FIELD_INPUT}, {cst.FIELD_OUTPUT}, {cst.FORMAT},
-            {cst.NO_INPUT_FORMAT}, {cst.STATUS}, {cst.HOURS_TO_COMPLETE}, {cst.TEST_DATA},
-            {cst.SYNTHETIC_DATA}, {cst.TRAINING_DATA}, {cst.MINER_SCORES}, {cst.CREATED_AT} FROM {cst.TASKS_TABLE}
+            SELECT * FROM {cst.TASKS_TABLE}
             WHERE {cst.TASK_ID} = $1
         """
         task_raw = await connection.fetchrow(query, task_id)
