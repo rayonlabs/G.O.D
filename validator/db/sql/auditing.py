@@ -1,3 +1,5 @@
+import json
+
 from asyncpg import Connection
 from fastapi import Depends
 
@@ -82,6 +84,11 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
         """
         results = await connection.fetch(query, task_id)
 
-        hotkey_details = [HotkeyDetails(**result) for result in results]
+        hotkey_details = []
+        for result in results:
+            result_dict = dict(result)
+            if result_dict[cst.OFFER_RESPONSE] is not None:
+                result_dict[cst.OFFER_RESPONSE] = json.loads(result_dict[cst.OFFER_RESPONSE])
+            hotkey_details.append(HotkeyDetails(**result_dict))
 
         return TaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
