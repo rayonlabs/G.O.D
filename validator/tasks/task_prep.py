@@ -13,6 +13,7 @@ import validator.core.constants as cst
 from core.models.utility_models import FileFormat
 from core.utils import download_s3_file
 from validator.augmentation.augmentation import generate_augmented_dataset
+from validator.core.models import PreparedDatasets
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
@@ -153,8 +154,11 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
 
 
 async def prepare_task(
-    dataset_name: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair
-) -> tuple[str, str, str]:
+    dataset_name: str,
+    file_format: FileFormat,
+    columns_to_sample: List[str],
+    keypair: Keypair,
+) -> PreparedDatasets:
     logger.info(f"Preparing {dataset_name}")
     dataset_dict = await train_test_split(dataset_name, file_format)
     train_dataset = dataset_dict["train"]
@@ -164,17 +168,8 @@ async def prepare_task(
     try:
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
-
             synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair)
 
-            # synthetic_dataset = Dataset.from_list(synthetic_data)
-            # logger.info("First 2 examples from original test dataset:")
-            # for i, example in enumerate(test_dataset.select(range(2))):
-            #     logger.info(f"Example {i + 1}: {example}")
-
-            # logger.info("First 2 examples from synthetic dataset:")
-            # for i, example in enumerate(synthetic_dataset.select(range(2))):
-            #     logger.info(f"Example {i + 1}: {example}")
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:
@@ -227,10 +222,21 @@ async def prepare_task(
         os.remove(synth_json_path)
     delete_dataset_from_cache(dataset_name)
 
-    return (
-        test_json_url.strip('"'),
-        synth_json_url.strip('"'),
-        train_json_url.strip('"'),
+    return PreparedDatasets.model_validate(
+        {
+            "training": {
+                "path": train_json_url,
+                "num_rows": len(train_data_json),
+            },
+            "synthetic": {
+                "path": synth_json_url,
+                "num_rows": len(synthetic_data_json),
+            },
+            "testing": {
+                "path": test_json_url,
+                "num_rows": len(test_data_json),
+            },
+        }
     )
 
 

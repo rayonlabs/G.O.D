@@ -23,16 +23,20 @@ from validator.core.config import Config
 from validator.core.constants import MAX_CONCURRENT_JOBS
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
+from validator.core.models import AllModelSizes
+from validator.core.models import AllProcessedDatasetRows
+from validator.core.models import AllUniqueModels
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
+from validator.db.sql.submissions_and_scoring import get_all_processed_dataset_rows
+from validator.db.sql.submissions_and_scoring import get_all_unique_models_count
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
-
 
 TASKS_CREATE_ENDPOINT = "/v1/tasks/create"
 TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"
@@ -44,6 +48,9 @@ GET_NODE_RESULTS_ENDPOINT = "/v1/tasks/node_results/{hotkey}"
 DELETE_TASK_ENDPOINT = "/v1/tasks/delete/{task_id}"
 LEADERBOARD_ENDPOINT = "/v1/leaderboard"
 COMPLETED_ORGANIC_TASKS_ENDPOINT = "/v1/tasks/organic/completed"
+GET_MODEL_SIZE_DISTRIBUTION = "/v1/models/distribution"
+GET_UNIQUE_MODELS = "/v1/models/unique"
+GET_PROCESSED_DATASET_ROWS = "/v1/dataset/rows"
 UPDATE_TRAINING_REPO_BACKUP_ENDPOINT = "/v1/tasks/{task_id}/training_repo_backup"
 
 
@@ -66,12 +73,6 @@ async def create_task(
 ) -> NewTaskResponse:
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
-
-    # if there are any queued jobs that are organic we can't accept any more to avoid overloading the network
-    #    queued_tasks = await task_sql.get_tasks_with_status(TaskStatus.DELAYED, config.psql_db, include_not_ready_tasks=True)
-    #    if len(queued_tasks) > 0:
-    #        logger.info("We already have some queued organic jobs, we can't a accept any more")
-    #        return NewTaskResponse(success=False, task_id=None)
 
     task = RawTask(
         model_id=request.model_repo,
@@ -304,6 +305,24 @@ async def update_training_repo_backup(
     return Response(status_code=200)
 
 
+async def get_model_size_distribution(
+    config: Config = Depends(get_config),
+) -> AllModelSizes:
+    return await submissions_and_scoring_sql.get_all_model_size_distribution(config.psql_db)
+
+
+async def get_unique_models_count(
+    config: Config = Depends(get_config),
+) -> AllUniqueModels:
+    return await get_all_unique_models_count(config.psql_db)
+
+
+async def get_processed_dataset_rows(
+    config: Config = Depends(get_config),
+) -> AllProcessedDatasetRows:
+    return await get_all_processed_dataset_rows(config.psql_db)
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Gradients On Demand"], dependencies=[Depends(get_api_key)])
     router.add_api_route(TASKS_CREATE_ENDPOINT, create_task, methods=["POST"])
@@ -316,5 +335,8 @@ def factory_router() -> APIRouter:
     router.add_api_route(LEADERBOARD_ENDPOINT, get_leaderboard, methods=["GET"])
     router.add_api_route(GET_NETWORK_STATUS, get_network_status, methods=["GET"])
     router.add_api_route(COMPLETED_ORGANIC_TASKS_ENDPOINT, get_completed_organic_tasks, methods=["GET"])
+    router.add_api_route(GET_MODEL_SIZE_DISTRIBUTION, get_model_size_distribution, methods=["GET"])
+    router.add_api_route(GET_UNIQUE_MODELS, get_unique_models_count, methods=["GET"])
+    router.add_api_route(GET_PROCESSED_DATASET_ROWS, get_processed_dataset_rows, methods=["GET"])
     router.add_api_route(UPDATE_TRAINING_REPO_BACKUP_ENDPOINT, update_training_repo_backup, methods=["PUT"])
     return router

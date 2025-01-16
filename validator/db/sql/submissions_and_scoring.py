@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from datetime import datetime
 from typing import Dict
 from typing import List
@@ -11,7 +12,10 @@ from asyncpg.connection import Connection
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
+from validator.core.models import AllModelSizes
 from validator.core.models import AllNodeStats
+from validator.core.models import AllProcessedDatasetRows
+from validator.core.models import AllUniqueModels
 from validator.core.models import ModelMetrics
 from validator.core.models import NodeStats
 from validator.core.models import QualityMetrics
@@ -413,3 +417,158 @@ async def get_all_node_stats(hotkey: str, psql_db: PSQLDB) -> AllNodeStats:
     )
 
     return AllNodeStats(daily=daily, three_day=three_day, weekly=weekly, monthly=monthly, all_time=all_time)
+
+
+def extract_model_size(model_id: str) -> float:
+    """Extract model size in billions from model ID string"""
+    model_id = model_id.lower()
+    match = re.search(r".*?(\d+\.?\d*)[mb]", model_id)
+
+    if not match:
+        return 1.0
+
+    number = float(match.group(1))
+    # convert mega to billions
+    if model_id[model_id.find(match.group(1)) + len(match.group(1))] == "m":
+        number = number / 1000.0
+
+    return number
+
+
+async def get_model_size_distribution(
+    psql_db: PSQLDB,
+    interval: str = "all",
+) -> Dict[str, int]:
+    """Get distribution of model sizes across all tasks.
+    Returns a dictionary mapping model sizes (in billions) to their count of occurrences.
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+
+        query = f"""
+            SELECT {cst.MODEL_ID}
+            FROM {cst.TASKS_TABLE}
+            WHERE {cst.STATUS} = $1
+            AND {cst.CREATED_AT} >= CASE
+                WHEN $2 = 'all' THEN '1970-01-01'::TIMESTAMP
+                ELSE NOW() - $2::INTERVAL
+            END
+        """
+        rows = await connection.fetch(query, TaskStatus.SUCCESS.value, interval)
+
+        sizes: Dict[str, int] = {}
+        for row in rows:
+            size = extract_model_size(row[cst.MODEL_ID])
+            size_key = f"{size:.1f}B" if size % 1 != 0 else f"{int(size)}B"
+            sizes[size_key] = sizes.get(size_key, 0) + 1
+
+        # sort by model size
+        sorted_sizes = dict(sorted(sizes.items(), key=lambda x: float(x[0][:-1]), reverse=True))
+
+        return sorted_sizes
+
+
+async def get_all_model_size_distribution(psql_db: PSQLDB) -> AllModelSizes:
+    daily, three_day, weekly, monthly, all_time = await asyncio.gather(
+        get_model_size_distribution(psql_db, "24 hours"),
+        get_model_size_distribution(psql_db, "3 days"),
+        get_model_size_distribution(psql_db, "7 days"),
+        get_model_size_distribution(psql_db, "30 days"),
+        get_model_size_distribution(psql_db, "all"),
+    )
+
+    return AllModelSizes(
+        daily=daily,
+        three_day=three_day,
+        weekly=weekly,
+        monthly=monthly,
+        all_time=all_time,
+    )
+
+
+async def get_unique_models_count(
+    psql_db: PSQLDB,
+    interval: str = "all",
+) -> int:
+    """Get count of unique models used in successful tasks over the specified interval.
+
+    Args:
+        psql_db: Database connection
+        interval: Time interval to look back (e.g. '24 hours', '7 days', or 'all')
+
+    Returns:
+        Number of unique models used in the specified timeframe
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+
+        query = f"""
+            SELECT COUNT(DISTINCT {cst.MODEL_ID}) as unique_model_count
+            FROM {cst.TASKS_TABLE}
+            WHERE {cst.STATUS} = $1
+            AND {cst.CREATED_AT} >= CASE
+                WHEN $2 = 'all' THEN '1970-01-01'::TIMESTAMP
+                ELSE NOW() - $2::INTERVAL
+            END
+        """
+        row = await connection.fetchrow(query, TaskStatus.SUCCESS.value, interval)
+
+        return row["unique_model_count"] if row else 0
+
+
+async def get_all_unique_models_count(psql_db: PSQLDB) -> AllUniqueModels:
+    daily, three_day, weekly, monthly, all_time = await asyncio.gather(
+        get_unique_models_count(psql_db, "24 hours"),
+        get_unique_models_count(psql_db, "3 days"),
+        get_unique_models_count(psql_db, "7 days"),
+        get_unique_models_count(psql_db, "30 days"),
+        get_unique_models_count(psql_db, "all"),
+    )
+
+    return AllUniqueModels(
+        daily=daily,
+        three_day=three_day,
+        weekly=weekly,
+        monthly=monthly,
+        all_time=all_time,
+    )
+
+
+async def get_processed_dataset_rows(
+    psql_db: PSQLDB,
+    interval: str = "all",
+) -> int:
+    """Get total number of dataset rows processed across all successful tasks in the specified interval."""
+    async with await psql_db.connection() as connection:
+        connection: Connection
+
+        query = f"""
+            SELECT COALESCE(SUM({cst.TRAINING_DATA_NUM_ROWS}), 0) as total_rows
+            FROM {cst.TASKS_TABLE}
+            WHERE {cst.STATUS} = $1
+            AND {cst.CREATED_AT} >= CASE
+                WHEN $2 = 'all' THEN '1970-01-01'::TIMESTAMP
+                ELSE NOW() - $2::INTERVAL
+            END
+        """
+        row = await connection.fetchrow(query, TaskStatus.SUCCESS.value, interval)
+
+        return row["total_rows"]
+
+
+async def get_all_processed_dataset_rows(psql_db: PSQLDB) -> AllProcessedDatasetRows:
+    daily, three_day, weekly, monthly, all_time = await asyncio.gather(
+        get_processed_dataset_rows(psql_db, "24 hours"),
+        get_processed_dataset_rows(psql_db, "3 days"),
+        get_processed_dataset_rows(psql_db, "7 days"),
+        get_processed_dataset_rows(psql_db, "30 days"),
+        get_processed_dataset_rows(psql_db, "all"),
+    )
+
+    return AllProcessedDatasetRows(
+        daily=daily,
+        three_day=three_day,
+        weekly=weekly,
+        monthly=monthly,
+        all_time=all_time,
+    )
