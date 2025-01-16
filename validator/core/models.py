@@ -229,6 +229,7 @@ class NetworkStats(BaseModel):
 
 class HotkeyDetails(BaseModel):
     hotkey: str
+    submission_id: UUID | None = None
     quality_score: float | None
     test_loss: float | None
     synth_loss: float | None

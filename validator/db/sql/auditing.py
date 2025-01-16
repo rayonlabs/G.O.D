@@ -61,6 +61,7 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
         query = f"""
             SELECT
                 tn.{cst.HOTKEY},
+                s.{cst.SUBMISSION_ID},
                 tn.{cst.QUALITY_SCORE},
                 tn.{cst.TEST_LOSS},
                 tn.{cst.SYNTH_LOSS},
