@@ -35,7 +35,7 @@ async def get_recent_tasks(
     return [Task(**task) for task in tasks]
 
 
-async def get_task_details(task_id: str, config: Config = Depends(get_config)) -> TaskWithHotkeyDetails:
+async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(get_config)) -> TaskWithHotkeyDetails:
     # First get all the task details like normal
     async with await config.psql_db.connection() as connection:
         connection: Connection
