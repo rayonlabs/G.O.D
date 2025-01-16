@@ -20,6 +20,7 @@ async def get_recent_tasks(
             query = f"""
                 SELECT * FROM {cst.TASKS_TABLE}
                 WHERE {cst.HOTKEY} = ANY($1)
+                ORDER BY {cst.CREATED_AT} DESC
                 LIMIT $2
                 OFFSET $3
             """
@@ -27,6 +28,7 @@ async def get_recent_tasks(
         else:
             query = f"""
                 SELECT * FROM {cst.TASKS_TABLE}
+                ORDER BY {cst.CREATED_AT} DESC
                 LIMIT $1
                 OFFSET $2
             """
