@@ -41,8 +41,8 @@ class HotkeyDetails(BaseModel):
     synth_loss: float
     repo: str
     rank: int
+    score_reason: str | None = None
     offer_response: dict | None = None
-
 
 class TaskWithHotkeyDetails(Task):
     hotkey_details: list[HotkeyDetails]
@@ -80,6 +80,7 @@ async def get_task_details(task_id: str, config: Config = Depends(get_config)) -
                 tn.{cst.QUALITY_SCORE},
                 tn.{cst.TEST_LOSS},
                 tn.{cst.SYNTH_LOSS},
+                tn.{cst.SCORE_REASON},
                 RANK() OVER (ORDER BY tn.{cst.QUALITY_SCORE} DESC) as rank,
                 s.{cst.REPO},
                 o.{cst.OFFER_RESPONSE}
