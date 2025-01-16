@@ -1,11 +1,12 @@
 from asyncpg import Connection
 from fastapi import Depends
-from pydantic import BaseModel
 
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.core.dependencies import get_config
+from validator.core.models import HotkeyDetails
 from validator.core.models import Task
+from validator.core.models import TaskWithHotkeyDetails
 from validator.db import constants as cst
 
 
@@ -32,20 +33,6 @@ async def get_recent_tasks(
             tasks = await connection.fetch(query, limit, (page - 1) * limit)
 
     return [Task(**task) for task in tasks]
-
-
-class HotkeyDetails(BaseModel):
-    hotkey: str
-    quality_score: float
-    test_loss: float
-    synth_loss: float
-    repo: str
-    rank: int
-    score_reason: str | None = None
-    offer_response: dict | None = None
-
-class TaskWithHotkeyDetails(Task):
-    hotkey_details: list[HotkeyDetails]
 
 
 async def get_task_details(task_id: str, config: Config = Depends(get_config)) -> TaskWithHotkeyDetails:

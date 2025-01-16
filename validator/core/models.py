@@ -225,3 +225,18 @@ class NetworkStats(BaseModel):
     number_of_jobs_success: int
     next_training_end: datetime | None
     job_can_be_made: bool = True
+
+
+class HotkeyDetails(BaseModel):
+    hotkey: str
+    quality_score: float
+    test_loss: float
+    synth_loss: float
+    repo: str
+    rank: int
+    score_reason: str | None = None
+    offer_response: dict | None = None
+
+
+class TaskWithHotkeyDetails(Task):
+    hotkey_details: list[HotkeyDetails]
