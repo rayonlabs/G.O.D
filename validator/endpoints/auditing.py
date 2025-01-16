@@ -9,7 +9,7 @@ from validator.db.sql.auditing import get_recent_tasks
 from validator.db.sql.auditing import get_task_details
 
 
-router = APIRouter()
+router = APIRouter(tags=["auditing"])
 
 
 @router.get("/auditing/tasks")
