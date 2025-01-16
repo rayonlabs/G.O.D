@@ -453,7 +453,7 @@ async def get_expected_repo_name(task_id: UUID, hotkey: str, psql_db: PSQLDB) ->
         return await connection.fetchval(query, task_id, hotkey, NETUID)
 
 
-async def store_offer_response(task_id: UUID, hotkey: str, offer_response: dict, psql_db: PSQLDB) -> None:
+async def store_offer_response(task_id: UUID, hotkey: str, offer_response: str, psql_db: PSQLDB) -> None:
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
