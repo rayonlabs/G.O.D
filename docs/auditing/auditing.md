@@ -36,12 +36,11 @@ In the future, we plan to:
 
 Develop an easier way to audit the evaluation of quality scores. This is all currently possible, but would need some manual work from the auditor which we want to avoid.
 
-
 * **Implement miner reporting**: Allow miners to report their own scores and provide additional transparency.
 Pesky miners be pesky, so we probably need some 'trusted' miners on rotation, perhaps run by the auditors. This is a marginal improvement though and can be in phase 2.
 
 ### FAQs
 
-* **How do I run auditing?**: Auditing can be run by using the provided endpoints and scripts.
-* **How do I know it's working?**: Auditing is working if the scores are being calculated correctly and the synthetic jobs are appearing in the scoring API.
-* **Isn't this weight copying?**: No, auditing is not weight copying. It is a transparent and verifiable way to evaluate miner performance.
+* **How do I run auditing?**: Auditing can be ran by following the instructions here []
+* **How do I know it's working?**: Auditing is working if the scores are being calculated correctly and the synthetic jobs are appearing in the scoring API - and your weights are set if you are running a separate validator.
+* **Isn't this weight copying?**: No, it has none of the downsides of weight copying. This is basically CHK with additional measures to ensure fairness.
