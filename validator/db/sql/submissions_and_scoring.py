@@ -454,7 +454,6 @@ async def get_model_size_key(
     if not size:
         try:
             # fallback to CDN
-            logger.debug(f"Calling CDN for model_id={model_id}")
             model_metadata = await call_content_service.__wrapped__(  # skip the retry decorator
                 endpoint=GET_MODEL_METADATA,
                 keypair=keypair,
