@@ -95,4 +95,4 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
                 result_dict[cst.OFFER_RESPONSE] = json.loads(result_dict[cst.OFFER_RESPONSE])
             hotkey_details.append(HotkeyDetails(**result_dict))
 
-        return TaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
+        return TaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details).clean_floats()
