@@ -248,3 +248,5 @@ class TaskWithHotkeyDetails(Task):
             hotkey_detail.test_loss = clean_float(hotkey_detail.test_loss)
             hotkey_detail.synth_loss = clean_float(hotkey_detail.synth_loss)
             hotkey_detail.quality_score = clean_float(hotkey_detail.quality_score)
+
+        return self
