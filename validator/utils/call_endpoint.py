@@ -266,7 +266,7 @@ async def call_content_service(endpoint: str, keypair: Keypair, params: dict = N
     """Make a signed request to the content service."""
     headers = _get_headers_for_signed_https_request(keypair)
 
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
         response = await client.get(url=endpoint, headers=headers, params=params)
         if response.status_code != 200:
             logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")

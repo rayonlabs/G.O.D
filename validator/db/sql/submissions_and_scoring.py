@@ -2,16 +2,21 @@ import asyncio
 import json
 import re
 from datetime import datetime
+from json import JSONDecodeError
 from typing import Dict
 from typing import List
 from typing import Optional
 from uuid import UUID
 
+import httpx
 from asyncpg.connection import Connection
+from fiber import Keypair
 
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
+from validator.core.config import Config
+from validator.core.constants import GET_MODEL_METADATA
 from validator.core.models import AllModelSizes
 from validator.core.models import AllNodeStats
 from validator.core.models import AllProcessedDatasetRows
@@ -25,6 +30,11 @@ from validator.core.models import TaskNode
 from validator.core.models import TaskResults
 from validator.core.models import WorkloadMetrics
 from validator.db.database import PSQLDB
+from validator.utils.call_endpoint import call_content_service
+from validator.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
@@ -419,13 +429,13 @@ async def get_all_node_stats(hotkey: str, psql_db: PSQLDB) -> AllNodeStats:
     return AllNodeStats(daily=daily, three_day=three_day, weekly=weekly, monthly=monthly, all_time=all_time)
 
 
-def extract_model_size(model_id: str) -> float:
+def _parse_model_size(model_id: str) -> float | None:
     """Extract model size in billions from model ID string"""
     model_id = model_id.lower()
     match = re.search(r".*?(\d+\.?\d*)[mb]", model_id)
 
     if not match:
-        return 1.0
+        return None
 
     number = float(match.group(1))
     # convert mega to billions
@@ -435,14 +445,36 @@ def extract_model_size(model_id: str) -> float:
     return number
 
 
+async def get_model_size_key(
+    model_id: str,
+    keypair: Keypair,
+) -> str:
+    # attempt to parse it out of the name
+    size = _parse_model_size(model_id)
+    if not size:
+        try:
+            # fallback to CDN
+            logger.debug(f"Calling CDN for model_id={model_id}")
+            model_metadata = await call_content_service.__wrapped__(  # skip the retry decorator
+                endpoint=GET_MODEL_METADATA,
+                keypair=keypair,
+                params={"model_id": model_id},
+            )
+            size = float(model_metadata["parameter_count"])
+        except (httpx.HTTPError, KeyError, JSONDecodeError):
+            size = 1.0  # we tried...
+
+    return f"{size:.1f}B" if size % 1 != 0 else f"{int(size)}B"
+
+
 async def get_model_size_distribution(
-    psql_db: PSQLDB,
+    config: Config,
     interval: str = "all",
 ) -> Dict[str, int]:
     """Get distribution of model sizes across all tasks.
     Returns a dictionary mapping model sizes (in billions) to their count of occurrences.
     """
-    async with await psql_db.connection() as connection:
+    async with await config.psql_db.connection() as connection:
         connection: Connection
 
         query = f"""
@@ -456,25 +488,31 @@ async def get_model_size_distribution(
         """
         rows = await connection.fetch(query, TaskStatus.SUCCESS.value, interval)
 
-        sizes: Dict[str, int] = {}
-        for row in rows:
-            size = extract_model_size(row[cst.MODEL_ID])
-            size_key = f"{size:.1f}B" if size % 1 != 0 else f"{int(size)}B"
-            sizes[size_key] = sizes.get(size_key, 0) + 1
+    distribution: Dict[str, int] = {}
+    model_id_to_size_key: Dict[str, str] = {}  # a little caching action
 
-        # sort by model size
-        sorted_sizes = dict(sorted(sizes.items(), key=lambda x: float(x[0][:-1]), reverse=True))
+    for idx, row in enumerate(rows):
+        model_id = row[cst.MODEL_ID]
 
-        return sorted_sizes
+        size_key = model_id_to_size_key.setdefault(
+            model_id,
+            await get_model_size_key(model_id, config.keypair),
+        )
+        distribution[size_key] = distribution.get(size_key, 0) + 1
+
+    # sort by model size
+    sorted_sizes = dict(sorted(distribution.items(), key=lambda x: float(x[0][:-1]), reverse=True))
+
+    return sorted_sizes
 
 
-async def get_all_model_size_distribution(psql_db: PSQLDB) -> AllModelSizes:
+async def get_all_model_size_distribution(config: Config) -> AllModelSizes:
     daily, three_day, weekly, monthly, all_time = await asyncio.gather(
-        get_model_size_distribution(psql_db, "24 hours"),
-        get_model_size_distribution(psql_db, "3 days"),
-        get_model_size_distribution(psql_db, "7 days"),
-        get_model_size_distribution(psql_db, "30 days"),
-        get_model_size_distribution(psql_db, "all"),
+        get_model_size_distribution(config, "24 hours"),
+        get_model_size_distribution(config, "3 days"),
+        get_model_size_distribution(config, "7 days"),
+        get_model_size_distribution(config, "30 days"),
+        get_model_size_distribution(config, "all"),
     )
 
     return AllModelSizes(

@@ -308,7 +308,7 @@ async def update_training_repo_backup(
 async def get_model_size_distribution(
     config: Config = Depends(get_config),
 ) -> AllModelSizes:
-    return await submissions_and_scoring_sql.get_all_model_size_distribution(config.psql_db)
+    return await submissions_and_scoring_sql.get_all_model_size_distribution(config)
 
 
 async def get_unique_models_count(
