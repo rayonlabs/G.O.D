@@ -21,6 +21,7 @@ from validator.core.models import TaskNode
 from validator.core.models import TaskResults
 from validator.core.models import WorkloadMetrics
 from validator.db.database import PSQLDB
+from validator.utils.json_utils import clean_float
 
 
 async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
@@ -173,14 +174,6 @@ async def get_all_scores_and_losses_for_task(task_id: UUID, psql_db: PSQLDB) -> 
             AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
         """
         rows = await connection.fetch(query, task_id, NETUID)
-
-        def clean_float(value):
-            if value is None:
-                return None
-            if isinstance(value, float):
-                if value in (float("inf"), float("-inf")) or value != value:
-                    return None
-            return value
 
         return [
             {

@@ -451,3 +451,12 @@ async def get_expected_repo_name(task_id: UUID, hotkey: str, psql_db: PSQLDB) ->
             WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2 AND {cst.NETUID} = $3
         """
         return await connection.fetchval(query, task_id, hotkey, NETUID)
+
+
+async def store_offer_response(task_id: UUID, hotkey: str, offer_response: str, psql_db: PSQLDB) -> None:
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            INSERT INTO {cst.OFFER_RESPONSES_TABLE} ({cst.TASK_ID}, {cst.HOTKEY}, {cst.OFFER_RESPONSE}) VALUES ($1, $2, $3)
+        """
+        await connection.execute(query, task_id, hotkey, offer_response)

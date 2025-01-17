@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from core.models.utility_models import FileFormat
+from validator.utils.json_utils import clean_float
 
 
 class TokenizerConfig(BaseModel):
@@ -225,3 +226,27 @@ class NetworkStats(BaseModel):
     number_of_jobs_success: int
     next_training_end: datetime | None
     job_can_be_made: bool = True
+
+
+class HotkeyDetails(BaseModel):
+    hotkey: str
+    submission_id: UUID | None = None
+    quality_score: float | None
+    test_loss: float | None
+    synth_loss: float | None
+    repo: str | None
+    rank: int | None
+    score_reason: str | None = None
+    offer_response: dict | None = None
+
+
+class TaskWithHotkeyDetails(Task):
+    hotkey_details: list[HotkeyDetails]
+
+    def clean_floats(self):
+        for hotkey_detail in self.hotkey_details:
+            hotkey_detail.test_loss = clean_float(hotkey_detail.test_loss)
+            hotkey_detail.synth_loss = clean_float(hotkey_detail.synth_loss)
+            hotkey_detail.quality_score = clean_float(hotkey_detail.quality_score)
+
+        return self
