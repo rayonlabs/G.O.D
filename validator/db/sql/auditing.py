@@ -4,7 +4,6 @@ import math
 from asyncpg import Connection
 from fastapi import Depends
 from fastapi import HTTPException
-from loguru import logger
 
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
@@ -119,7 +118,5 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
 
             hotkey_details.append(HotkeyDetails(**result_dict))
 
-        # NOTE: remove
-        logger.info(f"hotkey_details: {hotkey_details}")
 
         return TaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
