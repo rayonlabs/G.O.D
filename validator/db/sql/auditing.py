@@ -4,6 +4,7 @@ import math
 from asyncpg import Connection
 from fastapi import Depends
 from fastapi import HTTPException
+from loguru import logger  # noqa
 
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
@@ -157,6 +158,8 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
             raise HTTPException(status_code=404, detail="Task not found")
         task = Task(**task_raw)
 
+        logger.info("Got a task!!")
+
         # NOTE: If the task is not finished, remove details about synthetic data & test data?
         if task.status not in [
             TaskStatus.SUCCESS,
@@ -190,6 +193,8 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
             WHERE tn.{cst.TASK_ID} = $1
         """
         results = await connection.fetch(query, task_id)
+
+        logger.info(f"Got {len(results)} results for task {task_id}")
 
         hotkey_details = []
         for result in results:
