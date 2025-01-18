@@ -85,7 +85,6 @@ async def get_recent_tasks_for_hotkey(
                 s.{cst.REPO},
                 o.{cst.OFFER_RESPONSE}
             FROM {cst.TASKS_TABLE} t
-            WHERE t.{cst.TASK_ID} = ANY($1)
             LEFT JOIN {cst.TASK_NODES_TABLE} tn
                 ON t.{cst.TASK_ID} = tn.{cst.TASK_ID}
                 AND tn.{cst.HOTKEY} = $2
@@ -95,6 +94,7 @@ async def get_recent_tasks_for_hotkey(
             LEFT JOIN {cst.OFFER_RESPONSES_TABLE} o
                 ON t.{cst.TASK_ID} = o.{cst.TASK_ID}
                 AND o.{cst.HOTKEY} = $2
+            WHERE t.{cst.TASK_ID} = ANY($1)
         """
         results = await connection.fetch(query, task_ids, hotkey)
 
