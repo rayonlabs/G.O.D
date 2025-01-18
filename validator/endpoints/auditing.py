@@ -19,7 +19,7 @@ async def audit_recent_tasks_endpoint(limit: int = 100, page: int = 1, config: C
     return await get_recent_tasks(None, limit=limit, page=page, config=config)
 
 
-@router.get("/auditing/tasks/{hotkey}")
+@router.get("/auditing/tasks/hotkey/{hotkey}")
 async def audit_recent_tasks_for_hotkey_endpoint(
     hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
 ) -> list[TaskWithHotkeyDetails]:
