@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from fastapi import Depends
+from loguru import logger  # noqa
 
 from validator.core.config import Config
 from validator.core.dependencies import get_config
@@ -27,6 +28,7 @@ async def audit_recent_tasks_for_hotkey_endpoint(
 
 @router.get("/auditing/tasks/{task_id}")
 async def audit_task_details_endpoint(task_id: str, config: Config = Depends(get_config)) -> TaskWithHotkeyDetails:
+    logger.info(f"Getting task details for task {task_id}")
     return await get_task_with_hotkey_details(task_id, config)
 
 
