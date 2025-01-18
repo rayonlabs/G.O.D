@@ -1,4 +1,5 @@
 import json
+import math
 
 from asyncpg import Connection
 from fastapi import Depends
@@ -11,6 +12,17 @@ from validator.core.models import HotkeyDetails
 from validator.core.models import Task
 from validator.core.models import TaskWithHotkeyDetails
 from validator.db import constants as cst
+
+
+def normalise_float(float: float | None) -> float | None:
+    if float is None:
+        return 0.0
+    if math.isinf(float):
+        float = 1e100 if float > 0 else -1e100
+        return float
+
+    if math.isnan(float):
+        return None
 
 
 async def get_recent_tasks(
@@ -99,6 +111,11 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
             result_dict = dict(result)
             if result_dict[cst.OFFER_RESPONSE] is not None:
                 result_dict[cst.OFFER_RESPONSE] = json.loads(result_dict[cst.OFFER_RESPONSE])
+
+            float_fields = [cst.QUALITY_SCORE, cst.TEST_LOSS, cst.SYNTH_LOSS]
+            for field in float_fields:
+                result_dict[field] = normalise_float(result_dict[field])
+
             hotkey_details.append(HotkeyDetails(**result_dict))
 
         return TaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
