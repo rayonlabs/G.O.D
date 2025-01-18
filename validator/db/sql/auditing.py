@@ -76,7 +76,7 @@ async def get_recent_tasks_for_hotkey(
         query = f"""
             SELECT
                 t.*,
-                tn.{cst.SUBMISSION_ID},
+                s.{cst.SUBMISSION_ID},
                 tn.{cst.QUALITY_SCORE},
                 tn.{cst.TEST_LOSS},
                 tn.{cst.SYNTH_LOSS},
