@@ -24,6 +24,43 @@ from validator.db.database import PSQLDB
 
 logger = get_logger(__name__)
 
+# Temporary list to not change so it works smoothly for now
+
+base_task_fields = {
+    cst.TASK_ID,
+    cst.ACCOUNT_ID,
+    cst.MODEL_ID,
+    cst.DS,
+    cst.STATUS,
+    cst.HOURS_TO_COMPLETE,
+    cst.TEST_DATA,
+    cst.TRAINING_DATA,
+    cst.MINER_SCORES,
+    cst.CREATED_AT,
+    cst.NEXT_DELAY_AT,
+    cst.UPDATED_AT,
+    cst.STARTED_AT,
+    cst.COMPLETED_AT,
+    cst.TERMINATION_AT,
+    cst.IS_ORGANIC,
+    cst.TIMES_DELAYED,
+    cst.ASSIGNED_MINERS,
+    cst.TASK_TYPE,
+}
+
+text_specific_fields = [
+    cst.FIELD_SYSTEM,
+    cst.FIELD_INSTRUCTION,
+    cst.FIELD_INPUT,
+    cst.FIELD_OUTPUT,
+    cst.FORMAT,
+    cst.NO_INPUT_FORMAT,
+    cst.SYNTHETIC_DATA,
+]
+
+image_specific_fields = [
+    cst.MODEL_FILENAME
+]
 
 async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask:
     """Add a new task"""
@@ -192,7 +229,7 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
     async with await psql_db.connection() as connection:
         connection: Connection
         async with connection.transaction():
-            base_updates = {k: v for k, v in updates.items() if k in [cst.TASK_ID, cst.ACCOUNT_ID, cst.MODEL_ID, cst.DS, cst.STATUS, cst.HOURS_TO_COMPLETE, cst.TEST_DATA, cst.TRAINING_DATA, cst.MINER_SCORES, cst.CREATED_AT, cst.NEXT_DELAY_AT, cst.UPDATED_AT, cst.STARTED_AT, cst.COMPLETED_AT, cst.TERMINATION_AT, cst.IS_ORGANIC, cst.TIMES_DELAYED, cst.ASSIGNED_MINERS, cst.TASK_TYPE]}
+            base_updates = {k: v for k, v in updates.items() if k in base_task_fields}
             if base_updates:
                 set_clause = ", ".join([f"{column} = ${i+2}" for i, column in enumerate(base_updates.keys())])
                 values = list(base_updates.values())
@@ -211,7 +248,7 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
                 await connection.execute(query, updated_task.task_id)
 
             if updated_task.task_type == TaskType.TEXTTASK:
-                specific_updates = {k: v for k, v in updates.items() if k in [cst.FIELD_SYSTEM, cst.FIELD_INSTRUCTION, cst.FIELD_INPUT, cst.FIELD_OUTPUT, cst.FORMAT, cst.NO_INPUT_FORMAT, cst.SYNTHETIC_DATA]}
+                specific_updates = {k: v for k, v in updates.items() if k in text_specific_fields}
                 if specific_updates:
                     specific_clause = ", ".join([f"{column} = ${i+2}" for i, column in enumerate(specific_updates.keys())])
                     specific_values = list(specific_updates.values())
@@ -222,7 +259,7 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
                     """
                     await connection.execute(query, updated_task.task_id, *specific_values)
             elif updated_task.task_type == TaskType.IMAGETASK:
-                specific_updates = {k: v for k, v in updates.items() if k in [cst.MODEL_FILENAME]}
+                specific_updates = {k: v for k, v in updates.items() if k in image_specific_fields}
                 if specific_updates:
                     specific_clause = ", ".join([f"{column} = ${i+2}" for i, column in enumerate(specific_updates.keys())])
                     specific_values = list(specific_updates.values())

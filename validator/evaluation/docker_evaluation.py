@@ -131,7 +131,10 @@ async def run_evaluation_docker(
 
 # TODO: CLEAN this up
 async def run_evaluation_docker_diffusion(
-    test_split_path: str, base_model_repo: str, base_model_filename: str, lora_repos: dict[str, Union[str, dict[str, list]]]
+    test_split_path: str,
+    base_model_repo: str,
+    base_model_filename: str,
+    lora_repos: dict[str, Union[str, dict[str, list]]]
 ) -> EvaluationResultDiffusion:
     dataset_dir = os.path.abspath(test_split_path)
     container_dataset_path = "/workspace/input_data"

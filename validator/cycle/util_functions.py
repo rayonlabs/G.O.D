@@ -59,8 +59,7 @@ async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask
     task.synthetic_data = synth_data
     task.test_data = test_data
     logger.info(
-        "Data creation is complete - now time to find some miners",
-        extra=create_extra_log(status=task.status),
+        "Data creation is complete - now time to find some miners"
     )
     return task
 
@@ -89,14 +88,10 @@ def prepare_text_task_request(task: TextRawTask) -> TrainRequestText:
 
 # probs better to be Image not Diffusion for consistency
 def prepare_image_task_request(task: ImageRawTask) -> TrainRequestDiffusion:
-    # TODO MISSING STUFF THAT I DON'T KNOW ABOUT
     return TrainRequestDiffusion(
-        model=task.model_filename,
+        model=task.model_id,
         task_id=task.task_id,
         hours_to_complete=task.hours_to_complete,
-        dataset_zip=task.ds,
-        # where do we get this from in the task definition?
-        hf_repo="not sure what this is",
-        hf_folder="or this",
+        dataset_zip=task.training_data
     )
 

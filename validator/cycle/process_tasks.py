@@ -39,8 +39,8 @@ async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> Mi
 
 
 async def _select_miner_pool_and_add_to_task(
-    task: Union[TextRawTask, ImageRawTask], nodes: list[Node], config: Config
-) -> Union[TextRawTask, ImageRawTask]:
+    task: TextRawTask | ImageRawTask, nodes: list[Node], config: Config
+) -> TextRawTask | ImageRawTask:
     if len(nodes) < cst.MINIMUM_MINER_POOL:
         logger.warning(
             f"Not enough nodes available. Need at least {cst.MINIMUM_MINER_POOL}, but only have {len(nodes)}.",
@@ -141,7 +141,7 @@ async def _let_miners_know_to_start_training(task: Union[ImageRawTask, TextRawTa
         )
 
 
-async def _find_and_select_miners_for_task(task: Union[TextRawTask, ImageRawTask], config: Config):
+async def _find_and_select_miners_for_task(task: TextRawTask | ImageRawTask, config: Config):
     async with TaskContext(str(task.task_id)):
         try:
             nodes = await nodes_sql.get_all_nodes(config.psql_db)
@@ -162,7 +162,7 @@ async def _find_and_select_miners_for_task(task: Union[TextRawTask, ImageRawTask
             await tasks_sql.update_task(task, config.psql_db)
 
 
-def _attempt_delay_task(task: Union[TextRawTask, ImageRawTask]):
+def _attempt_delay_task(task: TextRawTask | ImageRawTask):
     assert (
         task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None
     ), "We wanted to check delay vs created timestamps but they are missing"
@@ -199,12 +199,12 @@ async def _find_miners_for_task(config: Config):
     )
 
 
-async def _prep_task(task: RawTask, config: Config):
+async def _prep_task(task: TextRawTask | ImageRawTask, config: Config):
     async with TaskContext(str(task.task_id)):
         try:
             task.status = TaskStatus.PREPARING_DATA
             await tasks_sql.update_task(task, config.psql_db)
-            task = await get_task_config(task).task_prep_function(task, config.keypair)
+            task = await get_task_config(task).task_prep_function(task)
             logger.info(f"THE TASK HAS BEEN PREPPED {task}", extra=create_extra_log(status=task.status))
             await tasks_sql.update_task(task, config.psql_db)
         except Exception:
@@ -220,7 +220,7 @@ async def _processing_pending_tasks(config: Config):
     await asyncio.gather(*[_prep_task(task, config) for task in pending_tasks[: cst.MAX_CONCURRENT_TASK_PREPS]])
 
 
-async def _start_training_task(task: RawTask, config: Config) -> None:
+async def _start_training_task(task: TextRawTask | ImageRawTask, config: Config) -> None:
     async with TaskContext(str(task.task_id)):
         task.started_at = datetime.datetime.now(datetime.timezone.utc)
         task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
@@ -247,7 +247,7 @@ async def _process_ready_to_train_tasks(config: Config):
         await asyncio.sleep(30)
 
 
-async def _evaluate_task(task: RawTask, gpu_ids: list[int], config: Config):
+async def _evaluate_task(task: TextRawTask | ImageRawTask, gpu_ids: list[int], config: Config):
     try:
         task.status = TaskStatus.EVALUATING
         await tasks_sql.update_task(task, config.psql_db)
@@ -263,7 +263,7 @@ async def _evaluate_task(task: RawTask, gpu_ids: list[int], config: Config):
         await tasks_sql.update_task(task, config.psql_db)
 
 
-async def _move_back_to_looking_for_nodes(task: RawTask, config: Config):
+async def _move_back_to_looking_for_nodes(task: TextRawTask | ImageRawTask, config: Config):
     logger.info(
         "Moving back from delay to looking for nodes",
         extra=create_extra_log(task_id=str(task.task_id), status=task.status),
@@ -300,7 +300,7 @@ async def _move_any_prep_data_to_pending(config):
     await asyncio.gather(*[_move_back_to_pending_status(task, config) for task in stopped_in_prep])
 
 
-async def _move_to_preevaluation(tasks: list[RawTask], config: Config):
+async def _move_to_preevaluation(tasks: list[TextRawTask | ImageRawTask], config: Config):
     await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
 
 

@@ -39,7 +39,7 @@ class TaskConfig(BaseModel):
 
 class ImageTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.IMAGE
-    eval_container: Callable = run_evaluation_docker
+    eval_container: Callable = run_evaluation_docker_diffusion
     synth_data_function: Callable | None = None
     data_size_function: Callable = get_total_image_dataset_size
     task_prep_function: Callable = run_image_task_prep
@@ -48,7 +48,7 @@ class ImageTaskConfig(TaskConfig):
 
 class TextTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.TEXT
-    eval_container: Callable = run_evaluation_docker_diffusion
+    eval_container: Callable = run_evaluation_docker
     synth_data_function: Callable | None = get_additional_synth_data
     data_size_function: Callable = get_total_text_dataset_size
     task_prep_function: Callable = run_text_task_prep

@@ -45,8 +45,9 @@ async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
     return temp_file.name
 
 def unzip_to_temp_path(zip_file_path: str) -> str:
-    tmp_dir = tempfile.mkdtemp()
-
+    tmp_dir = cst.TEMP_PATH_FOR_IMAGES
+    if not os.path.exists(tmp_dir):
+        os.makedirs(tmp_dir)
     with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
         zip_ref.extractall(tmp_dir)
 

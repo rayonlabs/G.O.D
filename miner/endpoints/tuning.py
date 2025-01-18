@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timedelta
 
 import yaml
+import toml
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi.routing import APIRouter
@@ -88,9 +89,7 @@ async def tune_model_diffusion(
         job_class=DiffusionJob,
         job_id=str(train_request.task_id),
         dataset_zip=train_request.dataset_zip,
-        model=train_request.model,
-        hf_repo=train_request.hf_repo,
-        hf_folder=train_request.hf_folder,
+        model=train_request.model
     )
     logger.info(f"Created job {job}")
     worker_config.trainer.enqueue_job(job)
@@ -101,14 +100,23 @@ async def tune_model_diffusion(
 # I think we need to be v careful that it's validators that are asking for this,
 # is there a way to ensure we only reply to validators?
 async def get_latest_model_submission(
-    task_id: str,
+    task_id: str
 ) -> str:
     try:
+        # Temporary work around in order to not change the vali alot
+        # Could send the task type from vali instead of matching file names
         config_filename = f"{task_id}.yml"
         config_path = os.path.join(cst.CONFIG_DIR, config_filename)
-        with open(config_path, "r") as file:
-            config_data = yaml.safe_load(file)
-            return config_data.get("hub_model_id", None)
+        if os.path.exists(config_path):
+            with open(config_path, "r") as file:
+                config_data = yaml.safe_load(file)
+                return config_data.get("hub_model_id", None)
+        else:
+            config_filename = f"{task_id}.toml"
+            config_path = os.path.join(cst.CONFIG_DIR, config_filename)
+            with open(config_path, "r") as file:
+                config_data = toml.load(file)
+                return config_data.get("huggingface_repo_id", None)
 
     except FileNotFoundError as e:
         logger.error(f"No submission found for task {task_id}: {str(e)}")
@@ -184,6 +192,11 @@ def factory_router() -> APIRouter:
         dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
     router.add_api_route(
-        "/start_training_diffusion/", tune_model_diffusion, tags=["Subnet"], methods=["POST"], response_model=TrainResponse
+        "/start_training_diffusion/", 
+        tune_model_diffusion,
+        tags=["Subnet"],
+        methods=["POST"],
+        response_model=TrainResponse,
+        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)]
     )
     return router

@@ -95,8 +95,6 @@ class DiffusionJob(Job):
         description="Link to dataset zip file",
         min_length=1,
     )
-    hf_repo: str
-    hf_folder: str
 
 
 class Role(str, Enum):

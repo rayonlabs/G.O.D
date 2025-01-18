@@ -58,6 +58,7 @@ MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
+TEMP_PATH_FOR_IMAGES = "validator/temp_images"
 
 # synth stuff
 SYNTH_GEN_BATCH_SIZE = 10
