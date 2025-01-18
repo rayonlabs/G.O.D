@@ -21,13 +21,19 @@ async def get_recent_tasks(
 
         if hotkeys is not None:
             query = f"""
-                SELECT * FROM {cst.TASKS_TABLE}
+                SELECT {cst.TASK_ID} FROM {cst.SUBMISSIONS_TABLE}
                 WHERE {cst.HOTKEY} = ANY($1)
-                ORDER BY {cst.CREATED_AT} DESC
+                ORDER BY {cst.CREATED_ON} DESC
                 LIMIT $2
                 OFFSET $3
             """
-            tasks = await connection.fetch(query, hotkeys, limit, (page - 1) * limit)
+            task_ids = await connection.fetch(query, hotkeys, limit, (page - 1) * limit)
+
+            query_for_tasks = f"""
+                SELECT * FROM {cst.TASKS_TABLE}
+                WHERE {cst.TASK_ID} = ANY($1)
+            """
+            tasks = await connection.fetch(query_for_tasks, task_ids)
         else:
             query = f"""
                 SELECT * FROM {cst.TASKS_TABLE}
