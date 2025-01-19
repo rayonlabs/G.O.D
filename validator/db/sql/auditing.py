@@ -25,6 +25,7 @@ def normalise_float(float: float | None) -> float | None:
     if math.isnan(float):
         return None
 
+    return float
 
 async def get_recent_tasks(
     hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
