@@ -262,13 +262,17 @@ async def sign_up_cron_job(keypair: Keypair) -> None:
 
 
 @retry_with_backoff
-async def call_content_service(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any] | list[dict[str, Any]]:
+async def call_content_service(
+    endpoint: str,
+    keypair: Keypair,
+    params: dict = None,
+) -> dict[str, Any] | list[dict[str, Any]]:
     """Make a signed request to the content service."""
     headers = _get_headers_for_signed_https_request(keypair)
 
     async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
         response = await client.get(url=endpoint, headers=headers, params=params)
         if response.status_code != 200:
-            logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")
+            logger.error(f"endpoint={endpoint} params={params} status_code={response.status_code} response.text={response.text}")
             response.raise_for_status()
         return response.json()
