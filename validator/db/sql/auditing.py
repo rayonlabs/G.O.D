@@ -18,14 +18,14 @@ from validator.db import constants as cst
 def normalise_float(float: float | None) -> float | None:
     if float is None:
         return 0.0
-    if math.isinf(float):
-        float = 1e100 if float > 0 else -1e100
-        return float
 
     if math.isnan(float):
         return None
 
+    if math.isinf(float):
+        float = 1e100 if float > 0 else -1e100
     return float
+
 
 async def get_recent_tasks(
     hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
