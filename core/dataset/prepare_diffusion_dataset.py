@@ -19,8 +19,11 @@ def prepare_dataset(
     with zipfile.ZipFile(training_images_zip_path, "r") as zip_ref:
         zip_ref.extractall(extraction_dir)
 
-    training_folder = [entry for entry in os.listdir(extraction_dir) if os.path.isdir(os.path.join(extraction_dir, entry))][0]
-    training_images_dir = extraction_dir + training_folder
+    extracted_items = [entry for entry in os.listdir(extraction_dir)]
+    if len(extracted_items) == 1 and os.path.isdir(os.path.join(extraction_dir, extracted_items[0])):
+        training_images_dir = os.path.join(extraction_dir, extracted_items[0])
+    else:
+        training_images_dir = extraction_dir
 
     output_dir = f"{cst.DIFFUSION_DATASET_DIR}/{job_id}/"
     os.makedirs(output_dir, exist_ok=True)

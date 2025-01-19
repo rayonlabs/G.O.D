@@ -29,6 +29,7 @@ class TrainRequest(BaseModel):
     model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
     task_id: str
     hours_to_complete: int
+    expected_repo_name: str | None = None
 
 
 class TrainRequestText(TrainRequest):
@@ -75,7 +76,7 @@ class EvaluationRequestDiffusion(BaseModel):
     lora_filename_list: str
 
 
-class EvaluationResult(BaseModel):
+class EvaluationResultText(BaseModel):
     is_finetune: bool
     eval_loss: float
     perplexity: float
@@ -87,7 +88,7 @@ class DiffusionLosses(BaseModel):
 
 
 class EvaluationResultDiffusion(BaseModel):
-    eval_losses: dict[str, DiffusionLosses]
+    eval_loss: DiffusionLosses
 
 
 class MinerTaskResponse(BaseModel):

@@ -106,7 +106,7 @@ MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.8  # image is currently 1 minus this
 
-# comfyui stuff
+# diffusion eval stuff
 LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
 CHECKPOINTS_SAVE_PATH = "validator/evaluation/ComfyUI/models/checkpoints"
 LORAS_SAVE_PATH = "validator/evaluation/ComfyUI/models/loras"
@@ -114,6 +114,10 @@ DEFAULT_STEPS = 10
 DEFAULT_CFG = 4
 DEFAULT_DENOISE = 0.9
 SUPPORTED_FILE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
+DIFFUSION_HF_DEFAULT_FOLDER = "checkpoint"
+DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
+
+
 MAX_CONCURRENT_JOBS = 4
 
 

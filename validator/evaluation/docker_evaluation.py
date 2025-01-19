@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import shutil
 import tarfile
 from typing import Union
 
@@ -11,11 +12,14 @@ from pydantic import TypeAdapter
 
 from core import constants as cst
 from core.docker_utils import stream_logs
-from core.models.payload_models import EvaluationResult
+from core.utils import download_s3_file
+from core.models.payload_models import EvaluationResultText
 from core.models.payload_models import EvaluationResultDiffusion
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
+from validator.tasks.task_prep import unzip_to_temp_path
+
 
 
 logger = get_logger(__name__)
@@ -53,7 +57,7 @@ async def run_evaluation_docker(
     dataset_type: Union[DatasetType, CustomDatasetType],
     file_format: FileFormat,
     gpu_ids: list[int],
-) -> dict[str, Union[EvaluationResult, Exception]]:
+) -> dict[str, Union[EvaluationResultText, Exception]]:
     client = docker.from_env()
 
     if isinstance(dataset_type, DatasetType):
@@ -112,7 +116,7 @@ async def run_evaluation_docker(
             if isinstance(result, str) and not isinstance(result, dict):
                 processed_results[repo] = Exception(result)
             else:
-                processed_results[repo] = TypeAdapter(EvaluationResult).validate_python(result)
+                processed_results[repo] = TypeAdapter(EvaluationResultText).validate_python(result)
 
         return processed_results
 
@@ -129,32 +133,28 @@ async def run_evaluation_docker(
         client.close()
 
 
-# TODO: CLEAN this up
 async def run_evaluation_docker_diffusion(
-    test_split_path: str,
-    base_model_repo: str,
-    base_model_filename: str,
-    lora_repos: dict[str, Union[str, dict[str, list]]]
-) -> EvaluationResultDiffusion:
+    test_split_url: str,
+    original_model_repo: str,
+    original_model_filename: str,
+    models: list[str],
+) -> dict[str, Union[EvaluationResultDiffusion, Exception]]:
+    raw_data = await download_s3_file(test_split_url)
+    test_split_path = unzip_to_temp_path(raw_data)
     dataset_dir = os.path.abspath(test_split_path)
     container_dataset_path = "/workspace/input_data"
-    container_eval_data_path = "/workspace/diffusion_eval_data.json"
-    diffusion_eval_data_path = "validator/evaluation/diffusion_eval_data.json"
-    diffusion_eval_data = {
-        "test_split_path": container_dataset_path,
-        "base_model_repo": base_model_repo,
-        "base_model_filename": base_model_filename,
-        "lora_repos": lora_repos,
-    }
-
-    with open(diffusion_eval_data_path, "w") as file:
-        json.dump(diffusion_eval_data, file)
 
     client = docker.from_env()
 
     volume_bindings = {}
     volume_bindings[dataset_dir] = {"bind": container_dataset_path, "mode": "ro"}
-    volume_bindings[os.path.abspath(diffusion_eval_data_path)] = {"bind": container_eval_data_path, "mode": "ro"}
+
+    environment = {
+            "DATASET": container_dataset_path,
+            "MODELS": ",".join(models),
+            "ORIGINAL_MODEL_REPO": original_model_repo,
+            "ORIGINAL_MODEL_FILENAME": original_model_filename
+        }
 
     async def cleanup_resources():
         try:
@@ -170,6 +170,7 @@ async def run_evaluation_docker_diffusion(
             client.containers.run,
             cst.VALIDATOR_DOCKER_IMAGE_DIFFUSION,
             volumes=volume_bindings,
+            environment=environment,
             runtime="nvidia",
             device_requests=[docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])],
             detach=True,
@@ -183,9 +184,17 @@ async def run_evaluation_docker_diffusion(
 
         eval_results_dict = await get_evaluation_results(container)
 
-        os.remove(diffusion_eval_data_path)
+        if os.path.exists(dataset_dir):
+            shutil.rmtree(dataset_dir)
 
-        return eval_results_dict
+        processed_results = {}
+        for repo, result in eval_results_dict.items():
+            if isinstance(result, str) and not isinstance(result, dict):
+                processed_results[repo] = Exception(result)
+            else:
+                processed_results[repo] = TypeAdapter(EvaluationResultDiffusion).validate_python(result)
+
+        return processed_results
 
     except Exception as e:
         logger.error(f"Failed to retrieve evaluation results: {str(e)}")
