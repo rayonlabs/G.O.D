@@ -1,12 +1,12 @@
 import json
 import os
-import tempfile
 import random
 import shutil
+import tempfile
 import zipfile
+from math import ceil
 from pathlib import Path
 from typing import List
-from math import ceil
 
 from datasets import Dataset
 from datasets import DatasetDict
@@ -22,9 +22,6 @@ from validator.utils.logging import create_extra_log
 from validator.utils.logging import logger
 from validator.utils.minio import async_minio_client
 
-from pathlib import Path
-import zipfile
-
 
 def create_zip_for_image_dataset(split_keys: set, zip_name: str, entries: dict, dataset_root: Path) -> Path:
     subfolder_name = Path(zip_name).stem
@@ -38,28 +35,34 @@ def create_zip_for_image_dataset(split_keys: set, zip_name: str, entries: dict, 
 
     return zip_path
 
+
 async def save_json_to_temp_file(data: List[dict], prefix: str) -> str:
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", prefix=prefix)
     with open(temp_file.name, "w") as f:
         json.dump(data, f)
     return temp_file.name
 
+
 def unzip_to_temp_path(zip_file_path: str) -> str:
     tmp_dir = cst.TEMP_PATH_FOR_IMAGES
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
-    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+    with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
         zip_ref.extractall(tmp_dir)
 
     return tmp_dir
 
 
-async def upload_file_to_minio(file_path: str, bucket_name: str, object_name: str) -> str | bool:
+async def upload_file_to_minio(file_path: str, bucket_name: str, object_name: str) -> str | None:
+    """
+    Uploads a file to MinIO and returns the presigned URL for the uploaded file.
+    """
     result = await async_minio_client.upload_file(bucket_name, object_name, file_path)
     if result:
         return await async_minio_client.get_presigned_url(bucket_name, object_name)
     else:
-        return False
+        return None
+
 
 def train_test_split_text(dataset_name: str, test_size: float = None) -> DatasetDict:
     if test_size is None:
@@ -90,6 +93,7 @@ def train_test_split_text(dataset_name: str, test_size: float = None) -> Dataset
 
     return split_dataset
 
+
 def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     dataset_path = Path(dataset_path)
     if not any(dataset_path.glob("*.png")):
@@ -112,18 +116,12 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     train_keys = set(keys[split_idx:])
 
     test_zip_path = create_zip_for_image_dataset(
-        split_keys=test_keys,
-        zip_name=cst.IMAGE_TEST_SPLIT_ZIP_NAME,
-        entries=dataset_entries,
-        dataset_root=dataset_path
-        )
+        split_keys=test_keys, zip_name=cst.IMAGE_TEST_SPLIT_ZIP_NAME, entries=dataset_entries, dataset_root=dataset_path
+    )
     train_zip_path = create_zip_for_image_dataset(
-        split_keys=train_keys,
-        zip_name=cst.IMAGE_TRAIN_SPLIT_ZIP_NAME,
-        entries=dataset_entries,
-        dataset_root=dataset_path
-        )
-    
+        split_keys=train_keys, zip_name=cst.IMAGE_TRAIN_SPLIT_ZIP_NAME, entries=dataset_entries, dataset_root=dataset_path
+    )
+
     return test_zip_path, train_zip_path
 
 
@@ -197,7 +195,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
 
 async def prepare_text_task(dataset_name: str, columns_to_sample: List[str], keypair: Keypair) -> tuple[str, str, str]:
     logger.info(f"Preparing {dataset_name}", extra=create_extra_log())
-    dataset_dict = train_test_split(dataset_name)
+    dataset_dict = train_test_split_text(dataset_name)
     train_dataset = dataset_dict["train"]
     test_dataset = dataset_dict["test"]
 
@@ -269,24 +267,18 @@ async def prepare_text_task(dataset_name: str, columns_to_sample: List[str], key
         train_json_url.strip('"'),
     )
 
+
 async def prepare_image_task(dataset_zip_path: str) -> tuple[str, str]:
     dataset_path = unzip_to_temp_path(dataset_zip_path)
     test_zip_path, train_zip_path = train_test_split_image(dataset_path=dataset_path)
     test_url = await upload_file_to_minio(
-        file_path=str(test_zip_path),
-        bucket_name=cst.BUCKET_NAME,
-        object_name=f"{os.urandom(8).hex()}_test_data.zip"
+        file_path=str(test_zip_path), bucket_name=cst.BUCKET_NAME, object_name=f"{os.urandom(8).hex()}_test_data.zip"
     )
     train_url = await upload_file_to_minio(
-        file_path=str(train_zip_path),
-        bucket_name=cst.BUCKET_NAME,
-        object_name=f"{os.urandom(8).hex()}_train_data.zip"
+        file_path=str(train_zip_path), bucket_name=cst.BUCKET_NAME, object_name=f"{os.urandom(8).hex()}_train_data.zip"
     )
 
     if os.path.exists(dataset_path):
         shutil.rmtree(dataset_path)
 
-    return (
-        test_url.strip('"'),
-        train_url.strip('"')
-    )
+    return (test_url.strip('"'), train_url.strip('"'))

@@ -58,7 +58,7 @@ MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
-TEMP_PATH_FOR_IMAGES = "validator/temp_images"
+TEMP_PATH_FOR_IMAGES = "/tmp/validator/temp_images"
 
 # synth stuff
 SYNTH_GEN_BATCH_SIZE = 10
@@ -70,6 +70,7 @@ GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
 SYNTH_MODEL = "chat-llama-3-2-3b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
+IMAGE_GEN_ENDPOINT = "https://api.nineteen.ai/v1/text-to-image"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
@@ -79,10 +80,13 @@ OUTPUT_REFORMULATION_PROBABILITY = 0.5
 # Task Stuff
 MINIMUM_MINER_POOL = 1
 
+
 MIN_IDEAL_NUM_MINERS_IN_POOL = 7
 MAX_IDEAL_NUM_MINERS_IN_POOL = 14
-MIN_COMPETITION_HOURS = 1
-MAX_COMPETITION_HOURS = 5
+MIN_TEXT_COMPETITION_HOURS = 1
+MAX_TEXT_COMPETITION_HOURS = 5
+MIN_IMAGE_COMPETITION_HOURS = 1
+MAX_IMAGE_COMPETITION_HOURS = 2
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 # how many times in total do we attempt to delay an organic request looking for miners
 MAX_DELAY_TIMES = 6
@@ -118,3 +122,86 @@ MAX_CONCURRENT_JOBS = 4
 
 
 LOGPATH = "/root/G.O.D/validator/logs"
+
+# Image generation stuff
+IMAGE_STYLES = [
+    "Watercolor Painting",
+    "Oil Painting",
+    "Digital Art",
+    "Pencil Sketch",
+    "Comic Book Style",
+    "Cyberpunk",
+    "Steampunk",
+    "Impressionist",
+    "Pop Art",
+    "Minimalist",
+    "Gothic",
+    "Art Nouveau",
+    "Pixel Art",
+    "Anime",
+    "3D Render",
+    "Low Poly",
+    "Photorealistic",
+    "Vector Art",
+    "Abstract Expressionism",
+    "Realism",
+    "Futurism",
+    "Cubism",
+    "Surrealism",
+    "Baroque",
+    "Renaissance",
+    "Fantasy Illustration",
+    "Sci-Fi Illustration",
+    "Ukiyo-e",
+    "Line Art",
+    "Black and White Ink Drawing",
+    "Graffiti Art",
+    "Stencil Art",
+    "Flat Design",
+    "Isometric Art",
+    "Retro 80s Style",
+    "Vaporwave",
+    "Dreamlike",
+    "High Fantasy",
+    "Dark Fantasy",
+    "Medieval Art",
+    "Art Deco",
+    "Hyperrealism",
+    "Sculpture Art",
+    "Caricature",
+    "Chibi",
+    "Noir Style",
+    "Lowbrow Art",
+    "Psychedelic Art",
+    "Vintage Poster",
+    "Manga",
+    "Holographic",
+    "Kawaii",
+    "Monochrome",
+    "Geometric Art",
+    "Photocollage",
+    "Mixed Media",
+    "Ink Wash Painting",
+    "Charcoal Drawing",
+    "Concept Art",
+    "Digital Matte Painting",
+    "Pointillism",
+    "Expressionism",
+    "Sumi-e",
+    "Retro Futurism",
+    "Pixelated Glitch Art",
+    "Neon Glow",
+    "Street Art",
+    "Acrylic Painting",
+    "Bauhaus",
+    "Flat Cartoon Style",
+    "Carved Relief Art",
+    "Fantasy Realism",
+]
+
+# Image generation parameters
+IMAGE_GEN_MODEL = "black-forest-labs/FLUX.1-schnell"
+IMAGE_GEN_STEPS = 8
+IMAGE_GEN_CFG_SCALE = 3
+IMAGE_GEN_HEIGHT = 1024
+IMAGE_GEN_WIDTH = 1024

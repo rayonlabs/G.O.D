@@ -15,6 +15,7 @@ from validator.core.config import Config
 from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
+from validator.tasks.diffusion_synth import create_synthetic_image_task
 from validator.utils.call_endpoint import call_content_service
 
 
@@ -65,7 +66,7 @@ async def create_synthetic_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[str, None],
-):
+) -> RawTask:
     number_of_hours = random.randint(cst.MIN_COMPETITION_HOURS, cst.MAX_COMPETITION_HOURS)
     model_id = await anext(models)
     dataset_id = await anext(datasets)
@@ -91,6 +92,8 @@ async def create_synthetic_text_task(
 
     task = await add_task(task, config.psql_db)
 
+    return task
+
 
 async def _add_new_task_to_network_if_not_enough(
     config: Config,
@@ -106,9 +109,7 @@ async def _add_new_task_to_network_if_not_enough(
         if random.random() > cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT:
             await create_synthetic_text_task(config, models, datasets)
         else:
-            # TODO IMPLEMENT ME
-            # await create_synthetic_image_task(config, models, datasets)
-            pass
+            await create_synthetic_image_task(config, models, datasets)
 
 
 async def schedule_synthetics_periodically(config: Config):
