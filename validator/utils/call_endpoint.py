@@ -108,7 +108,7 @@ async def process_non_stream_fiber(
 
 
 async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> str | None:
-    response = await post_to_nineteen_ai(PROMPT_GEN_ENDPOINT, payload, keypair)
+    response = await _post_to_nineteen_ai(PROMPT_GEN_ENDPOINT, payload, keypair)
     response_json = response.json()
     try:
         return response_json["choices"][0]["message"]["content"]
@@ -119,12 +119,12 @@ async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> st
 
 
 async def post_to_nineteen_image(payload: dict[str, Any], keypair: Keypair) -> str | None:
-    response = await post_to_nineteen_ai(IMAGE_GEN_ENDPOINT, payload, keypair)
+    response = await _post_to_nineteen_ai(IMAGE_GEN_ENDPOINT, payload, keypair)
     return response.json()
 
 
 @retry_with_backoff
-async def post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypair) -> str | None:
+async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypair) -> httpx.Response:
     if NINETEEN_API_KEY is None:
         headers = _get_headers_for_signed_https_request(keypair)
     else:
