@@ -33,6 +33,7 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.submissions_and_scoring import get_all_processed_dataset_rows
 from validator.db.sql.submissions_and_scoring import get_all_unique_models_count
+from validator.utils import stats
 from validator.utils.logging import get_logger
 
 
@@ -308,7 +309,7 @@ async def update_training_repo_backup(
 async def get_model_size_distribution(
     config: Config = Depends(get_config),
 ) -> AllModelSizes:
-    return await submissions_and_scoring_sql.get_all_model_size_distribution(config)
+    return await stats.get_all_model_size_distribution(config)
 
 
 async def get_unique_models_count(
