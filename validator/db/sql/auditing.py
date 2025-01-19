@@ -96,6 +96,7 @@ async def get_recent_tasks_for_hotkey(
                 ON t.{cst.TASK_ID} = o.{cst.TASK_ID}
                 AND o.{cst.HOTKEY} = $2
             WHERE t.{cst.TASK_ID} = ANY($1)
+            ORDER BY t.{cst.CREATED_AT} DESC
         """
         results = await connection.fetch(query, task_ids, hotkey)
 
