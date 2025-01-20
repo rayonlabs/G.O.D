@@ -64,6 +64,4 @@ async def get_scores_for_setting_weights(config: Config = Depends(get_config)) -
 
 
 def factory_router():
-    router = APIRouter(tags=["auditing"])
-    router.include_router(router)
     return router
