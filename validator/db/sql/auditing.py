@@ -57,7 +57,22 @@ async def get_recent_tasks(
             """
             tasks = await connection.fetch(query, limit, (page - 1) * limit)
 
-    return [Task(**task) for task in tasks]
+    tasks_processed = []
+    for task in tasks:
+        task = Task(**task)
+        if task.status not in [
+            TaskStatus.SUCCESS,
+            TaskStatus.FAILURE,
+            TaskStatus.FAILURE_FINDING_NODES,
+            TaskStatus.PREP_TASK_FAILURE,
+            TaskStatus.NODE_TRAINING_FAILURE,
+        ]:
+            task.ds_id = "Hidden"
+            task.test_data = None
+            task.synthetic_data = None
+            task.training_data = None
+        tasks_processed.append(task)
+    return tasks_processed
 
 
 async def get_recent_tasks_for_hotkey(
@@ -140,6 +155,7 @@ async def get_recent_tasks_for_hotkey(
                 task.synthetic_data = None
                 task.test_data = None
                 task.training_data = None
+                task.ds_id = "Hidden"
 
             tasks_with_details.append(TaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
 
@@ -173,6 +189,7 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
             task.synthetic_data = None
             task.test_data = None
             task.training_data = None
+            task.ds_id = "Hidden"
 
         query = f"""
             SELECT
