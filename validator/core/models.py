@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -62,25 +63,21 @@ class ModelData(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
+class TaskType(Enum):
+    TEXTTASK = "TextTask"
+    IMAGETASK = "ImageTask"
+
+
 class RawTask(BaseModel):
     is_organic: bool
     task_id: UUID | None = None
-    model_id: str
-    ds_id: str
-    file_format: FileFormat = FileFormat.HF
     status: str
+    model_id: str
+    ds: str
     account_id: UUID
     times_delayed: int = 0
     hours_to_complete: int
-    field_system: str | None = None
-    field_instruction: str
-    field_input: str | None = None
-    field_output: str | None = None
-    format: str | None = None
-    no_input_format: str | None = None
-    system_format: None = None  # NOTE: Needs updating to be optional once we accept it
     test_data: str | None = None
-    synthetic_data: str | None = None
     training_data: str | None = None
     assigned_miners: list[int] | None = None
     miner_scores: list[float] | None = None
@@ -92,14 +89,41 @@ class RawTask(BaseModel):
     started_at: datetime | None = None
     termination_at: datetime | None = None
     completed_at: datetime | None = None
+    task_type: TaskType
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
 
 
-# NOTE: As time goes on we will expand this class to be more of a 'submmited task'?
+class TextRawTask(RawTask):
+    field_system: str | None = None
+    field_instruction: str
+    field_input: str | None = None
+    field_output: str | None = None
+    format: str | None = None
+    no_input_format: str | None = None
+    system_format: None = None  # NOTE: Needs updating to be optional once we accept it
+    synthetic_data: str | None = None
+    file_format: FileFormat = FileFormat.HF
+    task_type: TaskType = TaskType.TEXTTASK
+
+
+class ImageRawTask(RawTask):
+    model_filename: str
+    task_type: TaskType = TaskType.IMAGETASK
+
+
+# NOTE: As time goes on we will expand this class to be more of a 'submitted task'?
 # Might wanna rename this some more
 class Task(RawTask):
+    trained_model_repository: str | None = None
+
+
+class TextTask(TextRawTask):
+    trained_model_repository: str | None = None
+
+
+class ImageTask(ImageRawTask):
     trained_model_repository: str | None = None
 
 
@@ -216,6 +240,17 @@ class DatasetJsons(BaseModel):
             "test_data": json.dumps(self.test_data),
             "synthetic_data": json.dumps(self.synthetic_data) if self.synthetic_data else "",
         }
+
+
+class Img2ImgPayload(BaseModel):
+    ckpt_name: str
+    lora_name: str
+    steps: int
+    cfg: float
+    denoise: float
+    comfy_template: dict
+    prompt: str | None = None
+    base_image: str | None = None
 
 
 class NetworkStats(BaseModel):

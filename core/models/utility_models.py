@@ -10,7 +10,6 @@ class DatasetType(str, Enum):
     INSTRUCT = "instruct"
     PRETRAIN = "pretrain"
     ALPACA = "alpaca"
-    # there is actually loads of these supported, but laziness is key here, add when we need
 
 
 class FileFormat(str, Enum):
@@ -82,13 +81,24 @@ class CustomDatasetType(BaseModel):
 
 class Job(BaseModel):
     job_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    dataset: str
     model: str
-    dataset_type: DatasetType | CustomDatasetType
-    file_format: FileFormat
     status: JobStatus = JobStatus.QUEUED
     error_message: str | None = None
     expected_repo_name: str | None = None
+
+
+class TextJob(Job):
+    dataset: str
+    dataset_type: DatasetType | CustomDatasetType
+    file_format: FileFormat
+
+
+class DiffusionJob(Job):
+    dataset_zip: str = Field(
+        ...,
+        description="Link to dataset zip file",
+        min_length=1,
+    )
 
 
 class Role(str, Enum):

@@ -1,6 +1,12 @@
+import base64
 import os
+import shutil
+import tempfile
+from io import BytesIO
 
 from datasets import get_dataset_config_names
+from huggingface_hub import hf_hub_download
+from PIL import Image
 from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 
@@ -70,3 +76,43 @@ def get_default_dataset_config(dataset_name: str) -> str | None:
         return config_names[0]
     else:
         return None
+
+
+def base64_to_image(base64_string: str) -> Image.Image:
+    image_data = base64.b64decode(base64_string)
+    image_stream = BytesIO(image_data)
+    image = Image.open(image_stream)
+    return image
+
+
+def download_from_huggingface(repo_id: str, filename: str, local_dir: str) -> str:
+    # Use a temp folder to ensure correct file placement
+    try:
+        local_filename = os.path.basename(filename)
+        final_path = os.path.join(local_dir, local_filename)
+        if os.path.exists(final_path):
+            logger.info(f"File {filename} already exists. Skipping download.")
+        else:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_file_path = hf_hub_download(repo_id=repo_id, filename=filename, local_dir=temp_dir)
+                shutil.move(temp_file_path, final_path)
+            logger.info(f"File {filename} downloaded successfully")
+        return final_path
+    except Exception as e:
+        logger.error(f"Error downloading file: {e}")
+
+
+def list_supported_images(dataset_path: str, extensions: tuple) -> list[str]:
+    return [file_name for file_name in os.listdir(dataset_path) if file_name.lower().endswith(extensions)]
+
+
+def read_image_as_base64(image_path: str) -> str:
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
+
+
+def read_prompt_file(text_file_path: str) -> str:
+    if os.path.exists(text_file_path):
+        with open(text_file_path, "r", encoding="utf-8") as text_file:
+            return text_file.read()
+    return None

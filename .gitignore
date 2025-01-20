@@ -23,6 +23,10 @@ core/custom_task_config.py
 
 core/config/*.yml
 !core/config/base.yml
+core/config/*.toml
+!core/config/base_diffusion.toml
+core/dataset/images/*
+!core/dataset/images/.gitkeep
 
 
 *_keys.encrypted
@@ -58,6 +62,7 @@ sample2.txt
 config.yaml
 
 test_images/
+ComfyUI/
 
 score_records.csv
 models_cache/*

@@ -12,8 +12,10 @@ from core.models.payload_models import DatasetColumnsResponse
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.core.models import RawTask
+from validator.core.models import TextRawTask
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
+from validator.tasks.diffusion_synth import create_synthetic_image_task
 from validator.utils.call_endpoint import call_content_service
 from validator.utils.logging import get_logger
 
@@ -61,11 +63,11 @@ async def _get_columns_for_dataset(dataset_id: str, keypair: Keypair) -> Dataset
     return columns
 
 
-async def _create_synthetic_task(
+async def create_synthetic_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[str, None],
-):
+) -> RawTask:
     number_of_hours = random.randint(cst.MIN_COMPETITION_HOURS, cst.MAX_COMPETITION_HOURS)
     model_id = await anext(models)
     dataset_id = await anext(datasets)
@@ -73,9 +75,9 @@ async def _create_synthetic_task(
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
-    task = RawTask(
+    task = TextRawTask(
         model_id=model_id,
-        ds_id=dataset_id,
+        ds=dataset_id,
         field_system=None,
         field_instruction=columns.field_instruction,
         field_input=columns.field_input,
@@ -91,6 +93,8 @@ async def _create_synthetic_task(
 
     task = await add_task(task, config.psql_db)
 
+    return task
+
 
 async def _add_new_task_to_network_if_not_enough(
     config: Config,
@@ -103,7 +107,10 @@ async def _add_new_task_to_network_if_not_enough(
     logger.info(f"There are {len(current_training_tasks)} running at the moment")
     if len(current_delayed_tasks) == 0 and len(current_training_tasks) < cst.HOW_MANY_TASKS_ALLOWED_AT_ONCE:
         logger.info("This is less than the minimal - creating a new task")
-        await _create_synthetic_task(config, models, datasets)
+        if random.random() > cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT:
+            await create_synthetic_text_task(config, models, datasets)
+        else:
+            await create_synthetic_image_task(config, models, datasets)
 
 
 async def schedule_synthetics_periodically(config: Config):
