@@ -6,6 +6,7 @@ from fastapi import Depends
 from fiber.chain.chain_utils import query_substrate
 from loguru import logger  # noqa
 
+from validator.core import constants as cts
 from validator.core.config import Config
 from validator.core.dependencies import get_config
 from validator.core.models import Task
@@ -59,11 +60,12 @@ async def get_scores_for_setting_weights(config: Config = Depends(get_config)) -
 
     seconds_since_update = updated * 12  # 12 is block time in seconds
 
-    time_when_last_set_weights = datetime.now() - timedelta(seconds=seconds_since_update)
+    time_when_last_set_weights = datetime.now() - timedelta(seconds=seconds_since_update, days=cts.SCORING_WINDOW)
 
     logger.info(f"Getting scores for time {time_when_last_set_weights.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    return await get_aggregate_scores_since(start_time=time_when_last_set_weights, psql_db=config.psql_db)
+    scores = await get_aggregate_scores_since(start_time=time_when_last_set_weights, psql_db=config.psql_db)
+    return scores
 
 
 def factory_router():
