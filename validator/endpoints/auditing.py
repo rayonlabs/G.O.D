@@ -60,7 +60,7 @@ async def get_scores_for_setting_weights(config: Config = Depends(get_config)) -
 
     time_when_last_set_weights = datetime.now() - timedelta(seconds=seconds_since_update)
 
-    return await get_aggregate_scores_since(starttime=time_when_last_set_weights, psql_db=config.psql_db)
+    return await get_aggregate_scores_since(start_time=time_when_last_set_weights, psql_db=config.psql_db)
 
 
 def factory_router():
