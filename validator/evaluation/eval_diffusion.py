@@ -28,6 +28,23 @@ def load_comfy_workflows():
 
     return lora_template
 
+def contains_png_files(directory: str) -> str:
+        try:
+            return any(file.lower().endswith('.png') for file in os.listdir(directory))
+        except FileNotFoundError:
+            return False
+
+def validate_dataset_path(dataset_path: str) -> str:
+    if os.path.isdir(dataset_path):
+        if contains_png_files(dataset_path):
+            return dataset_path
+        subdirectories = [os.path.join(dataset_path, d) for d in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, d))]
+        for subdirectory in subdirectories:
+            if contains_png_files(subdirectory):
+                return subdirectory
+    return dataset_path
+
+
 def find_latest_lora_submission_name(repo_id: str) -> str:
     repo_files = hf_api.list_repo_files(repo_id)
     model_files = [file for file in repo_files if file.startswith(cst.DIFFUSION_HF_DEFAULT_FOLDER)]
@@ -136,6 +153,7 @@ def main():
     logger.info("Base model downloaded")
 
     lora_repos = [m.strip() for m in trained_lora_model_repos.split(",") if m.strip()]
+    test_dataset_path = validate_dataset_path(test_dataset_path)
 
     lora_comfy_template = load_comfy_workflows()
     api_gate.connect()

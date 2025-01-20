@@ -50,7 +50,7 @@ async def get_evaluation_results(container):
         return json.loads(eval_results_content)
 
 
-async def run_evaluation_docker(
+async def run_evaluation_docker_text(
     dataset: str,
     models: list[str],
     original_model: str,
