@@ -51,7 +51,7 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     if hours * model_size_value == 0:
         logger.error(
             f"Hours to complete: {hours} and model size value: {model_size_value} for task {task.task_id} and model id: {model}"
-            "Returning 1 regardless as a failsafe, but please look into this"
+            "\nReturning 1 regardless as a failsafe, but please look into this"
         )
         return 1
     return max(1, 2 * np.log(float(hours * model_size_value)))

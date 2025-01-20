@@ -89,18 +89,7 @@ async def get_node_weights_from_results(
     return all_node_ids, all_node_weights
 
 
-async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
-    node_results, task_results = await _get_weights_to_set(config)
-    if node_results is None:
-        logger.info("No weights to set. Skipping weight setting.")
-        return False
-    if len(node_results) == 0:
-        logger.info("No nodes to set weights for. Skipping weight setting.")
-        return False
-
-    all_node_ids, all_node_weights = await get_node_weights_from_results(config.substrate, config.netuid, node_results)
-    logger.info("Weights calculated, about to set...")
-
+async def set_weights(config: Config, all_node_ids: list[int], all_node_weights: list[float], validator_node_id: int) -> bool:
     try:
         success = await asyncio.to_thread(
             weights.set_node_weights,
@@ -122,13 +111,30 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
     if success:
         logger.info("Weights set successfully.")
 
-        logger.info("Now uploading the scores to s3 for auditing...")
-        url = await _upload_results_to_s3(config, task_results)
-        logger.info(f"Uploaded the scores to s3 for auditing - url: {url}")
         return True
     else:
         logger.error("Failed to set weights :(")
         return False
+
+
+async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
+    node_results, task_results = await _get_weights_to_set(config)
+    if node_results is None:
+        logger.info("No weights to set. Skipping weight setting.")
+        return False
+    if len(node_results) == 0:
+        logger.info("No nodes to set weights for. Skipping weight setting.")
+        return False
+
+    all_node_ids, all_node_weights = await get_node_weights_from_results(config.substrate, config.netuid, node_results)
+    logger.info("Weights calculated, about to set...")
+
+    success = await set_weights(config, all_node_ids, all_node_weights, validator_node_id)
+    if success:
+        url = await _upload_results_to_s3(config, task_results)
+        logger.info(f"Uploaded the scores to s3 for auditing - url: {url}")
+
+    return success
 
 
 async def _set_metagraph_weights(config: Config) -> None:
