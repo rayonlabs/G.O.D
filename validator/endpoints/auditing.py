@@ -1,8 +1,8 @@
-
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
-from loguru import logger  # noqa
+from loguru import logger
+from pydantic import BaseModel  # noqa
 
 from validator.core.config import Config
 from validator.core.dependencies import get_config
@@ -35,15 +35,19 @@ async def audit_task_details_endpoint(task_id: str, config: Config = Depends(get
     return await get_task_with_hotkey_details(task_id, config)
 
 
+class ScoresUrlResponse(BaseModel):
+    url: str
+
+
 @router.get("/auditing/scores-url")
-async def get_latest_scores_url_endpoint(config: Config = Depends(get_config)) -> str:
+async def get_latest_scores_url_endpoint(config: Config = Depends(get_config)) -> ScoresUrlResponse:
     """
     Get the scores url for when I last set weights, to prove I did it right
     """
     url = await get_latest_scores_url(config)
     if url is None:
         raise HTTPException(status_code=400, detail="No scores url found... sorry :/")
-    return url
+    return ScoresUrlResponse(url=url)
 
 
 def factory_router():
