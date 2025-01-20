@@ -60,6 +60,8 @@ async def get_scores_for_setting_weights(config: Config = Depends(get_config)) -
 
     time_when_last_set_weights = datetime.now() - timedelta(seconds=seconds_since_update)
 
+    logger.info(f"Getting scores for time {time_when_last_set_weights.strftime('%Y-%m-%d %H:%M:%S')}")
+
     return await get_aggregate_scores_since(start_time=time_when_last_set_weights, psql_db=config.psql_db)
 
 
