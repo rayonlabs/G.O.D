@@ -44,7 +44,6 @@ async def _get_task_results_for_rayon_validator(config: Config) -> list[TaskResu
     with open(result_filepath, "r") as f:
         task_results_dicts = json.loads(json.load(f))
 
-
     return [TaskResults(**task_results_dict) for task_results_dict in task_results_dicts]
 
 
@@ -89,9 +88,8 @@ async def get_scores_from_rayon_vali(config: Config) -> list[PeriodScore]:
     return final_scores
 
 
-async def get_weights_for_rayon_validator() -> list[float]:
+async def audit_weights(config: Config) -> bool:
     """Get the weights for a rayon validator."""
-    config = load_config()
     results = await get_scores_from_rayon_vali(config)
 
     node_ids, node_weights = await get_node_weights_from_results(config.substrate, config.netuid, results)
@@ -126,5 +124,43 @@ async def get_weights_for_rayon_validator() -> list[float]:
         return False
 
 
+async def main():
+    config = load_config()
+    substrate = config.substrate
+    substrate, uid = query_substrate(
+        substrate,
+        "SubtensorModule",
+        "Uids",
+        [config.netuid, config.keypair.ss58_address],
+        return_value=True,
+    )
+
+    if uid is None:
+        raise ValueError(f"Can't find hotkey {config.keypair.ss58_address} for our keypair on netuid: {config.netuid}.")
+
+    while True:
+        substrate, current_block = query_substrate(substrate, "System", "Number", [], return_value=True)
+        substrate, last_updated_value = query_substrate(
+            substrate, "SubtensorModule", "LastUpdate", [config.netuid], return_value=False
+        )
+        updated: int = current_block - last_updated_value[uid].value
+        substrate, weights_set_rate_limit = query_substrate(
+            substrate, "SubtensorModule", "WeightsSetRateLimit", [config.netuid], return_value=True
+        )
+        logger.info(
+            f"My Validator Node ID: {uid}. Last updated {updated} blocks ago. Weights set rate limit: {weights_set_rate_limit}."
+        )
+
+        if updated < weights_set_rate_limit:
+            sleep_duration = (weights_set_rate_limit - updated) * 12
+            logger.info(f"Sleeping for {sleep_duration} seconds [{sleep_duration / 12 } blocks]" " as we set weights recently...")
+            await asyncio.sleep(sleep_duration)
+            continue
+
+        success = await audit_weights(config)
+        if success:
+            break
+
+
 if __name__ == "__main__":
-    asyncio.run(get_weights_for_rayon_validator())
+    asyncio.run(main())
