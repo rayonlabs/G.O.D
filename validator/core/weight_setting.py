@@ -9,12 +9,12 @@ from dotenv import load_dotenv
 from fiber.chain import fetch_nodes
 from fiber.chain import weights
 from fiber.chain.models import Node
+from substrateinterface import SubstrateInterface
 
 from core import constants as ccst
 from validator.core.config import Config
 from validator.core.config import load_config
 from validator.core.models import PeriodScore
-from validator.db.sql.nodes import get_node_id_by_hotkey
 from validator.db.sql.nodes import get_vali_node_id
 from validator.evaluation.scoring import scoring_aggregation_from_date
 from validator.utils.query_substrate import query_substrate
@@ -37,6 +37,31 @@ async def _get_weights_to_set(config: Config) -> list[PeriodScore] | None:
     return await scoring_aggregation_from_date(config.psql_db)
 
 
+async def get_node_weights_from_results(
+    substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore]
+) -> tuple[list[int], list[float]]:
+    """
+    Get the node ids and weights from the node results.
+    """
+    all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(substrate, netuid)
+
+    hotkey_to_node_id = {node.hotkey: node.node_id for node in all_nodes}
+
+    all_node_ids = [node.node_id for node in all_nodes]
+    all_node_weights = [0.0 for _ in all_nodes]
+    for node_result in node_results:
+        if node_result.normalised_score is not None:
+            node_id = hotkey_to_node_id.get(node_result.hotkey)
+            if node_id is not None:
+                all_node_weights[node_id] = node_result.normalised_score
+
+    logger.info(f"Node ids: {all_node_ids}")
+    logger.info(f"Node weights: {all_node_weights}")
+    logger.info(f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}")
+    logger.info(f"Everything going in is" f" {all_node_ids} {all_node_weights} {netuid} {ccst.VERSION_KEY}")
+    return all_node_ids, all_node_weights
+
+
 async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
     node_results = await _get_weights_to_set(config)
     if node_results is None:
@@ -46,24 +71,8 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
         logger.info("No nodes to set weights for. Skipping weight setting.")
         return False
 
+    all_node_ids, all_node_weights = await get_node_weights_from_results(config.substrate, config.netuid, node_results)
     logger.info("Weights calculated, about to set...")
-
-    all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
-    all_node_ids = [node.node_id for node in all_nodes]
-    all_node_weights = [0.0 for _ in all_nodes]
-    for node_result in node_results:
-        if node_result.normalised_score is not None:
-            node_id = await get_node_id_by_hotkey(node_result.hotkey, config.psql_db)
-            if node_id is not None:
-                all_node_weights[node_id] = node_result.normalised_score
-
-    logger.info(f"Node ids: {all_node_ids}")
-    logger.info(f"Node weights: {all_node_weights}")
-    logger.info(f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}")
-    logger.info(
-        f"Everything going in is {weights.set_node_weights} {config.substrate} {config.keypair}"
-        f" {all_node_ids} {all_node_weights} {config.netuid} {ccst.VERSION_KEY} {validator_node_id}"
-    )
 
     try:
         success = await asyncio.to_thread(
