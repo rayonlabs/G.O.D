@@ -40,7 +40,7 @@ class ScoresUrlResponse(BaseModel):
 
 
 @router.get("/auditing/scores-url")
-async def get_latest_scores_url_endpoint(config: Config = Depends(get_config)) -> ScoresUrlResponse:
+async def audit_latest_scores_url_endpoint(config: Config = Depends(get_config)) -> ScoresUrlResponse:
     """
     Get the scores url for when I last set weights, to prove I did it right
     """

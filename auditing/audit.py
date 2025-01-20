@@ -1,9 +1,10 @@
-from datetime import datetime
-from datetime import timedelta
+import asyncio
+import json
 
 from fiber.chain.weights import _normalize_and_quantize_weights
 
-from validator.core import constants as cts
+from core.utils import download_s3_file
+from validator.core.config import Config
 from validator.core.config import load_config
 from validator.core.models import NodeAggregationResult
 from validator.core.models import PeriodScore
@@ -19,12 +20,28 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def _get_task_results_for_rayon_validator() -> list[TaskResults]:
+async def _get_task_results_for_rayon_validator(config: Config) -> list[TaskResults]:
     """Get task results for a rayon validator."""
-    pass
+    url_to_get_latest_scores_url = "https://api.gradients.io/auditing/scores-url"
+    response = await config.httpx_client.get(url_to_get_latest_scores_url)
+
+    if response.status_code != 200:
+        logger.error(f"Failed to get latest scores url: {response.status_code} {response.text} :(")
+        raise Exception(f"Failed to get latest scores url: {response.status_code} {response.text} :(")
+
+    url = response.json()["url"]
+
+    logger.info(f"Getting task results from {url}")
+    result_filepath = await download_s3_file(url)
+    with open(result_filepath, "r") as f:
+        task_results_dicts = json.loads(json.load(f))
+
+    logger.info(f"Task results dicts: {list(task_results_dicts[0].keys())}")
+
+    return [TaskResults(**task_results_dict) for task_results_dict in task_results_dicts]
 
 
-async def get_results_from_api() -> list[PeriodScore]:
+async def get_scores_from_rayon_vali(config: Config) -> list[PeriodScore]:
     """Check that scores are calculated correctly by the validator.
 
     Receive details of every task that occurred in the past 7 days.
@@ -46,13 +63,8 @@ async def get_results_from_api() -> list[PeriodScore]:
     they have done to the tasks on the dashboards - it's only a minor improvement.
 
     """
-    date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
-    date
 
-    # NOTE: Below is what I need to replace with the api call
-
-    # task_results: list[TaskResults] = await get_aggregate_scores_since(date, psql_db)
-    task_results = await _get_task_results_for_rayon_validator()
+    task_results = await _get_task_results_for_rayon_validator(config)
 
     logger.info(f"Got task results {task_results}")
     if not task_results:
@@ -74,12 +86,19 @@ async def get_results_from_api() -> list[PeriodScore]:
 async def get_weights_for_rayon_validator() -> list[float]:
     """Get the weights for a rayon validator."""
     config = load_config()
-    results = await get_results_from_api()
+    results = await get_scores_from_rayon_vali(config)
 
-    node_ids, node_weights = get_node_weights_from_results(config.substrate, config.netuid, results)
+    node_ids, node_weights = await get_node_weights_from_results(config.substrate, config.netuid, results)
 
     node_ids_formatted, node_weights_formatted = _normalize_and_quantize_weights(node_ids, node_weights)
+    return node_ids_formatted, node_weights_formatted
+
+    print(node_ids_formatted, node_weights_formatted)
 
     # Get on chain weights set by that validator
 
     # Compare and ensure they are close by ensuring dot product is close to 1
+
+
+if __name__ == "__main__":
+    asyncio.run(get_weights_for_rayon_validator())

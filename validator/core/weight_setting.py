@@ -27,12 +27,13 @@ from core.constants import BUCKET_NAME
 from validator.core.config import Config
 from validator.core.config import load_config
 from validator.core.models import PeriodScore
+from validator.core.models import TaskResults
 from validator.db.sql.nodes import get_vali_node_id
 from validator.evaluation.scoring import scoring_aggregation_from_date
-from validator.tasks.task_prep import save_json_to_temp_file
-from validator.tasks.task_prep import upload_json_to_minio
 from validator.utils.logging import get_logger
+from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import try_db_connections
+from validator.utils.util import upload_json_to_minio
 
 
 logger = get_logger(__name__)
@@ -41,11 +42,11 @@ logger = get_logger(__name__)
 TIME_PER_BLOCK: int = 500
 
 
-async def _get_weights_to_set(config: Config) -> list[PeriodScore] | None:
+async def _get_weights_to_set(config: Config) -> tuple[list[PeriodScore], list[TaskResults]]:
     return await scoring_aggregation_from_date(config.psql_db)
 
 
-async def _upload_results_to_s3(config: Config, node_results: list[PeriodScore]) -> None:
+async def _upload_results_to_s3(config: Config, task_results: list[TaskResults]) -> None:
     class DateTimeEncoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, datetime):
@@ -54,7 +55,7 @@ async def _upload_results_to_s3(config: Config, node_results: list[PeriodScore])
                 return str(obj)
             return super().default(obj)
 
-    scores_json = json.dumps([result.model_dump() for result in node_results], indent=2, cls=DateTimeEncoder)
+    scores_json = json.dumps([result.model_dump() for result in task_results], indent=2, cls=DateTimeEncoder)
 
     temp_file, _ = await save_json_to_temp_file(scores_json, "latest_scores")
     datetime_of_upload = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -89,7 +90,7 @@ async def get_node_weights_from_results(
 
 
 async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
-    node_results = await _get_weights_to_set(config)
+    node_results, task_results = await _get_weights_to_set(config)
     if node_results is None:
         logger.info("No weights to set. Skipping weight setting.")
         return False
@@ -122,7 +123,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
         logger.info("Weights set successfully.")
 
         logger.info("Now uploading the scores to s3 for auditing...")
-        url = await _upload_results_to_s3(config, node_results)
+        url = await _upload_results_to_s3(config, task_results)
         logger.info(f"Uploaded the scores to s3 for auditing - url: {url}")
         return True
     else:
