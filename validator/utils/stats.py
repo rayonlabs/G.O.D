@@ -12,7 +12,7 @@ from validator.core.config import Config
 from validator.core.models import AllModelSizes
 from validator.db import constants as cst
 from validator.db.sql.submissions_and_scoring import fetch_all_task_data
-from validator.db.sql.submissions_and_scoring import fetch_model_params
+from validator.utils.call_endpoint import fetch_model_params
 
 
 async def get_all_model_size_distribution(config: Config) -> AllModelSizes:

@@ -1,22 +1,18 @@
 import asyncio
 import json
 from datetime import datetime
-from json import JSONDecodeError
 from typing import Dict
 from typing import List
 from typing import Optional
 from uuid import UUID
 
-import httpx
 from asyncpg import Record
 from asyncpg.connection import Connection
-from fiber import Keypair
 
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
-from validator.core.constants import GET_MODEL_METADATA
 from validator.core.models import AllNodeStats
 from validator.core.models import AllProcessedDatasetRows
 from validator.core.models import AllUniqueModels
@@ -29,7 +25,6 @@ from validator.core.models import TaskNode
 from validator.core.models import TaskResults
 from validator.core.models import WorkloadMetrics
 from validator.db.database import PSQLDB
-from validator.utils.call_endpoint import call_content_service
 from validator.utils.logging import get_logger
 
 
@@ -426,21 +421,6 @@ async def get_all_node_stats(hotkey: str, psql_db: PSQLDB) -> AllNodeStats:
     )
 
     return AllNodeStats(daily=daily, three_day=three_day, weekly=weekly, monthly=monthly, all_time=all_time)
-
-
-async def fetch_model_params(
-    model_id: str,
-    keypair: Keypair,
-) -> float:
-    try:
-        model_metadata = await call_content_service.__wrapped__(  # skip the retry decorator
-            endpoint=GET_MODEL_METADATA,
-            keypair=keypair,
-            params={"model_id": model_id},
-        )
-        return float(model_metadata["parameter_count"])
-    except (httpx.HTTPError, KeyError, JSONDecodeError):
-        return 1.0  # we tried...
 
 
 async def fetch_all_task_data(config: Config) -> List[Record]:
