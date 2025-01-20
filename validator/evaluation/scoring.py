@@ -1,5 +1,4 @@
 import os
-import re
 from datetime import datetime
 from datetime import timedelta
 
@@ -44,9 +43,8 @@ def get_task_work_score(task: RawTask) -> float:
     assert task.model_id, "Model ID must be present"
 
     hours = task.hours_to_complete
-    model = task.model_id
-    model_size = re.search(r"(\d+)(?=[bB])", model)
-    model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
+    # size in billions
+    model_size_value = min(8, task.model_params_count / 1_000_000_000) if task.model_params_count else 1
     return max(1, 2 * np.log(float(hours * model_size_value)))
 
 
@@ -334,8 +332,10 @@ async def _evaluate_submissions(
 
     logger.info("Starting synth evaluation")
     synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-    synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
+    synth_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
     os.remove(synthetic_data_filepath)
+    synth_eval_results = synth_results.results
+    task.model_params_count = synth_results.base_model_params_count
 
     finetuned_repos = []
     for repo in repos_to_evaluate:
@@ -354,10 +354,13 @@ async def _evaluate_submissions(
 
     if finetuned_repos:
         test_data_filepath = await download_s3_file(task.test_data)
-        test_eval_results = await run_evaluation_docker(
-            dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
+        test_results = await run_evaluation_docker(
+            dataset=test_data_filepath,
+            models=finetuned_repos,
+            **{k: v for k, v in evaluation_params.items() if k != "models"}
         )
         os.remove(test_data_filepath)
+        test_eval_results = test_results.results
 
         for repo in finetuned_repos:
             if isinstance(test_eval_results.get(repo), Exception):

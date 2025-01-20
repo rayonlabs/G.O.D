@@ -213,6 +213,14 @@ def evaluate_finetuned_model(
     return evaluate_language_model_loss(evaluation_config, finetuned_model, tokenizer)
 
 
+def _count_model_parameters(model: AutoModelForCausalLM) -> int:
+    try:
+        return sum(p.numel() for p in model.parameters())
+    except Exception as e:
+        logger.error(f"Failed to count model parameters: {e}")
+        return 0
+
+
 def main():
     dataset = os.environ.get("DATASET")
     original_model = os.environ.get("ORIGINAL_MODEL")
@@ -231,6 +239,7 @@ def main():
         dataset_type = CustomDatasetType.model_validate_json(dataset_type_str)
 
     base_model = AutoModelForCausalLM.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
+    model_params_count = _count_model_parameters(base_model)
     tokenizer = AutoTokenizer.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -238,7 +247,9 @@ def main():
 
     lora_repos = [m.strip() for m in models_str.split(",") if m.strip()]
 
-    results_dict = {}
+    results_dict = {
+        "model_params_count": model_params_count
+    }
     for repo in lora_repos:
         try:
             try:
