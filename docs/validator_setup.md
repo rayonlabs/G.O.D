@@ -23,6 +23,11 @@ cd G.O.D
 1. Install system dependencies (Ubuntu 24.04 LTS):
 
 ```bash
+# https://taskfile.dev/installation/
+# for example on ubuntu
+sudo snap install task --classic
+
+# run initial bootstrap script
 task bootstrap
 ```
 
