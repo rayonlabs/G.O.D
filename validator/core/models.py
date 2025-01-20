@@ -101,10 +101,12 @@ class TextRawTask(RawTask):
     no_input_format: str | None = None
     system_format: None = None  # NOTE: Needs updating to be optional once we accept it
     synthetic_data: str | None = None
+    task_type: TaskType = TaskType.TEXTTASK
 
 
 class ImageRawTask(RawTask):
     model_filename: str
+    task_type: TaskType = TaskType.IMAGETASK
 
 
 # NOTE: As time goes on we will expand this class to be more of a 'submitted task'?

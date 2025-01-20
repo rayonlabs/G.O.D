@@ -44,7 +44,6 @@ def validate_dataset_path(dataset_path: str) -> str:
                 return subdirectory
     return dataset_path
 
-
 def find_latest_lora_submission_name(repo_id: str) -> str:
     repo_files = hf_api.list_repo_files(repo_id)
     model_files = [file for file in repo_files if file.startswith(cst.DIFFUSION_HF_DEFAULT_FOLDER)]
@@ -153,6 +152,7 @@ def main():
     logger.info("Base model downloaded")
 
     lora_repos = [m.strip() for m in trained_lora_model_repos.split(",") if m.strip()]
+
     test_dataset_path = validate_dataset_path(test_dataset_path)
 
     lora_comfy_template = load_comfy_workflows()

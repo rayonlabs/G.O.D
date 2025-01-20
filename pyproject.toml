@@ -33,6 +33,7 @@ dependencies = [
     "sentencepiece==0.2.0",
     "protobuf==5.29.1",
     "peft",
+    "Pillow==11.1.0",
 ]
 
 [project.optional-dependencies]
