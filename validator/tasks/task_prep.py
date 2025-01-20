@@ -214,7 +214,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     return remaining_train_dataset, synthetic_dataset
 
 
-async def prepare_task(
+async def prepare_text_task(
     dataset_name: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair
 ) -> tuple[str, str, str]:
     logger.info(f"Preparing {dataset_name}")

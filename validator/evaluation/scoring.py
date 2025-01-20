@@ -9,7 +9,9 @@ from fiber.chain.models import Node
 from scipy.stats import gmean
 
 import validator.core.constants as cts
-from core.models.payload_models import EvaluationResult
+from core.models.payload_models import EvaluationResultText
+from core.models.payload_models import EvaluationResultImage
+from core.models.payload_models import DiffusionLosses
 from core.models.task_config_models import get_task_config
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
@@ -30,7 +32,8 @@ from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
-from validator.evaluation.docker_evaluation import run_evaluation_docker
+from validator.evaluation.docker_evaluation import run_evaluation_docker_text
+from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
 from validator.utils.logging import LogContext
@@ -302,50 +305,47 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str
 
 
 async def _evaluate_submissions(
-    task: TextRawTask | ImageRawTask,
-    submission_repos: list[str],
-    dataset_type: CustomDatasetType | None,
-    gpu_ids: list[int],
-) -> dict[str, tuple[EvaluationResult, EvaluationResult] | Exception]:
+    task: TextRawTask | ImageRawTask, submission_repos: list[str], gpu_ids: list[int], dataset_type: CustomDatasetType | None = None
+) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
     """Evaluate same task submissions within same docker container.
     Docker evaluations with an exception will return the Exception for the repo."""
     unique_repos = list(set(submission_repos))
     if len(unique_repos) != len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
 
-    results: dict[str, tuple[EvaluationResult, EvaluationResult] | Exception] = {}
-    repos_to_evaluate = []
-    for repo in unique_repos:
-        if repo == task.model_id:
-            logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
-            results[repo] = (
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-            )
-        else:
-            repos_to_evaluate.append(repo)
-
-    if not repos_to_evaluate:
-        return results
-
-    evaluation_params = {
-        "file_format": FileFormat.JSON,
-        "original_model": task.model_id,
-        "models": repos_to_evaluate,
-        "dataset_type": dataset_type,
-        "gpu_ids": gpu_ids,
-    }
-
-    assert task.test_data is not None, "Test data shouldn't be none"
-    results: dict[str, tuple[EvaluationResult, EvaluationResult] | Exception] = {}
-
     if isinstance(task, TextRawTask):
-        assert task.synthetic_data is not None, "Synth data shouldn't be none for text tasks"
+        results: dict[str, tuple[EvaluationResultText, EvaluationResultText] | Exception] = {}
+        repos_to_evaluate = []
+        for repo in unique_repos:
+            if repo == task.model_id:
+                logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
+                results[repo] = (
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                )
+            else:
+                repos_to_evaluate.append(repo)
+
+        if not repos_to_evaluate:
+            return results
+
+        evaluation_params = {
+            "file_format": FileFormat.JSON,
+            "original_model": task.model_id,
+            "models": repos_to_evaluate,
+            "dataset_type": dataset_type,
+            "gpu_ids": gpu_ids,
+        }
+
+        assert task.synthetic_data is not None, "Synthetic data shouldn't be none for text tasks"
+        assert task.test_data is not None, "Test data shouldn't be none for text tasks"
+
         logger.info("Starting synth evaluation")
         synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-        synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
+        synth_eval_results = await run_evaluation_docker_text(dataset=synthetic_data_filepath, **evaluation_params)
+        os.remove(synthetic_data_filepath)
 
-        finetuned_repos: list[str] = []
+        finetuned_repos = []
         for repo in repos_to_evaluate:
             if isinstance(synth_eval_results.get(repo), Exception):
                 results[repo] = synth_eval_results[repo]
@@ -354,41 +354,57 @@ async def _evaluate_submissions(
             synth_result = synth_eval_results[repo]
             if not synth_result.is_finetune:
                 results[repo] = (
-                    EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                    EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
                 )
             else:
                 finetuned_repos.append(repo)
+        if finetuned_repos:
+            test_data_filepath = await download_s3_file(task.test_data)
+            test_eval_results = await run_evaluation_docker_text(
+                dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
+            )
+            os.remove(test_data_filepath)
 
-    else:
-        # we need to set the submission repos for the diffusion task, feels like this could be tidied up
-        finetuned_repos = submission_repos
-
-    if finetuned_repos:
-        test_data_filepath = await download_s3_file(task.test_data)
-        test_eval_results = await get_task_config(task).eval_container(
-            # TODO, might be forcing it too much here, we would expect the inputs to be the same
-            # might be better to not add the container bits in the task config and just use isinstance
-            dataset=test_data_filepath,
-            models=finetuned_repos,
-            **{k: v for k, v in evaluation_params.items() if k != "models"},
-        )
-        os.remove(test_data_filepath)
-
-        for repo in finetuned_repos:
-            # puke, tidy me porfa
-            if isinstance(test_eval_results.get(repo), Exception):
-                results[repo] = test_eval_results[repo]
-            else:
-                if isinstance(task, ImageRawTask):
-                    # very sloppy for now, will eval out the same, would be nicer to accept just test for diffusion
-                    results[repo] = (test_eval_results[repo], test_eval_results[repo])
+            for repo in finetuned_repos:
+                if isinstance(test_eval_results.get(repo), Exception):
+                    results[repo] = test_eval_results[repo]
                 else:
                     results[repo] = (synth_eval_results[repo], test_eval_results[repo])
 
+    elif isinstance(task, ImageRawTask):
+        results: dict[str, EvaluationResultImage | Exception] = {}
+        repos_to_evaluate = []
+        for repo in unique_repos:
+            if repo == task.model_id:
+                logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
+                results[repo] = (
+                    EvaluationResultImage(eval_losses=DiffusionLosses(text_guided_losses=[0], no_text_losses=[0])),
+                )
+            else:
+                repos_to_evaluate.append(repo)
+
+        if not repos_to_evaluate:
+            return results
+
+        evaluation_params = {
+            "test_split_url": task.test_data,
+            "original_model_repo": task.model_id,
+            "original_model_filename": task.model_filename,
+            "models": repos_to_evaluate,
+            "gpu_ids": gpu_ids,
+        }
+
+        assert task.test_data is not None, "Test data shouldn't be none for image tasks"
+        logger.info("Starting image model evaluation")
+        image_eval_results = await run_evaluation_docker_image(**evaluation_params)
+        for repo in repos_to_evaluate:
+            results[repo] = image_eval_results[repo]
+            
     for repo in unique_repos:
         if repo not in results:
             results[repo] = Exception("Evaluation failed to complete")
+        
 
     return results
 

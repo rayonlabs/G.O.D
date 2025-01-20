@@ -14,7 +14,7 @@ from validator.cycle.util_functions import prepare_text_task_request
 from validator.cycle.util_functions import run_image_task_prep
 from validator.cycle.util_functions import run_text_task_prep
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
-from validator.evaluation.docker_evaluation import run_evaluation_docker_diffusion
+from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.tasks.task_prep import get_additional_synth_data
 
 
@@ -40,7 +40,7 @@ class TaskConfig(BaseModel):
 
 class ImageTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.IMAGE
-    eval_container: Callable = run_evaluation_docker_diffusion
+    eval_container: Callable = run_evaluation_docker_image
     synth_data_function: Callable | None = None
     data_size_function: Callable = get_total_image_dataset_size
     task_prep_function: Callable = run_image_task_prep

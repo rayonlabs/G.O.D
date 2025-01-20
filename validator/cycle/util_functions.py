@@ -13,9 +13,9 @@ from core.models.payload_models import TrainRequestDiffusion
 from core.models.payload_models import TrainRequestText
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
-from validator.utils.logging import create_extra_log
-from validator.utils.logging import logger
+from validator.utils.logging import get_logger
 
+logger = get_logger(__name__)
 
 def get_image_dataset_length_from_url(url: str) -> int:
     parsed_url = urlparse(url)
@@ -43,7 +43,6 @@ async def run_image_task_prep(task: ImageRawTask) -> ImageRawTask:
     task.status = TaskStatus.LOOKING_FOR_NODES
     logger.info(
         "Data creation is complete - now time to find some miners",
-        extra=create_extra_log(status=task.status),
     )
     return task
 

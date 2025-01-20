@@ -69,11 +69,10 @@ class EvaluationRequest(TrainRequest):
 
 
 class EvaluationRequestDiffusion(BaseModel):
-    test_split_path: str
-    base_model_repo: str
-    base_model_filename: str
-    lora_repo_list: str
-    lora_filename_list: str
+    test_split_url: str
+    original_model_repo: str
+    original_model_filename: str
+    models: list[str]
 
 
 class EvaluationResultText(BaseModel):
@@ -87,7 +86,7 @@ class DiffusionLosses(BaseModel):
     no_text_losses: list[float]
 
 
-class EvaluationResultDiffusion(BaseModel):
+class EvaluationResultImage(BaseModel):
     eval_loss: DiffusionLosses
 
 

@@ -12,7 +12,7 @@ from pydantic import TypeAdapter
 
 from core import constants as cst
 from core.docker_utils import stream_logs
-from core.models.payload_models import EvaluationResultDiffusion
+from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
@@ -139,12 +139,13 @@ async def run_evaluation_docker_text(
         client.close()
 
 
-async def run_evaluation_docker_diffusion(
+async def run_evaluation_docker_image(
     test_split_url: str,
     original_model_repo: str,
     original_model_filename: str,
     models: list[str],
-) -> dict[str, Union[EvaluationResultDiffusion, Exception]]:
+    gpu_ids: list[int]
+) -> dict[str, Union[EvaluationResultImage, Exception]]:
     raw_data = await download_s3_file(test_split_url)
     test_split_path = unzip_to_temp_path(raw_data)
     dataset_dir = os.path.abspath(test_split_path)
@@ -178,7 +179,7 @@ async def run_evaluation_docker_diffusion(
             volumes=volume_bindings,
             environment=environment,
             runtime="nvidia",
-            device_requests=[docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])],
+            device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
             detach=True,
         )
         log_task = asyncio.create_task(asyncio.to_thread(stream_logs, container))
@@ -198,7 +199,7 @@ async def run_evaluation_docker_diffusion(
             if isinstance(result, str) and not isinstance(result, dict):
                 processed_results[repo] = Exception(result)
             else:
-                processed_results[repo] = TypeAdapter(EvaluationResultDiffusion).validate_python(result)
+                processed_results[repo] = TypeAdapter(EvaluationResultImage).validate_python(result)
 
         return processed_results
 

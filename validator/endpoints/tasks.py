@@ -43,7 +43,6 @@ logger = get_logger(__name__)
 
 TASKS_CREATE_ENDPOINT_TEXT = "/v1/tasks/create"  # TODO: change to create_text after FE changes
 TASKS_CREATE_ENDPOINT_IMAGE = "/v1/tasks/create_image"
-TASKS_CREATE_ENDPOINT = "/v1/tasks/create"
 TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"  # TODO: this is just for text tasks
 GET_TASKS_BY_ACCOUNT_ENDPOINT = "/v1/tasks/account/{account_id}"
 GET_TASK_DETAILS_ENDPOINT = "/v1/tasks/{task_id}"
