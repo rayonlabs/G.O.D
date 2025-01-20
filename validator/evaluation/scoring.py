@@ -15,6 +15,7 @@ from core.models.utility_models import TaskStatus
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.models import MinerResults
+from validator.core.models import MiniTaskWithScoringOnly
 from validator.core.models import NodeAggregationResult
 from validator.core.models import PeriodScore
 from validator.core.models import RawTask
@@ -38,7 +39,7 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-def get_task_work_score(task: RawTask) -> float:
+def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     """Calculate work score for a task based on hours and model size."""
     assert task.hours_to_complete > 0, "Hours to complete must be positive"
     assert task.model_id, "Model ID must be present"

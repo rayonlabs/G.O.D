@@ -12,10 +12,10 @@ import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
 from validator.core.models import AllNodeStats
+from validator.core.models import MiniTaskWithScoringOnly
 from validator.core.models import ModelMetrics
 from validator.core.models import NodeStats
 from validator.core.models import QualityMetrics
-from validator.core.models import RawTask
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
@@ -257,7 +257,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
         for row in rows:
             row_dict = dict(row)
             task_dict = {k: v for k, v in row_dict.items() if k != "node_scores"}
-            task = RawTask(**task_dict)
+            task = MiniTaskWithScoringOnly(**task_dict)
 
             node_scores_data = row_dict["node_scores"]
             if isinstance(node_scores_data, str):
