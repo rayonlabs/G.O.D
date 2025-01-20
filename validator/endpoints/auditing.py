@@ -9,6 +9,7 @@ from loguru import logger  # noqa
 from validator.core.config import Config
 from validator.core.dependencies import get_config
 from validator.core.models import Task
+from validator.core.models import TaskResults
 from validator.core.models import TaskWithHotkeyDetails
 from validator.db.sql.auditing import get_recent_tasks
 from validator.db.sql.auditing import get_recent_tasks_for_hotkey
@@ -38,7 +39,7 @@ async def audit_task_details_endpoint(task_id: str, config: Config = Depends(get
 
 
 @router.get("/auditing/scores")
-async def get_scores_for_setting_weights(config: Config = Depends(get_config)) -> list[float]:
+async def get_scores_for_setting_weights(config: Config = Depends(get_config)) -> list[TaskResults]:
     """
     Get the scores I had when I last set weights, to prove I did it right
     """
