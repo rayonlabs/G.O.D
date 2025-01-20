@@ -211,3 +211,33 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
             hotkey_details.append(HotkeyDetails(**result_dict))
 
         return TaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
+
+
+async def store_latest_scores_url(url: str, config: Config = Depends(get_config)) -> None:
+    async with await config.psql_db.connection() as connection:
+        connection: Connection
+
+        # First expire all existing URLs
+        expire_query = f"""
+            UPDATE {cst.LATEST_SCORES_URL_TABLE}
+            SET expired_at = NOW()
+            WHERE expired_at IS NULL
+        """
+        await connection.execute(expire_query)
+
+        # Then insert the new URL
+        insert_query = f"""
+            INSERT INTO {cst.LATEST_SCORES_URL_TABLE} (url)
+            VALUES ($1)
+        """
+        await connection.execute(insert_query, url)
+
+
+async def get_latest_scores_url(config: Config = Depends(get_config)) -> str | None:
+    async with await config.psql_db.connection() as connection:
+        connection: Connection
+
+        query = f"""
+            SELECT url FROM {cst.LATEST_SCORES_URL_TABLE} WHERE expired_at IS NULL ORDER BY created_at DESC LIMIT 1
+        """
+        return await connection.fetchval(query)

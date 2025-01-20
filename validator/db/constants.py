@@ -5,6 +5,7 @@ TASKS_TABLE = "tasks"
 TASK_NODES_TABLE = "task_nodes"
 SUBMISSIONS_TABLE = "submissions"
 OFFER_RESPONSES_TABLE = "offer_responses"
+LATEST_SCORES_URL_TABLE = "latest_scores_url"
 
 # Node Table Columns
 NODE_ID = "node_id"

@@ -4,27 +4,35 @@ Calculates and schedules weights every SCORING_PERIOD
 
 import asyncio
 import os
+from datetime import datetime
 
 from dotenv import load_dotenv
+
+from validator.db.sql.auditing import store_latest_scores_url
+
+
+load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
+
+import json
+from uuid import UUID
+
 from fiber.chain import fetch_nodes
 from fiber.chain import weights
+from fiber.chain.chain_utils import query_substrate
 from fiber.chain.models import Node
 from substrateinterface import SubstrateInterface
 
 from core import constants as ccst
+from core.constants import BUCKET_NAME
 from validator.core.config import Config
 from validator.core.config import load_config
 from validator.core.models import PeriodScore
 from validator.db.sql.nodes import get_vali_node_id
 from validator.evaluation.scoring import scoring_aggregation_from_date
-from validator.utils.query_substrate import query_substrate
-from validator.utils.util import try_db_connections
-
-
-load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
-
-
+from validator.tasks.task_prep import save_json_to_temp_file
+from validator.tasks.task_prep import upload_json_to_minio
 from validator.utils.logging import get_logger
+from validator.utils.util import try_db_connections
 
 
 logger = get_logger(__name__)
@@ -35,6 +43,24 @@ TIME_PER_BLOCK: int = 500
 
 async def _get_weights_to_set(config: Config) -> list[PeriodScore] | None:
     return await scoring_aggregation_from_date(config.psql_db)
+
+
+async def _upload_results_to_s3(config: Config, node_results: list[PeriodScore]) -> None:
+    class DateTimeEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            if isinstance(obj, UUID):
+                return str(obj)
+            return super().default(obj)
+
+    scores_json = json.dumps([result.model_dump() for result in node_results], indent=2, cls=DateTimeEncoder)
+
+    temp_file, _ = await save_json_to_temp_file(scores_json, "latest_scores")
+    datetime_of_upload = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    presigned_url = await upload_json_to_minio(temp_file, BUCKET_NAME, f"latest_scores_{datetime_of_upload}.json")
+    await store_latest_scores_url(presigned_url, config)
+    return presigned_url
 
 
 async def get_node_weights_from_results(
@@ -94,6 +120,10 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
 
     if success:
         logger.info("Weights set successfully.")
+
+        logger.info("Now uploading the scores to s3 for auditing...")
+        url = await _upload_results_to_s3(config, node_results)
+        logger.info(f"Uploaded the scores to s3 for auditing - url: {url}")
         return True
     else:
         logger.error("Failed to set weights :(")
