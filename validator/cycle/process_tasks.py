@@ -115,6 +115,9 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
 
             offer_response = await _make_offer(node, task_request, config)
 
+            # Store offer response
+            await tasks_sql.store_offer_response(task.task_id, node.hotkey, offer_response.model_dump_json(), config.psql_db)
+
             if offer_response.accepted is True:
                 selected_miners.append(node.hotkey)
                 await tasks_sql.assign_node_to_task(str(task.task_id), node, config.psql_db)
