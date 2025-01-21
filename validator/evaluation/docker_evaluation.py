@@ -199,6 +199,7 @@ async def run_evaluation_docker_image(
             if isinstance(result, str) and not isinstance(result, dict):
                 processed_results[repo] = Exception(result)
             else:
+                result["is_finetune"] = True
                 processed_results[repo] = TypeAdapter(EvaluationResultImage).validate_python(result)
 
         return processed_results

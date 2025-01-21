@@ -75,19 +75,20 @@ class EvaluationRequestDiffusion(BaseModel):
     models: list[str]
 
 
+class DiffusionLosses(BaseModel):
+    text_guided_losses: list[float]
+    no_text_losses: list[float]
+    
+
+class EvaluationResultImage(BaseModel):
+    eval_loss: DiffusionLosses | float
+    is_finetune: bool | None = None
+
+
 class EvaluationResultText(BaseModel):
     is_finetune: bool
     eval_loss: float
     perplexity: float
-
-
-class DiffusionLosses(BaseModel):
-    text_guided_losses: list[float]
-    no_text_losses: list[float]
-
-
-class EvaluationResultImage(BaseModel):
-    eval_loss: DiffusionLosses
 
 
 class MinerTaskResponse(BaseModel):

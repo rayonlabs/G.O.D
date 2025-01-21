@@ -195,18 +195,17 @@ class Submission(BaseModel):
 class MinerResults(BaseModel):
     hotkey: str
     test_loss: float
-    score: float | None = 0.0
-    submission: Submission | None = None
-    score_reason: str | None = None
-
-class MinerResultsText(BaseModel):
-    hotkey: str
-    test_loss: float
     synth_loss: float
     is_finetune: bool
     score: float | None = 0.0
     submission: Submission | None = None
     score_reason: str | None = None
+
+class MinerResultsText(MinerResults):
+    task_type: TaskType.TEXTTASK
+
+class MinerResultsImage(MinerResults):
+    task_type: TaskType.IMAGETASK
 
 class QualityMetrics(BaseModel):
     total_score: float

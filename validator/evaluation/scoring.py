@@ -20,10 +20,12 @@ from validator.core.config import Config
 from validator.core.models import ImageRawTask
 from validator.core.models import MinerResults
 from validator.core.models import MinerResultsText
+from validator.core.models import MinerResultsImage
 from validator.core.models import MiniTaskWithScoringOnly
 from validator.core.models import NodeAggregationResult
 from validator.core.models import PeriodScore
 from validator.core.models import RawTask
+from validator.core.models import TaskType
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
@@ -174,7 +176,7 @@ def calculate_scaled_score(weighted_loss: float, scale_factor: float) -> float:
     return float(np.exp(-weighted_loss * scale_factor))
 
 
-def compute_adaptive_scale_factor(miner_results: list[MinerResults | MinerResultsText]) -> float:
+def compute_adaptive_scale_factor(miner_results: list[MinerResultsImage | MinerResultsText]) -> float:
     """Compute scale factor based only on finetuned submissions."""
     finetuned_results = [
         res for res in miner_results if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
@@ -199,8 +201,8 @@ def compute_adaptive_scale_factor(miner_results: list[MinerResults | MinerResult
 
 
 def adjust_miner_scores_to_be_relative_to_other_comps(
-    miner_results: list[MinerResults | MinerResultsText],
-) -> list[MinerResults | MinerResultsText]:
+    miner_results: list[MinerResultsImage | MinerResultsText],
+) -> list[MinerResultsImage | MinerResultsText]:
     """Adjusts scores to have geometric mean of 1.0 for finetuned submissions only."""
     valid_scores = [
         res.score
@@ -236,7 +238,7 @@ def adjust_miner_scores_to_be_relative_to_other_comps(
     return miner_results
 
 
-def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[MinerResults]:
+def add_raw_scores_to_miner_results(miner_results: list[MinerResultsText | MinerResultsImage]) -> list[MinerResultsText | MinerResultsImage]:
     """Calculate scores using only finetuned submissions."""
     logger.info("Beginning score calculation...")
 
@@ -298,10 +300,30 @@ def _get_dataset_type(task: TextRawTask) -> CustomDatasetType:
     )
 
 
-def _create_failed_miner_result(hotkey: str, reason: str) -> MinerResults:
+def _create_failed_miner_result(hotkey: str, reason: str, task_type: TaskType) -> MinerResults:
     """Create a failed miner result with zero score."""
-    return MinerResults(hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason)
+    if task_type==TaskType.TEXTTASK:
+        return MinerResultsText(hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason)
+    else:
+        return MinerResultsImage(hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason)
 
+
+def _calculate_weighted_loss_for_image_eval(eval_result: EvaluationResultImage) -> float:
+    if isinstance(eval_result.eval_loss, DiffusionLosses):
+        text_guided_avg = (
+            sum(eval_result.eval_loss.text_guided_losses) / len(eval_result.eval_loss.text_guided_losses)
+            if eval_result.eval_loss.text_guided_losses else 0
+        )
+        
+        no_text_avg = (
+            sum(eval_result.eval_loss.no_text_losses) / len(eval_result.eval_loss.no_text_losses)
+            if eval_result.eval_loss.no_text_losses else 0
+        )
+
+        weighted_loss = (cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT * text_guided_avg) + ((1 - cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT) * no_text_avg)
+        return weighted_loss
+
+    return None 
 
 async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str | None:
     url = f"{cts.SUBMISSION_ENDPOINT}{task_id}"
@@ -398,7 +420,7 @@ async def _evaluate_submissions(
         for repo in unique_repos:
             if repo == task.model_id:
                 logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
-                results[repo] = (EvaluationResultImage(eval_losses=DiffusionLosses(text_guided_losses=[0], no_text_losses=[0])),)
+                results[repo] = (EvaluationResultImage(eval_losses=DiffusionLosses(text_guided_losses=[0], no_text_losses=[0]), is_finetune=False))
             else:
                 repos_to_evaluate.append(repo)
 
@@ -438,7 +460,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
             logger.error(f"Failed to delete file {file_path} from MinIO: {e}")
 
 
-async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_db) -> None:
+async def _update_scores(task: TextRawTask | ImageRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db) -> None:
     assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
         with LogContext(miner_hotkey=result.hotkey):
@@ -507,7 +529,7 @@ async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[s
     return earliest_hotkey, earliest_repo, duplicates
 
 
-async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict[str, bool]:
+async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
     """Process submissions and identify duplicates."""
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
@@ -529,7 +551,7 @@ async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict
     return keep_submission
 
 
-def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dict[str, bool]) -> list[MinerResults]:
+def zero_duplicate_scores(task_results: list[MinerResultsText | MinerResultsImage], keep_submission: dict[str, bool]) -> list[MinerResultsText | MinerResultsImage]:
     """Zero out scores for duplicate submissions."""
     for result in task_results:
         if not keep_submission[result.hotkey]:
@@ -546,7 +568,7 @@ async def process_miners_pool(
     config: Config,
     gpu_ids: list[int],
     dataset_type: CustomDatasetType | None = None,
-) -> list[MinerResults]:
+) -> list[MinerResultsText | MinerResultsImage]:
     """Process same task miners"""
     assert task.task_id is not None, "We should have a task id when processing miners"
 
@@ -594,10 +616,13 @@ async def process_miners_pool(
                         logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
                         results.append(_create_failed_miner_result(miner.hotkey, reason="Evaluation failed"))
                         continue
-                    elif isinstance(eval_result, EvaluationResultText):
+                    elif isinstance(task, TextRawTask):
                         synth_result, test_result = eval_result
                     else:
                         test_result = eval_result
+                        test_result.eval_loss = _calculate_weighted_loss_for_image_eval(test_result)
+                        synth_result = test_result
+
                     submission = Submission(
                         task_id=task.task_id,
                         hotkey=miner.hotkey,
@@ -606,21 +631,33 @@ async def process_miners_pool(
                         updated_on=datetime.now(),
                     )
 
-                results.append(
-                    MinerResults(
-                        hotkey=miner.hotkey,
-                        test_loss=float(test_result.eval_loss),
-                        synth_loss=float(synth_result.eval_loss),
-                        is_finetune=test_result.is_finetune,
-                        submission=submission,
+                if isinstance(task, TextRawTask):
+                    results.append(
+                        MinerResultsText(
+                            hotkey=miner.hotkey,
+                            test_loss=float(test_result.eval_loss),
+                            synth_loss=float(synth_result.eval_loss),
+                            is_finetune=test_result.is_finetune,
+                            submission=submission,
+                        )
                     )
-                )
+                else:
+                    results.append(
+                        MinerResultsImage(
+                            hotkey=miner.hotkey,
+                            test_loss=float(test_result.eval_loss),
+                            synth_loss=float(synth_result.eval_loss),
+                            is_finetune=test_result.is_finetune,
+                            submission=submission,
+                        )
+                    )
+
 
         except Exception as e:
             logger.error(f"Error during batch evaluation: {e}", exc_info=True)
             results.extend(
                 [
-                    _create_failed_miner_result(miner.hotkey, reason="Evaluation failed")
+                    _create_failed_miner_result(miner.hotkey, reason="Evaluation failed", task_type=task.task_type)
                     for miner in miners
                     if miner.hotkey not in [r.hotkey for r in results]
                 ]
@@ -629,7 +666,7 @@ async def process_miners_pool(
     return results
 
 
-async def evaluate_and_score(task: Union[TextRawTask, ImageRawTask], gpu_ids: list[int], config: Config) -> RawTask:
+async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int], config: Config) -> TextRawTask | ImageRawTask:
     """Main function to evaluate and score task submissions."""
     assert task.task_id is not None, "Task ID must be present"
     assert task.test_data is not None, "Test data must be present"
@@ -641,7 +678,7 @@ async def evaluate_and_score(task: Union[TextRawTask, ImageRawTask], gpu_ids: li
         dataset_type = None
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
-    task_results = await process_miners_pool(miner_pool, task, dataset_type, config, gpu_ids)
+    task_results = await process_miners_pool(miner_pool, task, config, gpu_ids, dataset_type)
 
     logger.info("Checking for duplicates ...")
     keep_submission = await handle_duplicate_submissions(task_results)
