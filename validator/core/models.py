@@ -1,6 +1,5 @@
 import json
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -10,6 +9,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from core.models.utility_models import FileFormat
+from core.models.utility_models import TaskType
 
 
 class TokenizerConfig(BaseModel):
@@ -61,11 +61,6 @@ class ModelData(BaseModel):
     parameter_count: int | None = None
 
     model_config = {"protected_namespaces": ()}
-
-
-class TaskType(Enum):
-    TEXTTASK = "TextTask"
-    IMAGETASK = "ImageTask"
 
 
 class RawTask(BaseModel):
@@ -164,6 +159,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
 
+
 class TaskResults(BaseModel):
     task: MiniTaskWithScoringOnly
     node_scores: list[TaskNode]
@@ -205,7 +201,7 @@ class MinerResults(BaseModel):
 
 class MinerResultsText(MinerResults):
     task_type: TaskType = TaskType.TEXTTASK
-    
+
 
 class MinerResultsImage(MinerResults):
     task_type: TaskType = TaskType.IMAGETASK

@@ -23,13 +23,13 @@ from core.models.utility_models import FileFormat
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.constants import MAX_CONCURRENT_JOBS
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.core.models import ImageTask
 from validator.core.models import NetworkStats
-from validator.core.models import TaskType
 from validator.core.models import TextRawTask
 from validator.core.models import TextTask
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql

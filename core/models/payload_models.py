@@ -12,6 +12,7 @@ from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from validator.core.models import AllNodeStats
 
 
@@ -23,6 +24,7 @@ class MinerTaskOffer(BaseModel):
     model: str
     hours_to_complete: int
     task_id: str
+    task_type: TaskType
 
 
 class TrainRequest(BaseModel):
@@ -78,7 +80,7 @@ class EvaluationRequestDiffusion(BaseModel):
 class DiffusionLosses(BaseModel):
     text_guided_losses: list[float]
     no_text_losses: list[float]
-    
+
 
 class EvaluationResultImage(BaseModel):
     eval_loss: DiffusionLosses | float

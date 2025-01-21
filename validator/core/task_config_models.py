@@ -1,10 +1,10 @@
-from enum import Enum
 from typing import Callable
 from typing import Union
 
 from pydantic import BaseModel
 from pydantic import Field
 
+from core.models.utility_models import TaskType
 from validator.core import constants as cst
 from validator.core.models import ImageRawTask
 from validator.core.models import TextRawTask
@@ -17,11 +17,6 @@ from validator.cycle.util_functions import run_text_task_prep
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.tasks.task_prep import get_additional_synth_data
-
-
-class TaskType(str, Enum):
-    IMAGE = "image"
-    TEXT = "text"
 
 
 # TODO
@@ -41,7 +36,7 @@ class TaskConfig(BaseModel):
 
 
 class ImageTaskConfig(TaskConfig):
-    task_type: TaskType = TaskType.IMAGE
+    task_type: TaskType = TaskType.IMAGETASK
     eval_container: Callable = run_evaluation_docker_image
     synth_data_function: Callable | None = None
     data_size_function: Callable = get_total_image_dataset_size
@@ -51,7 +46,7 @@ class ImageTaskConfig(TaskConfig):
 
 
 class TextTaskConfig(TaskConfig):
-    task_type: TaskType = TaskType.TEXT
+    task_type: TaskType = TaskType.TEXTTASK
     eval_container: Callable = run_evaluation_docker_text
     synth_data_function: Callable | None = get_additional_synth_data
     data_size_function: Callable = get_total_text_dataset_size
