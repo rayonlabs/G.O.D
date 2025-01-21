@@ -67,6 +67,7 @@ async def get_recent_tasks(
             TaskStatus.PREP_TASK_FAILURE,
             TaskStatus.NODE_TRAINING_FAILURE,
         ]:
+            continue
             task.ds_id = "Hidden"
             task.test_data = None
             task.synthetic_data = None
@@ -152,6 +153,7 @@ async def get_recent_tasks_for_hotkey(
                 TaskStatus.PREP_TASK_FAILURE,
                 TaskStatus.NODE_TRAINING_FAILURE,
             ]:
+                continue
                 task.synthetic_data = None
                 task.test_data = None
                 task.training_data = None
@@ -186,6 +188,7 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
             TaskStatus.PREP_TASK_FAILURE,
             TaskStatus.NODE_TRAINING_FAILURE,
         ]:
+            raise HTTPException(status_code=400, detail="Task not finished!")
             task.synthetic_data = None
             task.test_data = None
             task.training_data = None
