@@ -127,7 +127,7 @@ async def run_evaluation_docker_text(
         return processed_results
 
     except Exception as e:
-        logger.error(f"Failed to retrieve evaluation results: {str(e)}")
+        logger.error(f"Failed to retrieve evaluation results: {str(e)}", exc_info=True)
         raise Exception(f"Failed to retrieve evaluation results: {str(e)}")
 
     finally:
