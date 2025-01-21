@@ -192,6 +192,7 @@ class Submission(BaseModel):
     created_on: datetime | None = None
     updated_on: datetime | None = None
 
+
 class MinerResults(BaseModel):
     hotkey: str
     test_loss: float
@@ -201,11 +202,14 @@ class MinerResults(BaseModel):
     submission: Submission | None = None
     score_reason: str | None = None
 
+
 class MinerResultsText(MinerResults):
-    task_type: TaskType.TEXTTASK
+    task_type: TaskType = TaskType.TEXTTASK
+    
 
 class MinerResultsImage(MinerResults):
-    task_type: TaskType.IMAGETASK
+    task_type: TaskType = TaskType.IMAGETASK
+
 
 class QualityMetrics(BaseModel):
     total_score: float
