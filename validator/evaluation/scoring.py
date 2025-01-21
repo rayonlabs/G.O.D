@@ -15,6 +15,7 @@ from core.models.utility_models import TaskStatus
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.models import MinerResults
+from validator.core.models import MiniTaskWithScoringOnly
 from validator.core.models import NodeAggregationResult
 from validator.core.models import PeriodScore
 from validator.core.models import RawTask
@@ -38,7 +39,7 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-def get_task_work_score(task: RawTask) -> float:
+def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     """Calculate work score for a task based on hours and model size."""
     assert task.hours_to_complete > 0, "Hours to complete must be positive"
     assert task.model_id, "Model ID must be present"
@@ -47,6 +48,12 @@ def get_task_work_score(task: RawTask) -> float:
     model = task.model_id
     model_size = re.search(r"(\d+)(?=[bB])", model)
     model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
+    if hours * model_size_value == 0:
+        logger.error(
+            f"Hours to complete: {hours} and model size value: {model_size_value} for task {task.task_id} and model id: {model}"
+            "\nReturning 1 regardless as a failsafe, but please look into this"
+        )
+        return 1
     return max(1, 2 * np.log(float(hours * model_size_value)))
 
 
@@ -124,7 +131,7 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def scoring_aggregation_from_date(psql_db: str) -> list[PeriodScore]:
+async def scoring_aggregation_from_date(psql_db: str) -> tuple[list[PeriodScore], list[TaskResults]]:
     """Aggregate and normalise scores across all nodes."""
     date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
     task_results: list[TaskResults] = await get_aggregate_scores_since(date, psql_db)
@@ -142,7 +149,7 @@ async def scoring_aggregation_from_date(psql_db: str) -> list[PeriodScore]:
 
     final_scores = calculate_node_quality_scores(node_aggregations)
     final_scores = _normalise_scores(final_scores)
-    return final_scores
+    return final_scores, task_results
 
 
 def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:

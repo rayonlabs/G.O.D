@@ -121,8 +121,32 @@ class TaskNode(BaseModel):
     quality_score: float
 
 
+class MiniTaskWithScoringOnly(BaseModel):
+    is_organic: bool
+    task_id: UUID | None = None
+    model_id: str
+    ds_id: str
+    file_format: FileFormat = FileFormat.HF
+    status: str
+    account_id: UUID
+    times_delayed: int = 0
+    hours_to_complete: int
+    assigned_miners: list[int] | None = None
+    miner_scores: list[float] | None = None
+
+    created_at: datetime
+    next_delay_at: datetime | None = None
+    updated_at: datetime | None = None
+    started_at: datetime | None = None
+    termination_at: datetime | None = None
+    completed_at: datetime | None = None
+
+    # Turn off protected namespace for model
+    model_config = {"protected_namespaces": ()}
+
+
 class TaskResults(BaseModel):
-    task: RawTask
+    task: MiniTaskWithScoringOnly
     node_scores: list[TaskNode]
 
 
@@ -239,3 +263,19 @@ class PreparedDatasets(BaseModel):
     training: Dataset
     synthetic: Dataset
     testing: Dataset
+
+
+class HotkeyDetails(BaseModel):
+    hotkey: str
+    submission_id: UUID | None = None
+    quality_score: float | None
+    test_loss: float | None
+    synth_loss: float | None
+    repo: str | None
+    rank: int | None
+    score_reason: str | None = None
+    offer_response: dict | None = None
+
+
+class TaskWithHotkeyDetails(Task):
+    hotkey_details: list[HotkeyDetails]
