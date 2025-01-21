@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 # TODO: Improve by batching these up
 async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> MinerTaskResponse:
     response = await process_non_stream_fiber(cst.TASK_OFFER_ENDPOINT, config, node, request.model_dump(), timeout=3)
-    logger.info(f"The response from make offer for node {node.node_id} was {response}")
+    logger.info(f"The response from make {request.task_type} offer for node {node.node_id} was {response}")
     if response is None:
         response = {}
     return MinerTaskResponse(
@@ -53,7 +53,7 @@ async def _select_miner_pool_and_add_to_task(
         model=task.model_id,
         hours_to_complete=task.hours_to_complete,
         task_id=str(task.task_id),
-        task_type=get_task_config(task).task_type,
+        task_type=task.task_type,
     )
     logger.info(f"We are offering the following task to the miners: {task_request.model_dump()}")
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
@@ -139,9 +139,9 @@ async def _find_and_select_miners_for_task(task: TextRawTask | ImageRawTask, con
 
 
 def _attempt_delay_task(task: TextRawTask | ImageRawTask):
-    assert task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None, (
-        "We wanted to check delay vs created timestamps but they are missing"
-    )
+    assert (
+        task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None
+    ), "We wanted to check delay vs created timestamps but they are missing"
 
     if task.times_delayed >= cst.MAX_DELAY_TIMES or not task.is_organic:
         if task.is_organic:

@@ -14,6 +14,7 @@ from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.models import ImageRawTask
@@ -327,7 +328,7 @@ def _calculate_weighted_loss_for_image_eval(eval_result: EvaluationResultImage) 
         )
 
         weighted_loss = (
-            cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT * text_guided_avg + (1 - cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT) * no_text_avg
+            (cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT * text_guided_avg) + ((1 - cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT) * no_text_avg)
         )
         return weighted_loss
 

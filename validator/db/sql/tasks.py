@@ -9,12 +9,12 @@ from fiber.chain.models import Node
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from validator.core.models import ImageRawTask
 from validator.core.models import ImageTask
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
 from validator.core.models import Task
-from validator.core.models import TaskType
 from validator.core.models import TextRawTask
 from validator.core.models import TextTask
 from validator.db.database import PSQLDB
@@ -67,15 +67,15 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
         async with connection.transaction():
             query_tasks = f"""
                 INSERT INTO {cst.TASKS_TABLE}
-                ({cst.ACCOUNT_ID}, 
-                {cst.MODEL_ID}, 
-                {cst.DS}, 
-                {cst.STATUS}, 
+                ({cst.ACCOUNT_ID},
+                {cst.MODEL_ID},
+                {cst.DS},
+                {cst.STATUS},
                 {cst.IS_ORGANIC},
-                {cst.HOURS_TO_COMPLETE}, 
-                {cst.TEST_DATA}, 
+                {cst.HOURS_TO_COMPLETE},
+                {cst.TEST_DATA},
                 {cst.TRAINING_DATA},
-                {cst.CREATED_AT}, 
+                {cst.CREATED_AT},
                 {cst.TASK_TYPE})
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 RETURNING *
