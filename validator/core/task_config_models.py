@@ -29,8 +29,8 @@ class TaskType(str, Enum):
 # data types
 class TaskConfig(BaseModel):
     task_type: TaskType = Field(..., description="The type of task.")
-    eval_container: Callable = Field(..., description="Function to evaluate the task")
-    synth_data_function: Callable | None = Field(..., description="Function to evaluate the task")
+    eval_container: Callable = Field(..., description="Container to evaluate the task")
+    synth_data_function: Callable | None = Field(..., description="Function to generate synthetic data")
     data_size_function: Callable = Field(..., description="The function used to determine the dataset size")
     task_prep_function: Callable = Field(
         ..., description="What we call in order to do the prep work - train test split and whatnot"

@@ -173,10 +173,11 @@ async def _prep_task(task: TextRawTask | ImageRawTask, config: Config):
             task.status = TaskStatus.PREPARING_DATA
             add_context_tag("status", task.status.value)
             await tasks_sql.update_task(task, config.psql_db)
-            task = await get_task_config(task).task_prep_function(task)
+            task = await get_task_config(task).task_prep_function(task, config.keypair)
             logger.info(f"THE TASK HAS BEEN PREPPED {task}")
             await tasks_sql.update_task(task, config.psql_db)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error during task prep: {e}")
             task.status = TaskStatus.PREP_TASK_FAILURE
             add_context_tag("status", task.status.value)
             await tasks_sql.update_task(task, config.psql_db)

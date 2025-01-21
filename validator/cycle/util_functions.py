@@ -57,7 +57,7 @@ async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask
         i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
     ]
     test_data, synth_data, train_data = await prepare_text_task(
-        dataset_name=task.ds, columns_to_sample=columns_to_sample, keypair=keypair
+        dataset_name=task.ds, file_format=task.file_format, columns_to_sample=columns_to_sample, keypair=keypair
     )
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
