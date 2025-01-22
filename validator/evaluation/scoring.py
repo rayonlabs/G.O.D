@@ -27,7 +27,6 @@ from validator.core.models import PeriodScore
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
-from validator.core.models import TaskType
 from validator.core.models import TextRawTask
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
@@ -328,7 +327,8 @@ def _calculate_weighted_loss_for_image_eval(eval_result: EvaluationResultImage) 
         )
 
         weighted_loss = (
-            (cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT * text_guided_avg) + ((1 - cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT) * no_text_avg)
+            cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT * text_guided_avg
+            + (1 - cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT) * no_text_avg
         )
         return weighted_loss
 
@@ -717,7 +717,13 @@ async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int
         )
     else:
         if cts.DELETE_S3_AFTER_COMPLETE:
-            await _clear_up_s3([task.training_data, task.test_data, task.synthetic_data])
+            if task.task_type == TaskType.TEXTTASK:
+                files_to_delete = [task.training_data, task.test_data, task.synthetic_data]
+            elif task.task_type == TaskType.IMAGETASK:
+                files_to_delete = [task.training_data, task.test_data]
+            else:
+                raise ValueError(f"Unknown task type: {task.task_type}")
+            await _clear_up_s3(files_to_delete)
         task.status = TaskStatus.SUCCESS
         add_context_tag("status", task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")

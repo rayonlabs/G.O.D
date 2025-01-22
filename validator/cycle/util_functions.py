@@ -40,7 +40,7 @@ def get_total_image_dataset_size(dataset_url: str) -> int:
     return get_image_dataset_length_from_url(dataset_url)
 
 
-async def run_image_task_prep(task: ImageRawTask) -> ImageRawTask:
+async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawTask:
     raw_dataset_zip_path = await download_s3_file(task.ds)
     test_url, train_url = await prepare_image_task(raw_dataset_zip_path)
     task.training_data = train_url

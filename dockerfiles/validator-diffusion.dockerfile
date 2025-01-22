@@ -15,7 +15,6 @@ RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ComfyUI &&
     cd ..
 
 RUN pip install -r ComfyUI/requirements.txt
-
 RUN cd ComfyUI/custom_nodes && \
     git clone --depth 1 https://github.com/Acly/comfyui-tooling-nodes && \
     cd ..
@@ -29,6 +28,7 @@ ENV LORA_MODEL_FILENAMES=""
 WORKDIR /app
 
 RUN pip install -r validator/requirements.txt
+RUN pip install docker
 
 RUN mkdir /aplp
 
