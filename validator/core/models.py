@@ -106,7 +106,7 @@ class TextRawTask(RawTask):
 
 class ImageRawTask(RawTask):
     model_filename: str
-    image_text_pairs: list[ImageTextPair]
+    image_text_pairs: list[ImageTextPair] | None = None
     task_type: TaskType = TaskType.IMAGETASK
 
 
