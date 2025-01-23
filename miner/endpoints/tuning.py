@@ -139,9 +139,12 @@ async def task_offer(
         # You will want to optimise this as a miner
         global current_job_finish_time
         current_time = datetime.now()
-        if request.task_type == TaskType.TEXTTASK:
-            if "llama" not in request.model.lower():
-                return MinerTaskResponse(message="I'm not yet optimised and only accept llama-type jobs", accepted=False)
+        if request.task_type != TaskType.TEXTTASK:
+            return MinerTaskResponse(message="This endpoint only accepts text tasks", accepted=False)
+
+        if "llama" not in request.model.lower():
+            return MinerTaskResponse(message="I'm not yet optimised and only accept llama-type jobs", accepted=False)
+
         if current_job_finish_time is None or current_time + timedelta(hours=1) > current_job_finish_time:
             if request.hours_to_complete < 13:
                 logger.info("Accepting the offer - ty snr")
@@ -164,6 +167,41 @@ async def task_offer(
         raise HTTPException(status_code=500, detail=f"Error processing task offer: {str(e)}")
 
 
+async def task_offer_image(
+    request: MinerTaskOffer,
+    config: Config = Depends(get_config),
+    worker_config: WorkerConfig = Depends(get_worker_config),
+) -> MinerTaskResponse:
+    try:
+        logger.info("An image offer has come through")
+        global current_job_finish_time
+        current_time = datetime.now()
+
+        if request.task_type != TaskType.IMAGETASK:
+            return MinerTaskResponse(message="This endpoint only accepts image tasks", accepted=False)
+
+        if current_job_finish_time is None or current_time + timedelta(hours=1) > current_job_finish_time:
+            if request.hours_to_complete < 13:
+                logger.info("Accepting the image offer")
+                return MinerTaskResponse(message="Yes. I can do image jobs", accepted=True)
+            else:
+                logger.info("Rejecting offer - too long")
+                return MinerTaskResponse(message="I only accept small jobs", accepted=False)
+        else:
+            return MinerTaskResponse(
+                message=f"Currently busy with another job until {current_job_finish_time.isoformat()}",
+                accepted=False,
+            )
+
+    except ValidationError as e:
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error in task_offer_image: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing task offer: {str(e)}")
+
+
 def factory_router() -> APIRouter:
     router = APIRouter()
     router.add_api_route(
@@ -174,6 +212,16 @@ def factory_router() -> APIRouter:
         response_model=MinerTaskResponse,
         dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
+
+    router.add_api_route(
+        "/task_offer_image/",
+        task_offer_image,
+        tags=["Subnet"],
+        methods=["POST"],
+        response_model=MinerTaskResponse,
+        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+    )
+
     router.add_api_route(
         "/get_latest_model_submission/{task_id}",
         get_latest_model_submission,
@@ -200,4 +248,5 @@ def factory_router() -> APIRouter:
         response_model=TrainResponse,
         dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
+
     return router

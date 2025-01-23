@@ -11,6 +11,7 @@ import validator.db.sql.tasks as tasks_sql
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.models import ImageRawTask
 from validator.core.models import TextRawTask
@@ -28,7 +29,8 @@ logger = get_logger(__name__)
 
 # TODO: Improve by batching these up
 async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> MinerTaskResponse:
-    response = await process_non_stream_fiber(cst.TASK_OFFER_ENDPOINT, config, node, request.model_dump(), timeout=3)
+    endpoint = cst.TASK_OFFER_IMAGE_ENDPOINT if request.task_type == TaskType.IMAGETASK else cst.TASK_OFFER_ENDPOINT
+    response = await process_non_stream_fiber(endpoint, config, node, request.model_dump(), timeout=3)
     logger.info(f"The response from make {request.task_type} offer for node {node.node_id} was {response}")
     if response is None:
         response = {}
