@@ -124,11 +124,12 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
                 await connection.execute(query_image_tasks, task_record["task_id"], task.model_filename)
 
                 if task.image_text_pairs:
-                    await add_image_text_pairs(task.task_id, task.image_text_pairs, psql_db)
+                    await add_image_text_pairs(task_record["task_id"], task.image_text_pairs, psql_db)
             else:
                 raise ValueError(f"Unsupported task type: {task.task_type}")
 
-        return RawTask(**task_record)
+            task.task_id = task_record["task_id"]
+            return task
 
 
 async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node]:
