@@ -195,7 +195,8 @@ async def get_tasks_with_status(
                 if task_type == TaskType.TEXTTASK.value:
                     tasks.append(TextRawTask(**task_data))
                 elif task_type == TaskType.IMAGETASK.value:
-                    tasks.append(ImageRawTask(**task_data))
+                    image_text_pairs = await get_image_text_pairs(row[cst.TASK_ID], psql_db)
+                    tasks.append(ImageRawTask(**task_data, image_text_pairs=image_text_pairs))
 
         logger.info(f"Retrieved {len(tasks)} tasks with status {status.value}")
         return tasks
