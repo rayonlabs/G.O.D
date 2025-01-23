@@ -8,6 +8,7 @@ TASK_NODES_TABLE = "task_nodes"
 SUBMISSIONS_TABLE = "submissions"
 OFFER_RESPONSES_TABLE = "offer_responses"
 LATEST_SCORES_URL_TABLE = "latest_scores_url"
+IMAGE_TEXT_PAIRS_TABLE = "image_text_pairs"
 
 # Node Table Columns
 NODE_ID = "node_id"
@@ -65,6 +66,11 @@ FILE_FORMAT = "file_format"
 
 # Image Tasks Table Columns
 MODEL_FILENAME = "model_filename"
+
+# Image Text Pairs Table Columns
+IMAGE_URL = "image_url"
+TEXT_URL = "text_url"
+ID = "id"
 
 
 # Submissions Table Columns

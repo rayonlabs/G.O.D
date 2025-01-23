@@ -49,7 +49,7 @@ async def _select_miner_pool_and_add_to_task(
         return task
 
     selected_miners: list[str] = []
-    ds_size = get_task_config(task).data_size_function(task.ds)
+    ds_size = get_task_config(task).data_size_function(task)
     task_request = MinerTaskOffer(
         ds_size=ds_size,
         model=task.model_id,

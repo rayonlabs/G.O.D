@@ -61,6 +61,7 @@ ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
 TEMP_PATH_FOR_IMAGES = "/tmp/validator/temp_images"
+SUPPORTED_IMAGE_FILE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
 MAX_FILE_SIZE_BYTES = 2147483646  # pyarrow max json load size
 
 # synth stuff
@@ -122,7 +123,6 @@ LORAS_SAVE_PATH = "validator/evaluation/ComfyUI/models/loras"
 DEFAULT_STEPS = 10
 DEFAULT_CFG = 4
 DEFAULT_DENOISE = 0.9
-SUPPORTED_FILE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
 DIFFUSION_HF_DEFAULT_FOLDER = "checkpoint"
 DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
 DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.7

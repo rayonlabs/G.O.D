@@ -8,6 +8,7 @@ from fiber.chain.models import Node
 
 import validator.db.constants as cst
 from core.constants import NETUID
+from core.models.utility_models import ImageTextPair
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.models import ImageRawTask
@@ -94,9 +95,7 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
                 task.task_type.value,
             )
 
-            if task.task_type.value == TaskType.TEXTTASK.value:
-                specific_task = TextRawTask(**task.dict())
-
+            if isinstance(task, TextRawTask):
                 query_text_tasks = f"""
                     INSERT INTO {cst.TEXT_TASKS_TABLE}
                     ({cst.TASK_ID}, {cst.FIELD_SYSTEM}, {cst.FIELD_INSTRUCTION},
@@ -107,24 +106,25 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
                 await connection.execute(
                     query_text_tasks,
                     task_record["task_id"],
-                    specific_task.field_system,
-                    specific_task.field_instruction,
-                    specific_task.field_input,
-                    specific_task.field_output,
-                    specific_task.format,
-                    specific_task.no_input_format,
-                    specific_task.synthetic_data,
-                    specific_task.file_format,
+                    task.field_system,
+                    task.field_instruction,
+                    task.field_input,
+                    task.field_output,
+                    task.format,
+                    task.no_input_format,
+                    task.synthetic_data,
+                    task.file_format,
                 )
-            elif task.task_type.value == TaskType.IMAGETASK.value:
-                specific_task = ImageRawTask(**task.dict())
-
+            elif isinstance(task, ImageRawTask):
                 query_image_tasks = f"""
                     INSERT INTO {cst.IMAGE_TASKS_TABLE}
                     ({cst.TASK_ID}, {cst.MODEL_FILENAME})
                     VALUES ($1, $2)
                 """
-                await connection.execute(query_image_tasks, task_record["task_id"], specific_task.model_filename)
+                await connection.execute(query_image_tasks, task_record["task_id"], task.model_filename)
+
+                if task.image_text_pairs:
+                    await add_image_text_pairs(task.task_id, task.image_text_pairs, psql_db)
             else:
                 raise ValueError(f"Unsupported task type: {task.task_type}")
 
@@ -548,7 +548,8 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> TextTask | ImageTask
         if task_type == TaskType.TEXTTASK.value:
             return TextTask(**full_task_data)
         elif task_type == TaskType.IMAGETASK.value:
-            return ImageTask(**full_task_data)
+            image_text_pairs = await get_image_text_pairs(task_id, psql_db)
+            return ImageTask(**full_task_data, image_text_pairs=image_text_pairs)
 
 
 async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[Task]:
@@ -674,3 +675,28 @@ async def store_offer_response(task_id: UUID, hotkey: str, offer_response: str, 
             INSERT INTO {cst.OFFER_RESPONSES_TABLE} ({cst.TASK_ID}, {cst.HOTKEY}, {cst.OFFER_RESPONSE}) VALUES ($1, $2, $3)
         """
         await connection.execute(query, task_id, hotkey, offer_response)
+
+
+async def add_image_text_pairs(task_id: UUID, pairs: list[ImageTextPair], psql_db: PSQLDB) -> None:
+    query = f"""
+        INSERT INTO {cst.IMAGE_TEXT_PAIRS_TABLE} ({cst.TASK_ID}, {cst.IMAGE_URL}, {cst.TEXT_URL})
+        VALUES ($1, $2, $3)
+    """
+
+    async with await psql_db.connection() as conn:
+        async with conn.transaction():
+            for pair in pairs:
+                await conn.execute(query, task_id, pair.image_url, pair.text_url)
+
+
+async def get_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> list[ImageTextPair]:
+    query = f"""
+        SELECT {cst.IMAGE_URL}, {cst.TEXT_URL}
+        FROM {cst.IMAGE_TEXT_PAIRS_TABLE}
+        WHERE {cst.TASK_ID} = $1
+        ORDER BY {cst.ID}
+    """
+
+    async with await psql_db.connection() as conn:
+        rows = await conn.fetch(query, task_id)
+        return [ImageTextPair(image_url=row["image_url"], text_url=row["text_url"]) for row in rows]

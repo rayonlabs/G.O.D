@@ -1,18 +1,18 @@
 import base64
 import json
+import os
 import random
 import re
-import shutil
 import tempfile
-import time
+import uuid
 from datetime import datetime
 from datetime import timedelta
-from pathlib import Path
 from typing import List
 
 from fiber import Keypair
 
 import validator.core.constants as cst
+from core.models.payload_models import ImageTextPair
 from core.models.utility_models import Message
 from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
@@ -193,46 +193,34 @@ async def generate_image(prompt: str, keypair: Keypair) -> str:
         raise ValueError("Failed to generate image")
 
 
-async def create_training_data_zip(config: Config, prompts: List[str], style: str, temp_dir: str) -> str:
-    source_dir = Path(temp_dir) / "source"
-    source_dir.mkdir(exist_ok=True)
-
-    zip_base_path = Path(temp_dir) / f"ds_{len(prompts)}_{style}_{int(time.time())}"
-
-    for i, prompt in enumerate(prompts):
-        image = await generate_image(prompt, config.keypair)
-        logger.info(f"Generated synthetic image {i+1}/{len(prompts)}")
-        with open(source_dir / f"{i}.png", "wb") as f:
-            f.write(base64.b64decode(image))
-        with open(source_dir / f"{i}.txt", "w") as f:
-            f.write(prompt)
-
-    zip_path = shutil.make_archive(zip_base_path, "zip", source_dir)
-
-    return zip_path
-
-
 async def create_synthetic_image_task(config: Config) -> RawTask:
     number_of_hours = random.randint(cst.MIN_IMAGE_COMPETITION_HOURS, cst.MAX_IMAGE_COMPETITION_HOURS)
     style = random.choice(IMAGE_STYLES)
+
     try:
         prompts = await generate_diffusion_prompts(style, config.keypair)
     except Exception as e:
         logger.error(f"Failed to generate prompts for {style}: {e}")
         raise e
 
-    Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=cst.TEMP_PATH_FOR_IMAGES, prefix="diffusion_synth_") as temp_dir:
-        zip_path = await create_training_data_zip(config, prompts, style, temp_dir)
+    image_text_pairs = []
+    for i, prompt in enumerate(prompts):
+        image = await generate_image(prompt, config.keypair)
 
-        s3_url = await upload_file_to_minio(zip_path, cst.BUCKET_NAME, Path(zip_path).name)
+        with tempfile.NamedTemporaryFile(dir=cst.TEMP_PATH_FOR_IMAGES, suffix=".png") as img_file:
+            img_file.write(base64.b64decode(image))
+            img_url = await upload_file_to_minio(img_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.png")
 
-    if s3_url is None:
-        raise ValueError("Failed to upload file to MinIO")
+        with tempfile.NamedTemporaryFile(suffix=".txt") as txt_file:
+            txt_file.write(prompt.encode())
+            txt_url = await upload_file_to_minio(txt_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.txt")
+
+        image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
 
     task = ImageRawTask(
         model_id=IMAGE_MODEL_TO_FINETUNE,
-        ds=s3_url,
+        ds=str(uuid.uuid4()),
+        image_text_pairs=image_text_pairs,
         status=TaskStatus.PENDING,
         is_organic=False,
         created_at=datetime.utcnow(),

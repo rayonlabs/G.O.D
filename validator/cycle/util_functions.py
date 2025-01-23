@@ -1,7 +1,3 @@
-import re
-from urllib.parse import unquote
-from urllib.parse import urlparse
-
 from datasets import get_dataset_infos
 from fiber import Keypair
 
@@ -10,7 +6,6 @@ from core.models.payload_models import TrainRequestText
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskStatus
-from core.utils import download_s3_file
 from validator.core.models import ImageRawTask
 from validator.core.models import TextRawTask
 from validator.tasks.task_prep import prepare_image_task
@@ -21,28 +16,18 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def get_image_dataset_length_from_url(url: str) -> int:
-    parsed_url = urlparse(url)
-    filename = unquote(parsed_url.path.split("/")[-1])
-    match = re.search(r"ds_(\d+)_", filename)
-    if match:
-        return int(match.group(1))
-    return None
+def get_total_text_dataset_size(task: TextRawTask) -> int:
+    return int(sum(info.dataset_size for info in get_dataset_infos(task.ds).values() if info.dataset_size))
 
 
-def get_total_text_dataset_size(repo_name: str) -> int:
-    return int(sum(info.dataset_size for info in get_dataset_infos(repo_name).values() if info.dataset_size))
-
-
-# Using a naming convention of ds_{dataset_length}_{name}_{uuid}.zip while uploading the dataset
-# This helps us fetch the dataset length without actually downloading the dataset before its needed
-def get_total_image_dataset_size(dataset_url: str) -> int:
-    return get_image_dataset_length_from_url(dataset_url)
+def get_total_image_dataset_size(task: ImageRawTask) -> int:
+    if not task.image_text_pairs:
+        return 0
+    return len(task.image_text_pairs)
 
 
 async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawTask:
-    raw_dataset_zip_path = await download_s3_file(task.ds)
-    test_url, train_url = await prepare_image_task(raw_dataset_zip_path)
+    test_url, train_url = await prepare_image_task(task.image_text_pairs)
     task.training_data = train_url
     task.test_data = test_url
     task.status = TaskStatus.LOOKING_FOR_NODES

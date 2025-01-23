@@ -128,3 +128,8 @@ class Prompts(BaseModel):
 class TaskType(str, Enum):
     TEXTTASK = "TextTask"
     IMAGETASK = "ImageTask"
+
+
+class ImageTextPair(BaseModel):
+    image_url: str = Field(..., description="Presigned URL for the image file")
+    text_url: str = Field(..., description="Presigned URL for the text file")
