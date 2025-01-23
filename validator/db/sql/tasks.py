@@ -64,7 +64,6 @@ image_specific_fields = [cst.MODEL_FILENAME]
 async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask:
     """Add a new task"""
     async with await psql_db.connection() as connection:
-        connection: Connection
         async with connection.transaction():
             query_tasks = f"""
                 INSERT INTO {cst.TASKS_TABLE}
@@ -124,9 +123,13 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
                 await connection.execute(query_image_tasks, task_record["task_id"], task.model_filename)
 
                 if task.image_text_pairs:
-                    await add_image_text_pairs(task_record["task_id"], task.image_text_pairs, psql_db)
-            else:
-                raise ValueError(f"Unsupported task type: {task.task_type}")
+                    query_pairs = f"""
+                        INSERT INTO {cst.IMAGE_TEXT_PAIRS_TABLE}
+                        ({cst.TASK_ID}, {cst.IMAGE_URL}, {cst.TEXT_URL})
+                        VALUES ($1, $2, $3)
+                    """
+                    for pair in task.image_text_pairs:
+                        await connection.execute(query_pairs, task_record["task_id"], pair.image_url, pair.text_url)
 
             task.task_id = task_record["task_id"]
             return task
