@@ -214,7 +214,10 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
             img_url = await upload_file_to_minio(img_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.png")
 
         with tempfile.NamedTemporaryFile(suffix=".txt") as txt_file:
+            logger.info(f"Writing prompt to file: {prompt}")
             txt_file.write(prompt.encode())
+            txt_file.flush()
+            txt_file.seek(0)
             txt_url = await upload_file_to_minio(txt_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.txt")
 
         image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
