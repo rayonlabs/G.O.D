@@ -44,7 +44,6 @@ pre-commit install
 
 
 
-
 5. Run the Validator
 
 ```bash
