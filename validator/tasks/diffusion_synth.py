@@ -108,6 +108,7 @@ IMAGE_STYLES = [
 ]
 
 IMAGE_MODEL_TO_FINETUNE = "stabilityai/stable-diffusion-xl-base-1.0"
+IMAGE_MODEL_FILENAME = "RealVisXL_V4.0.safetensors"
 
 
 def create_diffusion_messages(style: str) -> List[Message]:
@@ -214,7 +215,6 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
             img_url = await upload_file_to_minio(img_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.png")
 
         with tempfile.NamedTemporaryFile(suffix=".txt") as txt_file:
-            logger.info(f"Writing prompt to file: {prompt}")
             txt_file.write(prompt.encode())
             txt_file.flush()
             txt_file.seek(0)
@@ -232,7 +232,7 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
         termination_at=datetime.utcnow() + timedelta(hours=number_of_hours),
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
-        model_filename="test",
+        model_filename=IMAGE_MODEL_FILENAME,
     )
 
     logger.info(f"New task created and added to the queue {task}")

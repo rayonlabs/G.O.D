@@ -106,9 +106,15 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     Dataset path is a folder containing the images and text files.
     """
     dataset_path = Path(dataset_path)
-    glob_pattern = f"*{{{','.join(cst.SUPPORTED_IMAGE_FILE_EXTENSIONS)}}}"
-    if not any(dataset_path.glob(glob_pattern)):
-        sub_folder = [folder for folder in dataset_path.iterdir() if folder.is_dir() and any(folder.glob(glob_pattern))]
+
+    has_images = any(dataset_path.glob(f"*.{ext.lstrip('.')}") for ext in cst.SUPPORTED_IMAGE_FILE_EXTENSIONS)
+
+    if not has_images:
+        sub_folder = [
+            folder
+            for folder in dataset_path.iterdir()
+            if folder.is_dir() and any(folder.glob(f"*.{ext.lstrip('.')}") for ext in cst.SUPPORTED_IMAGE_FILE_EXTENSIONS)
+        ]
         if not sub_folder:
             raise ValueError(f"No folder containing images found in: {dataset_path}")
         dataset_path = sub_folder[0]
@@ -309,5 +315,5 @@ async def prepare_image_task(image_text_pairs: list[ImageTextPair]) -> tuple[str
 async def _check_file_size(file_size: int, file_type: str) -> None:
     if file_size > cst.MAX_FILE_SIZE_BYTES:
         raise ValueError(
-            f"{file_type} data size ({file_size} bytes) exceeds maximum allowed size " f"of {cst.MAX_FILE_SIZE_BYTES} bytes"
+            f"{file_type} data size ({file_size} bytes) exceeds maximum allowed size of {cst.MAX_FILE_SIZE_BYTES} bytes"
         )
