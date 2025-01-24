@@ -53,6 +53,8 @@ async def _get_and_store_nodes(config: Config) -> list[Node]:
 
 
 async def refresh_nodes_periodically(config: Config) -> None:
+    if not config.refresh_nodes:
+        return
     while True:
         try:
             logger.info("Attempting to refresh nodes with the metagraph")
