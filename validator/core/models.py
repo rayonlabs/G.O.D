@@ -105,7 +105,6 @@ class TextRawTask(RawTask):
 
 
 class ImageRawTask(RawTask):
-    model_filename: str
     image_text_pairs: list[ImageTextPair] | None = None
     task_type: TaskType = TaskType.IMAGETASK
 
@@ -278,9 +277,10 @@ class Img2ImgPayload(BaseModel):
     cfg: float
     denoise: float
     comfy_template: dict
+    is_safetensors: bool = True
     prompt: str | None = None
     base_image: str | None = None
-
+    
 
 class NetworkStats(BaseModel):
     number_of_jobs_training: int

@@ -4,6 +4,7 @@ import os
 import numpy as np
 from fiber.logging_utils import get_logger
 from huggingface_hub import HfApi
+from huggingface_hub import snapshot_download
 from PIL import Image
 
 from validator.core import constants as cst
@@ -23,26 +24,29 @@ hf_api = HfApi()
 def load_comfy_workflows():
     with open(cst.LORA_WORKFLOW_PATH, "r") as file:
         lora_template = json.load(file)
+    
+    with open(cst.LORA_WORKFLOW_PATH_DIFFUSERS, "r") as file:
+        lora_template_diffusers = json.load(file)
 
-    return lora_template
+    return lora_template, lora_template_diffusers
 
 
-def contains_png_files(directory: str) -> str:
+def contains_image_files(directory: str) -> str:
     try:
-        return any(file.lower().endswith(".png") for file in os.listdir(directory))
+        return any(file.lower().endswith(cst.SUPPORTED_IMAGE_FILE_EXTENSIONS) for file in os.listdir(directory))
     except FileNotFoundError:
         return False
 
 
 def validate_dataset_path(dataset_path: str) -> str:
     if os.path.isdir(dataset_path):
-        if contains_png_files(dataset_path):
+        if contains_image_files(dataset_path):
             return dataset_path
         subdirectories = [
             os.path.join(dataset_path, d) for d in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, d))
         ]
         for subdirectory in subdirectories:
-            if contains_png_files(subdirectory):
+            if contains_image_files(subdirectory):
                 return subdirectory
     return dataset_path
 
@@ -70,6 +74,25 @@ def find_latest_lora_submission_name(repo_id: str) -> str:
 
     return None
 
+def is_safetensors_available(repo_id: str) -> tuple[bool, str | None]:
+    files_metadata = hf_api.list_repo_tree(repo_id=repo_id, repo_type="model")
+    for file in files_metadata:
+        if hasattr(file, 'size') and file.size is not None:
+            if file.path.endswith(".safetensors") and file.size > 6 * 1024 * 1024 * 1024:
+                return True, file.path
+
+    return False, None
+
+def download_base_model(repo_id: str, safetensors_filename: str | None = None) -> str:
+    if safetensors_filename:
+        local_path = download_from_huggingface(repo_id, safetensors_filename, cst.CHECKPOINTS_SAVE_PATH)
+    else:
+        model_name = repo_id.split("/")[-1]
+        save_dir = f"{cst.DIFFUSERS_PATH}/{model_name}"
+        local_path = snapshot_download(repo_id=repo_id,local_dir=save_dir, repo_type="model")
+        return model_name
+    
+    return safetensors_filename
 
 def download_lora(repo_id: str) -> str:
     lora_filename = find_latest_lora_submission_name(repo_id)
@@ -86,8 +109,11 @@ def calculate_l2_loss(test_image: Image.Image, generated_image: Image.Image) -> 
     return l2_loss
 
 
-def edit_workflow(payload: dict, edit_elements: Img2ImgPayload, text_guided: bool) -> dict:
-    payload["Checkpoint_loader"]["inputs"]["ckpt_name"] = edit_elements.ckpt_name
+def edit_workflow(payload: dict, edit_elements: Img2ImgPayload, text_guided: bool, is_safetensors: bool = True) -> dict:
+    if is_safetensors:
+        payload["Checkpoint_loader"]["inputs"]["ckpt_name"] = edit_elements.ckpt_name
+    else:
+        payload["Checkpoint_loader"]["inputs"]["model_path"] = edit_elements.ckpt_name
     payload["Sampler"]["inputs"]["steps"] = edit_elements.steps
     payload["Sampler"]["inputs"]["cfg"] = edit_elements.cfg
     payload["Sampler"]["inputs"]["denoise"] = edit_elements.denoise
@@ -107,7 +133,7 @@ def inference(image_base64: str, params: Img2ImgPayload, use_prompt: bool = Fals
 
     params.base_image = image_base64
 
-    lora_payload = edit_workflow(params.comfy_template, params, text_guided=use_prompt)
+    lora_payload = edit_workflow(payload=params.comfy_template, edit_elements=params, text_guided=use_prompt, is_safetensors=params.is_safetensors)
     lora_gen = api_gate.generate(lora_payload)[0]
     lora_gen_loss = calculate_l2_loss(base64_to_image(image_base64), lora_gen)
     logger.info(f"Loss: {lora_gen_loss}")
@@ -142,22 +168,22 @@ def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float
 def main():
     test_dataset_path = os.environ.get("DATASET")
     base_model_repo = os.environ.get("ORIGINAL_MODEL_REPO")
-    base_model_filename = os.environ.get("ORIGINAL_MODEL_FILENAME")
     trained_lora_model_repos = os.environ.get("MODELS", "")
-    if not all([test_dataset_path, base_model_repo, base_model_filename, trained_lora_model_repos]):
+    if not all([test_dataset_path, base_model_repo, trained_lora_model_repos]):
         logger.error("Missing required environment variables.")
         exit(1)
 
+    is_safetensors, safetensors_filename = is_safetensors_available(base_model_repo)
     # Base model download
     logger.info("Downloading base model")
-    _ = download_from_huggingface(base_model_repo, base_model_filename, cst.CHECKPOINTS_SAVE_PATH)
+    model_name_or_path = download_base_model(base_model_repo, safetensors_filename=safetensors_filename)
     logger.info("Base model downloaded")
 
     lora_repos = [m.strip() for m in trained_lora_model_repos.split(",") if m.strip()]
 
     test_dataset_path = validate_dataset_path(test_dataset_path)
 
-    lora_comfy_template = load_comfy_workflows()
+    lora_comfy_template, diffusers_comfy_template = load_comfy_workflows()
     api_gate.connect()
 
     results = {}
@@ -165,12 +191,13 @@ def main():
     for repo_id in lora_repos:
         lora_local_path = download_lora(repo_id)
         img2img_payload = Img2ImgPayload(
-            ckpt_name=base_model_filename,
+            ckpt_name=model_name_or_path,
             lora_name=os.path.basename(lora_local_path),
             steps=cst.DEFAULT_STEPS,
             cfg=cst.DEFAULT_CFG,
             denoise=cst.DEFAULT_DENOISE,
-            comfy_template=lora_comfy_template,
+            comfy_template=lora_comfy_template if is_safetensors else diffusers_comfy_template,
+            is_safetensors=is_safetensors
         )
 
         loss_data = eval_loop(test_dataset_path, img2img_payload)

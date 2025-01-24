@@ -142,7 +142,6 @@ async def run_evaluation_docker_text(
 async def run_evaluation_docker_image(
     test_split_url: str,
     original_model_repo: str,
-    original_model_filename: str,
     models: list[str],
     gpu_ids: list[int]
 ) -> dict[str, Union[EvaluationResultImage, Exception]]:
@@ -160,7 +159,6 @@ async def run_evaluation_docker_image(
         "DATASET": container_dataset_path,
         "MODELS": ",".join(models),
         "ORIGINAL_MODEL_REPO": original_model_repo,
-        "ORIGINAL_MODEL_FILENAME": original_model_filename,
     }
 
     async def cleanup_resources():

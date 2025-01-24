@@ -120,7 +120,6 @@ async def create_task_image(
 
     task = ImageRawTask(
         model_id=request.model_repo,
-        model_filename=request.model_filename,
         image_text_pairs=request.image_text_pairs,
         ds=request.ds_id,
         is_organic=True,

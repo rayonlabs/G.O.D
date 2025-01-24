@@ -117,10 +117,10 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
             elif isinstance(task, ImageRawTask):
                 query_image_tasks = f"""
                     INSERT INTO {cst.IMAGE_TASKS_TABLE}
-                    ({cst.TASK_ID}, {cst.MODEL_FILENAME})
-                    VALUES ($1, $2)
+                    ({cst.TASK_ID})
+                    VALUES ($1)
                 """
-                await connection.execute(query_image_tasks, task_record["task_id"], task.model_filename)
+                await connection.execute(query_image_tasks, task_record["task_id"])
 
                 if task.image_text_pairs:
                     query_pairs = f"""
