@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from datetime import timedelta
 
@@ -44,12 +45,12 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     assert task.model_id, "Model ID must be present"
 
     hours = task.hours_to_complete
-    # size in billions
-    model_size_value = min(8, task.model_params_count / 1_000_000_000) if task.model_params_count else 1
+    model = task.model_id
+    model_size = re.search(r"(\d+)(?=[bB])", model)
+    model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
     if hours * model_size_value == 0:
         logger.error(
-            f"Hours to complete: {hours} and model size value: {model_size_value} "
-            f"for task {task.task_id} and model id: {task.model_id}"
+            f"Hours to complete: {hours} and model size value: {model_size_value} for task {task.task_id} and model id: {model}"
             "\nReturning 1 regardless as a failsafe, but please look into this"
         )
         return 1
@@ -340,13 +341,11 @@ async def _evaluate_submissions(
 
     logger.info("Starting synth evaluation")
     synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-    synth_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
+    synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
     try:
         os.remove(synthetic_data_filepath)
     except Exception as e:
         logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
-    synth_eval_results = synth_results.results
-    task.model_params_count = synth_results.base_model_params_count
 
     finetuned_repos = []
     for repo in repos_to_evaluate:
@@ -365,16 +364,13 @@ async def _evaluate_submissions(
 
     if finetuned_repos:
         test_data_filepath = await download_s3_file(task.test_data)
-        test_results = await run_evaluation_docker(
-            dataset=test_data_filepath,
-            models=finetuned_repos,
-            **{k: v for k, v in evaluation_params.items() if k != "models"}
+        test_eval_results = await run_evaluation_docker(
+            dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
         )
         try:
             os.remove(test_data_filepath)
         except Exception as e:
             logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
-        test_eval_results = test_results.results
 
         for repo in finetuned_repos:
             if isinstance(test_eval_results.get(repo), Exception):
