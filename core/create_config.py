@@ -194,7 +194,7 @@ if __name__ == "__main__":
         config = generate_config(miner=True)
         name = "1"
     elif args.auditor:
-        config = generate_auditor_config(dev=args.dev)
+        config = generate_auditor_config(args.dev)
         name = "test-temp"
 
     else:
