@@ -37,5 +37,11 @@ task install
 5. Run the Auditor
 
 ```bash
+task auditor-autoupdates
+```
+
+or
+
+```bash
 task auditor
 ```
