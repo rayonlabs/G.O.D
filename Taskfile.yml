@@ -67,4 +67,4 @@ tasks:
 
   auditor:
     cmds:
-      - pm2 start "python -m utils.run_auditor" --name auditor
+      - pm2 start "python -m auditing.audit" --name auditor
