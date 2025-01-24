@@ -69,3 +69,8 @@ tasks:
     cmds:
       - pm2 delete auditor || true
       - pm2 start "python -m auditing.audit" --name auditor
+
+  auditor-autoupdates:
+    cmds:
+      - pm2 delete auditor-autoupdates || true
+      - pm2 start "python utils/run_auditor_autoupdate.py" --name auditor-autoupdates
