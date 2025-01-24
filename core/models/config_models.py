@@ -18,8 +18,8 @@ class MinerConfig(BaseConfig):
     repo_id: str
     huggingface_token: str
     min_stake_threshold: str
-    is_validator: bool = False
     refresh_nodes: bool
+    is_validator: bool = False
 
 
 @dataclass
