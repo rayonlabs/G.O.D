@@ -47,6 +47,9 @@ pm2 start \
     python -u -m validator.cycle.main" \
     --name validator_cycle
 
-pm2 start \
-    "python -m validator.core.weight_setting" \
-    --name weight_setter
+# no weight setting in dev
+if [ "${ENV,,}" != "dev" ]; then
+    pm2 start \
+        "python -m validator.core.weight_setting" \
+        --name weight_setter
+fi
