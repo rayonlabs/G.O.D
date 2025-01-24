@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 import aiohttp
 
 
-async def download_s3_file(file_url: str, save_path: str = None) -> str:
+async def download_s3_file(file_url: str, save_path: str = None, tmp_dir: str = "/tmp") -> str:
     parsed_url = urlparse(file_url)
     file_name = os.path.basename(parsed_url.path)
     if save_path:
@@ -13,7 +13,7 @@ async def download_s3_file(file_url: str, save_path: str = None) -> str:
         else:
             local_file_path = save_path
     else:
-        local_file_path = os.path.join("/tmp", file_name)
+        local_file_path = os.path.join(tmp_dir, file_name)
 
     async with aiohttp.ClientSession() as session:
         async with session.get(file_url) as response:

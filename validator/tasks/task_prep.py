@@ -14,6 +14,7 @@ from datasets import load_dataset
 from fiber import Keypair
 
 import validator.core.constants as cst
+from core.models.payload_models import ImageTextPair
 from core.models.utility_models import FileFormat
 from core.utils import download_s3_file
 from validator.augmentation.augmentation import generate_augmented_text_dataset
@@ -101,16 +102,26 @@ async def train_test_split(dataset_name: str, file_format: FileFormat, test_size
 
 
 def train_test_split_image(dataset_path: str) -> tuple[str, str]:
+    """
+    Dataset path is a folder containing the images and text files.
+    """
     dataset_path = Path(dataset_path)
-    if not any(dataset_path.glob("*.png")):
-        sub_folder = [folder for folder in dataset_path.iterdir() if folder.is_dir() and any(folder.glob("*.png"))]
+
+    has_images = any(dataset_path.glob(f"*.{ext.lstrip('.')}") for ext in cst.SUPPORTED_IMAGE_FILE_EXTENSIONS)
+
+    if not has_images:
+        sub_folder = [
+            folder
+            for folder in dataset_path.iterdir()
+            if folder.is_dir() and any(folder.glob(f"*.{ext.lstrip('.')}") for ext in cst.SUPPORTED_IMAGE_FILE_EXTENSIONS)
+        ]
         if not sub_folder:
             raise ValueError(f"No folder containing images found in: {dataset_path}")
         dataset_path = sub_folder[0]
 
     dataset_entries = {}
     for file in dataset_path.iterdir():
-        if file.suffix == ".png":
+        if file.suffix in cst.SUPPORTED_IMAGE_FILE_EXTENSIONS:
             txt_file = file.with_suffix(".txt")
             if txt_file.exists():
                 dataset_entries[file.stem] = (file, txt_file)
@@ -277,24 +288,32 @@ async def prepare_text_task(
     )
 
 
-async def prepare_image_task(dataset_zip_path: str) -> tuple[str, str]:
-    dataset_path = unzip_to_temp_path(dataset_zip_path)
-    test_zip_path, train_zip_path = train_test_split_image(dataset_path=dataset_path)
-    test_url = await upload_file_to_minio(
-        file_path=str(test_zip_path), bucket_name=cst.BUCKET_NAME, object_name=f"{os.urandom(8).hex()}_test_data.zip"
-    )
-    train_url = await upload_file_to_minio(
-        file_path=str(train_zip_path), bucket_name=cst.BUCKET_NAME, object_name=f"{os.urandom(8).hex()}_train_data.zip"
-    )
+async def prepare_image_task(image_text_pairs: list[ImageTextPair]) -> tuple[str, str]:
+    Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=cst.TEMP_PATH_FOR_IMAGES) as source_dir:
+        for i, pair in enumerate(image_text_pairs):
+            txt_path = Path(source_dir) / f"{i}.txt"
+            await download_s3_file(pair.text_url, str(txt_path))
 
-    if os.path.exists(dataset_path):
-        shutil.rmtree(dataset_path)
+            tmp_img_path = Path(await download_s3_file(pair.image_url))
+            img_extension = tmp_img_path.suffix
+            img_path = Path(source_dir) / f"{i}{img_extension}"
+            shutil.move(tmp_img_path, img_path)
 
-    return (test_url.strip('"'), train_url.strip('"'))
+        test_zip_path, train_zip_path = train_test_split_image(dataset_path=source_dir)
+
+        test_url = await upload_file_to_minio(
+            file_path=str(test_zip_path), bucket_name=cst.BUCKET_NAME, object_name=f"{os.urandom(8).hex()}_test_data.zip"
+        )
+        train_url = await upload_file_to_minio(
+            file_path=str(train_zip_path), bucket_name=cst.BUCKET_NAME, object_name=f"{os.urandom(8).hex()}_train_data.zip"
+        )
+
+        return (test_url.strip('"'), train_url.strip('"'))
 
 
 async def _check_file_size(file_size: int, file_type: str) -> None:
     if file_size > cst.MAX_FILE_SIZE_BYTES:
         raise ValueError(
-            f"{file_type} data size ({file_size} bytes) exceeds maximum allowed size " f"of {cst.MAX_FILE_SIZE_BYTES} bytes"
+            f"{file_type} data size ({file_size} bytes) exceeds maximum allowed size of {cst.MAX_FILE_SIZE_BYTES} bytes"
         )

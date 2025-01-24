@@ -1,13 +1,16 @@
 from datetime import datetime
 from uuid import UUID
+from uuid import uuid4
 
 from fiber.logging_utils import get_logger
 from pydantic import BaseModel
 from pydantic import Field
 
+from core import constants as cst
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import ImageTextPair
 from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
@@ -128,9 +131,17 @@ class NewTaskRequestText(NewTaskRequest):
 
 
 class NewTaskRequestImage(NewTaskRequest):
-    ds_url: str = Field(..., description="The S3 URL for the dataset")
-    model_repo: str = Field(..., description="The repository for the model")
-    model_filename: str = Field(..., description="The filename for the model safetensors file in the repo")
+    model_repo: str = Field(..., description="The model repository to use")
+    model_filename: str
+    image_text_pairs: list[ImageTextPair] = Field(
+        ...,
+        description="List of image and text file pairs",
+        min_length=cst.MIN_IMAGE_TEXT_PAIRS,
+        max_length=cst.MAX_IMAGE_TEXT_PAIRS,
+    )
+    ds_id: str = Field(
+        default_factory=lambda: str(uuid4()), description="A ds name. The actual dataset is provided via the image_text_pairs"
+    )
 
 
 class NewTaskWithFixedDatasetsRequest(NewTaskRequest):

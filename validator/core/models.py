@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from core.models.utility_models import FileFormat
+from core.models.utility_models import ImageTextPair
 from core.models.utility_models import TaskType
 
 
@@ -105,6 +106,7 @@ class TextRawTask(RawTask):
 
 class ImageRawTask(RawTask):
     model_filename: str
+    image_text_pairs: list[ImageTextPair] | None = None
     task_type: TaskType = TaskType.IMAGETASK
 
 

@@ -28,10 +28,9 @@ from validator.core.config import Config
 from validator.core.constants import MAX_CONCURRENT_JOBS
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
-from validator.core.models import ImageTask
+from validator.core.models import ImageRawTask
 from validator.core.models import NetworkStats
 from validator.core.models import TextRawTask
-from validator.core.models import TextTask
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
@@ -81,7 +80,7 @@ async def create_task_text(
     #        logger.info("We already have some queued organic jobs, we can't a accept any more")
     #        return NewTaskResponse(success=False, task_id=None)
 
-    task = TextTask(
+    task = TextRawTask(
         model_id=request.model_repo,
         ds=request.ds_repo,
         file_format=request.file_format,
@@ -102,7 +101,7 @@ async def create_task_text(
 
     task = await task_sql.add_task(task, config.psql_db)
 
-    logger.info(task.task_id)
+    logger.info(f"Task of type {task.task_type} created: {task.task_id}")
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -119,10 +118,11 @@ async def create_task_image(
     #        logger.info("We already have some queued organic jobs, we can't a accept any more")
     #        return NewTaskResponse(success=False, task_id=None)
 
-    task = ImageTask(
+    task = ImageRawTask(
         model_id=request.model_repo,
         model_filename=request.model_filename,
-        ds=request.ds_url,
+        image_text_pairs=request.image_text_pairs,
+        ds=request.ds_id,
         is_organic=True,
         status=TaskStatus.PENDING,
         created_at=current_time,
@@ -134,7 +134,7 @@ async def create_task_image(
 
     task = await task_sql.add_task(task, config.psql_db)
 
-    logger.info(task.task_id)
+    logger.info(f"Task of type {task.task_type} created: {task.task_id}")
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 

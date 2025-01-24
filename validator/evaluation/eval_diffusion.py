@@ -1,26 +1,24 @@
-import base64
 import json
 import os
-from typing import Any, Union
-import re
-from PIL import Image
+
 import numpy as np
-from huggingface_hub import HfApi
-
 from fiber.logging_utils import get_logger
-from validator.core.models import Img2ImgPayload
+from huggingface_hub import HfApi
+from PIL import Image
 
+from validator.core import constants as cst
+from validator.core.models import Img2ImgPayload
 from validator.evaluation.utils import base64_to_image
+from validator.evaluation.utils import download_from_huggingface
 from validator.evaluation.utils import list_supported_images
 from validator.evaluation.utils import read_image_as_base64
 from validator.evaluation.utils import read_prompt_file
-from validator.evaluation.utils import download_from_huggingface
-from validator.core import constants as cst
 from validator.utils import comfy_api_gate as api_gate
 
 
 logger = get_logger(__name__)
 hf_api = HfApi()
+
 
 def load_comfy_workflows():
     with open(cst.LORA_WORKFLOW_PATH, "r") as file:
@@ -28,43 +26,48 @@ def load_comfy_workflows():
 
     return lora_template
 
+
 def contains_png_files(directory: str) -> str:
-        try:
-            return any(file.lower().endswith('.png') for file in os.listdir(directory))
-        except FileNotFoundError:
-            return False
+    try:
+        return any(file.lower().endswith(".png") for file in os.listdir(directory))
+    except FileNotFoundError:
+        return False
+
 
 def validate_dataset_path(dataset_path: str) -> str:
     if os.path.isdir(dataset_path):
         if contains_png_files(dataset_path):
             return dataset_path
-        subdirectories = [os.path.join(dataset_path, d) for d in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, d))]
+        subdirectories = [
+            os.path.join(dataset_path, d) for d in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, d))
+        ]
         for subdirectory in subdirectories:
             if contains_png_files(subdirectory):
                 return subdirectory
     return dataset_path
 
+
 def find_latest_lora_submission_name(repo_id: str) -> str:
     repo_files = hf_api.list_repo_files(repo_id)
     model_files = [file for file in repo_files if file.startswith(cst.DIFFUSION_HF_DEFAULT_FOLDER)]
-    
+
     for file in model_files:
         if file.endswith(cst.DIFFUSION_HF_DEFAULT_CKPT_NAME):
             return file
-    
+
     epoch_files = []
     for file in model_files:
         if "last-" in file and file.endswith(".safetensors"):
             try:
-                epoch = int(file.split("last-")[1].split(".")[0]) 
+                epoch = int(file.split("last-")[1].split(".")[0])
                 epoch_files.append((epoch, file))
             except ValueError:
                 continue
-    
+
     if epoch_files:
         epoch_files.sort(reverse=True, key=lambda x: x[0])
         return epoch_files[0][1]
-    
+
     return None
 
 
@@ -73,6 +76,7 @@ def download_lora(repo_id: str) -> str:
     local_path = download_from_huggingface(repo_id, lora_filename, cst.LORAS_SAVE_PATH)
     return local_path
 
+
 def calculate_l2_loss(test_image: Image.Image, generated_image: Image.Image) -> float:
     test_image = np.array(test_image.convert("RGB")) / 255.0
     generated_image = np.array(generated_image.convert("RGB")) / 255.0
@@ -80,6 +84,7 @@ def calculate_l2_loss(test_image: Image.Image, generated_image: Image.Image) -> 
         raise ValueError("Images must have the same dimensions to calculate L2 loss.")
     l2_loss = np.mean((test_image - generated_image) ** 2)
     return l2_loss
+
 
 def edit_workflow(payload: dict, edit_elements: Img2ImgPayload, text_guided: bool) -> dict:
     payload["Checkpoint_loader"]["inputs"]["ckpt_name"] = edit_elements.ckpt_name
@@ -114,7 +119,7 @@ def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float
     lora_losses_text_guided = []
     lora_losses_no_text = []
 
-    test_images_list = list_supported_images(dataset_path, cst.SUPPORTED_FILE_EXTENSIONS)
+    test_images_list = list_supported_images(dataset_path, cst.SUPPORTED_IMAGE_FILE_EXTENSIONS)
 
     for file_name in test_images_list:
         logger.info(f"Calculating losses for {file_name}")
@@ -131,10 +136,7 @@ def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float
         lora_losses_text_guided.append(inference(image_base64, params, use_prompt=True))
         lora_losses_no_text.append(inference(image_base64, params, use_prompt=False))
 
-    return {
-        "text_guided_losses":lora_losses_text_guided,
-        "no_text_losses":lora_losses_no_text
-    }
+    return {"text_guided_losses": lora_losses_text_guided, "no_text_losses": lora_losses_no_text}
 
 
 def main():
@@ -173,9 +175,7 @@ def main():
 
         loss_data = eval_loop(test_dataset_path, img2img_payload)
 
-        results[repo_id] = {
-            "eval_loss": loss_data
-        }
+        results[repo_id] = {"eval_loss": loss_data}
         if os.path.exists(lora_local_path):
             os.remove(lora_local_path)
 
