@@ -195,7 +195,7 @@ if __name__ == "__main__":
         name = "1"
     elif args.auditor:
         config = generate_auditor_config(args.dev)
-        name = "test-temp"
+        name = "vali"
 
     else:
         env = "dev" if args.dev else "prod"
