@@ -10,7 +10,6 @@ class BaseConfig:
     subtensor_address: Optional[str]
     netuid: int
     env: str
-    refresh_nodes: bool
 
 
 @dataclass
@@ -20,6 +19,7 @@ class MinerConfig(BaseConfig):
     huggingface_token: str
     min_stake_threshold: str
     is_validator: bool = False
+    refresh_nodes: bool
 
 
 @dataclass
@@ -43,3 +43,8 @@ class ValidatorConfig(BaseConfig):
     env_file: str = ".vali.env"
     hf_datasets_trust_remote_code = True
     s3_region: str = "us-east-1"
+    refresh_nodes: bool = True
+
+
+@dataclass
+class AuditorConfig(BaseConfig): ...
