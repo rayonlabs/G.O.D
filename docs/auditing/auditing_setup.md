@@ -33,7 +33,6 @@ task install
 ```
 
 
-
 5. Run the Auditor
 
 ```bash
