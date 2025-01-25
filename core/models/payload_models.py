@@ -201,9 +201,8 @@ class TextTaskDetails(TaskDetails):
 
 
 class ImageTaskDetails(TaskDetails):
-    ds_url: str = Field(..., description="The S3 URL for the dataset")
+    image_text_pairs: list[ImageTextPair]
     base_model_repository: str = Field(..., description="The repository for the model")
-    model_filename: str = Field(..., description="The filename for the model safetensors file in the repo")
 
 
 class TaskListResponse(BaseModel):
