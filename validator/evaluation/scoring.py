@@ -20,7 +20,9 @@ from validator.core.models import RawTask
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
+from validator.db.database import PSQLDB
 from validator.db.sql.submissions_and_scoring import add_submission
+from validator.db.sql.submissions_and_scoring import get_task_model_params_count
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
@@ -36,14 +38,14 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
+async def get_task_work_score(task: MiniTaskWithScoringOnly, psql_db: PSQLDB) -> float:
     """Calculate work score for a task based on hours and model size."""
     assert task.hours_to_complete > 0, "Hours to complete must be positive"
     assert task.model_id, "Model ID must be present"
 
     hours = task.hours_to_complete
-    # size in billions
-    model_size_value = min(8, task.model_params_count / 1_000_000_000) if task.model_params_count else 1
+    model_params_count = await get_task_model_params_count(task.task_id, psql_db)
+    model_size_value = min(8, model_params_count / 1_000_000_000) if model_params_count else 1
     if hours * model_size_value == 0:
         logger.error(
             f"Hours to complete: {hours} and model size value: {model_size_value} "
@@ -134,13 +136,13 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
+async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float, psql_db: PSQLDB) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
 
     node_aggregations: dict[str, NodeAggregationResult] = {}
 
     for task_res in task_results:
-        task_work_score = get_task_work_score(task_res.task)
+        task_work_score = await get_task_work_score(task_res.task, psql_db)
         for node_score in task_res.node_scores:
             update_node_aggregation(node_aggregations, node_score, task_work_score)
 
