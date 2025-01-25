@@ -54,7 +54,7 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
             "\nReturning 1 regardless as a failsafe, but please look into this"
         )
         return 1
-    return max(1, 2 * np.log(float(hours * model_size_value)))
+    return max(1, 2 * np.sqrt(float(hours * model_size_value)))
 
 
 def calculate_adjusted_task_score(quality_score: float, task_work_score: float) -> float:
