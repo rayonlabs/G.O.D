@@ -3,6 +3,7 @@ from fiber import Keypair
 
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
+from core.models.payload_models import ImageTextPair
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskStatus
@@ -77,5 +78,9 @@ def prepare_text_task_request(task: TextRawTask) -> TrainRequestText:
 
 def prepare_image_task_request(task: ImageRawTask) -> TrainRequestImage:
     return TrainRequestImage(
-        model=task.model_id, task_id=str(task.task_id), hours_to_complete=task.hours_to_complete, dataset_zip=task.training_data
+        model=task.model_id,
+        task_id=str(task.task_id),
+        hours_to_complete=task.hours_to_complete,
+        dataset_zip=task.training_data,
+        expected_repo_name= task.task_id
     )

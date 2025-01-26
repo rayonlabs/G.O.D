@@ -63,7 +63,7 @@ image_specific_fields = [
 ]
 
 
-async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask:
+async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
     """Add a new task"""
     async with await psql_db.connection() as connection:
         async with connection.transaction():
@@ -276,8 +276,11 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
                     await connection.execute(query, updated_task.task_id, *specific_values)
             elif updated_task.task_type == TaskType.IMAGETASK:
                 if "image_text_pairs" in updates:
+                    pairs: list[ImageTextPair] = [
+                        ImageTextPair(**pair) for pair in updates["image_text_pairs"]
+                    ]
                     await delete_image_text_pairs(updated_task.task_id, psql_db)
-                    await add_image_text_pairs(updated_task.task_id, updates["image_text_pairs"], psql_db)
+                    await add_image_text_pairs(updated_task.task_id, pairs, psql_db)
 
             if updated_task.assigned_miners is not None:
                 await connection.execute(

@@ -141,7 +141,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     is_organic: bool
     task_id: UUID | None = None
     model_id: str
-    ds_id: str
+    ds_id: str | None = None
     file_format: FileFormat = FileFormat.HF
     status: str
     account_id: UUID
