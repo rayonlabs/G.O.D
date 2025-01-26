@@ -64,10 +64,8 @@ NO_INPUT_FORMAT = "no_input_format"
 SYNTHETIC_DATA = "synthetic_data"
 FILE_FORMAT = "file_format"
 
-# Image Tasks Table Columns
-MODEL_FILENAME = "model_filename"
-
 # Image Text Pairs Table Columns
+IMAGE_TEXT_PAIRS = "image_text_pairs"
 IMAGE_URL = "image_url"
 TEXT_URL = "text_url"
 ID = "id"

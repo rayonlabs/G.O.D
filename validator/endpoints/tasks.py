@@ -120,7 +120,6 @@ async def create_task_image(
 
     task = ImageRawTask(
         model_id=request.model_repo,
-        model_filename=request.model_filename,
         image_text_pairs=request.image_text_pairs,
         ds=request.ds_id,
         is_organic=True,
@@ -260,8 +259,7 @@ async def get_task_details(
             account_id=task.account_id,
             status=task.status,
             base_model_repository=task.model_id,
-            ds_url=task.ds,
-            model_filename=task.model_filename,
+            image_text_pairs=task.image_text_pairs,
             created_at=task.created_at,
             started_at=task.started_at,
             finished_at=task.termination_at,

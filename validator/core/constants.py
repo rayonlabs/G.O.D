@@ -118,7 +118,9 @@ PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.8  # image is currently 1 minus this
 
 # diffusion eval stuff
 LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
+LORA_WORKFLOW_PATH_DIFFUSERS = "validator/evaluation/comfy_workflows/lora_diffusers.json"
 CHECKPOINTS_SAVE_PATH = "validator/evaluation/ComfyUI/models/checkpoints"
+DIFFUSERS_PATH = "validator/evaluation/ComfyUI/models/diffusers"
 LORAS_SAVE_PATH = "validator/evaluation/ComfyUI/models/loras"
 DEFAULT_STEPS = 10
 DEFAULT_CFG = 4

@@ -58,7 +58,9 @@ text_specific_fields = [
     cst.SYNTHETIC_DATA,
 ]
 
-image_specific_fields = [cst.MODEL_FILENAME]
+image_specific_fields = [
+    cst.IMAGE_TEXT_PAIRS
+]
 
 
 async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask:
@@ -117,10 +119,10 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
             elif isinstance(task, ImageRawTask):
                 query_image_tasks = f"""
                     INSERT INTO {cst.IMAGE_TASKS_TABLE}
-                    ({cst.TASK_ID}, {cst.MODEL_FILENAME})
-                    VALUES ($1, $2)
+                    ({cst.TASK_ID})
+                    VALUES ($1)
                 """
-                await connection.execute(query_image_tasks, task_record["task_id"], task.model_filename)
+                await connection.execute(query_image_tasks, task_record["task_id"])
 
                 if task.image_text_pairs:
                     query_pairs = f"""
@@ -183,7 +185,7 @@ async def get_tasks_with_status(
                 """
             elif task_type == TaskType.IMAGETASK.value:
                 specific_query = f"""
-                    SELECT t.*, it.model_filename
+                    SELECT t.*
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
@@ -273,16 +275,9 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
                     """
                     await connection.execute(query, updated_task.task_id, *specific_values)
             elif updated_task.task_type == TaskType.IMAGETASK:
-                specific_updates = {k: v for k, v in updates.items() if k in image_specific_fields}
-                if specific_updates:
-                    specific_clause = ", ".join([f"{column} = ${i + 2}" for i, column in enumerate(specific_updates.keys())])
-                    specific_values = list(specific_updates.values())
-                    query = f"""
-                        UPDATE {cst.IMAGE_TASKS_TABLE}
-                        SET {specific_clause}
-                        WHERE {cst.TASK_ID} = $1
-                    """
-                    await connection.execute(query, updated_task.task_id, *specific_values)
+                if "image_text_pairs" in updates:
+                    await delete_image_text_pairs(updated_task.task_id, psql_db)
+                    await add_image_text_pairs(updated_task.task_id, updates["image_text_pairs"], psql_db)
 
             if updated_task.assigned_miners is not None:
                 await connection.execute(
@@ -441,7 +436,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[TextRawTask | Ima
             """
         elif task_type == TaskType.IMAGETASK.value:
             specific_query = f"""
-                SELECT t.*, it.model_filename
+                SELECT t.*
                 FROM {cst.TASKS_TABLE} t
                 LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
@@ -535,7 +530,6 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> TextTask | ImageTask
                 )
                 SELECT
                     tasks.*,
-                    it.model_filename,
                     victorious_repo.repo as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
                 LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON tasks.{cst.TASK_ID} = it.{cst.TASK_ID}
@@ -705,3 +699,14 @@ async def get_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> list[ImageText
     async with await psql_db.connection() as conn:
         rows = await conn.fetch(query, task_id)
         return [ImageTextPair(image_url=row["image_url"], text_url=row["text_url"]) for row in rows]
+    
+
+async def delete_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> None:
+    query = f"""
+        DELETE FROM {cst.IMAGE_TEXT_PAIRS_TABLE}
+        WHERE {cst.TASK_ID} = $1
+    """
+
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        await connection.execute(query, task_id)

@@ -76,7 +76,6 @@ class EvaluationRequest(TrainRequest):
 class EvaluationRequestDiffusion(BaseModel):
     test_split_url: str
     original_model_repo: str
-    original_model_filename: str
     models: list[str]
 
 
@@ -132,7 +131,6 @@ class NewTaskRequestText(NewTaskRequest):
 
 class NewTaskRequestImage(NewTaskRequest):
     model_repo: str = Field(..., description="The model repository to use")
-    model_filename: str
     image_text_pairs: list[ImageTextPair] = Field(
         ...,
         description="List of image and text file pairs",
@@ -203,9 +201,8 @@ class TextTaskDetails(TaskDetails):
 
 
 class ImageTaskDetails(TaskDetails):
-    ds_url: str = Field(..., description="The S3 URL for the dataset")
+    image_text_pairs: list[ImageTextPair]
     base_model_repository: str = Field(..., description="The repository for the model")
-    model_filename: str = Field(..., description="The filename for the model safetensors file in the repo")
 
 
 class TaskListResponse(BaseModel):
