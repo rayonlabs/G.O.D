@@ -289,7 +289,7 @@ async def prepare_text_task(
 
 
 async def prepare_image_task(image_text_pairs: list[ImageTextPair]) -> tuple[str, str]:
-    Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(exist_ok=True)
+    Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=cst.TEMP_PATH_FOR_IMAGES) as source_dir:
         for i, pair in enumerate(image_text_pairs):
             txt_path = Path(source_dir) / f"{i}.txt"
