@@ -106,7 +106,7 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
                 """
                 await connection.execute(
                     query_text_tasks,
-                    task_record["task_id"],
+                    task_record[cst.TASK_ID],
                     task.field_system,
                     task.field_instruction,
                     task.field_input,
@@ -122,7 +122,7 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
                     ({cst.TASK_ID})
                     VALUES ($1)
                 """
-                await connection.execute(query_image_tasks, task_record["task_id"])
+                await connection.execute(query_image_tasks, task_record[cst.TASK_ID])
 
                 if task.image_text_pairs:
                     query_pairs = f"""
@@ -131,9 +131,9 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask
                         VALUES ($1, $2, $3)
                     """
                     for pair in task.image_text_pairs:
-                        await connection.execute(query_pairs, task_record["task_id"], pair.image_url, pair.text_url)
+                        await connection.execute(query_pairs, task_record[cst.TASK_ID], pair.image_url, pair.text_url)
 
-            task.task_id = task_record["task_id"]
+            task.task_id = task_record[cst.TASK_ID]
             return task
 
 
