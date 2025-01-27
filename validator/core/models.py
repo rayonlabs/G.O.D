@@ -141,7 +141,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     is_organic: bool
     task_id: UUID | None = None
     model_id: str
-    ds_id: str
+    ds: str
     file_format: FileFormat = FileFormat.HF
     status: str
     account_id: UUID
@@ -149,7 +149,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     hours_to_complete: int
     assigned_miners: list[int] | None = None
     miner_scores: list[float] | None = None
-
+    task_type: TaskType
     created_at: datetime
     next_delay_at: datetime | None = None
     updated_at: datetime | None = None
@@ -280,7 +280,7 @@ class Img2ImgPayload(BaseModel):
     is_safetensors: bool = True
     prompt: str | None = None
     base_image: str | None = None
-    
+
 
 class NetworkStats(BaseModel):
     number_of_jobs_training: int
