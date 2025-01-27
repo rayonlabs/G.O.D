@@ -58,9 +58,7 @@ text_specific_fields = [
     cst.SYNTHETIC_DATA,
 ]
 
-image_specific_fields = [
-    cst.IMAGE_TEXT_PAIRS
-]
+image_specific_fields = [cst.IMAGE_TEXT_PAIRS]
 
 
 async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask:
@@ -579,10 +577,12 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[
         return [Task(**dict(row)) for row in rows]
 
 
-async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0) -> List[Task]:
+async def get_tasks_by_account_id(
+    psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0
+) -> List[TextTask | ImageTask]:
     async with await psql_db.connection() as connection:
         connection: Connection
-        query = f"""
+        base_query = f"""
             WITH victorious_repo AS (
                 SELECT
                     submissions.{cst.TASK_ID},
@@ -610,8 +610,30 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
             LIMIT $2 OFFSET $3
         """
 
-        rows = await connection.fetch(query, account_id, limit, offset)
-        return [Task(**dict(row)) for row in rows]
+        rows = await connection.fetch(base_query, account_id, limit, offset)
+        tasks = []
+
+        for row in rows:
+            task_data = dict(row)
+            task_type = task_data[cst.TASK_TYPE]
+
+            if task_type == TaskType.TEXTTASK.value:
+                text_query = f"""
+                    SELECT field_system, field_instruction, field_input, field_output,
+                           format, no_input_format, synthetic_data
+                    FROM {cst.TEXT_TASKS_TABLE}
+                    WHERE {cst.TASK_ID} = $1
+                """
+                text_row = await connection.fetchrow(text_query, task_data[cst.TASK_ID])
+                if text_row:
+                    task_data.update(dict(text_row))
+                tasks.append(TextTask(**task_data))
+
+            elif task_type == TaskType.IMAGETASK.value:
+                image_text_pairs = await get_image_text_pairs(task_data[cst.TASK_ID], psql_db)
+                tasks.append(ImageTask(**task_data, image_text_pairs=image_text_pairs))
+
+        return tasks
 
 
 async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[Task]:
@@ -699,7 +721,7 @@ async def get_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> list[ImageText
     async with await psql_db.connection() as conn:
         rows = await conn.fetch(query, task_id)
         return [ImageTextPair(image_url=row["image_url"], text_url=row["text_url"]) for row in rows]
-    
+
 
 async def delete_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> None:
     query = f"""
