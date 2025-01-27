@@ -8,6 +8,7 @@ from typing import Union
 
 import docker
 from docker.models.containers import Container
+from docker.types import Mount
 
 from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
@@ -105,6 +106,10 @@ async def run_evaluation_docker_text(
         dataset_dir: {
             "bind": "/workspace/input_data",
             "mode": "ro",
+        },
+        os.path.expanduser(cst.CACHE_DIR): {
+            "bind": "/root/.cache/huggingface",
+            "mode": "rw",
         }
     }
 
@@ -160,8 +165,27 @@ async def run_evaluation_docker_image(
 
     client = docker.from_env()
 
-    volume_bindings = {}
-    volume_bindings[dataset_dir] = {"bind": container_dataset_path, "mode": "ro"}
+    base_path = "/app/validator/evaluation/ComfyUI/models"
+    mounts = [
+        Mount(
+            target=container_dataset_path,
+            source=dataset_dir,
+            type='bind',
+            read_only=True
+        ),
+        Mount(
+            target=f"{base_path}/checkpoints",
+            source=cst.CACHE_DIR_HUB,
+            type='bind',
+            read_only=False
+        ),
+        Mount(
+            target=f"{base_path}/diffusers",
+            source=cst.CACHE_DIR_HUB,
+            type='bind',
+            read_only=False
+        )
+    ]
 
     environment = {
         "DATASET": container_dataset_path,
@@ -182,7 +206,7 @@ async def run_evaluation_docker_image(
         container = await asyncio.to_thread(
             client.containers.run,
             cst.VALIDATOR_DOCKER_IMAGE_DIFFUSION,
-            volumes=volume_bindings,
+            mounts=mounts,
             environment=environment,
             runtime="nvidia",
             device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
