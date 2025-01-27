@@ -260,7 +260,7 @@ def add_raw_scores_to_miner_results(
         return miner_results
 
     scale_factor = compute_adaptive_scale_factor(finetuned_results)
-    logger.info(f"Using scale factor: {scale_factor} " f"(calculated from {len(finetuned_results)} finetuned submissions)")
+    logger.info(f"Using scale factor: {scale_factor} (calculated from {len(finetuned_results)} finetuned submissions)")
 
     for result in miner_results:
         with LogContext(miner_hotkey=result.hotkey):
@@ -327,8 +327,7 @@ def _calculate_weighted_loss_for_image_eval(eval_result: EvaluationResultImage) 
         )
 
         weighted_loss = (
-            cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT * text_guided_avg
-            + (1 - cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT) * no_text_avg
+            cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT * text_guided_avg + (1 - cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT) * no_text_avg
         )
         return weighted_loss
 

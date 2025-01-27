@@ -73,10 +73,10 @@ async def tune_model_diffusion(
     train_request: TrainRequestImage,
     worker_config: WorkerConfig = Depends(get_worker_config),
 ):
-    global finish_time
+    global current_job_finish_time
     logger.info("Starting model tuning.")
 
-    finish_time = datetime.now() + timedelta(hours=train_request.hours_to_complete)
+    current_job_finish_time = datetime.now() + timedelta(hours=train_request.hours_to_complete)
     logger.info(f"Job received is {train_request}")
     try:
         train_request.dataset_zip = await download_s3_file(
@@ -181,7 +181,7 @@ async def task_offer_image(
             return MinerTaskResponse(message="This endpoint only accepts image tasks", accepted=False)
 
         if current_job_finish_time is None or current_time + timedelta(hours=1) > current_job_finish_time:
-            if request.hours_to_complete < 13:
+            if request.hours_to_complete < 3:
                 logger.info("Accepting the image offer")
                 return MinerTaskResponse(message="Yes. I can do image jobs", accepted=True)
             else:
@@ -219,7 +219,7 @@ def factory_router() -> APIRouter:
         tags=["Subnet"],
         methods=["POST"],
         response_model=MinerTaskResponse,
-        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+        # dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
 
     router.add_api_route(
@@ -230,7 +230,7 @@ def factory_router() -> APIRouter:
         response_model=str,
         summary="Get Latest Model Submission",
         description="Retrieve the latest model submission for a given task ID",
-        dependencies=[Depends(blacklist_low_stake)],
+        # dependencies=[Depends(blacklist_low_stake)],
     )
     router.add_api_route(
         "/start_training/",  # TODO: change to /start_training_text or similar
@@ -246,7 +246,7 @@ def factory_router() -> APIRouter:
         tags=["Subnet"],
         methods=["POST"],
         response_model=TrainResponse,
-        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+        # dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
 
     return router

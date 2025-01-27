@@ -280,7 +280,7 @@ class Img2ImgPayload(BaseModel):
     is_safetensors: bool = True
     prompt: str | None = None
     base_image: str | None = None
-    
+
 
 class NetworkStats(BaseModel):
     number_of_jobs_training: int

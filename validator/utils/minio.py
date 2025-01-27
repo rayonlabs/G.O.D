@@ -95,8 +95,8 @@ class AsyncMinioClient:
     def parse_s3_url(self, url: str) -> tuple[str, str]:
         """Extract bucket name and object name from S3 URL."""
         parsed_url = urlparse(url)
-        bucket_name = parsed_url.hostname.split('.')[0]
-        object_name = parsed_url.path.lstrip('/').split('?')[0]
+        bucket_name = parsed_url.hostname.split(".")[0]
+        object_name = parsed_url.path.lstrip("/").split("?")[0]
         return bucket_name, object_name
 
     def __del__(self):

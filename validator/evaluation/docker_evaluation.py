@@ -140,10 +140,7 @@ async def run_evaluation_docker_text(
 
 
 async def run_evaluation_docker_image(
-    test_split_url: str,
-    original_model_repo: str,
-    models: list[str],
-    gpu_ids: list[int]
+    test_split_url: str, original_model_repo: str, models: list[str], gpu_ids: list[int]
 ) -> dict[str, Union[EvaluationResultImage, Exception]]:
     raw_data = await download_s3_file(test_split_url)
     test_split_path = unzip_to_temp_path(raw_data)

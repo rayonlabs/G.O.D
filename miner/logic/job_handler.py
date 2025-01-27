@@ -1,11 +1,11 @@
 import os
+import shutil
+import uuid
 from dataclasses import dataclass
 
-import uuid
 import docker
 import toml
 import yaml
-import shutil
 from docker.errors import DockerException
 from fiber.logging_utils import get_logger
 from huggingface_hub import HfApi
@@ -196,11 +196,12 @@ def start_tuning_container_diffusion(job: DiffusionJob):
 
         train_data_path = f"{cst.DIFFUSION_DATASET_DIR}/{job.job_id}"
         train_zip_path = f"{cst.DIFFUSION_DATASET_DIR}/{job.job_id}.zip"
-        
+
         if os.path.exists(train_data_path):
             shutil.rmtree(train_data_path)
         if os.path.exists(train_zip_path):
             os.remove(train_zip_path)
+
 
 def start_tuning_container(job: TextJob):
     logger.info("=" * 80)

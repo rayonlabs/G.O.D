@@ -153,7 +153,7 @@ async def main():
 
         if updated < weights_set_rate_limit:
             sleep_duration = (weights_set_rate_limit - updated) * 12
-            logger.info(f"Sleeping for {sleep_duration} seconds [{sleep_duration / 12 } blocks]" " as we set weights recently...")
+            logger.info(f"Sleeping for {sleep_duration} seconds [{sleep_duration / 12} blocks] as we set weights recently...")
             await asyncio.sleep(sleep_duration)
             continue
 

@@ -58,9 +58,7 @@ text_specific_fields = [
     cst.SYNTHETIC_DATA,
 ]
 
-image_specific_fields = [
-    cst.IMAGE_TEXT_PAIRS
-]
+image_specific_fields = [cst.IMAGE_TEXT_PAIRS]
 
 
 async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
@@ -276,9 +274,7 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
                     await connection.execute(query, updated_task.task_id, *specific_values)
             elif updated_task.task_type == TaskType.IMAGETASK:
                 if "image_text_pairs" in updates:
-                    pairs: list[ImageTextPair] = [
-                        ImageTextPair(**pair) for pair in updates["image_text_pairs"]
-                    ]
+                    pairs: list[ImageTextPair] = [ImageTextPair(**pair) for pair in updates["image_text_pairs"]]
                     await delete_image_text_pairs(updated_task.task_id, psql_db)
                     await add_image_text_pairs(updated_task.task_id, pairs, psql_db)
 
@@ -702,7 +698,7 @@ async def get_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> list[ImageText
     async with await psql_db.connection() as conn:
         rows = await conn.fetch(query, task_id)
         return [ImageTextPair(image_url=row["image_url"], text_url=row["text_url"]) for row in rows]
-    
+
 
 async def delete_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> None:
     query = f"""

@@ -1,11 +1,9 @@
 import os
 import shutil
 import zipfile
-from fiber.logging_utils import get_logger
 
 from core import constants as cst
 
-logger = get_logger(__name__)
 
 def prepare_dataset(
     training_images_zip_path: str,
@@ -61,4 +59,3 @@ def prepare_dataset(
 
     if os.path.exists(training_images_zip_path):
         os.remove(training_images_zip_path)
-
