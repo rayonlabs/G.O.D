@@ -21,6 +21,7 @@ CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 
 CONFIG_DIR = "./core/config/"
 OUTPUT_DIR = "./core/outputs/"
+CACHE_DIR = "~/.cache/huggingface/"
 
 CONFIG_TEMPLATE_PATH = CONFIG_DIR + "base.yml"
 

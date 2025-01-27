@@ -18,9 +18,11 @@ from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.core.models import RawTask
+from validator.db.database import PSQLDB
 from validator.evaluation.scoring import evaluate_and_score
 from validator.tasks.task_prep import prepare_task
 from validator.utils.cache_clear import clean_all_hf_datasets_cache
+from validator.utils.cache_clear import manage_models_cache
 from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
@@ -29,6 +31,8 @@ from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
+
+_cache_cleanup_lock = asyncio.Lock()
 
 
 async def _get_total_dataset_size(repo_name: str, file_format: FileFormat) -> int:
@@ -342,6 +346,22 @@ async def move_tasks_to_preevaluation_loop(config: Config):
         await asyncio.sleep(60)
 
 
+async def cleanup_model_cache(psql_db: PSQLDB):
+    """Clean up model cache when it exceeds size limit."""
+    if _cache_cleanup_lock.locked():
+        return
+
+    async with _cache_cleanup_lock:
+        cache_stats = await tasks_sql.get_model_cache_stats(
+            psql_db,
+            tau_days=cst.CACHE_TAU_DAYS,
+            max_lookup_days=cst.CACHE_MAX_LOOKUP_DAYS
+        )
+
+        manage_models_cache(cache_stats, cst.MAX_CACHE_SIZE_BYTES)
+        await asyncio.sleep(cst.CACHE_CLEANUP_INTERVAL)
+
+
 async def evaluate_tasks_loop(config: Config):
     task_queue = asyncio.Queue()
     gpu_queue = asyncio.Queue()
@@ -375,6 +395,7 @@ async def evaluate_tasks_loop(config: Config):
             # Clean up workers
             for w in workers:
                 w.cancel()
+            await cleanup_model_cache(config.psql_db)
         else:
             logger.info("No tasks awaiting evaluation - waiting 30 seconds")
             await asyncio.sleep(30)

@@ -81,6 +81,10 @@ async def run_evaluation_docker(
         dataset_dir: {
             "bind": "/workspace/input_data",
             "mode": "ro",
+        },
+        os.path.expanduser(cst.CACHE_DIR): {
+            "bind": "/root/.cache/huggingface",
+            "mode": "rw",
         }
     }
 
