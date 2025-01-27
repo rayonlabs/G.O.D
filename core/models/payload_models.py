@@ -180,7 +180,7 @@ class TaskDetails(BaseModel):
 
 
 class TextTaskDetails(TaskDetails):
-    task_type: TaskType = TaskType.TEXT
+    task_type: TaskType = TaskType.TEXTTASK
     base_model_repository: str
     ds_repo: str
 
@@ -203,7 +203,7 @@ class TextTaskDetails(TaskDetails):
 
 
 class ImageTaskDetails(TaskDetails):
-    task_type: TaskType = TaskType.IMAGE
+    task_type: TaskType = TaskType.IMAGETASK
     image_text_pairs: list[ImageTextPair]
     base_model_repository: str = Field(..., description="The repository for the model")
 
