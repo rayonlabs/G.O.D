@@ -232,12 +232,14 @@ async def set_expected_repo_name(task_id: str, node: Node, psql_db: PSQLDB, expe
 
 async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)
+
     if not existing_task:
         raise ValueError(f"Task {updated_task.task_id} not found in the database?")
 
+    existing_task_dict = existing_task.model_dump()
     updates = {}
     for field, value in updated_task.dict(exclude_unset=True, exclude={cst.ASSIGNED_MINERS, cst.UPDATED_AT}).items():
-        if getattr(existing_task, field) != value:
+        if existing_task_dict.get(field, None) != value:
             updates[field] = value
 
     async with await psql_db.connection() as connection:
@@ -274,8 +276,8 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
                     await connection.execute(query, updated_task.task_id, *specific_values)
             elif updated_task.task_type == TaskType.IMAGETASK:
                 if "image_text_pairs" in updates:
-                    pairs: list[ImageTextPair] = [ImageTextPair(**pair) for pair in updates["image_text_pairs"]]
                     await delete_image_text_pairs(updated_task.task_id, psql_db)
+                    pairs = [ImageTextPair(**pair) for pair in updates["image_text_pairs"]]
                     await add_image_text_pairs(updated_task.task_id, pairs, psql_db)
 
             if updated_task.assigned_miners is not None:
@@ -452,7 +454,8 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[TextRawTask | Ima
         if task_type == TaskType.TEXTTASK.value:
             return TextRawTask(**full_task_data)
         elif task_type == TaskType.IMAGETASK.value:
-            return ImageRawTask(**full_task_data)
+            image_text_pairs = await get_image_text_pairs(task_id, psql_db)
+            return ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs)
 
 
 async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Dict]:
@@ -578,10 +581,12 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[
         return [Task(**dict(row)) for row in rows]
 
 
-async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0) -> List[Task]:
+async def get_tasks_by_account_id(
+    psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0
+) -> List[TextTask | ImageTask]:
     async with await psql_db.connection() as connection:
         connection: Connection
-        query = f"""
+        base_query = f"""
             WITH victorious_repo AS (
                 SELECT
                     submissions.{cst.TASK_ID},
@@ -609,8 +614,30 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
             LIMIT $2 OFFSET $3
         """
 
-        rows = await connection.fetch(query, account_id, limit, offset)
-        return [Task(**dict(row)) for row in rows]
+        rows = await connection.fetch(base_query, account_id, limit, offset)
+        tasks = []
+
+        for row in rows:
+            task_data = dict(row)
+            task_type = task_data[cst.TASK_TYPE]
+
+            if task_type == TaskType.TEXTTASK.value:
+                text_query = f"""
+                    SELECT field_system, field_instruction, field_input, field_output,
+                           format, no_input_format, synthetic_data
+                    FROM {cst.TEXT_TASKS_TABLE}
+                    WHERE {cst.TASK_ID} = $1
+                """
+                text_row = await connection.fetchrow(text_query, task_data[cst.TASK_ID])
+                if text_row:
+                    task_data.update(dict(text_row))
+                tasks.append(TextTask(**task_data))
+
+            elif task_type == TaskType.IMAGETASK.value:
+                image_text_pairs = await get_image_text_pairs(task_data[cst.TASK_ID], psql_db)
+                tasks.append(ImageTask(**task_data, image_text_pairs=image_text_pairs))
+
+        return tasks
 
 
 async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[Task]:

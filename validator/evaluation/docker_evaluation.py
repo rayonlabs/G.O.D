@@ -11,7 +11,6 @@ from docker.models.containers import Container
 from pydantic import TypeAdapter
 
 from core import constants as cst
-from core.docker_utils import stream_logs
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import CustomDatasetType
@@ -177,7 +176,7 @@ async def run_evaluation_docker_image(
             device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
             detach=True,
         )
-        log_task = asyncio.create_task(asyncio.to_thread(stream_logs, container))
+        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
         result = await asyncio.to_thread(container.wait)
         log_task.cancel()
 

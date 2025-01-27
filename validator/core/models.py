@@ -141,7 +141,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     is_organic: bool
     task_id: UUID | None = None
     model_id: str
-    ds_id: str | None = None
+    ds: str
     file_format: FileFormat = FileFormat.HF
     status: str
     account_id: UUID
@@ -149,7 +149,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     hours_to_complete: int
     assigned_miners: list[int] | None = None
     miner_scores: list[float] | None = None
-
+    task_type: TaskType
     created_at: datetime
     next_delay_at: datetime | None = None
     updated_at: datetime | None = None
