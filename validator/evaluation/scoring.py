@@ -54,7 +54,7 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
             "\nReturning 1 regardless as a failsafe, but please look into this"
         )
         return 1
-    return max(1, 2 * np.log(float(hours * model_size_value)))
+    return max(1, 2 * np.sqrt(float(hours * model_size_value)))
 
 
 def calculate_adjusted_task_score(quality_score: float, task_work_score: float) -> float:
@@ -342,7 +342,10 @@ async def _evaluate_submissions(
     logger.info("Starting synth evaluation")
     synthetic_data_filepath = await download_s3_file(task.synthetic_data)
     synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
-    os.remove(synthetic_data_filepath)
+    try:
+        os.remove(synthetic_data_filepath)
+    except Exception as e:
+        logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
 
     finetuned_repos = []
     for repo in repos_to_evaluate:
@@ -364,7 +367,10 @@ async def _evaluate_submissions(
         test_eval_results = await run_evaluation_docker(
             dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
         )
-        os.remove(test_data_filepath)
+        try:
+            os.remove(test_data_filepath)
+        except Exception as e:
+            logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
 
         for repo in finetuned_repos:
             if isinstance(test_eval_results.get(repo), Exception):
@@ -564,7 +570,7 @@ async def process_miners_pool(
                     )
 
         except Exception as e:
-            logger.error(f"Error during batch evaluation: {e}")
+            logger.error(f"Error during batch evaluation: {e}", exc_info=True)
             results.extend(
                 [
                     _create_failed_miner_result(miner.hotkey, reason="Evaluation failed")

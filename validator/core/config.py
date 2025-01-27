@@ -5,22 +5,18 @@ from dataclasses import dataclass
 import httpx
 import websocket
 from dotenv import load_dotenv
-from redis.asyncio import Redis
-
-from validator.db.database import PSQLDB
-
-
-load_dotenv()
-
 from fiber.chain import chain_utils
 from fiber.chain import interface
+from redis.asyncio import Redis
 from substrateinterface import Keypair
 from substrateinterface import SubstrateInterface
 
+from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+load_dotenv(".vali.env")
 
 
 @dataclass

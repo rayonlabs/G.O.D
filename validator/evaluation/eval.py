@@ -22,6 +22,7 @@ from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
 from validator.core import constants as cst
 from validator.evaluation.utils import model_is_a_finetune
+from validator.utils.logging import TimeBasedLogger
 from validator.utils.logging import get_logger
 
 
@@ -103,12 +104,20 @@ def _process_evaluation_batches(
     consecutive_nans = 0
     max_consecutive_nans = evaluation_config.get("max_consecutive_nans")
 
+    total_batches = len(eval_dataloader)
+    time_logger = TimeBasedLogger(interval_seconds=10.0)
+
     language_model.eval()
     with torch.no_grad():
         for batch_idx, batch in enumerate(eval_dataloader):
-            logger.info(f"Processing batch {batch_idx + 1}")
             batch_loss = _compute_batch_loss(language_model, batch, device)
-            logger.info(f"Batch {batch_idx + 1} loss: {batch_loss}")
+
+            if time_logger.should_log():
+                progress = (batch_idx + 1) / total_batches * 100
+                logger.info(
+                    f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) "
+                    f"- Current loss: {batch_loss}"
+                )
 
             if torch.isnan(torch.tensor(batch_loss)):
                 consecutive_nans += 1

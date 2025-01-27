@@ -343,14 +343,38 @@ async def move_tasks_to_preevaluation_loop(config: Config):
 
 
 async def evaluate_tasks_loop(config: Config):
+    task_queue = asyncio.Queue()
+    gpu_queue = asyncio.Queue()
+    for gpu_id in cst.GPU_IDS:
+        await gpu_queue.put(gpu_id)
+
+    async def evaluation_worker():
+        while True:
+            try:
+                task = await asyncio.wait_for(task_queue.get(), timeout=1)
+                gpu_id = await gpu_queue.get()
+
+                try:
+                    await _evaluate_task(task, [gpu_id], config)
+                finally:
+                    await gpu_queue.put(gpu_id)
+                    task_queue.task_done()
+            except asyncio.TimeoutError:
+                # No more tasks in queue
+                break
+
     while True:
         tasks_to_evaluate = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=config.psql_db)
         if tasks_to_evaluate:
             logger.info(f"There are {len(tasks_to_evaluate)} tasks awaiting evaluation")
-            for i in range(0, len(tasks_to_evaluate), len(cst.GPU_IDS)):
-                batch = [(task, [gpu_id]) for task, gpu_id in zip(tasks_to_evaluate[i : i + len(cst.GPU_IDS)], cst.GPU_IDS)]
-                await asyncio.gather(*[_evaluate_task(task, gpu_list, config) for task, gpu_list in batch])
+            for task in tasks_to_evaluate:
+                await task_queue.put(task)
+            workers = [asyncio.create_task(evaluation_worker()) for _ in cst.GPU_IDS]
+            await task_queue.join()
 
+            # Clean up workers
+            for w in workers:
+                w.cancel()
         else:
             logger.info("No tasks awaiting evaluation - waiting 30 seconds")
             await asyncio.sleep(30)
