@@ -194,32 +194,51 @@ async def get_task_details_by_account(
     limit: int = 100,
     page: int = 1,
     config: Config = Depends(get_config),
-) -> list[TaskDetails]:
+) -> list[TextTaskDetails | ImageTaskDetails]:
     offset = (page - 1) * limit
     tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
 
-    task_status_responses = [
-        TaskDetails(
-            id=task.task_id,
-            account_id=task.account_id,
-            status=task.status,
-            base_model_repository=task.model_id,
-            ds_repo=task.ds,
-            field_input=task.field_input,
-            field_system=task.field_system,
-            field_instruction=task.field_instruction,
-            field_output=task.field_output,
-            format=task.format,
-            no_input_format=task.no_input_format,
-            system_format=task.system_format,
-            created_at=task.created_at,
-            started_at=task.started_at,
-            finished_at=task.termination_at,
-            hours_to_complete=task.hours_to_complete,
-            trained_model_repository=task.trained_model_repository,
-        )
-        for task in tasks
-    ]
+    task_status_responses = []
+    for task in tasks:
+        if task.task_type == TaskType.TEXTTASK:
+            task_status_responses.append(
+                TextTaskDetails(
+                    id=task.task_id,
+                    account_id=task.account_id,
+                    status=task.status,
+                    base_model_repository=task.model_id,
+                    ds_repo=task.ds,
+                    field_input=task.field_input,
+                    field_system=task.field_system,
+                    field_instruction=task.field_instruction,
+                    field_output=task.field_output,
+                    format=task.format,
+                    no_input_format=task.no_input_format,
+                    system_format=task.system_format,
+                    created_at=task.created_at,
+                    started_at=task.started_at,
+                    finished_at=task.termination_at,
+                    hours_to_complete=task.hours_to_complete,
+                    trained_model_repository=task.trained_model_repository,
+                    task_type=task.task_type,
+                )
+            )
+        elif task.task_type == TaskType.IMAGETASK:
+            task_status_responses.append(
+                ImageTaskDetails(
+                    id=task.task_id,
+                    account_id=task.account_id,
+                    status=task.status,
+                    base_model_repository=task.model_id,
+                    image_text_pairs=task.image_text_pairs,
+                    created_at=task.created_at,
+                    started_at=task.started_at,
+                    finished_at=task.termination_at,
+                    hours_to_complete=task.hours_to_complete,
+                    trained_model_repository=task.trained_model_repository,
+                    task_type=task.task_type,
+                )
+            )
 
     return task_status_responses
 
