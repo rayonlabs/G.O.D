@@ -7,7 +7,7 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def test_run_evaluation():
+async def test_run_evaluation():
     custom_dataset_type = CustomDatasetType(
         system_prompt="you are helpful",
         system_format="{system}",
@@ -17,7 +17,7 @@ def test_run_evaluation():
         field_output="output",
     )
 
-    results = run_evaluation_docker(
+    results = await run_evaluation_docker(
         dataset="mhenrichsen/alpaca_2k_test",
         models=["unsloth/Llama-3.2-3B-Instruct"],
         original_model="unsloth/Llama-3.2-3B-Instruct",

@@ -1,15 +1,16 @@
 import asyncio
 import datetime
-import os
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 from minio import Minio
 
+from validator.core.config import load_config
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+config = load_config()
 
 # NOTE: This all needs rewriting to be honest
 # TODO: TODO: TODO: BIN ALL OF THIS PLZ :PRAY:
@@ -38,11 +39,10 @@ class AsyncMinioClient:
     async def upload_file(self, bucket_name, object_name, file_path):
         func = self.client.fput_object
         args = (bucket_name, object_name, file_path)
-        logger.info("Attempting to upload")
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(self.executor, func, *args)
-            logger.info(f"The bucket_name is {bucket_name} and the result was {result}")
+            logger.info(f"Successfully uploaded args={args}")
             return result
         except Exception as e:
             logger.info(f"There was an issue with uploading file to s3. {e}")
@@ -51,7 +51,6 @@ class AsyncMinioClient:
     async def download_file(self, bucket_name, object_name, file_path):
         func = self.client.fget_object
         args = (bucket_name, object_name, file_path)
-        logger.info("Attempting to download")
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.executor, func, *args)
 
@@ -64,7 +63,6 @@ class AsyncMinioClient:
     async def list_objects(self, bucket_name, prefix=None, recursive=True):
         func = self.client.list_objects
         args = (bucket_name, prefix, recursive)
-        logger.info("Listing objects")
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.executor, func, *args)
 
@@ -72,7 +70,6 @@ class AsyncMinioClient:
         """Get stats for an object in MinIO storage."""
         func = self.client.stat_object
         args = (bucket_name, object_name)
-        logger.info("Getting stats for object")
         loop = asyncio.get_event_loop()
         stats = await loop.run_in_executor(self.executor, func, *args)
         return stats
@@ -95,19 +92,18 @@ class AsyncMinioClient:
     def parse_s3_url(self, url: str) -> tuple[str, str]:
         """Extract bucket name and object name from S3 URL."""
         parsed_url = urlparse(url)
-        bucket_name = parsed_url.hostname.split('.')[0]
-        object_name = parsed_url.path.lstrip('/').split('?')[0]
+        bucket_name = parsed_url.hostname.split(".")[0]
+        object_name = parsed_url.path.lstrip("/").split("?")[0]
         return bucket_name, object_name
 
     def __del__(self):
         self.executor.shutdown(wait=False)
 
 
-S3_COMPATIBLE_ENDPOINT = os.getenv("S3_COMPATIBLE_ENDPOINT", "localhost:9000")
-S3_COMPATIBLE_ACCESS_KEY = os.getenv("S3_COMPATIBLE_ACCESS_KEY", "minioadmin")
-S3_COMPATIBLE_SECRET_KEY = os.getenv("S3_COMPATIBLE_SECRET_KEY", "minioadmin")
-S3_REGION = os.getenv("S3_REGION", "us-east-1")
-
 async_minio_client = AsyncMinioClient(
-    endpoint=S3_COMPATIBLE_ENDPOINT, access_key=S3_COMPATIBLE_ACCESS_KEY, secret_key=S3_COMPATIBLE_SECRET_KEY, region=S3_REGION
+    endpoint=config.s3_compatible_endpoint,
+    access_key=config.s3_compatible_access_key,
+    secret_key=config.s3_compatible_secret_key,
+    region=config.s3_region,
+    secure=not config.debug,
 )

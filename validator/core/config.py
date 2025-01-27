@@ -12,7 +12,6 @@ from validator.db.database import PSQLDB
 
 load_dotenv()
 
-
 from fiber.chain import chain_utils
 from fiber.chain import interface
 from substrateinterface import Keypair
@@ -36,6 +35,11 @@ class Config:
     refresh_nodes: bool
     httpx_client: httpx.AsyncClient
     set_metagraph_weights_with_high_updated_to_not_dereg: bool
+    s3_compatible_endpoint: str
+    s3_compatible_access_key: str
+    s3_compatible_secret_key: str
+    s3_bucket_name: str
+    s3_region: str
     testnet: bool = os.getenv("SUBTENSOR_NETWORK", "").lower() == "test"
     debug: bool = os.getenv("ENV", "prod").lower() != "prod"
 
@@ -81,6 +85,12 @@ def load_config() -> Config:
             os.getenv("SET_METAGRAPH_WEIGHTS_WITH_HIGH_UPDATED_TO_NOT_DEREG", "false").lower() == "true"
         )
 
+        s3_compatible_endpoint = os.getenv("S3_COMPATIBLE_ENDPOINT", "localhost:9000")
+        s3_compatible_access_key = os.getenv("S3_COMPATIBLE_ACCESS_KEY", "minioadmin")
+        s3_compatible_secret_key = os.getenv("S3_COMPATIBLE_SECRET_KEY", "minioadmin")
+        s3_bucket_name = os.getenv("S3_BUCKET_NAME")
+        s3_region = os.getenv("S3_REGION", "us-east-1")
+
         _config = Config(
             substrate=substrate,
             keypair=keypair,
@@ -93,5 +103,10 @@ def load_config() -> Config:
             httpx_client=httpx_client,
             debug=dev_env,
             set_metagraph_weights_with_high_updated_to_not_dereg=set_metagraph_weights_with_high_updated_to_not_dereg,
+            s3_compatible_endpoint=s3_compatible_endpoint,
+            s3_compatible_access_key=s3_compatible_access_key,
+            s3_compatible_secret_key=s3_compatible_secret_key,
+            s3_bucket_name=s3_bucket_name,
+            s3_region=s3_region,
         )
     return _config

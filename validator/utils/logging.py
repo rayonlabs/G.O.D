@@ -104,6 +104,7 @@ def stream_container_logs(container: Container, log_context: dict | None = None)
             for log_chunk in container.logs(stream=True, follow=True):
                 log_text = log_chunk.decode("utf-8", errors="replace")
                 buffer += log_text
+                logger.info(f"Got new chunk from container: {log_text}")
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
                     if line:

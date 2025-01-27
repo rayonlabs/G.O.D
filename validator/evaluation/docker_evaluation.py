@@ -75,7 +75,6 @@ async def run_evaluation_docker(
         "FILE_FORMAT": file_format.value,
         "JOB_ID": "dummy",
     }
-    logger.info(f"Here are the models {models}")
 
     volume_bindings = {
         dataset_dir: {
@@ -94,18 +93,25 @@ async def run_evaluation_docker(
             logger.error(f"Cleanup failed: {str(e)}")
 
     try:
+        devices = [docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])]
+        logger.info(
+            f"Starting up container image={cst.VALIDATOR_DOCKER_IMAGE} "
+            f"({client.api.inspect_image(cst.VALIDATOR_DOCKER_IMAGE)}) with devices={devices}"
+        )
         container: Container = await asyncio.to_thread(
             client.containers.run,
             cst.VALIDATOR_DOCKER_IMAGE,
             environment=environment,
             volumes=volume_bindings,
             runtime="nvidia",
-            device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
+            device_requests=devices,
             detach=True,
         )
+        logger.info("Attaching log streamer...")
         log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
         result = await asyncio.to_thread(container.wait)
         log_task.cancel()
+        logger.info(f"Exited container with result={result}")
 
         if result["StatusCode"] != 0:
             raise Exception(f"Container exited with status {result['StatusCode']}")

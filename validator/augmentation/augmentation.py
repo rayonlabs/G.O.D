@@ -129,12 +129,32 @@ async def generate_from_output(row: dict, output_field: str, prompts: Prompts, k
     payload = convert_to_nineteen_payload(messages)
     result = await post_to_nineteen_ai(payload, keypair)
     generated_inputs = json.loads(result) if isinstance(result, str) else result
-    generated_inputs[output_field] = reformulated_output  # Double check the output is unchanged
+    generated_inputs[output_field] = reformulated_output  # Double-check the output is unchanged
 
     return generated_inputs
 
 
-async def generate_augmented_dataset(sampled_data: List[dict], column_to_reformulate: str | None, keypair: Keypair) -> List[dict]:
+async def process_row(row, column_to_reformulate, prompts, keypair):
+    # Use probability constant for deciding the method
+    use_output_reformulation_method = random.random() < OUTPUT_REFORMULATION_PROBABILITY if column_to_reformulate else False
+
+    if use_output_reformulation_method:
+        json_synthetic_data_point = await generate_from_output(row, column_to_reformulate, prompts, keypair)
+    else:
+        json_synthetic_data_point = await generate_from_distribution(row, prompts, keypair)
+    logger.info(json_synthetic_data_point)
+    if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
+        return json_synthetic_data_point
+    else:
+        raise ValueError(
+            f"Generated data point has incorrect schema. Expected keys: {set(row.keys())}, "
+            f"got: {set(json_synthetic_data_point.keys())}"
+        )
+
+
+async def generate_augmented_dataset(
+    sampled_data: List[dict], column_to_reformulate: str | None, keypair: Keypair
+) -> List[dict | BaseException] | None:
     prompts = load_prompts()
     logger.info("Creating an augmented dataset...")  # Task id would be nice here
     synthetic_dataset = []
@@ -143,26 +163,9 @@ async def generate_augmented_dataset(sampled_data: List[dict], column_to_reformu
     consecutive_errors = 0
     max_consecutive_errors = 3
 
-    async def process_row(row, column_to_reformulate):
-        # Use probability constant for deciding the method
-        use_output_reformulation_method = random.random() < OUTPUT_REFORMULATION_PROBABILITY if column_to_reformulate else False
-
-        if use_output_reformulation_method:
-            json_synthetic_data_point = await generate_from_output(row, column_to_reformulate, prompts, keypair)
-        else:
-            json_synthetic_data_point = await generate_from_distribution(row, prompts, keypair)
-        logger.info(json_synthetic_data_point)
-        if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
-            return json_synthetic_data_point
-        else:
-            raise ValueError(
-                f"Generated data point has incorrect schema. Expected keys: {set(row.keys())}, "
-                f"got: {set(json_synthetic_data_point.keys())}"
-            )
-
     for i in range(0, len(sampled_data), SYNTH_GEN_BATCH_SIZE):
         batch = sampled_data[i : i + SYNTH_GEN_BATCH_SIZE]
-        tasks = [process_row(row, column_to_reformulate) for row in batch]
+        tasks = [process_row(row, column_to_reformulate, prompts, keypair) for row in batch]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         batch_results = []
