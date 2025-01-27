@@ -232,12 +232,14 @@ async def set_expected_repo_name(task_id: str, node: Node, psql_db: PSQLDB, expe
 
 async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)
+
     if not existing_task:
         raise ValueError(f"Task {updated_task.task_id} not found in the database?")
 
+    existing_task_dict = existing_task.model_dump()
     updates = {}
     for field, value in updated_task.dict(exclude_unset=True, exclude={cst.ASSIGNED_MINERS, cst.UPDATED_AT}).items():
-        if getattr(existing_task, field) != value:
+        if existing_task_dict.get(field, None) != value:
             updates[field] = value
 
     async with await psql_db.connection() as connection:
@@ -275,7 +277,8 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
             elif updated_task.task_type == TaskType.IMAGETASK:
                 if "image_text_pairs" in updates:
                     await delete_image_text_pairs(updated_task.task_id, psql_db)
-                    await add_image_text_pairs(updated_task.task_id, updates["image_text_pairs"], psql_db)
+                    pairs = [ImageTextPair(**pair) for pair in updates["image_text_pairs"]]
+                    await add_image_text_pairs(updated_task.task_id, pairs, psql_db)
 
             if updated_task.assigned_miners is not None:
                 await connection.execute(
@@ -451,7 +454,8 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[TextRawTask | Ima
         if task_type == TaskType.TEXTTASK.value:
             return TextRawTask(**full_task_data)
         elif task_type == TaskType.IMAGETASK.value:
-            return ImageRawTask(**full_task_data)
+            image_text_pairs = await get_image_text_pairs(task_id, psql_db)
+            return ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs)
 
 
 async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Dict]:
