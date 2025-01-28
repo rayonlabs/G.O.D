@@ -61,7 +61,7 @@ text_specific_fields = [
 image_specific_fields = [cst.IMAGE_TEXT_PAIRS]
 
 
-async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> RawTask:
+async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
     """Add a new task"""
     async with await psql_db.connection() as connection:
         async with connection.transaction():

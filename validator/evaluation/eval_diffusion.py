@@ -24,7 +24,7 @@ hf_api = HfApi()
 def load_comfy_workflows():
     with open(cst.LORA_WORKFLOW_PATH, "r") as file:
         lora_template = json.load(file)
-    
+
     with open(cst.LORA_WORKFLOW_PATH_DIFFUSERS, "r") as file:
         lora_template_diffusers = json.load(file)
 
@@ -74,25 +74,28 @@ def find_latest_lora_submission_name(repo_id: str) -> str:
 
     return None
 
+
 def is_safetensors_available(repo_id: str) -> tuple[bool, str | None]:
     files_metadata = hf_api.list_repo_tree(repo_id=repo_id, repo_type="model")
     for file in files_metadata:
-        if hasattr(file, 'size') and file.size is not None:
+        if hasattr(file, "size") and file.size is not None:
             if file.path.endswith(".safetensors") and file.size > 6 * 1024 * 1024 * 1024:
                 return True, file.path
 
     return False, None
 
+
 def download_base_model(repo_id: str, safetensors_filename: str | None = None) -> str:
     if safetensors_filename:
-        local_path = download_from_huggingface(repo_id, safetensors_filename, cst.CHECKPOINTS_SAVE_PATH)
+        _ = download_from_huggingface(repo_id, safetensors_filename, cst.CHECKPOINTS_SAVE_PATH)
     else:
         model_name = repo_id.split("/")[-1]
         save_dir = f"{cst.DIFFUSERS_PATH}/{model_name}"
-        local_path = snapshot_download(repo_id=repo_id,local_dir=save_dir, repo_type="model")
+        _ = snapshot_download(repo_id=repo_id, local_dir=save_dir, repo_type="model")
         return model_name
-    
+
     return safetensors_filename
+
 
 def download_lora(repo_id: str) -> str:
     lora_filename = find_latest_lora_submission_name(repo_id)
@@ -133,7 +136,9 @@ def inference(image_base64: str, params: Img2ImgPayload, use_prompt: bool = Fals
 
     params.base_image = image_base64
 
-    lora_payload = edit_workflow(payload=params.comfy_template, edit_elements=params, text_guided=use_prompt, is_safetensors=params.is_safetensors)
+    lora_payload = edit_workflow(
+        payload=params.comfy_template, edit_elements=params, text_guided=use_prompt, is_safetensors=params.is_safetensors
+    )
     lora_gen = api_gate.generate(lora_payload)[0]
     lora_gen_loss = calculate_l2_loss(base64_to_image(image_base64), lora_gen)
     logger.info(f"Loss: {lora_gen_loss}")
@@ -197,7 +202,7 @@ def main():
             cfg=cst.DEFAULT_CFG,
             denoise=cst.DEFAULT_DENOISE,
             comfy_template=lora_comfy_template if is_safetensors else diffusers_comfy_template,
-            is_safetensors=is_safetensors
+            is_safetensors=is_safetensors,
         )
 
         loss_data = eval_loop(test_dataset_path, img2img_payload)

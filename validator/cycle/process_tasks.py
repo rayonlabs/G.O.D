@@ -141,9 +141,9 @@ async def _find_and_select_miners_for_task(task: TextRawTask | ImageRawTask, con
 
 
 def _attempt_delay_task(task: TextRawTask | ImageRawTask):
-    assert (
-        task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None
-    ), "We wanted to check delay vs created timestamps but they are missing"
+    assert task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None, (
+        "We wanted to check delay vs created timestamps but they are missing"
+    )
 
     if task.times_delayed >= cst.MAX_DELAY_TIMES or not task.is_organic:
         if task.is_organic:
