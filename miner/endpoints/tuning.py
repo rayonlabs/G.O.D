@@ -219,7 +219,7 @@ def factory_router() -> APIRouter:
         tags=["Subnet"],
         methods=["POST"],
         response_model=MinerTaskResponse,
-        # dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
 
     router.add_api_route(
@@ -230,7 +230,7 @@ def factory_router() -> APIRouter:
         response_model=str,
         summary="Get Latest Model Submission",
         description="Retrieve the latest model submission for a given task ID",
-        # dependencies=[Depends(blacklist_low_stake)],
+        dependencies=[Depends(blacklist_low_stake)],
     )
     router.add_api_route(
         "/start_training/",  # TODO: change to /start_training_text or similar
@@ -246,7 +246,7 @@ def factory_router() -> APIRouter:
         tags=["Subnet"],
         methods=["POST"],
         response_model=TrainResponse,
-        # dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
 
     return router
