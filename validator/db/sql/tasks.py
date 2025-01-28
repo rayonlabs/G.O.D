@@ -667,7 +667,7 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
                 ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
             )
             SELECT
-                tasks.*,
+                tasks.{cst.TASK_ID},
                 COALESCE(tasks.training_repo_backup, victorious_repo.{cst.REPO}) as trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
             LEFT JOIN victorious_repo
@@ -679,15 +679,13 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
             ORDER BY tasks.{cst.TERMINATION_AT} DESC
         """
 
-        rows = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
-        task_list = []
-        for row in rows:
-            if row[cst.TASK_TYPE] == TaskType.TEXTTASK.value:
-                task_list.append(TextTask(**dict(row)))
-            elif row[cst.TASK_TYPE] == TaskType.IMAGETASK.value:
-                image_text_pairs = await get_image_text_pairs(row[cst.TASK_ID], psql_db)
-                task_list.append(ImageTask(**dict(row), image_text_pairs=image_text_pairs))
-        return task_list
+        task_ids = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
+        tasks_list = []
+        for task_row in task_ids:
+            task = await get_task_by_id(task_row[cst.TASK_ID], psql_db)
+            tasks_list.append(task)
+
+        return tasks_list
 
 
 async def get_expected_repo_name(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> str | None:
