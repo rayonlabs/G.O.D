@@ -16,7 +16,6 @@ from core.models.payload_models import NewTaskRequestImage
 from core.models.payload_models import NewTaskRequestText
 from core.models.payload_models import NewTaskResponse
 from core.models.payload_models import NewTaskWithFixedDatasetsRequest
-from core.models.payload_models import TaskDetails
 from core.models.payload_models import TaskResultResponse
 from core.models.payload_models import TextTaskDetails
 from core.models.utility_models import FileFormat
@@ -186,7 +185,7 @@ async def get_node_results(
     except Exception as e:
         logger.info(e)
         raise HTTPException(status_code=404, detail="Hotkey not found")
-    return AllOfNodeResults(hotkey=hotkey, task_results=miner_results)
+    return AllOfNodeResults(success=True, hotkey=hotkey, task_results=miner_results)
 
 
 async def get_task_details_by_account(
@@ -335,32 +334,52 @@ async def get_network_status(
 async def get_completed_organic_tasks(
     hours: int = Query(default=5, description="Number of hours to look back for completed organic tasks", ge=1),
     config: Config = Depends(get_config),
-) -> list[TaskDetails]:
+) -> list[TextTaskDetails | ImageTaskDetails]:
     """Get all completed organic tasks from the last N hours"""
     tasks = await task_sql.get_completed_organic_tasks(config.psql_db, hours)
 
-    task_details = [
-        TaskDetails(
-            id=task.task_id,
-            account_id=task.account_id,
-            status=task.status,
-            base_model_repository=task.model_id,
-            ds_repo=task.ds,
-            field_input=task.field_input,
-            field_system=task.field_system,
-            field_instruction=task.field_instruction,
-            field_output=task.field_output,
-            format=task.format,
-            no_input_format=task.no_input_format,
-            system_format=task.system_format,
-            created_at=task.created_at,
-            started_at=task.started_at,
-            finished_at=task.termination_at,
-            hours_to_complete=task.hours_to_complete,
-            trained_model_repository=task.trained_model_repository,
-        )
-        for task in tasks
-    ]
+    task_details = []
+    for task in tasks:
+        if task.task_type == TaskType.TEXTTASK:
+            task_details.append(
+                TextTaskDetails(
+                    id=task.task_id,
+                    account_id=task.account_id,
+                    status=task.status,
+                    base_model_repository=task.model_id,
+                    ds_repo=task.ds,
+                    field_input=task.field_input,
+                    field_system=task.field_system,
+                    field_instruction=task.field_instruction,
+                    field_output=task.field_output,
+                    format=task.format,
+                    no_input_format=task.no_input_format,
+                    system_format=task.system_format,
+                    created_at=task.created_at,
+                    started_at=task.started_at,
+                    finished_at=task.termination_at,
+                    hours_to_complete=task.hours_to_complete,
+                    trained_model_repository=task.trained_model_repository,
+                    task_type=task.task_type,
+                )
+            )
+        elif task.task_type == TaskType.IMAGETASK:
+            task_details.append(
+                ImageTaskDetails(
+                    id=task.task_id,
+                    account_id=task.account_id,
+                    status=task.status,
+                    base_model_repository=task.model_id,
+                    image_text_pairs=task.image_text_pairs,
+                    created_at=task.created_at,
+                    started_at=task.started_at,
+                    finished_at=task.termination_at,
+                    hours_to_complete=task.hours_to_complete,
+                    trained_model_repository=task.trained_model_repository,
+                    task_type=task.task_type,
+                )
+            )
+        logger.info(task.task_id)
 
     return task_details
 

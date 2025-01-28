@@ -640,7 +640,7 @@ async def get_tasks_by_account_id(
         return tasks
 
 
-async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[Task]:
+async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[TextTask | ImageTask]:
     """Get completed organic tasks from the specified timeframe
 
     Args:
@@ -680,7 +680,14 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
         """
 
         rows = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
-        return [Task(**dict(row)) for row in rows]
+        task_list = []
+        for row in rows:
+            if row[cst.TASK_TYPE] == TaskType.TEXTTASK.value:
+                task_list.append(TextTask(**dict(row)))
+            elif row[cst.TASK_TYPE] == TaskType.IMAGETASK.value:
+                image_text_pairs = await get_image_text_pairs(row[cst.TASK_ID], psql_db)
+                task_list.append(ImageTask(**dict(row), image_text_pairs=image_text_pairs))
+        return task_list
 
 
 async def get_expected_repo_name(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> str | None:
