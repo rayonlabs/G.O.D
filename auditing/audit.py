@@ -9,10 +9,8 @@ from core.constants import NETUID
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.config import load_config
-from validator.core.models import PeriodScore
 from validator.core.models import TaskResults
 from validator.core.weight_setting import get_node_weights_from_results
-from validator.core.weight_setting import get_period_scores_from_task_results
 from validator.core.weight_setting import set_weights
 from validator.utils.logging import get_logger
 
@@ -38,12 +36,12 @@ async def _get_7_day_task_results_for_rayon_validator(config: Config) -> list[Ta
     logger.info(f"Getting task results from {url}")
     result_filepath = await download_s3_file(url)
     with open(result_filepath, "r") as f:
-        task_results_dicts = json.loads(json.load(f))
+        task_results_dicts = json.loads(f)
 
     return [TaskResults(**task_results_dict) for task_results_dict in task_results_dicts]
 
 
-async def get_scores_from_rayon_vali(config: Config) -> list[PeriodScore]:
+async def get_task_results_from_s3(config: Config) -> list[TaskResults]:
     """Check that scores are calculated correctly by the validator.
 
     Receive details of every task that occurred in the past 7 days.
@@ -68,16 +66,13 @@ async def get_scores_from_rayon_vali(config: Config) -> list[PeriodScore]:
 
     task_results = await _get_7_day_task_results_for_rayon_validator(config)
 
-    all_period_scores = await get_period_scores_from_task_results(task_results)
-
-    return all_period_scores
+    return task_results
 
 
-async def audit_weights(config: Config) -> bool:
-    """Get the weights for a rayon validator."""
-    results = await get_scores_from_rayon_vali(config)
 
-    node_ids, node_weights = await get_node_weights_from_results(config.substrate, config.netuid, results)
+
+async def _get_similarity_score_for_rayon_weights(config: Config, task_results: list[TaskResults]) -> float:
+    node_ids, node_weights = await get_node_weights_from_results(config.substrate, config.netuid, task_results)
 
     node_ids_formatted, node_weights_formatted = _normalize_and_quantize_weights(node_ids, node_weights)
 
@@ -92,11 +87,22 @@ async def audit_weights(config: Config) -> bool:
 
     similarity_between_scores = _normalised_vector_dot_product(rayon_weights, weights_values)
 
+    return similarity_between_scores, node_ids_formatted, node_weights_formatted
+
+
+async def audit_weights(config: Config) -> bool:
+    """Get the weights for a rayon validator."""
+    task_results = await get_task_results_from_s3(config)
+
+    similarity_between_scores, node_ids_formatted, node_weights_formatted = await _get_similarity_score_for_rayon_weights(
+        config, task_results
+    )
+
     if similarity_between_scores > 0.98:
         logger.info(f"✅ Yay! The scores are similar to the weights set on chain!! Similarity: {similarity_between_scores}")
         logger.info("Setting the weights on chain...")
         _, my_vali_uid = query_substrate(
-            substrate, "SubtensorModule", "Uids", [NETUID, config.keypair.ss58_address], return_value=True
+            config.substrate, "SubtensorModule", "Uids", [NETUID, config.keypair.ss58_address], return_value=True
         )
         success = await set_weights(config, node_ids_formatted, node_weights_formatted, my_vali_uid)
         return success
