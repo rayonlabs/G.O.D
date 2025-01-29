@@ -205,7 +205,7 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
         logger.error(f"Failed to generate prompts for {style}: {e}")
         raise e
 
-    Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(exist_ok=True)
+    Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
     image_text_pairs = []
     for i, prompt in enumerate(prompts):
         image = await generate_image(prompt, config.keypair)
