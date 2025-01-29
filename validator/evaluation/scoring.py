@@ -102,7 +102,7 @@ def calculate_node_quality_scores(
                 quality_score=score,
                 average_score=node_agg.average_raw_score,
                 summed_task_score=node_agg.summed_adjusted_task_scores,
-                weight_mulitplier=weight_multiplier,
+                weight_multiplier=weight_multiplier,
             )
         )
 

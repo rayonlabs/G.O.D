@@ -108,7 +108,7 @@ class PeriodScore(BaseModel):
     summed_task_score: float
     average_score: float
     hotkey: str
-    weight_mulitplier: float
+    weight_multiplier: float
     normalised_score: float | None = 0.0
 
 
@@ -140,6 +140,7 @@ class MiniTaskWithScoringOnly(BaseModel):
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
+
 
 class TaskResults(BaseModel):
     task: MiniTaskWithScoringOnly

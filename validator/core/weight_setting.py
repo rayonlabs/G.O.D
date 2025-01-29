@@ -125,7 +125,7 @@ async def get_node_weights_from_results(
     logger.info(f"Node ids: {all_node_ids}")
     logger.info(f"Node weights: {all_node_weights}")
     logger.info(f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}")
-    logger.info(f"Everything going in is" f" {all_node_ids} {all_node_weights} {netuid} {ccst.VERSION_KEY}")
+    logger.info(f"Everything going in is {all_node_ids} {all_node_weights} {netuid} {ccst.VERSION_KEY}")
     return all_node_ids, all_node_weights
 
 
