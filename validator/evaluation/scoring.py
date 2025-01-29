@@ -82,6 +82,7 @@ def update_node_aggregation(
 
 def calculate_node_quality_scores(
     node_aggregations: dict[str, NodeAggregationResult],
+    weight_multiplier: float,
 ) -> list[PeriodScore]:
     """Calculate quality scores for each node."""
     assert node_aggregations, "Node aggregations dictionary cannot be empty"
@@ -101,6 +102,7 @@ def calculate_node_quality_scores(
                 quality_score=score,
                 average_score=node_agg.average_raw_score,
                 summed_task_score=node_agg.summed_adjusted_task_scores,
+                weight_mulitplier=weight_multiplier,
             )
         )
 
@@ -129,7 +131,7 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def scoring_aggregation_from_date(task_results: list[TaskResults]) -> list[PeriodScore]:
+async def scoring_aggregation_from_date(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
 
     node_aggregations: dict[str, NodeAggregationResult] = {}
@@ -139,8 +141,9 @@ async def scoring_aggregation_from_date(task_results: list[TaskResults]) -> list
         for node_score in task_res.node_scores:
             update_node_aggregation(node_aggregations, node_score, task_work_score)
 
-    final_scores = calculate_node_quality_scores(node_aggregations)
+    final_scores = calculate_node_quality_scores(node_aggregations, weight_multiplier=weight_multiplier)
     final_scores = _normalise_scores(final_scores)
+
     return final_scores
 
 
