@@ -131,7 +131,7 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def scoring_aggregation_from_date(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
+async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
 
     node_aggregations: dict[str, NodeAggregationResult] = {}

@@ -32,7 +32,7 @@ from validator.core.config import load_config
 from validator.core.models import PeriodScore
 from validator.core.models import TaskResults
 from validator.db.sql.nodes import get_vali_node_id
-from validator.evaluation.scoring import scoring_aggregation_from_date
+from validator.evaluation.scoring import get_period_scores_from_results
 from validator.utils.logging import get_logger
 from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import try_db_connections
@@ -58,9 +58,9 @@ async def get_period_scores_from_task_results(task_results: list[TaskResults]) -
     three_day_task_results = [i for i in task_results if i.task.created_at > three_days_ago]
     one_day_task_results = [i for i in task_results if i.task.created_at > one_day_ago]
 
-    seven_day_scores = await scoring_aggregation_from_date(seven_day_task_results, weight_multiplier=0.5)
-    three_day_scores = await scoring_aggregation_from_date(three_day_task_results, weight_multiplier=0.35)
-    one_day_scores = await scoring_aggregation_from_date(one_day_task_results, weight_multiplier=0.15)
+    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.5)
+    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.35)
+    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.15)
 
     all_period_scores = [seven_day_scores, three_day_scores, one_day_scores]
 
