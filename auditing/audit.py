@@ -9,15 +9,11 @@ from core.constants import NETUID
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.config import load_config
-from validator.core.models import NodeAggregationResult
 from validator.core.models import PeriodScore
 from validator.core.models import TaskResults
 from validator.core.weight_setting import get_node_weights_from_results
+from validator.core.weight_setting import get_period_scores_from_task_results
 from validator.core.weight_setting import set_weights
-from validator.evaluation.scoring import _normalise_scores
-from validator.evaluation.scoring import calculate_node_quality_scores
-from validator.evaluation.scoring import get_task_work_score
-from validator.evaluation.scoring import update_node_aggregation
 from validator.utils.logging import get_logger
 
 
@@ -28,7 +24,7 @@ def _normalised_vector_dot_product(a, b):
     return sum(a[i] * b[i] for i in range(len(a))) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
-async def _get_task_results_for_rayon_validator(config: Config) -> list[TaskResults]:
+async def _get_7_day_task_results_for_rayon_validator(config: Config) -> list[TaskResults]:
     """Get task results for a rayon validator."""
     url_to_get_latest_scores_url = "https://api.gradients.io/auditing/scores-url"
     response = await config.httpx_client.get(url_to_get_latest_scores_url)
@@ -70,22 +66,11 @@ async def get_scores_from_rayon_vali(config: Config) -> list[PeriodScore]:
 
     """
 
-    task_results = await _get_task_results_for_rayon_validator(config)
+    task_results = await _get_7_day_task_results_for_rayon_validator(config)
 
-    if not task_results:
-        logger.info("There were not results to be scored")
-        return []
+    all_period_scores = await get_period_scores_from_task_results(task_results)
 
-    node_aggregations: dict[str, NodeAggregationResult] = {}
-
-    for task_res in task_results:
-        task_work_score = get_task_work_score(task_res.task)
-        for node_score in task_res.node_scores:
-            update_node_aggregation(node_aggregations, node_score, task_work_score)
-
-    final_scores = calculate_node_quality_scores(node_aggregations)
-    final_scores = _normalise_scores(final_scores)
-    return final_scores
+    return all_period_scores
 
 
 async def audit_weights(config: Config) -> bool:

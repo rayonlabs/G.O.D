@@ -1,7 +1,6 @@
 import os
 import re
 from datetime import datetime
-from datetime import timedelta
 
 import numpy as np
 from fiber.chain.models import Node
@@ -23,7 +22,6 @@ from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
 from validator.db.sql.submissions_and_scoring import add_submission
-from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
@@ -131,14 +129,8 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def scoring_aggregation_from_date(psql_db: str) -> tuple[list[PeriodScore], list[TaskResults]]:
+async def scoring_aggregation_from_date(task_results: list[TaskResults]) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
-    date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
-    task_results: list[TaskResults] = await get_aggregate_scores_since(date, psql_db)
-    logger.info(f"Got task results {task_results}")
-    if not task_results:
-        logger.info("There were not results to be scored")
-        return []
 
     node_aggregations: dict[str, NodeAggregationResult] = {}
 
@@ -149,7 +141,7 @@ async def scoring_aggregation_from_date(psql_db: str) -> tuple[list[PeriodScore]
 
     final_scores = calculate_node_quality_scores(node_aggregations)
     final_scores = _normalise_scores(final_scores)
-    return final_scores, task_results
+    return final_scores
 
 
 def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
