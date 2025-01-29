@@ -303,5 +303,9 @@ class HotkeyDetails(BaseModel):
     offer_response: dict | None = None
 
 
-class TaskWithHotkeyDetails(Task):
+class TextTaskWithHotkeyDetails(TextTask):
+    hotkey_details: list[HotkeyDetails]
+
+
+class ImageTaskWithHotkeyDetails(ImageTask):
     hotkey_details: list[HotkeyDetails]
