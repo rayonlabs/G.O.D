@@ -98,10 +98,18 @@ async def _add_new_task_to_network_if_not_enough(
     datasets: AsyncGenerator[str, None],
 ):
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
+    current_preeval_tasks = await get_tasks_with_status(TaskStatus.PREEVALUATION, config.psql_db)
     current_delayed_tasks = await get_tasks_with_status(TaskStatus.DELAYED, config.psql_db, include_not_ready_tasks=True)
-    logger.info(f"We have {(len(current_delayed_tasks))} tasks in the queue")
-    logger.info(f"There are {len(current_training_tasks)} running at the moment")
-    if len(current_delayed_tasks) == 0 and len(current_training_tasks) < cst.HOW_MANY_TASKS_ALLOWED_AT_ONCE:
+
+    total_active_tasks = len(current_training_tasks) + len(current_preeval_tasks)
+
+    logger.info(f"We have {len(current_delayed_tasks)} tasks in the queue")
+    logger.info(
+        f"There are {total_active_tasks} active tasks"
+        + f" ({len(current_training_tasks)} training, {len(current_preeval_tasks)} pre-evaluation)"
+    )
+
+    if len(current_delayed_tasks) == 0 and total_active_tasks < cst.HOW_MANY_TASKS_ALLOWED_AT_ONCE:
         logger.info("This is less than the minimal - creating a new task")
         await _create_synthetic_task(config, models, datasets)
 
