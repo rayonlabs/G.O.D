@@ -120,7 +120,7 @@ async def get_node_weights_from_results(
         if node_result.normalised_score is not None:
             node_id = hotkey_to_node_id.get(node_result.hotkey)
             if node_id is not None:
-                all_node_weights[node_id] = node_result.normalised_score
+                all_node_weights[node_id] = node_result.normalised_score * node_result.weight_multiplier
 
     logger.info(f"Node ids: {all_node_ids}")
     logger.info(f"Node weights: {all_node_weights}")
