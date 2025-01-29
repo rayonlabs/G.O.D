@@ -71,7 +71,7 @@ async def get_task_results_from_s3(config: Config) -> list[TaskResults]:
 
 
 
-async def _get_similarity_score_for_rayon_weights(config: Config, task_results: list[TaskResults]) -> float:
+async def get_similarity_score_for_rayon_weights(config: Config, task_results: list[TaskResults]) -> float:
     node_ids, node_weights = await get_node_weights_from_results(config.substrate, config.netuid, task_results)
 
     node_ids_formatted, node_weights_formatted = _normalize_and_quantize_weights(node_ids, node_weights)
@@ -94,7 +94,7 @@ async def audit_weights(config: Config) -> bool:
     """Get the weights for a rayon validator."""
     task_results = await get_task_results_from_s3(config)
 
-    similarity_between_scores, node_ids_formatted, node_weights_formatted = await _get_similarity_score_for_rayon_weights(
+    similarity_between_scores, node_ids_formatted, node_weights_formatted = await get_similarity_score_for_rayon_weights(
         config, task_results
     )
 
