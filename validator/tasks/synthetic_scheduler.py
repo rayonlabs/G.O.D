@@ -101,8 +101,10 @@ async def _add_new_task_to_network_if_not_enough(
     current_delayed_tasks = await get_tasks_with_status(TaskStatus.DELAYED, config.psql_db, include_not_ready_tasks=True)
     logger.info(f"We have {(len(current_delayed_tasks))} tasks in the queue")
     logger.info(f"There are {len(current_training_tasks)} running at the moment")
-    if len(current_delayed_tasks) == 0 and len(current_training_tasks) < cst.HOW_MANY_TASKS_ALLOWED_AT_ONCE:
-        logger.info("This is less than the minimal - creating a new task")
+    if len(current_delayed_tasks) == 0 and len(current_training_tasks) < cst.MAX_CONCURRENT_JOBS:
+        logger.info(
+            "Current number of training tasks is less than the maximum amount of concurrent jobs we can have. New task inc"
+        )
         await _create_synthetic_task(config, models, datasets)
 
 
