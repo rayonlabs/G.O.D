@@ -109,8 +109,11 @@ async def _add_new_task_to_network_if_not_enough(
         + f" ({len(current_training_tasks)} training, {len(current_preeval_tasks)} pre-evaluation)"
     )
 
-    if len(current_delayed_tasks) == 0 and total_active_tasks < cst.HOW_MANY_TASKS_ALLOWED_AT_ONCE:
-        logger.info("This is less than the minimal - creating a new task")
+    if len(current_delayed_tasks) == 0 and total_active_tasks < cst.MAX_CONCURRENT_SYNTHETIC_JOBS:
+        logger.info(
+            "Current number of training tasks is less than the maximum amount of concurrent synthetic"
+            " jobs we can have. New task incoming..."
+        )
         await _create_synthetic_task(config, models, datasets)
 
 

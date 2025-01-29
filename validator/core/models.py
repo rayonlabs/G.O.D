@@ -108,6 +108,7 @@ class PeriodScore(BaseModel):
     summed_task_score: float
     average_score: float
     hotkey: str
+    weight_mulitplier: float
     normalised_score: float | None = 0.0
 
 

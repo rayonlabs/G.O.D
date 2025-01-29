@@ -5,10 +5,12 @@ Calculates and schedules weights every SCORING_PERIOD
 import asyncio
 import os
 from datetime import datetime
+from datetime import timedelta
 
 from dotenv import load_dotenv
 
 from validator.db.sql.auditing import store_latest_scores_url
+from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 
 
 load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
@@ -22,6 +24,7 @@ from fiber.chain.chain_utils import query_substrate
 from fiber.chain.models import Node
 from substrateinterface import SubstrateInterface
 
+import validator.core.constants as cts
 from core import constants as ccst
 from core.constants import BUCKET_NAME
 from validator.core.config import Config
@@ -29,7 +32,7 @@ from validator.core.config import load_config
 from validator.core.models import PeriodScore
 from validator.core.models import TaskResults
 from validator.db.sql.nodes import get_vali_node_id
-from validator.evaluation.scoring import scoring_aggregation_from_date
+from validator.evaluation.scoring import get_period_scores_from_results
 from validator.utils.logging import get_logger
 from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import try_db_connections
@@ -42,8 +45,45 @@ logger = get_logger(__name__)
 TIME_PER_BLOCK: int = 500
 
 
+async def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list[PeriodScore]:
+    if not task_results:
+        logger.info("There were not results to be scored")
+        return []
+
+    seven_days_ago = datetime.now() - timedelta(days=7)
+    three_days_ago = datetime.now() - timedelta(days=3)
+    one_day_ago = datetime.now() - timedelta(days=1)
+
+    seven_day_task_results = [i for i in task_results if i.task.created_at > seven_days_ago]
+    three_day_task_results = [i for i in task_results if i.task.created_at > three_days_ago]
+    one_day_task_results = [i for i in task_results if i.task.created_at > one_day_ago]
+
+    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.5)
+    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.35)
+    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.15)
+
+    all_period_scores = [seven_day_scores, three_day_scores, one_day_scores]
+
+    return all_period_scores
+
+
 async def _get_weights_to_set(config: Config) -> tuple[list[PeriodScore], list[TaskResults]]:
-    return await scoring_aggregation_from_date(config.psql_db)
+    """
+    Retrieve task results from the database and score multiple periods independently.
+    This ensures a fairer ramp-up for new miners.
+
+    In the future, as miners become more stable, we aim to encourage long-term stability.
+    This means not giving new miners more weight than necessary, while still allowing them
+    the potential to reach the top position without being deregistered.
+
+    Period scores are calculated completely independently
+    """
+    date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
+    task_results: list[TaskResults] = await get_aggregate_scores_since(date, config.psql_db)
+
+    all_period_scores = await get_period_scores_from_task_results(task_results)
+
+    return all_period_scores, task_results
 
 
 async def _upload_results_to_s3(config: Config, task_results: list[TaskResults]) -> None:
@@ -80,7 +120,7 @@ async def get_node_weights_from_results(
         if node_result.normalised_score is not None:
             node_id = hotkey_to_node_id.get(node_result.hotkey)
             if node_id is not None:
-                all_node_weights[node_id] = node_result.normalised_score
+                all_node_weights[node_id] = node_result.normalised_score * node_result.weight_multiplier
 
     logger.info(f"Node ids: {all_node_ids}")
     logger.info(f"Node weights: {all_node_weights}")
