@@ -92,6 +92,7 @@ class RawTask(BaseModel):
     started_at: datetime | None = None
     termination_at: datetime | None = None
     completed_at: datetime | None = None
+    n_eval_attempts: int = 0
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
