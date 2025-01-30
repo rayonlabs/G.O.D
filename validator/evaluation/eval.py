@@ -114,10 +114,7 @@ def _process_evaluation_batches(
 
             if time_logger.should_log():
                 progress = (batch_idx + 1) / total_batches * 100
-                logger.info(
-                    f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) "
-                    f"- Current loss: {batch_loss}"
-                )
+                logger.info(f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) - Current loss: {batch_loss}")
 
             if torch.isnan(torch.tensor(batch_loss)):
                 consecutive_nans += 1

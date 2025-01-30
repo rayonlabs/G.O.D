@@ -9,10 +9,11 @@ from PIL import Image
 
 from validator.core import constants as cst
 from validator.core.models import Img2ImgPayload
+from validator.evaluation.utils import adjust_image_size
 from validator.evaluation.utils import base64_to_image
 from validator.evaluation.utils import download_from_huggingface
+from validator.evaluation.utils import image_to_base64
 from validator.evaluation.utils import list_supported_images
-from validator.evaluation.utils import read_image_as_base64
 from validator.evaluation.utils import read_prompt_file
 from validator.utils import comfy_api_gate as api_gate
 
@@ -158,8 +159,9 @@ def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float
         base_name = os.path.splitext(file_name)[0]
         png_path = os.path.join(dataset_path, file_name)
         txt_path = os.path.join(dataset_path, f"{base_name}.txt")
-
-        image_base64 = read_image_as_base64(png_path)
+        test_image = Image.open(png_path)
+        test_image = adjust_image_size(test_image)
+        image_base64 = image_to_base64(test_image)
         prompt = read_prompt_file(txt_path)
 
         params.prompt = prompt

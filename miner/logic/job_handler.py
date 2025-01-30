@@ -195,12 +195,9 @@ def start_tuning_container_diffusion(job: DiffusionJob):
             container.remove(force=True)
 
         train_data_path = f"{cst.DIFFUSION_DATASET_DIR}/{job.job_id}"
-        train_zip_path = f"{cst.DIFFUSION_DATASET_DIR}/{job.job_id}.zip"
 
         if os.path.exists(train_data_path):
             shutil.rmtree(train_data_path)
-        if os.path.exists(train_zip_path):
-            os.remove(train_zip_path)
 
 
 def start_tuning_container(job: TextJob):

@@ -78,6 +78,37 @@ def get_default_dataset_config(dataset_name: str) -> str | None:
         return None
 
 
+def adjust_image_size(image: Image.Image) -> Image.Image:
+    width, height = image.size
+    new_width = (width // 8) * 8
+    new_height = (height // 8) * 8
+
+    if width % 8 != 0 or height % 8 != 0:
+        aspect_ratio = width / height
+        if width > height:
+            new_width = (width // 8) * 8
+            new_height = int(new_width / aspect_ratio)
+        else:
+            new_height = (height // 8) * 8
+            new_width = int(new_height * aspect_ratio)
+        new_width = (new_width // 8) * 8
+        new_height = (new_height // 8) * 8
+        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+    width, height = image.size
+    crop_width = (width // 8) * 8
+    crop_height = (height // 8) * 8
+
+    if width != crop_width or height != crop_height:
+        left = (width - crop_width) // 2
+        top = (height - crop_height) // 2
+        right = left + crop_width
+        bottom = top + crop_height
+        image = image.crop((left, top, right, bottom))
+
+    return image
+
+
 def base64_to_image(base64_string: str) -> Image.Image:
     image_data = base64.b64decode(base64_string)
     image_stream = BytesIO(image_data)
@@ -109,6 +140,13 @@ def list_supported_images(dataset_path: str, extensions: tuple) -> list[str]:
 def read_image_as_base64(image_path: str) -> str:
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
+
+
+def image_to_base64(image: Image.Image) -> str:
+    buffer = BytesIO()
+    img_format = image.format if image.format else "PNG"
+    image.save(buffer, format=img_format)
+    return base64.b64encode(buffer.getvalue()).decode()
 
 
 def read_prompt_file(text_file_path: str) -> str:
