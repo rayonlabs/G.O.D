@@ -12,6 +12,7 @@ from validator.core.models import Img2ImgPayload
 from validator.evaluation.utils import base64_to_image
 from validator.evaluation.utils import download_from_huggingface
 from validator.evaluation.utils import list_supported_images
+from validator.evaluation.utils import match_image_size
 from validator.evaluation.utils import read_image_as_base64
 from validator.evaluation.utils import read_prompt_file
 from validator.utils import comfy_api_gate as api_gate
@@ -140,7 +141,8 @@ def inference(image_base64: str, params: Img2ImgPayload, use_prompt: bool = Fals
         payload=params.comfy_template, edit_elements=params, text_guided=use_prompt, is_safetensors=params.is_safetensors
     )
     lora_gen = api_gate.generate(lora_payload)[0]
-    lora_gen_loss = calculate_l2_loss(base64_to_image(image_base64), lora_gen)
+    base_gen, lora_gen = match_image_size(base64_to_image(image_base64), lora_gen)
+    lora_gen_loss = calculate_l2_loss(base_gen, lora_gen)
     logger.info(f"Loss: {lora_gen_loss}")
 
     return lora_gen_loss
@@ -158,7 +160,6 @@ def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float
         base_name = os.path.splitext(file_name)[0]
         png_path = os.path.join(dataset_path, file_name)
         txt_path = os.path.join(dataset_path, f"{base_name}.txt")
-
         image_base64 = read_image_as_base64(png_path)
         prompt = read_prompt_file(txt_path)
 

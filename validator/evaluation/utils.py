@@ -78,6 +78,45 @@ def get_default_dataset_config(dataset_name: str) -> str | None:
         return None
 
 
+def resize_image(image: Image.Image, max_size: int = 1024) -> Image.Image:
+    width, height = image.size
+    if width > height:
+        new_width = max_size
+        new_height = int((max_size / width) * height)
+    else:
+        new_height = max_size
+        new_width = int((max_size / height) * width)
+    return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+
+def crop_center(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+    img_width, img_height = image.size
+    left = (img_width - target_width) // 2
+    top = (img_height - target_height) // 2
+    right = left + target_width
+    bottom = top + target_height
+    return image.crop((left, top, right, bottom))
+
+
+def match_image_size(image1: Image.Image, image2: Image.Image) -> tuple[Image.Image, Image.Image]:
+    if image1.size != image2.size:
+        image1 = resize_image(image1)
+        image2 = resize_image(image2)
+
+        width1, height1 = image1.size
+        width2, height2 = image2.size
+
+        target_width = min(width1, width2)
+        target_height = min(height1, height2)
+
+        if width1 > width2 or height1 > height2:
+            image1 = crop_center(image1, target_width, target_height)
+        if width2 > width1 or height2 > height1:
+            image2 = crop_center(image2, target_width, target_height)
+
+    return image1, image2
+
+
 def base64_to_image(base64_string: str) -> Image.Image:
     image_data = base64.b64decode(base64_string)
     image_stream = BytesIO(image_data)

@@ -277,6 +277,8 @@ class Img2ImgPayload(BaseModel):
     cfg: float
     denoise: float
     comfy_template: dict
+    height: int = 1024
+    width: int = 1024
     is_safetensors: bool = True
     prompt: str | None = None
     base_image: str | None = None
