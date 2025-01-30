@@ -59,9 +59,9 @@ async def get_period_scores_from_task_results(task_results: list[TaskResults]) -
     three_day_task_results = [i for i in task_results if i.task.created_at > three_days_ago]
     one_day_task_results = [i for i in task_results if i.task.created_at > one_day_ago]
 
-    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=1)
-    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0)
-    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0)
+    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.4)
+    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.3)
+    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.3)
 
     all_period_scores = seven_day_scores + three_day_scores + one_day_scores
 
@@ -121,7 +121,9 @@ async def get_node_weights_from_period_scores(
         if node_result.normalised_score is not None:
             node_id = hotkey_to_node_id.get(node_result.hotkey)
             if node_id is not None:
-                all_node_weights[node_id] = node_result.normalised_score * node_result.weight_multiplier
+                all_node_weights[node_id] = (
+                    all_node_weights[node_id] + node_result.normalised_score * node_result.weight_multiplier
+                )
 
     logger.info(f"Node ids: {all_node_ids}")
     logger.info(f"Node weights: {all_node_weights}")
