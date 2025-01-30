@@ -6,6 +6,7 @@ import string
 from typing import Any
 from typing import Dict
 
+from core.models.config_models import AuditorConfig
 from core.models.config_models import MinerConfig
 from core.models.config_models import ValidatorConfig
 from core.validators import InputValidators
@@ -38,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate configuration file")
     parser.add_argument("--dev", action="store_true", help="Use development configuration")
     parser.add_argument("--miner", action="store_true", help="Generate miner configuration")
+    parser.add_argument("--auditor", action="store_true", help="Generate auditor configuration")
     return parser.parse_args()
 
 
@@ -147,6 +149,35 @@ def generate_config(dev: bool = False, miner: bool = False) -> dict[str, Any]:
         return generate_validator_config(dev)
 
 
+def generate_auditor_config(dev: bool = False) -> dict[str, Any]:
+    print("\n🎯 Let's set up your Auditor! 🚀\n")
+
+    subtensor_network = input("🌐 Enter subtensor network (default: finney): ") or "finney"
+    subtensor_address = (
+        validate_input(
+            "🔌 Enter subtensor address (default: None): ",
+            InputValidators.websocket_url,
+        )
+        or None
+    )
+
+    wallet_name = input("💼 Enter wallet name (default: default): ") or "default"
+    hotkey_name = input("🔑 Enter hotkey name (default: default): ") or "default"
+    netuid = 241 if subtensor_network.strip() == "test" else 56
+
+    config = vars(
+        AuditorConfig(
+            wallet_name=wallet_name,
+            hotkey_name=hotkey_name,
+            subtensor_network=subtensor_network,
+            subtensor_address=subtensor_address,
+            netuid=netuid,
+            env="dev" if dev else "prod",
+        )
+    )
+    return config
+
+
 def write_config_to_file(config: dict[str, Any], env: str) -> None:
     filename = f".{env}.env"
     with open(filename, "w") as f:
@@ -162,6 +193,9 @@ if __name__ == "__main__":
     if args.miner:
         config = generate_config(miner=True)
         name = "1"
+    elif args.auditor:
+        config = generate_auditor_config(args.dev)
+        name = "test-temp"
 
     else:
         env = "dev" if args.dev else "prod"

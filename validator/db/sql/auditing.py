@@ -85,6 +85,7 @@ async def get_recent_tasks(
     for task in full_tasks_list:
         task = _check_if_task_has_finished(task)
         tasks_processed.append(task)
+
     return tasks_processed
 
 

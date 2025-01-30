@@ -1,4 +1,5 @@
 import logging
+import time
 from contextvars import ContextVar
 from logging import Logger
 from logging import LogRecord
@@ -118,3 +119,25 @@ def get_logger(name: str) -> Logger:
     logger = fiber_get_logger(name)
     logger.addFilter(ContextTagsFilter())
     return logger
+
+
+class TimeBasedLogger:
+    """Utility class to manage time-based logging intervals."""
+
+    def __init__(self, interval_seconds: float = 10.0):
+        self.interval_seconds = interval_seconds
+        self.last_log_time = 0.0
+
+    def should_log(self) -> bool:
+        """
+        Determines if logging should occur based on time interval.
+        Always logs on first call and then based on time interval.
+
+        Returns:
+            bool: True if enough time has passed since last log
+        """
+        current_time = time.time()
+        if current_time - self.last_log_time >= self.interval_seconds:
+            self.last_log_time = current_time
+            return True
+        return False
