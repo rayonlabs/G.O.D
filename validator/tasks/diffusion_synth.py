@@ -108,10 +108,9 @@ IMAGE_STYLES = [
 ]
 
 IMAGE_MODEL_TO_FINETUNE = "stabilityai/stable-diffusion-xl-base-1.0"
-IMAGE_MODEL_FILENAME = "RealVisXL_V4.0.safetensors"
 
 
-def create_diffusion_messages(style: str) -> List[Message]:
+def create_diffusion_messages(style: str, num_prompts: int) -> List[Message]:
     system_content = """You are an expert in creating diverse and descriptive prompts for image generation models.
 You will generate a set of creative prompts in a specific artistic style.
 Each prompt should be detailed and consistent with the given style.
@@ -125,7 +124,7 @@ Example Output:
   ]
 }"""
 
-    user_content = f"""Generate 10 creative and detailed prompts in the following style: {style}
+    user_content = f"""Generate {num_prompts} creative and detailed prompts in the following style: {style}
 Make sure each prompt is descriptive and would work well with image generation models.
 Return only the JSON response."""
 
@@ -144,8 +143,8 @@ def convert_to_nineteen_payload(
 
 
 @retry_with_backoff
-async def generate_diffusion_prompts(style: str, keypair: Keypair) -> List[str]:
-    messages = create_diffusion_messages(style)
+async def generate_diffusion_prompts(style: str, keypair: Keypair, num_prompts: int) -> List[str]:
+    messages = create_diffusion_messages(style, num_prompts)
     payload = convert_to_nineteen_payload(messages)
 
     result = await post_to_nineteen_chat(payload, keypair)
@@ -165,12 +164,14 @@ async def generate_diffusion_prompts(style: str, keypair: Keypair) -> List[str]:
 
 
 @retry_with_backoff
-async def generate_image(prompt: str, keypair: Keypair) -> str:
+async def generate_image(prompt: str, keypair: Keypair, width: int, height: int) -> str:
     """Generate an image using the Nineteen AI API.
 
     Args:
         prompt: The text prompt to generate an image from
         keypair: The keypair containing the API key
+        width: The width in pixels of the image to generate
+        height: The height in pixels of the image to generate
 
     Returns:
         str: The base64-encoded image data
@@ -180,8 +181,8 @@ async def generate_image(prompt: str, keypair: Keypair) -> str:
         "model": cst.IMAGE_GEN_MODEL,
         "steps": cst.IMAGE_GEN_STEPS,
         "cfg_scale": cst.IMAGE_GEN_CFG_SCALE,
-        "height": cst.IMAGE_GEN_HEIGHT,
-        "width": cst.IMAGE_GEN_WIDTH,
+        "height": height,
+        "width": width,
         "negative_prompt": "",
     }
 
@@ -198,9 +199,10 @@ async def generate_image(prompt: str, keypair: Keypair) -> str:
 async def create_synthetic_image_task(config: Config) -> RawTask:
     number_of_hours = random.randint(cst.MIN_IMAGE_COMPETITION_HOURS, cst.MAX_IMAGE_COMPETITION_HOURS)
     style = random.choice(IMAGE_STYLES)
+    num_prompts = random.randint(cst.MIN_IMAGE_SYNTH_PAIRS, cst.MAX_IMAGE_SYNTH_PAIRS)
 
     try:
-        prompts = await generate_diffusion_prompts(style, config.keypair)
+        prompts = await generate_diffusion_prompts(style, config.keypair, num_prompts)
     except Exception as e:
         logger.error(f"Failed to generate prompts for {style}: {e}")
         raise e
@@ -208,7 +210,9 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
     Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
     image_text_pairs = []
     for i, prompt in enumerate(prompts):
-        image = await generate_image(prompt, config.keypair)
+        width = random.randrange(cst.MIN_IMAGE_WIDTH, cst.MAX_IMAGE_WIDTH + 1, cst.IMAGE_RESOLUTION_STEP)
+        height = random.randrange(cst.MIN_IMAGE_HEIGHT, cst.MAX_IMAGE_HEIGHT + 1, cst.IMAGE_RESOLUTION_STEP)
+        image = await generate_image(prompt, config.keypair, width, height)
 
         with tempfile.NamedTemporaryFile(dir=cst.TEMP_PATH_FOR_IMAGES, suffix=".png") as img_file:
             img_file.write(base64.b64decode(image))
@@ -224,7 +228,7 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
 
     task = ImageRawTask(
         model_id=IMAGE_MODEL_TO_FINETUNE,
-        ds=str(uuid.uuid4()),
+        ds=style.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
         image_text_pairs=image_text_pairs,
         status=TaskStatus.PENDING,
         is_organic=False,
@@ -232,7 +236,6 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
         termination_at=datetime.utcnow() + timedelta(hours=number_of_hours),
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
-        model_filename=IMAGE_MODEL_FILENAME,
     )
 
     logger.info(f"New task created and added to the queue {task}")
