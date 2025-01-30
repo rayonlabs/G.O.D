@@ -228,7 +228,7 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
 
     task = ImageRawTask(
         model_id=IMAGE_MODEL_TO_FINETUNE,
-        ds=style + "_" + str(uuid.uuid4()),
+        ds=style.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
         image_text_pairs=image_text_pairs,
         status=TaskStatus.PENDING,
         is_organic=False,
