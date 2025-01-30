@@ -142,7 +142,7 @@ def read_image_as_base64(image_path: str) -> str:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
-def image_to_base64(image: Image.Image) -> Image.Image:
+def image_to_base64(image: Image.Image) -> str:
     buffer = BytesIO()
     img_format = image.format if image.format else "PNG"
     image.save(buffer, format=img_format)
