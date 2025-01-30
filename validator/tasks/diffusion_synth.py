@@ -212,7 +212,7 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
     for i, prompt in enumerate(prompts):
         width = random.randrange(cst.MIN_IMAGE_WIDTH, cst.MAX_IMAGE_WIDTH + 1, cst.IMAGE_RESOLUTION_STEP)
         height = random.randrange(cst.MIN_IMAGE_HEIGHT, cst.MAX_IMAGE_HEIGHT + 1, cst.IMAGE_RESOLUTION_STEP)
-        logger.info(f"Generating synthetic image {i}/{len(prompts)} at resolution {width}x{height}")
+        logger.info(f"Generating synthetic image {i + 1}/{len(prompts)} at resolution {width}x{height}")
         image = await generate_image(prompt, config.keypair, width, height)
 
         with tempfile.NamedTemporaryFile(dir=cst.TEMP_PATH_FOR_IMAGES, suffix=".png") as img_file:
@@ -229,7 +229,7 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
 
     task = ImageRawTask(
         model_id=IMAGE_MODEL_TO_FINETUNE,
-        ds=str(uuid.uuid4()),
+        ds=style + "_" + str(uuid.uuid4()),
         image_text_pairs=image_text_pairs,
         status=TaskStatus.PENDING,
         is_organic=False,
