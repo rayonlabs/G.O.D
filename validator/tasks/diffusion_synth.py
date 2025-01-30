@@ -143,8 +143,8 @@ def convert_to_nineteen_payload(
 
 
 @retry_with_backoff
-async def generate_diffusion_prompts(style: str, keypair: Keypair) -> List[str]:
-    messages = create_diffusion_messages(style)
+async def generate_diffusion_prompts(style: str, keypair: Keypair, num_prompts: int) -> List[str]:
+    messages = create_diffusion_messages(style, num_prompts)
     payload = convert_to_nineteen_payload(messages)
 
     result = await post_to_nineteen_chat(payload, keypair)
