@@ -78,43 +78,35 @@ def get_default_dataset_config(dataset_name: str) -> str | None:
         return None
 
 
-def resize_image(image: Image.Image, max_size: int = 1024) -> Image.Image:
+def adjust_image_size(image: Image.Image) -> Image.Image:
     width, height = image.size
-    if width > height:
-        new_width = max_size
-        new_height = int((max_size / width) * height)
-    else:
-        new_height = max_size
-        new_width = int((max_size / height) * width)
-    return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    new_width = (width // 8) * 8
+    new_height = (height // 8) * 8
 
+    if width % 8 != 0 or height % 8 != 0:
+        aspect_ratio = width / height
+        if width > height:
+            new_width = (width // 8) * 8
+            new_height = int(new_width / aspect_ratio)
+        else:
+            new_height = (height // 8) * 8
+            new_width = int(new_height * aspect_ratio)
+        new_width = (new_width // 8) * 8
+        new_height = (new_height // 8) * 8
+        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-def crop_center(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
-    img_width, img_height = image.size
-    left = (img_width - target_width) // 2
-    top = (img_height - target_height) // 2
-    right = left + target_width
-    bottom = top + target_height
-    return image.crop((left, top, right, bottom))
+    width, height = image.size
+    crop_width = (width // 8) * 8
+    crop_height = (height // 8) * 8
 
+    if width != crop_width or height != crop_height:
+        left = (width - crop_width) // 2
+        top = (height - crop_height) // 2
+        right = left + crop_width
+        bottom = top + crop_height
+        image = image.crop((left, top, right, bottom))
 
-def match_image_size(image1: Image.Image, image2: Image.Image) -> tuple[Image.Image, Image.Image]:
-    if image1.size != image2.size:
-        image1 = resize_image(image1)
-        image2 = resize_image(image2)
-
-        width1, height1 = image1.size
-        width2, height2 = image2.size
-
-        target_width = min(width1, width2)
-        target_height = min(height1, height2)
-
-        if width1 > width2 or height1 > height2:
-            image1 = crop_center(image1, target_width, target_height)
-        if width2 > width1 or height2 > height1:
-            image2 = crop_center(image2, target_width, target_height)
-
-    return image1, image2
+    return image
 
 
 def base64_to_image(base64_string: str) -> Image.Image:
@@ -148,6 +140,13 @@ def list_supported_images(dataset_path: str, extensions: tuple) -> list[str]:
 def read_image_as_base64(image_path: str) -> str:
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
+
+
+def image_to_base64(image: Image.Image) -> Image.Image:
+    buffer = BytesIO()
+    img_format = image.format if image.format else "PNG"
+    image.save(buffer, format=img_format)
+    return base64.b64encode(buffer.getvalue()).decode()
 
 
 def read_prompt_file(text_file_path: str) -> str:
