@@ -6,6 +6,7 @@ import asyncio
 import os
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 
 from dotenv import load_dotenv
 
@@ -50,19 +51,19 @@ async def get_period_scores_from_task_results(task_results: list[TaskResults]) -
         logger.info("There were not results to be scored")
         return []
 
-    seven_days_ago = datetime.now() - timedelta(days=7)
-    three_days_ago = datetime.now() - timedelta(days=3)
-    one_day_ago = datetime.now() - timedelta(days=1)
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    three_days_ago = datetime.now(timezone.utc) - timedelta(days=3)
+    one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
 
     seven_day_task_results = [i for i in task_results if i.task.created_at > seven_days_ago]
     three_day_task_results = [i for i in task_results if i.task.created_at > three_days_ago]
     one_day_task_results = [i for i in task_results if i.task.created_at > one_day_ago]
 
-    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.5)
-    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.35)
-    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.15)
+    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=1)
+    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0)
+    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0)
 
-    all_period_scores = [seven_day_scores, three_day_scores, one_day_scores]
+    all_period_scores = seven_day_scores + three_day_scores + one_day_scores
 
     return all_period_scores
 
@@ -104,7 +105,7 @@ async def _upload_results_to_s3(config: Config, task_results: list[TaskResults])
     return presigned_url
 
 
-async def get_node_weights_from_results(
+async def get_node_weights_from_period_scores(
     substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore]
 ) -> tuple[list[int], list[float]]:
     """
@@ -166,7 +167,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
         logger.info("No nodes to set weights for. Skipping weight setting.")
         return False
 
-    all_node_ids, all_node_weights = await get_node_weights_from_results(config.substrate, config.netuid, node_results)
+    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(config.substrate, config.netuid, node_results)
     logger.info("Weights calculated, about to set...")
 
     success = await set_weights(config, all_node_ids, all_node_weights, validator_node_id)
