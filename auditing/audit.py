@@ -98,22 +98,22 @@ async def audit_weights(config: Config, set_weights_on_chain: bool = True) -> bo
 
     if similarity_between_scores > 0.98:
         logger.info(f"✅ Yay! The scores are similar to the weights set on chain!! Similarity: {similarity_between_scores}")
-        if set_weights_on_chain:
-            logger.info("Setting the weights on chain...")
-            _, my_vali_uid = query_substrate(
-                config.substrate, "SubtensorModule", "Uids", [NETUID, config.keypair.ss58_address], return_value=True
-            )
-            success = await set_weights(config, node_ids_formatted, node_weights_formatted, my_vali_uid)
-            return success
-        else:
-            return True
 
     else:
         logger.error(
             f"Dear Auditor, the similarity between the scores and the weights set on chain is {similarity_between_scores}."
             "This is quite low, and you might want to look into this!"
         )
-        return False
+
+    if set_weights_on_chain:
+        logger.info("Setting the weights on chain...")
+        _, my_vali_uid = query_substrate(
+            config.substrate, "SubtensorModule", "Uids", [NETUID, config.keypair.ss58_address], return_value=True
+        )
+        success = await set_weights(config, node_ids_formatted, node_weights_formatted, my_vali_uid)
+        return success
+    else:
+        return True
 
 
 async def main():
