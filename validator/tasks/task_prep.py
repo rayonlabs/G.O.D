@@ -141,6 +141,13 @@ async def prepare_task(
 ) -> tuple[str, str, str]:
     logger.info(f"Preparing {dataset_name}")
     dataset_dict = await train_test_split(dataset_name, file_format)
+
+    total_size = len(dataset_dict["train"]) + len(dataset_dict["test"])
+    if total_size < cst.MINIMUM_DATASET_ROWS:
+        error_msg = f"Dataset {dataset_name} has only {total_size} rows, minimum required is {cst.MINIMUM_DATASET_ROWS}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
     train_dataset = dataset_dict["train"]
     test_dataset = dataset_dict["test"]
 
