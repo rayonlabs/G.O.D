@@ -59,9 +59,9 @@ async def get_period_scores_from_task_results(task_results: list[TaskResults]) -
     three_day_task_results = [i for i in task_results if i.task.created_at > three_days_ago]
     one_day_task_results = [i for i in task_results if i.task.created_at > one_day_ago]
 
-    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.4)
-    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.3)
-    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.3)
+    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.25)
+    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.4)
+    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.35)
 
     all_period_scores = seven_day_scores + three_day_scores + one_day_scores
 
