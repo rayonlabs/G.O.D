@@ -345,6 +345,8 @@ async def move_tasks_to_preevaluation_loop(config: Config):
 async def evaluate_tasks_loop(config: Config):
     task_queue = asyncio.Queue()
     gpu_queue = asyncio.Queue()
+    processing_task_ids = set()
+
     for gpu_id in cst.GPU_IDS:
         await gpu_queue.put(gpu_id)
 
@@ -358,26 +360,33 @@ async def evaluate_tasks_loop(config: Config):
                     await _evaluate_task(task, [gpu_id], config)
                 finally:
                     await gpu_queue.put(gpu_id)
+                    processing_task_ids.remove(task.task_id)
                     task_queue.task_done()
             except asyncio.TimeoutError:
-                # No more tasks in queue
-                break
+                await asyncio.sleep(5)
+                continue
+            except Exception as e:
+                logger.error(f"Error in evaluation worker: {str(e)}")
+                continue
+
+    for _ in cst.GPU_IDS:
+        asyncio.create_task(evaluation_worker())
 
     while True:
-        tasks_to_evaluate = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=config.psql_db)
-        if tasks_to_evaluate:
-            logger.info(f"There are {len(tasks_to_evaluate)} tasks awaiting evaluation")
-            for task in tasks_to_evaluate:
-                await task_queue.put(task)
-            workers = [asyncio.create_task(evaluation_worker()) for _ in cst.GPU_IDS]
-            await task_queue.join()
-
-            # Clean up workers
-            for w in workers:
-                w.cancel()
+        if len(processing_task_ids) < 2 * len(cst.GPU_IDS):
+            tasks_to_evaluate = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=config.psql_db)
+            if tasks_to_evaluate:
+                logger.info(f"Found {len(tasks_to_evaluate)} new tasks awaiting evaluation, adding to queue")
+                for task in tasks_to_evaluate:
+                    # Only add to queue if not already added, some tasks in the queue might still have TaskStatus.PREEVALUATION
+                    if task.task_id not in processing_task_ids:
+                        processing_task_ids.add(task.task_id)
+                        await task_queue.put(task)
+            else:
+                logger.info("No new tasks awaiting evaluation - waiting 30 seconds")
         else:
-            logger.info("No tasks awaiting evaluation - waiting 30 seconds")
-            await asyncio.sleep(30)
+            logger.info("Evaluation queue is full - waiting for 30 seconds")
+        await asyncio.sleep(30)
 
 
 async def process_completed_tasks(config: Config) -> None:
