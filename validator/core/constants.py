@@ -57,6 +57,7 @@ GET_SYNTH_DATA = True
 MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 MAX_FILE_SIZE_BYTES = 2147483646  # pyarrow max json load size
+MINIMUM_DATASET_ROWS = 500  # Minimum number of rows required in a dataset
 
 # synth stuff
 NUM_SYNTH_RETRIES = 3
