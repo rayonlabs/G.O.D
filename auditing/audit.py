@@ -43,13 +43,9 @@ async def _get_7_day_task_results_for_rayon_validator(config: Config) -> list[Ta
 
 
 async def get_task_results_from_s3(config: Config) -> list[TaskResults]:
-
-
     task_results = await _get_7_day_task_results_for_rayon_validator(config)
 
     return task_results
-
-
 
 
 async def get_similarity_score_for_rayon_weights(config: Config, task_results: list[TaskResults]) -> float:
@@ -72,7 +68,7 @@ async def get_similarity_score_for_rayon_weights(config: Config, task_results: l
     return similarity_between_scores, node_ids_formatted, node_weights_formatted
 
 
-async def audit_weights(config: Config) -> bool:
+async def audit_weights(config: Config, set_weights_on_chain: bool = True) -> bool:
     """Check that scores are calculated correctly by the validator.
 
     Receive details of every task that occurred in the past 7 days.
@@ -102,12 +98,15 @@ async def audit_weights(config: Config) -> bool:
 
     if similarity_between_scores > 0.98:
         logger.info(f"✅ Yay! The scores are similar to the weights set on chain!! Similarity: {similarity_between_scores}")
-        logger.info("Setting the weights on chain...")
-        _, my_vali_uid = query_substrate(
-            config.substrate, "SubtensorModule", "Uids", [NETUID, config.keypair.ss58_address], return_value=True
-        )
-        success = await set_weights(config, node_ids_formatted, node_weights_formatted, my_vali_uid)
-        return success
+        if set_weights_on_chain:
+            logger.info("Setting the weights on chain...")
+            _, my_vali_uid = query_substrate(
+                config.substrate, "SubtensorModule", "Uids", [NETUID, config.keypair.ss58_address], return_value=True
+            )
+            success = await set_weights(config, node_ids_formatted, node_weights_formatted, my_vali_uid)
+            return success
+        else:
+            return True
 
     else:
         logger.error(
@@ -146,7 +145,7 @@ async def main():
 
         if updated < weights_set_rate_limit:
             sleep_duration = (weights_set_rate_limit - updated) * 12
-            logger.info(f"Sleeping for {sleep_duration} seconds [{sleep_duration / 12 } blocks]" " as we set weights recently...")
+            logger.info(f"Sleeping for {sleep_duration} seconds [{sleep_duration / 12} blocks] as we set weights recently...")
             await asyncio.sleep(sleep_duration)
             continue
 
