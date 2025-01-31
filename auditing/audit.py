@@ -37,7 +37,7 @@ async def _get_7_day_task_results_for_rayon_validator(config: Config) -> list[Ta
     logger.info(f"Getting task results from {url}")
     result_filepath = await download_s3_file(url)
     with open(result_filepath, "r") as f:
-        task_results_dicts = json.loads(f)
+        task_results_dicts = json.load(f)
 
     return [TaskResults(**task_results_dict) for task_results_dict in task_results_dicts]
 
