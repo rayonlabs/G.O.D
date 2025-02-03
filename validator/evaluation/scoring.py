@@ -600,7 +600,6 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
     all_scores_zero = all(result.score == 0.0 for result in task_results)
     if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS:
         task.status = TaskStatus.PREEVALUATION
-        task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
         add_context_tag("status", task.status.value)
         logger.info(
             f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate"
@@ -611,4 +610,5 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
         task.status = TaskStatus.SUCCESS
         add_context_tag("status", task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
+    task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
     return task
