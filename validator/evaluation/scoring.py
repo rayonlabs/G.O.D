@@ -110,12 +110,12 @@ def calculate_node_quality_scores(
 
 
 def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
-    """Normalise scores and update node emission values. Now < 0 maps to zero"""
+    """Normalise scores using a combination of sigmoid and linear functions."""
+
     assert period_scores, "Period scores list cannot be empty"
     valid_scores = [ps.quality_score for ps in period_scores if ps.quality_score is not None]
     if not valid_scores:
         raise ValueError("No valid quality scores found in period_scores")
-
     max_score = max(valid_scores)
     if max_score <= 0:
         for node_period_score in period_scores:
@@ -126,7 +126,11 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
         if node_period_score.quality_score is None or node_period_score.quality_score <= 0:
             node_period_score.normalised_score = 0.0
         else:
-            node_period_score.normalised_score = (node_period_score.quality_score / max_score) ** cts.REWEIGHTING_EXP
+            normalised_input = node_period_score.quality_score / max_score
+            sigmoid_part = 1 / (1 + np.exp(-cts.SIGMOID_STEEPNESS * (normalised_input - cts.SIGMOID_SHIFT)))
+            sigmoid_score = pow(sigmoid_part, cts.SIGMOID_POWER)
+            linear_score = normalised_input
+            node_period_score.normalised_score = (cts.SIGMOID_WEIGHT * sigmoid_score) + (cts.LINEAR_WEIGHT * linear_score)
 
     return period_scores
 

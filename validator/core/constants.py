@@ -95,8 +95,11 @@ TARGET_SCORE_RATIO = 1.5
 MIN_TASK_SCORE = -0.05  # very tiny punishment while miners find their feet
 MAX_TASK_SCORE = 1.8
 TASK_SCORE_THRESHOLD = 0.95
-REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
-
+SIGMOID_STEEPNESS = 15  # Higher = sharper transition
+SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
+SIGMOID_POWER = 4  # Higher = more extreme difference between high and low scores
+LINEAR_WEIGHT = 0.25  # Weight for linear component (0-1) - benefits low scores
+SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
 SCORING_WINDOW = 7  # number of days over which we score
 
 # processing stuff
