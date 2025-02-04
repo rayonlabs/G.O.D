@@ -101,6 +101,7 @@ async def _upload_results_to_s3(config: Config, task_results: list[TaskResults])
     temp_file, _ = await save_json_to_temp_file(scores_json, "latest_scores", dump_json=False)
     datetime_of_upload = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     presigned_url = await upload_json_to_minio(temp_file, BUCKET_NAME, f"latest_scores_{datetime_of_upload}.json")
+    os.remove(temp_file)
     await store_latest_scores_url(presigned_url, config)
     return presigned_url
 
