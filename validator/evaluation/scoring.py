@@ -498,6 +498,43 @@ def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dic
     return task_results
 
 
+def _reject_loss_outliers(miner_results: list[MinerResults], n_std: float = cts.OUTLIER_STD_THRESHOLD) -> list[MinerResults]:
+    """Reject outliers based on weighted loss values that are too high."""
+    weighted_losses = [
+        calculate_weighted_loss(res.test_loss, res.synth_loss)
+        for res in miner_results
+        if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
+    ]
+
+    if not weighted_losses:
+        return miner_results
+
+    losses_array = np.array(weighted_losses)
+    mean = np.mean(losses_array)
+    std = np.std(losses_array)
+
+    upper_bound = mean + (n_std * std)
+
+    logger.info(f"Mean loss: {mean:.4f}, Std: {std:.4f}, Upper bound: {upper_bound:.4f}")
+
+    for res in miner_results:
+        if not res.is_finetune or np.isnan(res.test_loss) or np.isnan(res.synth_loss):
+            continue
+
+        weighted_loss = calculate_weighted_loss(res.test_loss, res.synth_loss)
+        if weighted_loss > upper_bound or np.isnan(weighted_loss) or np.isinf(weighted_loss):
+            logger.info(
+                f"Loss rejected as an outlier for miner {res.hotkey}: "
+                f"weighted_loss={weighted_loss:.4f} "
+                f"(test_loss={res.test_loss:.4f}, synth_loss={res.synth_loss:.4f})"
+            )
+            res.score = 0.0
+            res.is_finetune = False
+            res.score_reason = "Loss rejected as an outlier"
+
+    return miner_results
+
+
 async def process_miners_pool(
     miners: list[Node], task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
 ) -> list[MinerResults]:
@@ -598,21 +635,20 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
     task_results = zero_duplicate_scores(task_results, keep_submission)
 
     logger.info("Calculating final scores...")
+    task_results = _reject_loss_outliers(task_results)
     task_results = add_raw_scores_to_miner_results(task_results)
     task_results = adjust_miner_scores_to_be_relative_to_other_comps(task_results)
     await _update_scores(task, task_results, config.psql_db)
     all_scores_zero = all(result.score == 0.0 for result in task_results)
     if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS:
         task.status = TaskStatus.PREEVALUATION
-        task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
         add_context_tag("status", task.status.value)
-        logger.info(
-            f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate"
-        )
+        logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")
     else:
         if cts.DELETE_S3_AFTER_COMPLETE:
             await _clear_up_s3([task.training_data, task.test_data, task.synthetic_data])
         task.status = TaskStatus.SUCCESS
         add_context_tag("status", task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
+    task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
     return task
