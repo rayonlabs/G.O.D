@@ -1,10 +1,9 @@
 from dotenv import load_dotenv
 
 
-load_dotenv(".vali.env")
+load_dotenv(".vali.env", override=True)
 
 import asyncio
-
 
 from validator.core.config import load_config
 from validator.core.refresh_nodes import refresh_nodes_periodically
