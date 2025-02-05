@@ -121,3 +121,9 @@ MAX_CONCURRENT_SYNTHETIC_JOBS = 50
 
 
 LOGPATH = "/root/G.O.D/validator/logs"
+
+# HF models cache management
+CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
+CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
+MAX_CACHE_SIZE_BYTES = 800 * 1024**3  # in bytes
+CACHE_CLEANUP_INTERVAL = 30 * 60  # in seconds
