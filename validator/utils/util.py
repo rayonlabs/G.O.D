@@ -21,10 +21,14 @@ async def try_db_connections(config: Config) -> None:
     logger.info("Redis connected successfully")
 
 
-async def save_json_to_temp_file(data: list[dict], prefix: str) -> tuple[str, int]:
+async def save_json_to_temp_file(data: list[dict], prefix: str, dump_json: bool = True) -> tuple[str, int]:
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", prefix=prefix)
-    with open(temp_file.name, "w") as f:
-        json.dump(data, f)
+    if dump_json:
+        with open(temp_file.name, "w") as f:
+            json.dump(data, f)
+    else:
+        with open(temp_file.name, "w") as f:
+            f.write(data)
     file_size = os.path.getsize(temp_file.name)
     return temp_file.name, file_size
 

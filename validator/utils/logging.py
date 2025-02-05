@@ -99,6 +99,8 @@ def stream_container_logs(container: Container, log_context: dict | None = None)
     if not log_context:
         log_context = {}
 
+    log_context["docker_container_name"] = container.name
+
     with LogContext(**log_context):
         buffer = ""
         try:

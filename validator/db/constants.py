@@ -53,6 +53,7 @@ TIMES_DELAYED = "times_delayed"
 ASSIGNED_MINERS = "assigned_miners"
 TASK_TYPE = "task_type"
 TRAINING_REPO_BACKUP = "training_repo_backup"
+N_EVAL_ATTEMPTS = "n_eval_attempts"
 
 # Text Tasks Table Columns
 FIELD_SYSTEM = "field_system"

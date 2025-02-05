@@ -10,6 +10,7 @@ sam_vit_l_0b3195.pth
 *.gguf
 nohup.out
 
+tvenv/*
 axolotl/*
 axolotl
 postgres_data/*
