@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 
 import numpy as np
@@ -45,7 +46,15 @@ async def get_task_work_score(task: MiniTaskWithScoringOnly, psql_db: PSQLDB) ->
 
     hours = task.hours_to_complete
     model_params_count = await get_task_model_params_count(task.task_id, psql_db)
-    model_size_value = min(8, model_params_count / 1_000_000_000) if model_params_count else 1
+
+    if model_params_count:
+        model_size_value = min(8, model_params_count / 1_000_000_000)
+    else:
+        # Temporary fallback to parsing model name if params count is 0
+        model = task.model_id
+        model_size = re.search(r"(\d+)(?=[bB])", model)
+        model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
+
     if hours * model_size_value == 0:
         logger.error(
             f"Hours to complete: {hours} and model size value: {model_size_value} "
@@ -136,7 +145,11 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float, psql_db: PSQLDB) -> list[PeriodScore]:
+async def get_period_scores_from_results(
+    task_results: list[TaskResults],
+    weight_multiplier: float,
+    psql_db: PSQLDB,
+) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
 
     node_aggregations: dict[str, NodeAggregationResult] = {}
