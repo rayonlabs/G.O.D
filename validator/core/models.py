@@ -85,6 +85,7 @@ class RawTask(BaseModel):
     started_at: datetime | None = None
     termination_at: datetime | None = None
     completed_at: datetime | None = None
+    n_eval_attempts: int = 0
     task_type: TaskType
 
     # Turn off protected namespace for model
@@ -128,6 +129,7 @@ class PeriodScore(BaseModel):
     summed_task_score: float
     average_score: float
     hotkey: str
+    weight_multiplier: float
     normalised_score: float | None = 0.0
 
 

@@ -13,13 +13,14 @@ def cleanup_temp_files():
     temp_dir = tempfile.gettempdir()
     for filename in os.listdir(temp_dir):
         if filename.endswith(".json") and (
-            any(prefix in filename for prefix in ["train_data_", "test_data_", "synth_data_"])
-            or any(suffix in filename for suffix in ["_test_data.json", "_train_data.json", "_synth_data.json"])
+            any(prefix in filename for prefix in ["train_data_", "test_data_", "synth_data_", "latest_scores_"])
+            or any(suffix in filename for suffix in ["_test_data.json", "_train_data.json", "_synth_data.json", "_scores.json"])
         ):
             try:
                 os.remove(os.path.join(temp_dir, filename))
-            except OSError:
-                pass
+                logger.info(f"Removed temporary file: {filename}")
+            except OSError as e:
+                logger.warning(f"Failed to remove temporary file {filename}: {e}")
 
 
 def delete_dataset_from_cache(dataset_name):

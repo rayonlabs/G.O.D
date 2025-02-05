@@ -48,8 +48,7 @@ GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
 
 
-HOW_MANY_TASKS_ALLOWED_AT_ONCE = 15
-NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 10
+NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 5
 
 
 # data stuff
@@ -63,6 +62,7 @@ IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
 TEMP_PATH_FOR_IMAGES = "/tmp/validator/temp_images"
 SUPPORTED_IMAGE_FILE_EXTENSIONS = (".png", ".jpg", ".jpeg")
 MAX_FILE_SIZE_BYTES = 2147483646  # pyarrow max json load size
+MINIMUM_DATASET_ROWS = 500  # Minimum number of rows required in a dataset
 
 # synth stuff
 NUM_SYNTH_RETRIES = 3
@@ -95,6 +95,8 @@ MAX_IMAGE_COMPETITION_HOURS = 2
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 # how many times in total do we attempt to delay an organic request looking for miners
 MAX_DELAY_TIMES = 6
+# Maximum number of times we retry a task after node training failure
+MAX_EVAL_ATTEMPTS = 3
 
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
@@ -102,10 +104,18 @@ TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 TARGET_SCORE_RATIO = 1.5
 MIN_TASK_SCORE = -0.05  # very tiny punishment while miners find their feet
 MAX_TASK_SCORE = 1.8
-TASK_SCORE_THRESHOLD = 0.85
-REWEIGHTING_EXP = 0.55  # how much of a drop off from leader
+TASK_SCORE_THRESHOLD = 0.95
+
+SIGMOID_STEEPNESS = 15  # Higher = sharper transition
+SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
+SIGMOID_POWER = 4  # Higher = more extreme difference between high and low scores
+LINEAR_WEIGHT = 0.25  # Weight for linear component (0-1) - benefits low scores
+SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
+
+REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
 
 SCORING_WINDOW = 7  # number of days over which we score
+OUTLIER_STD_THRESHOLD = 2.0  # number of standard deviations from the mean to reject the outlier scores
 
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
@@ -128,7 +138,11 @@ DIFFUSION_HF_DEFAULT_FOLDER = "checkpoint"
 DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
 DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.7
 
-MAX_CONCURRENT_JOBS = 16
+
+# Max jobs
+MAX_CONCURRENT_JOBS = 60
+MAX_CONCURRENT_SYNTHETIC_JOBS = 50
+## This leaves room for MAX_CONCURRENT_JOBS - MAX_CONCURRENT_SYNTHETIC_JOBS at all times
 
 
 LOGPATH = "/root/G.O.D/validator/logs"
