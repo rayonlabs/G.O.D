@@ -136,9 +136,33 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     return remaining_train_dataset, synthetic_dataset
 
 
+def calculate_hours_from_json_size(json_size_bytes: int) -> int:
+    """Calculate training hours based on JSON file size using linear mapping."""
+
+    FIRST_THRESHOLD_MB = 300
+    LAST_THRESHOLD_MB = cst.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+    json_size_mb = json_size_bytes / (1024 * 1024)
+
+    if json_size_mb < FIRST_THRESHOLD_MB:
+        return cst.MIN_COMPETITION_HOURS
+
+    # Linear interpolation from min to max hours with rounding up
+    numerator = int((json_size_mb - FIRST_THRESHOLD_MB) * (cst.MAX_COMPETITION_HOURS - cst.MIN_COMPETITION_HOURS) * 1000)
+    denominator = int((LAST_THRESHOLD_MB - FIRST_THRESHOLD_MB) * 1000)
+    hours = cst.MIN_COMPETITION_HOURS + (numerator + denominator - 1) // denominator
+
+    return min(max(hours, cst.MIN_COMPETITION_HOURS), cst.MAX_COMPETITION_HOURS)
+
+
 async def prepare_task(
     dataset_name: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, int]:
+    """
+    Prepares a task by splitting the dataset into train and test, generating synthetic data, and saving the jsons to MinIO.
+    Returns the URLs of the train, test, and synthetic data, and suggested training hours.
+    The suggested training hours is based on the size of the train data.
+    """
+
     logger.info(f"Preparing {dataset_name}")
     dataset_dict = await train_test_split(dataset_name, file_format)
 
@@ -222,6 +246,7 @@ async def prepare_task(
         test_json_url.strip('"'),
         synth_json_url.strip('"'),
         train_json_url.strip('"'),
+        calculate_hours_from_json_size(train_json_size),
     )
 
 

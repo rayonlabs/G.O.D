@@ -47,14 +47,18 @@ async def _run_task_prep(task: RawTask, keypair: Keypair) -> RawTask:
     columns_to_sample = [
         i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
     ]
-    test_data, synth_data, train_data = await prepare_task(
+    test_data, synth_data, train_data, suggested_hours = await prepare_task(
         dataset_name=task.ds_id, file_format=task.file_format, columns_to_sample=columns_to_sample, keypair=keypair
     )
+    # we modify the hours for synth tasks
+    if not task.is_organic:
+        logger.info(f"We are modifying the hours for a synthetic task from {task.hours_to_complete} to {suggested_hours}")
+        task.hours_to_complete = suggested_hours
     task.training_data = train_data
-    task.status = TaskStatus.LOOKING_FOR_NODES
-    add_context_tag("status", task.status.value)
     task.synthetic_data = synth_data
     task.test_data = test_data
+    task.status = TaskStatus.LOOKING_FOR_NODES
+    add_context_tag("status", task.status.value)
     logger.info("Data creation is complete - now time to find some miners")
     return task
 
