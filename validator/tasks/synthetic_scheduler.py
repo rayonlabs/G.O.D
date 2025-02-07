@@ -98,8 +98,10 @@ def _get_training_hours_from_bytes(bytes: int) -> tuple[int, int]:
             min_hours, max_hours = cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE[(min_bytes, max_bytes)]
             break
     if min_hours == 0 and max_hours == 0:
-        if bytes > cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys()[-1][1]:  # if greater than the largest bin
-            return cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.values()[-1][-1]  # max hours
+        sorted_bins = list(cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys())
+        if bytes > sorted_bins[-1][1]:  # if greater than the largest bin
+            max_hours_range = list(cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.values())[-1]
+            return max_hours_range[1]  # max hours
         else:
             raise ValueError(f"No training hours range found for {bytes} bytes")
     return random.randint(min_hours, max_hours)
@@ -112,7 +114,7 @@ async def _create_synthetic_task(
 ):
     model_id = await anext(models)
     dataset = await anext(datasets)
-    number_of_hours = _get_training_hours_from_bytes(dataset.size_bytes)
+    number_of_hours = _get_training_hours_from_bytes(dataset.num_bytes_parquet_files)
     columns = await _get_columns_for_dataset(dataset.dataset_id, config.keypair)
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)

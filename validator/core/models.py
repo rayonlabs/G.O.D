@@ -272,4 +272,4 @@ class TaskWithHotkeyDetails(Task):
 class Dataset(BaseModel):
     dataset_id: str
     num_rows: int
-    num_parquet_bytes: int
+    num_bytes_parquet_files: int
