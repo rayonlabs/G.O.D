@@ -32,7 +32,6 @@ from validator.core.config import Config
 from validator.core.config import load_config
 from validator.core.models import PeriodScore
 from validator.core.models import TaskResults
-from validator.db.database import PSQLDB
 from validator.db.sql.nodes import get_vali_node_id
 from validator.evaluation.scoring import get_period_scores_from_results
 from validator.utils.logging import get_logger
@@ -47,7 +46,7 @@ logger = get_logger(__name__)
 TIME_PER_BLOCK: int = 500
 
 
-async def get_period_scores_from_task_results(task_results: list[TaskResults], psql_db: PSQLDB) -> list[PeriodScore]:
+async def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list[PeriodScore]:
     if not task_results:
         logger.info("There were not results to be scored")
         return []
@@ -60,9 +59,9 @@ async def get_period_scores_from_task_results(task_results: list[TaskResults], p
     three_day_task_results = [i for i in task_results if i.task.created_at > three_days_ago]
     one_day_task_results = [i for i in task_results if i.task.created_at > one_day_ago]
 
-    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.25, psql_db=psql_db)
-    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.4, psql_db=psql_db)
-    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.35, psql_db=psql_db)
+    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.25)
+    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.4)
+    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.35)
 
     all_period_scores = seven_day_scores + three_day_scores + one_day_scores
 
@@ -83,7 +82,7 @@ async def _get_weights_to_set(config: Config) -> tuple[list[PeriodScore], list[T
     date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
     task_results: list[TaskResults] = await get_aggregate_scores_since(date, config.psql_db)
 
-    all_period_scores = await get_period_scores_from_task_results(task_results, config.psql_db)
+    all_period_scores = await get_period_scores_from_task_results(task_results)
 
     return all_period_scores, task_results
 

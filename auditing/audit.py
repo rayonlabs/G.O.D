@@ -49,7 +49,7 @@ async def get_task_results_from_s3(config: Config) -> list[TaskResults]:
 
 
 async def get_similarity_score_for_rayon_weights(config: Config, task_results: list[TaskResults]) -> float:
-    period_scores = await get_period_scores_from_task_results(task_results, config.psql_db)
+    period_scores = await get_period_scores_from_task_results(task_results)
     node_ids, node_weights = await get_node_weights_from_period_scores(config.substrate, config.netuid, period_scores)
 
     node_ids_formatted, node_weights_formatted = _normalize_and_quantize_weights(node_ids, node_weights)
