@@ -21,9 +21,7 @@ from validator.core.models import RawTask
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
-from validator.db.database import PSQLDB
 from validator.db.sql.submissions_and_scoring import add_submission
-from validator.db.sql.submissions_and_scoring import get_task_model_params_count
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
@@ -39,26 +37,18 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-async def get_task_work_score(task: MiniTaskWithScoringOnly, psql_db: PSQLDB) -> float:
+def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     """Calculate work score for a task based on hours and model size."""
     assert task.hours_to_complete > 0, "Hours to complete must be positive"
     assert task.model_id, "Model ID must be present"
 
     hours = task.hours_to_complete
-    model_params_count = await get_task_model_params_count(task.task_id, psql_db)
-
-    if model_params_count:
-        model_size_value = min(8, model_params_count / 1_000_000_000)
-    else:
-        # Temporary fallback to parsing model name if params count is 0
-        model = task.model_id
-        model_size = re.search(r"(\d+)(?=[bB])", model)
-        model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
-
+    model = task.model_id
+    model_size = re.search(r"(\d+)(?=[bB])", model)
+    model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
     if hours * model_size_value == 0:
         logger.error(
-            f"Hours to complete: {hours} and model size value: {model_size_value} "
-            f"for task {task.task_id} and model id: {task.model_id}"
+            f"Hours to complete: {hours} and model size value: {model_size_value} for task {task.task_id} and model id: {model}"
             "\nReturning 1 regardless as a failsafe, but please look into this"
         )
         return 1
@@ -145,17 +135,13 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def get_period_scores_from_results(
-    task_results: list[TaskResults],
-    weight_multiplier: float,
-    psql_db: PSQLDB,
-) -> list[PeriodScore]:
+async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
 
     node_aggregations: dict[str, NodeAggregationResult] = {}
 
     for task_res in task_results:
-        task_work_score = await get_task_work_score(task_res.task, psql_db)
+        task_work_score = get_task_work_score(task_res.task)
         for node_score in task_res.node_scores:
             update_node_aggregation(node_aggregations, node_score, task_work_score)
 
@@ -354,13 +340,11 @@ async def _evaluate_submissions(
 
     logger.info("Starting synth evaluation")
     synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-    synth_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
+    synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
     try:
         os.remove(synthetic_data_filepath)
     except Exception as e:
         logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
-    synth_eval_results = synth_results.results
-    task.model_params_count = synth_results.base_model_params_count
 
     finetuned_repos = []
     for repo in repos_to_evaluate:
@@ -379,16 +363,13 @@ async def _evaluate_submissions(
 
     if finetuned_repos:
         test_data_filepath = await download_s3_file(task.test_data)
-        test_results = await run_evaluation_docker(
-            dataset=test_data_filepath,
-            models=finetuned_repos,
-            **{k: v for k, v in evaluation_params.items() if k != "models"}
+        test_eval_results = await run_evaluation_docker(
+            dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
         )
         try:
             os.remove(test_data_filepath)
         except Exception as e:
             logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
-        test_eval_results = test_results.results
 
         for repo in finetuned_repos:
             if isinstance(test_eval_results.get(repo), Exception):
@@ -659,7 +640,7 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
     task_results = adjust_miner_scores_to_be_relative_to_other_comps(task_results)
     await _update_scores(task, task_results, config.psql_db)
     all_scores_zero = all(result.score == 0.0 for result in task_results)
-    if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS - 1:
+    if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS:
         task.status = TaskStatus.PREEVALUATION
         add_context_tag("status", task.status.value)
         logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")

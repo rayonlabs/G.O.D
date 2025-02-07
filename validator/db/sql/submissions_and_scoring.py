@@ -156,18 +156,6 @@ async def get_task_node_quality_score(task_id: UUID, hotkey: str, psql_db: PSQLD
         return await connection.fetchval(query, task_id, hotkey, NETUID)
 
 
-async def get_task_model_params_count(task_id: UUID, psql_db: PSQLDB) -> Optional[int]:
-    """Get model_params_count for a task"""
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            SELECT {cst.MODEL_PARAMS_COUNT}
-            FROM {cst.TASKS_TABLE}
-            WHERE {cst.TASK_ID} = $1
-        """
-        return await connection.fetchval(query, task_id)
-
-
 async def get_all_scores_and_losses_for_task(task_id: UUID, psql_db: PSQLDB) -> list[dict]:
     """Get all quality scores and losses for a task"""
     async with await psql_db.connection() as connection:

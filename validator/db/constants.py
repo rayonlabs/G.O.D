@@ -58,7 +58,6 @@ TIMES_DELAYED = "times_delayed"
 ASSIGNED_MINERS = "assigned_miners"
 TRAINING_REPO_BACKUP = "training_repo_backup"
 N_EVAL_ATTEMPTS = "n_eval_attempts"
-MODEL_PARAMS_COUNT = "model_params_count"
 
 # Submissions Table Columns
 SUBMISSION_ID = "submission_id"

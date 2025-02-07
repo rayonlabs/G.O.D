@@ -66,7 +66,6 @@ class RawTask(BaseModel):
     is_organic: bool
     task_id: UUID | None = None
     model_id: str
-    model_params_count: int = 0
     ds_id: str
     file_format: FileFormat = FileFormat.HF
     status: str

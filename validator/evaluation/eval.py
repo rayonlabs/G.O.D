@@ -271,14 +271,6 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
         raise  # Re-raise the exception to trigger retry
 
 
-def _count_model_parameters(model: AutoModelForCausalLM) -> int:
-    try:
-        return sum(p.numel() for p in model.parameters())
-    except Exception as e:
-        logger.error(f"Failed to count model parameters: {e}")
-        return 0
-
-
 def main():
     dataset = os.environ.get("DATASET")
     original_model = os.environ.get("ORIGINAL_MODEL")
@@ -297,7 +289,6 @@ def main():
         dataset_type = CustomDatasetType.model_validate_json(dataset_type_str)
 
     base_model = load_model(original_model)
-    model_params_count = _count_model_parameters(base_model)
     tokenizer = load_tokenizer(original_model)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -305,9 +296,7 @@ def main():
 
     lora_repos = [m.strip() for m in models_str.split(",") if m.strip()]
 
-    results_dict = {
-        "model_params_count": model_params_count
-    }
+    results_dict = {}
     for repo in lora_repos:
         try:
             try:

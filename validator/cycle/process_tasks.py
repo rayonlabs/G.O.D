@@ -299,7 +299,7 @@ async def _move_to_preevaluation_status(task, config):
 
 async def _move_any_evaluating_tasks_to_pending_evaluation(config: Config):
     stopped_mid_evaluation = await tasks_sql.get_tasks_with_status(TaskStatus.EVALUATING, psql_db=config.psql_db)
-    logger.info(f"WE ARE MOVING {len(stopped_mid_evaluation)} TASKS TO PREEVALUATION")
+    logger.info(f"WE  ARE MOVING {len(stopped_mid_evaluation)} TASKS TO PREEVALUATION")
     await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in stopped_mid_evaluation])
 
 

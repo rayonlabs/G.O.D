@@ -9,7 +9,7 @@ zero_score_tasks AS (
     SELECT DISTINCT t.task_id
     FROM tasks_last_12h t
     JOIN task_nodes tn ON t.task_id = tn.task_id
-    WHERE t.n_eval_attempts = 4 -- Equal to MAX_EVAL_ATTEMPTS in validator/core/constants.py
+    WHERE t.n_eval_attempts = 3
     GROUP BY t.task_id
     HAVING MAX(tn.quality_score) = 0 AND MIN(tn.quality_score) = 0
 ),
