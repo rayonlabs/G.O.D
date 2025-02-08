@@ -77,13 +77,12 @@ DATASET_BINS_TO_SAMPLE = [
 # parquet file size bins to training hours range
 TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     (0, 30_000_000): (1, 1),  # 0-30MB needs 1 hour
-    (30_000_000, 60_000_000): (1, 2),  # 30MB-60MB needs 1-2 hours
-    (60_000_000, 100_000_000): (2, 3),  # 60MB-100MB needs 2-4 hours
-    (100_000_000, 500_000_000): (3, 4),  # 100MB-500MB needs 3-4 hours
-    (500_000_000, 1_000_000_000): (4, 8),  # 500MB-1GB needs 4-8 hours
-    (1_000_000_000, 10_000_000_000): (8, 12),  # 1GB-10GB needs 8-12 hours
+    (30_000_000, 60_000_000): (1, 3),  # 30MB-60MB needs 1-3 hours
+    (60_000_000, 100_000_000): (2, 5),  # 60MB-100MB needs 2-5 hours
+    (100_000_000, 500_000_000): (3, 6),  # 100MB-500MB needs 3-6 hours
+    (500_000_000, 1_000_000_000): (4, 9),  # 500MB-1GB needs 4-9 hours
+    (1_000_000_000, 10_000_000_000): (5, 12),  # 1GB-10GB needs 5-12 hours
 }
-
 
 SYNTH_MODEL = "chat-llama-3-2-3b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
