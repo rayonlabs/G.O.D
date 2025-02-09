@@ -139,7 +139,7 @@ def start_tuning_container_diffusion(job: DiffusionJob):
 
     prepare_dataset(
         training_images_zip_path=job.dataset_zip,
-        training_images_repeat=cst.DIFFUSION_DEFAULT_REPEATS,
+        training_images_repeat=cst.DIFFUSION_REPEATS,
         instance_prompt=cst.DIFFUSION_DEFAULT_INSTANCE_PROMPT,
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,
         job_id=job.job_id,
