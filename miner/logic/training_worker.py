@@ -35,9 +35,9 @@ class TrainingWorker:
                 break
             try:
                 if isinstance(job, TextJob):
-                    return start_tuning_container(job)
+                    start_tuning_container(job)
                 elif isinstance(job, DiffusionJob):
-                    return start_tuning_container_diffusion(job)
+                    start_tuning_container_diffusion(job)
                 job.status = JobStatus.COMPLETED
             except Exception as e:
                 logger.error(f"Error processing job {job.job_id}: {str(e)}")
