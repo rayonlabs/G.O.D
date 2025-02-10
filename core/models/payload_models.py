@@ -109,6 +109,7 @@ class DatasetColumnsResponse(BaseModel):
 class NewTaskRequest(BaseModel):
     account_id: UUID
     hours_to_complete: int = Field(..., description="The number of hours to complete the task", examples=[1])
+    result_model_name: str | None = Field(None, description="The name to give to a model that is created by this task")
 
 
 class NewTaskRequestText(NewTaskRequest):
@@ -177,6 +178,7 @@ class TaskDetails(BaseModel):
     hours_to_complete: int
     trained_model_repository: str | None
     task_type: TaskType
+    result_model_name: str | None
 
 
 class TextTaskDetails(TaskDetails):

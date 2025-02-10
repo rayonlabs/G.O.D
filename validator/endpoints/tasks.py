@@ -96,6 +96,7 @@ async def create_task_text(
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
         task_type=TaskType.TEXTTASK,
+        result_model_name=request.result_model_name,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -128,6 +129,7 @@ async def create_task_image(
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
         task_type=TaskType.IMAGETASK,
+        result_model_name=request.result_model_name,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -159,6 +161,7 @@ async def create_task_with_fixed_datasets(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
+        result_model_name=request.result_model_name,
     )
 
     # NOTE: feels weird to add the task and then update it immediately
@@ -220,6 +223,7 @@ async def get_task_details_by_account(
                     hours_to_complete=task.hours_to_complete,
                     trained_model_repository=task.trained_model_repository,
                     task_type=task.task_type,
+                    result_model_name=task.result_model_name,
                 )
             )
         elif task.task_type == TaskType.IMAGETASK:
@@ -236,6 +240,7 @@ async def get_task_details_by_account(
                     hours_to_complete=task.hours_to_complete,
                     trained_model_repository=task.trained_model_repository,
                     task_type=task.task_type,
+                    result_model_name=task.result_model_name,
                 )
             )
 
@@ -270,6 +275,7 @@ async def get_task_details(
             hours_to_complete=task.hours_to_complete,
             trained_model_repository=task.trained_model_repository,
             task_type=task.task_type,
+            result_model_name=task.result_model_name,
         )
     else:
         return ImageTaskDetails(
@@ -361,6 +367,7 @@ async def get_completed_organic_tasks(
                     hours_to_complete=task.hours_to_complete,
                     trained_model_repository=task.trained_model_repository,
                     task_type=task.task_type,
+                    result_model_name=task.result_model_name,
                 )
             )
         elif task.task_type == TaskType.IMAGETASK:
@@ -377,6 +384,7 @@ async def get_completed_organic_tasks(
                     hours_to_complete=task.hours_to_complete,
                     trained_model_repository=task.trained_model_repository,
                     task_type=task.task_type,
+                    result_model_name=task.result_model_name,
                 )
             )
         logger.info(task.task_id)
