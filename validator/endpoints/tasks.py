@@ -339,11 +339,19 @@ async def get_network_status(
 
 
 async def get_completed_organic_tasks(
-    hours: int = Query(default=5, description="Number of hours to look back for completed organic tasks", ge=1),
+    hours: int | None = Query(default=None, description="Number of hours to look back for completed organic tasks", ge=1),
+    task_type: TaskType | None = Query(
+        default=None,
+        description=f"Filter by task type: {', '.join([t.value for t in TaskType])}",
+    ),
+    limit: int = Query(default=100, description="Number of tasks per page", ge=1),
+    page: int = Query(default=1, description="Page number", ge=1),
     config: Config = Depends(get_config),
 ) -> list[TextTaskDetails | ImageTaskDetails]:
-    """Get all completed organic tasks from the last N hours"""
-    tasks = await task_sql.get_completed_organic_tasks(config.psql_db, hours)
+    """Get completed organic tasks with optional time filter and task type filter"""
+    tasks = await task_sql.get_completed_organic_tasks(
+        config.psql_db, hours=hours, task_type=task_type, limit=limit, offset=(page - 1) * limit
+    )
 
     task_details = []
     for task in tasks:
@@ -388,7 +396,6 @@ async def get_completed_organic_tasks(
                     result_model_name=task.result_model_name,
                 )
             )
-        logger.info(task.task_id)
 
     return task_details
 
