@@ -46,6 +46,7 @@ base_task_fields = {
     cst.TIMES_DELAYED,
     cst.ASSIGNED_MINERS,
     cst.TASK_TYPE,
+    cst.RESULT_MODEL_NAME,
 }
 
 text_specific_fields = [
@@ -76,8 +77,9 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 {cst.TEST_DATA},
                 {cst.TRAINING_DATA},
                 {cst.CREATED_AT},
-                {cst.TASK_TYPE})
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                {cst.TASK_TYPE},
+                {cst.RESULT_MODEL_NAME})
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 RETURNING *
             """
             task_record = await connection.fetchrow(
@@ -92,6 +94,7 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 task.training_data,
                 task.created_at,
                 task.task_type.value,
+                task.result_model_name,
             )
 
             if isinstance(task, TextRawTask):
