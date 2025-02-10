@@ -643,15 +643,37 @@ async def get_tasks_by_account_id(
         return tasks
 
 
-async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[TextTask | ImageTask]:
-    """Get completed organic tasks from the specified timeframe
+async def get_completed_organic_tasks(
+    psql_db: PSQLDB, hours: int | None = None, task_type: TaskType | None = None, limit: int = 100, offset: int = 0
+) -> List[TextTask | ImageTask]:
+    """Get completed organic tasks with optional filters
 
     Args:
         psql_db: Database connection
-        hours: Number of hours to look back (default: 5)
+        hours: Optional number of hours to look back
+        task_type: Optional task type filter
+        limit: Number of tasks per page
+        offset: Offset for pagination
     """
     async with await psql_db.connection() as connection:
         connection: Connection
+
+        where_clauses = [f"tasks.{cst.STATUS} = $1", f"tasks.{cst.IS_ORGANIC} = true"]
+        params = [TaskStatus.SUCCESS.value]
+        param_count = 1
+
+        if hours is not None:
+            param_count += 1
+            where_clauses.append(f"tasks.{cst.TERMINATION_AT} >= NOW() - ${param_count} * INTERVAL '1 hour'")
+            params.append(hours)
+
+        if task_type is not None:
+            param_count += 1
+            where_clauses.append(f"tasks.{cst.TASK_TYPE} = ${param_count}")
+            params.append(task_type.value)
+
+        where_clause = " AND ".join(where_clauses)
+
         query = f"""
             WITH victorious_repo AS (
                 SELECT
@@ -676,13 +698,13 @@ async def get_completed_organic_tasks(psql_db: PSQLDB, hours: int = 5) -> List[T
             LEFT JOIN victorious_repo
                 ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
                 AND victorious_repo.rn = 1
-            WHERE tasks.{cst.STATUS} = $1
-            AND tasks.{cst.IS_ORGANIC} = true
-            AND tasks.{cst.TERMINATION_AT} >= NOW() - $2 * INTERVAL '1 hour'
+            WHERE {where_clause}
             ORDER BY tasks.{cst.TERMINATION_AT} DESC
+            LIMIT ${param_count + 1} OFFSET ${param_count + 2}
         """
 
-        task_ids = await connection.fetch(query, TaskStatus.SUCCESS.value, hours)
+        params.extend([limit, offset])
+        task_ids = await connection.fetch(query, *params)
         tasks_list = []
         for task_row in task_ids:
             task = await get_task_by_id(task_row[cst.TASK_ID], psql_db)
