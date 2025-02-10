@@ -46,6 +46,7 @@ base_task_fields = {
     cst.TIMES_DELAYED,
     cst.ASSIGNED_MINERS,
     cst.TASK_TYPE,
+    cst.RESULT_MODEL_NAME,
 }
 
 text_specific_fields = [

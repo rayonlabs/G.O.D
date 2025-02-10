@@ -51,6 +51,7 @@ DELETE_TASK_ENDPOINT = "/v1/tasks/delete/{task_id}"
 LEADERBOARD_ENDPOINT = "/v1/leaderboard"
 COMPLETED_ORGANIC_TASKS_ENDPOINT = "/v1/tasks/organic/completed"
 UPDATE_TRAINING_REPO_BACKUP_ENDPOINT = "/v1/tasks/{task_id}/training_repo_backup"
+UPDATE_RESULT_MODEL_NAME_ENDPOINT = "/v1/tasks/{task_id}/result_model_name"
 
 
 async def delete_task(
@@ -407,6 +408,21 @@ async def update_training_repo_backup(
     return Response(status_code=200)
 
 
+async def update_result_model_name(
+    task_id: UUID,
+    result_model_name: str,
+    config: Config = Depends(get_config),
+) -> Response:
+    task = await task_sql.get_task(task_id, config.psql_db)
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found.")
+
+    task.result_model_name = result_model_name
+    await task_sql.update_task(task, config.psql_db)
+    return Response(status_code=200)
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Gradients On Demand"], dependencies=[Depends(get_api_key)])
     router.add_api_route(TASKS_CREATE_ENDPOINT_TEXT, create_task_text, methods=["POST"])
@@ -421,4 +437,5 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_NETWORK_STATUS, get_network_status, methods=["GET"])
     router.add_api_route(COMPLETED_ORGANIC_TASKS_ENDPOINT, get_completed_organic_tasks, methods=["GET"])
     router.add_api_route(UPDATE_TRAINING_REPO_BACKUP_ENDPOINT, update_training_repo_backup, methods=["PUT"])
+    router.add_api_route(UPDATE_RESULT_MODEL_NAME_ENDPOINT, update_result_model_name, methods=["PUT"])
     return router
