@@ -69,7 +69,7 @@ GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
 # we sample datasets with these ranges equally
 DATASET_BINS_TO_SAMPLE = [
-    (0, 80_000_000),
+    (20_000_000, 80_000_000),
     (80_000_000, 250_000_000),
     (250_000_000, 2_000_000_000),
 ]
