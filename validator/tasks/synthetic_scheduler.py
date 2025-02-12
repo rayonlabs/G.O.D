@@ -34,10 +34,10 @@ async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:
             yield model_id
 
 
-async def _get_datasets_for_bin(min_bytes: int, max_bytes: int, keypair: Keypair) -> AsyncGenerator[Dataset, None]:
+async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Get datasets for a specific size bin."""
     while True:
-        params = {"min_parquet_bytes": min_bytes, "max_parquet_bytes": max_bytes}
+        params = {"min_rows": min_rows, "max_rows": max_rows}
         try:
             response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair, params)
             if not isinstance(response, list):
@@ -51,14 +51,14 @@ async def _get_datasets_for_bin(min_bytes: int, max_bytes: int, keypair: Keypair
                 yield dataset
 
         except Exception as e:
-            logger.warning(f"Failed to fetch datasets for bin {min_bytes}-{max_bytes} bytes: {e}")
+            logger.warning(f"Failed to fetch datasets for bin {min_rows}-{max_rows} rows: {e}")
             await asyncio.sleep(5)
 
 
 async def _get_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
-    bin_generators = [_get_datasets_for_bin(min_bytes, max_bytes, keypair) for min_bytes, max_bytes in cst.DATASET_BINS_TO_SAMPLE]
+    bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
 
     while True:
         for generator in bin_generators:
@@ -90,20 +90,15 @@ async def _get_columns_for_dataset(
     return columns
 
 
-def _get_training_hours_from_bytes(bytes: int) -> tuple[int, int]:
+def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
     """Randomly select training hours for a given dataset size in bytes based on range bins."""
     min_hours, max_hours = 0, 0
-    for min_bytes, max_bytes in cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys():
-        if min_bytes <= bytes <= max_bytes:
-            min_hours, max_hours = cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE[(min_bytes, max_bytes)]
+    for min_rows, max_rows in cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.items():
+        if min_rows <= num_rows <= max_rows:
+            min_hours, max_hours = cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE[(min_rows, max_rows)]
             break
     if min_hours == 0 and max_hours == 0:
-        sorted_bins = list(cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys())
-        if bytes > sorted_bins[-1][1]:  # if greater than the largest bin
-            max_hours_range = list(cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.values())[-1]
-            return max_hours_range[1]  # max hours
-        else:
-            raise ValueError(f"No training hours range found for {bytes} bytes")
+        raise ValueError(f"No training hours range found for {num_rows} rows")
     return random.randint(min_hours, max_hours)
 
 
@@ -114,7 +109,7 @@ async def _create_synthetic_task(
 ):
     model_id = await anext(models)
     dataset = await anext(datasets)
-    number_of_hours = _get_training_hours_from_bytes(dataset.num_bytes_parquet_files)
+    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
     columns = await _get_columns_for_dataset(dataset.dataset_id, config.keypair)
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
