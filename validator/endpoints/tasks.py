@@ -344,13 +344,19 @@ async def get_completed_organic_tasks(
         default=None,
         description=f"Filter by task type: {', '.join([t.value for t in TaskType])}",
     ),
+    search_model_name: str | None = Query(default=None, description="Search term to filter models by name"),
     limit: int = Query(default=100, description="Number of tasks per page", ge=1),
     page: int = Query(default=1, description="Page number", ge=1),
     config: Config = Depends(get_config),
 ) -> list[TextTaskDetails | ImageTaskDetails]:
     """Get completed organic tasks with optional time filter and task type filter"""
     tasks = await task_sql.get_completed_organic_tasks(
-        config.psql_db, hours=hours, task_type=task_type, limit=limit, offset=(page - 1) * limit
+        config.psql_db,
+        hours=hours,
+        task_type=task_type,
+        search_model_name=search_model_name,
+        limit=limit,
+        offset=(page - 1) * limit,
     )
 
     task_details = []

@@ -644,7 +644,12 @@ async def get_tasks_by_account_id(
 
 
 async def get_completed_organic_tasks(
-    psql_db: PSQLDB, hours: int | None = None, task_type: TaskType | None = None, limit: int = 100, offset: int = 0
+    psql_db: PSQLDB,
+    hours: int | None = None,
+    task_type: TaskType | None = None,
+    search_model_name: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
 ) -> List[TextTask | ImageTask]:
     """Get completed organic tasks with optional filters
 
@@ -652,6 +657,7 @@ async def get_completed_organic_tasks(
         psql_db: Database connection
         hours: Optional number of hours to look back
         task_type: Optional task type filter
+        search_model_name: Optional search term to filter models by name
         limit: Number of tasks per page
         offset: Offset for pagination
     """
@@ -671,6 +677,11 @@ async def get_completed_organic_tasks(
             param_count += 1
             where_clauses.append(f"tasks.{cst.TASK_TYPE} = ${param_count}")
             params.append(task_type.value)
+
+        if search_model_name is not None:
+            param_count += 1
+            where_clauses.append(f"tasks.result_model_name_lower LIKE LOWER(${param_count})")
+            params.append(f"%{search_model_name}%")
 
         where_clause = " AND ".join(where_clauses)
 
