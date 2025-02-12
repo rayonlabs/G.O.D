@@ -178,7 +178,7 @@ class TaskDetails(BaseModel):
     hours_to_complete: int
     trained_model_repository: str | None
     task_type: TaskType
-    result_model_name: str | None
+    result_model_name: str | None = None
 
 
 class TextTaskDetails(TaskDetails):
