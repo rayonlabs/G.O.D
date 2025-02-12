@@ -46,7 +46,7 @@
         "uid": "P8E80F9AEF21F6940"
       },
       "editorMode": "builder",
-      "expr": "{service_name=~\"validator|validator_cycle\"} |= `$search_in_line` | ctx_task_id =~ `.*$task_id.*` | ctx_miner_hotkey =~ `.*$miner_hotkey.*` | ctx_gpu_ids =~ `.*${gpu_id:+,$gpu_id,}.*` | label_format level=detected_level | line_format `{{.service_name }} - {{__line__}}`",
+      "expr": "{service_name=~\"validator|validator_cycle\"} |= `$search_in_line` | ctx_task_id =~ `.*$task_id.*` | ctx_miner_hotkey =~ `.*$miner_hotkey.*` | ctx_gpu_ids =~ `.*${gpu_id:+,$gpu_id,}.*` | ctx_docker_container_name =~ `$filter_by_container` | label_format level=detected_level | line_format `{{.service_name }} - {{__line__}}`",
       "legendFormat": "",
       "queryType": "range",
       "refId": "A"
@@ -113,6 +113,26 @@
         "query": "",
         "skipUrlSync": false,
         "type": "textbox"
+      },
+      {
+        "hide": 0,
+        "label": "Show Container Logs",
+        "name": "filter_by_container",
+        "options": [
+          {
+            "selected": false,
+            "text": "Only Container Logs",
+            "value": ".+"
+          },
+          {
+            "selected": true,
+            "text": "Only General Logs",
+            "value": "^$"
+          }
+        ],
+        "query": "Only Container Logs : .+,Only General Logs : ^$",
+        "skipUrlSync": false,
+        "type": "custom"
       }
     ]
   },

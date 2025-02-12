@@ -32,3 +32,17 @@ task setup
 ```bash
 task validator
 ```
+
+## Dev vali/miner communication
+
+To test validator and miner communication locally:
+
+1. Register a miner in dev mode in the testnet (requires test TAOs): [Miner Setup Guide](docs/miner_setup.md).
+
+2. Under `miner/endpoints/tuning.py`, comment out the API  `dependencies`.
+
+3. [Optional] add a dependency to only accept requests from your specific dev vali IP address.
+
+4. Start a validator in another terminal in dev mode: [Validator Setup Guide](docs/validator_setup.md).
+
+5. [Optional] Use the `Python Debugger: Validator Cycle` configuration in `.vscode/launch.json` to attach to the validator and debug the connection using your preset breakpoints.

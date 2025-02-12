@@ -1,7 +1,6 @@
 import os
 import re
 from datetime import datetime
-from datetime import timedelta
 
 import numpy as np
 from fiber.chain.models import Node
@@ -23,7 +22,6 @@ from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
 from validator.db.sql.submissions_and_scoring import add_submission
-from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
@@ -54,7 +52,7 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
             "\nReturning 1 regardless as a failsafe, but please look into this"
         )
         return 1
-    return max(1, 2 * np.log(float(hours * model_size_value)))
+    return max(1, 2 * np.sqrt(float(hours * model_size_value)))
 
 
 def calculate_adjusted_task_score(quality_score: float, task_work_score: float) -> float:
@@ -84,6 +82,7 @@ def update_node_aggregation(
 
 def calculate_node_quality_scores(
     node_aggregations: dict[str, NodeAggregationResult],
+    weight_multiplier: float,
 ) -> list[PeriodScore]:
     """Calculate quality scores for each node."""
     assert node_aggregations, "Node aggregations dictionary cannot be empty"
@@ -103,6 +102,7 @@ def calculate_node_quality_scores(
                 quality_score=score,
                 average_score=node_agg.average_raw_score,
                 summed_task_score=node_agg.summed_adjusted_task_scores,
+                weight_multiplier=weight_multiplier,
             )
         )
 
@@ -110,12 +110,12 @@ def calculate_node_quality_scores(
 
 
 def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
-    """Normalise scores and update node emission values. Now < 0 maps to zero"""
+    """Normalise scores using a combination of sigmoid and linear functions."""
+
     assert period_scores, "Period scores list cannot be empty"
     valid_scores = [ps.quality_score for ps in period_scores if ps.quality_score is not None]
     if not valid_scores:
         raise ValueError("No valid quality scores found in period_scores")
-
     max_score = max(valid_scores)
     if max_score <= 0:
         for node_period_score in period_scores:
@@ -126,19 +126,17 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
         if node_period_score.quality_score is None or node_period_score.quality_score <= 0:
             node_period_score.normalised_score = 0.0
         else:
-            node_period_score.normalised_score = (node_period_score.quality_score / max_score) ** cts.REWEIGHTING_EXP
+            normalised_input = node_period_score.quality_score / max_score
+            sigmoid_part = 1 / (1 + np.exp(-cts.SIGMOID_STEEPNESS * (normalised_input - cts.SIGMOID_SHIFT)))
+            sigmoid_score = pow(sigmoid_part, cts.SIGMOID_POWER)
+            linear_score = normalised_input
+            node_period_score.normalised_score = (cts.SIGMOID_WEIGHT * sigmoid_score) + (cts.LINEAR_WEIGHT * linear_score)
 
     return period_scores
 
 
-async def scoring_aggregation_from_date(psql_db: str) -> tuple[list[PeriodScore], list[TaskResults]]:
+async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
-    date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
-    task_results: list[TaskResults] = await get_aggregate_scores_since(date, psql_db)
-    logger.info(f"Got task results {task_results}")
-    if not task_results:
-        logger.info("There were not results to be scored")
-        return []
 
     node_aggregations: dict[str, NodeAggregationResult] = {}
 
@@ -147,9 +145,10 @@ async def scoring_aggregation_from_date(psql_db: str) -> tuple[list[PeriodScore]
         for node_score in task_res.node_scores:
             update_node_aggregation(node_aggregations, node_score, task_work_score)
 
-    final_scores = calculate_node_quality_scores(node_aggregations)
+    final_scores = calculate_node_quality_scores(node_aggregations, weight_multiplier=weight_multiplier)
     final_scores = _normalise_scores(final_scores)
-    return final_scores, task_results
+
+    return final_scores
 
 
 def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
@@ -342,7 +341,10 @@ async def _evaluate_submissions(
     logger.info("Starting synth evaluation")
     synthetic_data_filepath = await download_s3_file(task.synthetic_data)
     synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
-    os.remove(synthetic_data_filepath)
+    try:
+        os.remove(synthetic_data_filepath)
+    except Exception as e:
+        logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
 
     finetuned_repos = []
     for repo in repos_to_evaluate:
@@ -364,7 +366,10 @@ async def _evaluate_submissions(
         test_eval_results = await run_evaluation_docker(
             dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
         )
-        os.remove(test_data_filepath)
+        try:
+            os.remove(test_data_filepath)
+        except Exception as e:
+            logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
 
         for repo in finetuned_repos:
             if isinstance(test_eval_results.get(repo), Exception):
@@ -493,6 +498,43 @@ def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dic
     return task_results
 
 
+def _reject_loss_outliers(miner_results: list[MinerResults], n_std: float = cts.OUTLIER_STD_THRESHOLD) -> list[MinerResults]:
+    """Reject outliers based on weighted loss values that are too high."""
+    weighted_losses = [
+        calculate_weighted_loss(res.test_loss, res.synth_loss)
+        for res in miner_results
+        if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
+    ]
+
+    if not weighted_losses:
+        return miner_results
+
+    losses_array = np.array(weighted_losses)
+    mean = np.mean(losses_array)
+    std = np.std(losses_array)
+
+    upper_bound = mean + (n_std * std)
+
+    logger.info(f"Mean loss: {mean:.4f}, Std: {std:.4f}, Upper bound: {upper_bound:.4f}")
+
+    for res in miner_results:
+        if not res.is_finetune or np.isnan(res.test_loss) or np.isnan(res.synth_loss):
+            continue
+
+        weighted_loss = calculate_weighted_loss(res.test_loss, res.synth_loss)
+        if weighted_loss > upper_bound or np.isnan(weighted_loss) or np.isinf(weighted_loss):
+            logger.info(
+                f"Loss rejected as an outlier for miner {res.hotkey}: "
+                f"weighted_loss={weighted_loss:.4f} "
+                f"(test_loss={res.test_loss:.4f}, synth_loss={res.synth_loss:.4f})"
+            )
+            res.score = 0.0
+            res.is_finetune = False
+            res.score_reason = "Loss rejected as an outlier"
+
+    return miner_results
+
+
 async def process_miners_pool(
     miners: list[Node], task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
 ) -> list[MinerResults]:
@@ -564,7 +606,7 @@ async def process_miners_pool(
                     )
 
         except Exception as e:
-            logger.error(f"Error during batch evaluation: {e}")
+            logger.error(f"Error during batch evaluation: {e}", exc_info=True)
             results.extend(
                 [
                     _create_failed_miner_result(miner.hotkey, reason="Evaluation failed")
@@ -593,23 +635,20 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
     task_results = zero_duplicate_scores(task_results, keep_submission)
 
     logger.info("Calculating final scores...")
+    task_results = _reject_loss_outliers(task_results)
     task_results = add_raw_scores_to_miner_results(task_results)
     task_results = adjust_miner_scores_to_be_relative_to_other_comps(task_results)
     await _update_scores(task, task_results, config.psql_db)
-    # all_scores_zero = all(result.score == 0.0 for result in task_results)
-    # for now we just let them fail, need to come back to decide whether we wanna restart the job
-    all_scores_zero = False
-    if all_scores_zero:
-        task.status = TaskStatus.NODE_TRAINING_FAILURE
+    all_scores_zero = all(result.score == 0.0 for result in task_results)
+    if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS:
+        task.status = TaskStatus.PREEVALUATION
         add_context_tag("status", task.status.value)
-        logger.info(
-            f"All scores are zero for task {task.task_id}, setting status to LOOKING FOR NODES to find new miner since"
-            "we are going to try again."
-        )
+        logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")
     else:
         if cts.DELETE_S3_AFTER_COMPLETE:
             await _clear_up_s3([task.training_data, task.test_data, task.synthetic_data])
         task.status = TaskStatus.SUCCESS
         add_context_tag("status", task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
+    task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
     return task

@@ -47,8 +47,7 @@ GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
 
 
-HOW_MANY_TASKS_ALLOWED_AT_ONCE = 15
-NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 10
+NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 5
 
 
 # data stuff
@@ -58,6 +57,7 @@ GET_SYNTH_DATA = True
 MAX_SYNTH_DATA_POINTS = 100
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 MAX_FILE_SIZE_BYTES = 2147483646  # pyarrow max json load size
+MINIMUM_DATASET_ROWS = 500  # Minimum number of rows required in a dataset
 
 # synth stuff
 NUM_SYNTH_RETRIES = 3
@@ -67,6 +67,23 @@ CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
+
+# we sample datasets with these ranges equally
+DATASET_BINS_TO_SAMPLE = [
+    (20_000_000, 80_000_000),
+    (80_000_000, 250_000_000),
+    (250_000_000, 2_000_000_000),
+]
+
+# parquet file size bins to training hours range
+TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
+    (0, 30_000_000): (1, 1),  # 0-30MB needs 1 hour
+    (30_000_000, 60_000_000): (1, 3),  # 30MB-60MB needs 1-3 hours
+    (60_000_000, 100_000_000): (2, 5),  # 60MB-100MB needs 2-5 hours
+    (100_000_000, 500_000_000): (3, 6),  # 100MB-500MB needs 3-6 hours
+    (500_000_000, 1_000_000_000): (4, 9),  # 500MB-1GB needs 4-9 hours
+    (1_000_000_000, 10_000_000_000): (5, 12),  # 1GB-10GB needs 5-12 hours
+}
 
 SYNTH_MODEL = "chat-llama-3-2-3b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
@@ -86,18 +103,27 @@ MAX_COMPETITION_HOURS = 8
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 # how many times in total do we attempt to delay an organic request looking for miners
 MAX_DELAY_TIMES = 6
+# Maximum number of times we retry a task after node training failure
+MAX_EVAL_ATTEMPTS = 3
 
 
-# scoring stuff
-SOFTMAX_TEMPERATURE = 0.5
+# scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
-TARGET_SCORE_RATIO = 1.3
-MIN_TASK_SCORE = 0.0  # very tiny punishment while miners find their feet
-MAX_TASK_SCORE = 1.6
-TASK_SCORE_THRESHOLD = 0.9
-REWEIGHTING_EXP = 0.5  # how much of a drop off from leader
+TARGET_SCORE_RATIO = 1.5
+MIN_TASK_SCORE = -0.05  # very tiny punishment while miners find their feet
+MAX_TASK_SCORE = 1.8
+TASK_SCORE_THRESHOLD = 0.95
+
+SIGMOID_STEEPNESS = 15  # Higher = sharper transition
+SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
+SIGMOID_POWER = 4  # Higher = more extreme difference between high and low scores
+LINEAR_WEIGHT = 0.25  # Weight for linear component (0-1) - benefits low scores
+SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
+
+REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
 
 SCORING_WINDOW = 7  # number of days over which we score
+OUTLIER_STD_THRESHOLD = 2.0  # number of standard deviations from the mean to reject the outlier scores
 
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
@@ -105,7 +131,11 @@ MAX_CONCURRENT_TASK_PREPS = 3
 MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
-MAX_CONCURRENT_JOBS = 16
+
+# Max jobs
+MAX_CONCURRENT_JOBS = 60
+MAX_CONCURRENT_SYNTHETIC_JOBS = 50
+## This leaves room for MAX_CONCURRENT_JOBS - MAX_CONCURRENT_SYNTHETIC_JOBS at all times
 
 
 LOGPATH = "/root/G.O.D/validator/logs"

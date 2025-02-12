@@ -10,6 +10,11 @@ import yaml
 from axolotl.utils.data import load_tokenized_prepared_datasets
 from axolotl.utils.dict import DictDefault
 from peft import PeftModel
+from requests.exceptions import HTTPError
+from tenacity import retry
+from tenacity import retry_if_exception
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -22,6 +27,7 @@ from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
 from validator.core import constants as cst
 from validator.evaluation.utils import model_is_a_finetune
+from validator.utils.logging import TimeBasedLogger
 from validator.utils.logging import get_logger
 
 
@@ -103,12 +109,20 @@ def _process_evaluation_batches(
     consecutive_nans = 0
     max_consecutive_nans = evaluation_config.get("max_consecutive_nans")
 
+    total_batches = len(eval_dataloader)
+    time_logger = TimeBasedLogger(interval_seconds=10.0)
+
     language_model.eval()
     with torch.no_grad():
         for batch_idx, batch in enumerate(eval_dataloader):
-            logger.info(f"Processing batch {batch_idx + 1}")
             batch_loss = _compute_batch_loss(language_model, batch, device)
-            logger.info(f"Batch {batch_idx + 1} loss: {batch_loss}")
+
+            if time_logger.should_log():
+                progress = (batch_idx + 1) / total_batches * 100
+                logger.info(
+                    f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) "
+                    f"- Current loss: {batch_loss}"
+                )
 
             if torch.isnan(torch.tensor(batch_loss)):
                 consecutive_nans += 1
@@ -213,6 +227,50 @@ def evaluate_finetuned_model(
     return evaluate_language_model_loss(evaluation_config, finetuned_model, tokenizer)
 
 
+def has_status_code_5xx(e):
+    while e is not None:
+        if isinstance(e, HTTPError) and 500 <= e.response.status_code < 600:
+            return True
+        e = e.__cause__
+    return False
+
+
+def retry_on_5xx():
+    return retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2.5, min=30, max=600),
+        retry=retry_if_exception(has_status_code_5xx),
+        reraise=True,
+    )
+
+
+@retry_on_5xx()
+def load_model(model_name_or_path: str) -> AutoModelForCausalLM:
+    try:
+        return AutoModelForCausalLM.from_pretrained(model_name_or_path, token=os.environ.get("HUGGINGFACE_TOKEN"))
+    except Exception as e:
+        logger.error(f"Exception type: {type(e)}, message: {str(e)}")
+        raise  # Re-raise the exception to trigger retry
+
+
+@retry_on_5xx()
+def load_tokenizer(original_model: str) -> AutoTokenizer:
+    try:
+        return AutoTokenizer.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
+    except Exception as e:
+        logger.error(f"Exception type: {type(e)}, message: {str(e)}")
+        raise  # Re-raise the exception to trigger retry
+
+
+@retry_on_5xx()
+def load_finetuned_model(base_model, repo: str) -> PeftModel:
+    try:
+        return PeftModel.from_pretrained(base_model, repo, is_trainable=False)
+    except Exception as e:
+        logger.error(f"Exception type: {type(e)}, message: {str(e)}")
+        raise  # Re-raise the exception to trigger retry
+
+
 def main():
     dataset = os.environ.get("DATASET")
     original_model = os.environ.get("ORIGINAL_MODEL")
@@ -230,8 +288,8 @@ def main():
     except ValueError:
         dataset_type = CustomDatasetType.model_validate_json(dataset_type_str)
 
-    base_model = AutoModelForCausalLM.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
-    tokenizer = AutoTokenizer.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
+    base_model = load_model(original_model)
+    tokenizer = load_tokenizer(original_model)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -242,11 +300,11 @@ def main():
     for repo in lora_repos:
         try:
             try:
-                finetuned_model = PeftModel.from_pretrained(base_model, repo, is_trainable=False)
+                finetuned_model = load_finetuned_model(base_model, repo)
                 is_finetune = True
             except Exception as lora_error:
                 logger.info(f"Loading full model... failed to load as LoRA: {lora_error}")
-                finetuned_model = AutoModelForCausalLM.from_pretrained(repo, token=os.environ.get("HUGGINGFACE_TOKEN"))
+                finetuned_model = load_model(repo)
                 try:
                     is_finetune = model_is_a_finetune(original_model, finetuned_model)
                 except Exception as e:

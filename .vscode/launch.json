@@ -1,0 +1,62 @@
+{
+    "version": "2.0.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Validator Cycle",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.cycle.main",
+            "console": "integratedTerminal",
+            "preLaunchTask": "start-validator-services"
+        },
+        {
+            "name": "Python Debugger: Miner FastAPI",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "miner.server:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "7999",
+                "--env-file",
+                ".1.env",
+                "--reload",
+                "--reload-dir",
+                "miner"
+            ],
+            "jinja": true,
+            "env": {
+                "ENV": "DEV",
+                "ENV_FILE": ".1.env"
+            }
+        },
+        {
+            "name": "Python: Remote Attach",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "/app"
+                }
+            ]
+        },
+        {
+            "name": "Python Debugger: Docker Evaluation",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.evaluation.docker_evaluation",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+}

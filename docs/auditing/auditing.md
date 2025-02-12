@@ -42,6 +42,6 @@ Pesky miners be pesky, so we probably need some 'trusted' miners on rotation, pe
 
 ### FAQs
 
-* **How do I run auditing?**: Auditing can be ran by `python -m auditing.audit`
+* **How do I run auditing?**: Auditing can be ran by following the instructions in [auditing_setup.md](auditing_setup.md)
 * **How do I know it's working?**: Auditing is working if the scores are being calculated correctly and the synthetic jobs are appearing in the scoring API - and your weights are set if you are running a separate validator.
 * **Isn't this weight copying?**: No, it has none of the downsides of weight copying. This is basically CHK with additional measures to ensure fairness.

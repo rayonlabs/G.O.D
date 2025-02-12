@@ -12,6 +12,10 @@ tasks:
     cmds:
       - python -m core.create_config
 
+  auditor-config:
+    cmds:
+      - python -m core.create_config --auditor
+
   miner-config:
     cmds:
       - python -m core.create_config --miner
@@ -60,3 +64,13 @@ tasks:
     cmds:
       - source $HOME/.venv/bin/activate
       - pip install -e .
+
+  auditor:
+    cmds:
+      - pm2 delete auditor || true
+      - pm2 start "python -m auditing.audit" --name auditor
+
+  auditor-autoupdates:
+    cmds:
+      - pm2 delete auditor-autoupdates || true
+      - pm2 start "python utils/run_auditor_autoupdate.py" --name auditor-autoupdates
