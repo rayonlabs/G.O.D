@@ -291,6 +291,7 @@ async def get_task_details(
             hours_to_complete=task.hours_to_complete,
             trained_model_repository=task.trained_model_repository,
             task_type=task.task_type,
+            result_model_name=task.result_model_name,
         )
 
 
