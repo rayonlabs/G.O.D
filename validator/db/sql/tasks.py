@@ -679,9 +679,11 @@ async def get_completed_organic_tasks(
             params.append(task_type.value)
 
         if search_model_name is not None:
-            param_count += 1
-            where_clauses.append(f"tasks.result_model_name_lower LIKE LOWER(${param_count})")
-            params.append(f"%{search_model_name}%")
+            search_terms = search_model_name.lower().split()
+            for term in search_terms:
+                param_count += 1
+                where_clauses.append(f"tasks.result_model_name_lower LIKE ${param_count}")
+                params.append(f"%{term}%")
 
         where_clause = " AND ".join(where_clauses)
 
