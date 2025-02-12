@@ -93,7 +93,7 @@ async def _get_columns_for_dataset(
 def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
     """Randomly select training hours for a given dataset size in bytes based on range bins."""
     min_hours, max_hours = 0, 0
-    for min_rows, max_rows in cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.items():
+    for min_rows, max_rows in cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys():
         if min_rows <= num_rows <= max_rows:
             min_hours, max_hours = cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE[(min_rows, max_rows)]
             break
