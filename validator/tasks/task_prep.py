@@ -137,7 +137,10 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
 
 
 async def prepare_task(
-    dataset_name: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair
+    dataset_name: str,
+    file_format: FileFormat,
+    columns_to_sample: List[str],
+    keypair: Keypair,
 ) -> tuple[str, str, str]:
     logger.info(f"Preparing {dataset_name}")
     dataset_dict = await train_test_split(dataset_name, file_format)

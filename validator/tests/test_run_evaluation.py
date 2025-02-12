@@ -1,27 +1,29 @@
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
+from core.utils import download_s3_file
 from validator.evaluation.docker_evaluation import run_evaluation_docker
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+s3_dataset = "https://gradients.s3.eu-north-1.amazonaws.com/a93ea2cf7f944480_test_data.json"
 
 
-def test():
-    custom_dataset_type = CustomDatasetType(
-        system_prompt="you are helpful",
-        system_format="{system}",
-        field_system="text",
-        field_instruction="instruction",
-        field_input="input",
-        field_output="output",
+async def test_run_evaluation():
+    custom_dataset = CustomDatasetType(
+        field_instruction="raw_text",
+        field_output="clean_text",
     )
 
-    results = run_evaluation_docker(
-        dataset="mhenrichsen/alpaca_2k_test",
-        model="unsloth/Llama-3.2-3B-Instruct",
-        original_model="unsloth/Llama-3.2-3B-Instruct",
-        dataset_type=custom_dataset_type,
+    dataset = await download_s3_file(s3_dataset)
+    logger.info(f"Downloaded dataset to {dataset}")
+
+    result = await run_evaluation_docker(
+        dataset=dataset,
+        models=["samoline/7c929f55-f88d-4c10-9953-16c7dab4efc7"],
+        original_model="facebook/opt-125m",
+        dataset_type=custom_dataset,
         file_format=FileFormat.JSON,
+        gpu_ids=[0],
     )
-    logger.info(f"Evaluation results: {results}")
+    logger.info(f"Evaluation result: {result}")
