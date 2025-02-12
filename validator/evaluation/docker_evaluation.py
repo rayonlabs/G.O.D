@@ -98,6 +98,9 @@ async def run_evaluation_docker(
             f"Starting up container image={cst.VALIDATOR_DOCKER_IMAGE} "
             f"({client.api.inspect_image(cst.VALIDATOR_DOCKER_IMAGE)}) with devices={devices}"
         )
+
+        await asyncio.to_thread(client.images.pull, cst.VALIDATOR_DOCKER_IMAGE)
+
         container: Container = await asyncio.to_thread(
             client.containers.run,
             cst.VALIDATOR_DOCKER_IMAGE,

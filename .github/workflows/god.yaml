@@ -57,6 +57,40 @@ jobs:
         wget https://github.com/amacneil/dbmate/releases/download/v2.12.0/dbmate-linux-amd64 -O ./dbmate
         chmod +x ./dbmate
 
-    - name: Run tests
-      run: |
-        PATH=$(pwd):$PATH pytest -vv -xs tests/
+  gpu-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: Start GPU Instance
+        run: |
+          gcloud compute instances create github-gpu-test-instance \
+            --zone=us-central1-a \
+            --machine-type=n1-standard-4 \
+            --accelerator="type=nvidia-tesla-t4,count=1" \
+            --maintenance-policy=TERMINATE \
+            --preemptible \
+            --boot-disk-size=50GB \
+            --image-family=ubuntu-2004-lts \
+            --image-project=ubuntu-os-cloud
+
+      - name: Run Tests
+        run: |
+          sleep 60  # Adjust based on your startup needs
+          
+          gcloud compute ssh github-gpu-test-instance --zone=us-central1-a --command="
+            docker pull weightswandering/tuning_vali:latest
+          "
+          
+          PATH=$(pwd):$PATH pytest -vv -xs tests/
+
+      - name: Cleanup
+        if: always()
+        run: |
+          gcloud compute instances delete gpu-test-instance \
+            --zone=us-central1-a \
+            --quiet

@@ -89,3 +89,32 @@ def setup_storage(
 
     finally:
         run(f"{container_runtime} stop pytest-god-minio", False)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_tuning(
+    container_runtime,
+    test_config,
+):
+    try:
+        run(
+            f"{container_runtime} run --rm -d --name pytest-god-tuning weightswandering/tuning_vali:latest server /data ",
+        )
+
+        # create an images bucket and allow public, anonymous reads
+        mn = minio.Minio(
+            test_config.s3_compatible_endpoint,
+            test_config.s3_compatible_access_key,
+            test_config.s3_compatible_secret_key,
+            secure=False,
+        )
+        if not mn.bucket_exists(test_config.s3_bucket_name):
+            mn.make_bucket(test_config.s3_bucket_name)
+
+        yield
+
+    finally:
+        run(f"{container_runtime} stop pytest-god-minio", False)
+
+
+tuning_image = "weightswandering/tuning_vali:latest"
