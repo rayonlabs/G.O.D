@@ -73,7 +73,7 @@ DATASET_BINS_TO_SAMPLE = [
     (10_000, 25_000),
     (25_000, 50_000),
     (50_000, 500_000),
-    (500_000, float("inf")),
+    (500_000, 5_000_000),
 ]
 
 # dataset row bins to training hours range
@@ -82,7 +82,7 @@ TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     (10_000, 25_000): (2, 4),  # 10k-25k rows needs 2-4 hours
     (25_000, 50_000): (3, 6),  # 25k-50k rows needs 3-6 hours
     (50_000, 500_000): (4, 8),  # 50k-500k rows needs 4-8 hours
-    (500_000, float("inf")): (5, 12),  # 500k+ rows needs 5-12 hours
+    (500_000, 5_000_000): (5, 12),  # 500k+ rows needs 5-12 hours
 }
 
 SYNTH_MODEL = "chat-llama-3-2-3b"
