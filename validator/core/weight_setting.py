@@ -227,7 +227,7 @@ async def set_weights_periodically(config: Config, just_once: bool = False) -> N
         substrate, last_updated_value = query_substrate(
             substrate, "SubtensorModule", "LastUpdate", [config.netuid], return_value=False
         )
-        updated: int = current_block - last_updated_value[uid].value
+        updated: int = current_block - last_updated_value[uid]
         substrate, weights_set_rate_limit = query_substrate(
             substrate, "SubtensorModule", "WeightsSetRateLimit", [config.netuid], return_value=True
         )
