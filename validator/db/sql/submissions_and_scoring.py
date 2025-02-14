@@ -6,12 +6,16 @@ from typing import List
 from typing import Optional
 from uuid import UUID
 
+from asyncpg import Record
 from asyncpg.connection import Connection
 
 import validator.db.constants as cst
 from core.constants import NETUID
 from core.models.utility_models import TaskStatus
+from validator.core.config import Config
 from validator.core.models import AllNodeStats
+from validator.core.models import AllProcessedDatasetRows
+from validator.core.models import AllUniqueModels
 from validator.core.models import MiniTaskWithScoringOnly
 from validator.core.models import ModelMetrics
 from validator.core.models import NodeStats
@@ -21,6 +25,10 @@ from validator.core.models import TaskNode
 from validator.core.models import TaskResults
 from validator.core.models import WorkloadMetrics
 from validator.db.database import PSQLDB
+from validator.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
@@ -413,3 +421,104 @@ async def get_all_node_stats(hotkey: str, psql_db: PSQLDB) -> AllNodeStats:
     )
 
     return AllNodeStats(daily=daily, three_day=three_day, weekly=weekly, monthly=monthly, all_time=all_time)
+
+
+async def fetch_all_task_data(config: Config) -> List[Record]:
+    """Fetch all necessary task data in a single query."""
+    async with await config.psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            SELECT {cst.MODEL_ID}, {cst.CREATED_AT}
+            FROM {cst.TASKS_TABLE}
+            WHERE {cst.STATUS} = $1
+            ORDER BY {cst.CREATED_AT} DESC
+        """
+        return await connection.fetch(query, TaskStatus.SUCCESS.value)
+
+
+async def get_unique_models_count(
+    psql_db: PSQLDB,
+    interval: str = "all",
+) -> int:
+    """Get count of unique models used in successful tasks over the specified interval.
+
+    Args:
+        psql_db: Database connection
+        interval: Time interval to look back (e.g. '24 hours', '7 days', or 'all')
+
+    Returns:
+        Number of unique models used in the specified timeframe
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+
+        query = f"""
+            SELECT COUNT(DISTINCT {cst.MODEL_ID}) as unique_model_count
+            FROM {cst.TASKS_TABLE}
+            WHERE {cst.STATUS} = $1
+            AND {cst.CREATED_AT} >= CASE
+                WHEN $2 = 'all' THEN '1970-01-01'::TIMESTAMP
+                ELSE NOW() - $2::INTERVAL
+            END
+        """
+        row = await connection.fetchrow(query, TaskStatus.SUCCESS.value, interval)
+
+        return row["unique_model_count"] if row else 0
+
+
+async def get_all_unique_models_count(psql_db: PSQLDB) -> AllUniqueModels:
+    daily, three_day, weekly, monthly, all_time = await asyncio.gather(
+        get_unique_models_count(psql_db, "24 hours"),
+        get_unique_models_count(psql_db, "3 days"),
+        get_unique_models_count(psql_db, "7 days"),
+        get_unique_models_count(psql_db, "30 days"),
+        get_unique_models_count(psql_db, "all"),
+    )
+
+    return AllUniqueModels(
+        daily=daily,
+        three_day=three_day,
+        weekly=weekly,
+        monthly=monthly,
+        all_time=all_time,
+    )
+
+
+async def get_processed_dataset_rows(
+    psql_db: PSQLDB,
+    interval: str = "all",
+) -> int:
+    """Get total number of dataset rows processed across all successful tasks in the specified interval."""
+    async with await psql_db.connection() as connection:
+        connection: Connection
+
+        query = f"""
+            SELECT COALESCE(SUM({cst.TRAINING_DATA_NUM_ROWS}), 0) as total_rows
+            FROM {cst.TASKS_TABLE}
+            WHERE {cst.STATUS} = $1
+            AND {cst.CREATED_AT} >= CASE
+                WHEN $2 = 'all' THEN '1970-01-01'::TIMESTAMP
+                ELSE NOW() - $2::INTERVAL
+            END
+        """
+        row = await connection.fetchrow(query, TaskStatus.SUCCESS.value, interval)
+
+        return row["total_rows"]
+
+
+async def get_all_processed_dataset_rows(psql_db: PSQLDB) -> AllProcessedDatasetRows:
+    daily, three_day, weekly, monthly, all_time = await asyncio.gather(
+        get_processed_dataset_rows(psql_db, "24 hours"),
+        get_processed_dataset_rows(psql_db, "3 days"),
+        get_processed_dataset_rows(psql_db, "7 days"),
+        get_processed_dataset_rows(psql_db, "30 days"),
+        get_processed_dataset_rows(psql_db, "all"),
+    )
+
+    return AllProcessedDatasetRows(
+        daily=daily,
+        three_day=three_day,
+        weekly=weekly,
+        monthly=monthly,
+        all_time=all_time,
+    )

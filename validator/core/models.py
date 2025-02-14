@@ -1,7 +1,4 @@
-import json
 from datetime import datetime
-from pathlib import Path
-from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
@@ -79,9 +76,16 @@ class RawTask(BaseModel):
     format: str | None = None
     no_input_format: str | None = None
     system_format: None = None  # NOTE: Needs updating to be optional once we accept it
+
     test_data: str | None = None
+    test_data_num_rows: int | None = None
+
     synthetic_data: str | None = None
+    synthetic_data_num_rows: int | None = None
+
     training_data: str | None = None
+    training_data_num_rows: int | None = None
+
     assigned_miners: list[int] | None = None
     miner_scores: list[float] | None = None
     training_repo_backup: str | None = None
@@ -219,31 +223,6 @@ class AllNodeStats(BaseModel):
     all_time: NodeStats
 
 
-class DatasetUrls(BaseModel):
-    test_url: str
-    synthetic_url: str | None = None
-    train_url: str
-
-
-class DatasetFiles(BaseModel):
-    prefix: str
-    data: str
-    temp_path: Path | None = None
-
-
-class DatasetJsons(BaseModel):
-    train_data: list[Any]
-    test_data: list[Any]
-    synthetic_data: list[Any] = Field(default_factory=list)
-
-    def to_json_strings(self) -> dict[str, str]:
-        return {
-            "train_data": json.dumps(self.train_data),
-            "test_data": json.dumps(self.test_data),
-            "synthetic_data": json.dumps(self.synthetic_data) if self.synthetic_data else "",
-        }
-
-
 class NetworkStats(BaseModel):
     number_of_jobs_training: int
     number_of_jobs_preevaluation: int
@@ -251,6 +230,41 @@ class NetworkStats(BaseModel):
     number_of_jobs_success: int
     next_training_end: datetime | None
     job_can_be_made: bool = True
+
+
+class AllModelSizes(BaseModel):
+    daily: dict[str, int]
+    three_day: dict[str, int]
+    weekly: dict[str, int]
+    monthly: dict[str, int]
+    all_time: dict[str, int]
+
+
+class AllUniqueModels(BaseModel):
+    daily: int
+    three_day: int
+    weekly: int
+    monthly: int
+    all_time: int
+
+
+class AllProcessedDatasetRows(BaseModel):
+    daily: int
+    three_day: int
+    weekly: int
+    monthly: int
+    all_time: int
+
+
+class Dataset(BaseModel):
+    path: str
+    num_rows: int
+
+
+class PreparedDatasets(BaseModel):
+    training: Dataset
+    synthetic: Dataset
+    testing: Dataset
 
 
 class HotkeyDetails(BaseModel):

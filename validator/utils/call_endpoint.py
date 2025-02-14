@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+from json import JSONDecodeError
 from typing import Any
 from typing import Optional
 
@@ -9,10 +10,10 @@ import httpx
 import netaddr
 import requests
 import urllib3
-from fiber import Keypair
 from fiber.chain import chain_utils
 from fiber.chain.models import Node
 from fiber.validator import client
+from substrateinterface import Keypair
 from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
@@ -20,6 +21,7 @@ from tenacity import wait_exponential
 
 from core.constants import NETUID
 from validator.core.config import Config
+from validator.core.constants import GET_MODEL_METADATA
 from validator.core.constants import GRADIENTS_ENDPOINT
 from validator.core.constants import NINETEEN_API_KEY
 from validator.core.constants import PROMPT_GEN_ENDPOINT
@@ -262,13 +264,32 @@ async def sign_up_cron_job(keypair: Keypair) -> None:
 
 
 @retry_with_backoff
-async def call_content_service(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any] | list[dict[str, Any]]:
+async def call_content_service(
+    endpoint: str,
+    keypair: Keypair,
+    params: dict = None,
+) -> dict[str, Any] | list[dict[str, Any]]:
     """Make a signed request to the content service."""
     headers = _get_headers_for_signed_https_request(keypair)
 
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
         response = await client.get(url=endpoint, headers=headers, params=params)
         if response.status_code != 200:
-            logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")
+            logger.error(f"endpoint={endpoint} params={params} status_code={response.status_code} response.text={response.text}")
             response.raise_for_status()
         return response.json()
+
+
+async def fetch_model_params(
+    model_id: str,
+    keypair: Keypair,
+) -> float:
+    try:
+        model_metadata = await call_content_service.__wrapped__(  # skip the retry decorator
+            endpoint=GET_MODEL_METADATA,
+            keypair=keypair,
+            params={"model_id": model_id},
+        )
+        return float(model_metadata["parameter_count"])
+    except (httpx.HTTPError, KeyError, JSONDecodeError):
+        return 1.0  # we tried...
