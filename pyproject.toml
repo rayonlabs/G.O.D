@@ -47,7 +47,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "asgi-lifespan==2.1.0",
-    "bittensor==8.3.0",
     "freezegun>=1.5.1",
     "ipython==8.28.0",
     "pre-commit==4.0.1",
