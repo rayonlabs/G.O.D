@@ -7,4 +7,5 @@ python -m venv $HOME/.venv
 chown -R $SUDO_USER:$SUDO_USER $HOME/.venv $HOME/.bashrc
 source $HOME/.venv/bin/activate
 pip install -e .
+
 task auditor
