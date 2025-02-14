@@ -68,6 +68,7 @@ tasks:
 
   auditor:
     cmds:
+      - source $HOME/.venv/bin/activate
       - pm2 delete auditor || true
       - pm2 start "python -m auditing.audit" --name auditor
 
