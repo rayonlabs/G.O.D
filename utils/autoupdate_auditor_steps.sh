@@ -1,5 +1,10 @@
 # Steps to take to update the auditor automatically
 # Change each time but take caution
 
-task install
+deactivate || true
+rm -rf $HOME/.venv
+python -m venv $HOME/.venv
+chown -R $SUDO_USER:$SUDO_USER $HOME/.venv $HOME/.bashrc
+source $HOME/.venv/bin/activate
+pip install -e .
 task auditor
