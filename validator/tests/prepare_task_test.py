@@ -10,7 +10,6 @@ logger = get_logger(__name__)
 
 
 async def main():
-    # Test dataset and columns
     dataset_name = "OpenSafetyLab/Salad-Data"
     columns_to_sample = ["augq", "baseq"]
 
