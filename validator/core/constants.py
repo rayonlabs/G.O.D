@@ -69,13 +69,13 @@ GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
-    (5_000, 50_000), # we don't sample these for now as they are too small
+    (10_000, 50_000), # we don't sample these for now as they are too small
     (50_000, 1_500_000),
 ]
 
 # dataset row bins to training hours range
 TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
-    (5_000, 10_000): (2, 5),  # 5k-10k rows needs 1-2 hours
+ #   (5_000, 10_000): (3, 5),  # 5k-10k rows needs 1-2 hours
     (10_000, 25_000): (3, 6),  # 10k-25k rows needs 2-4 hours
     (25_000, 50_000): (4, 7),  # 25k-50k rows needs 3-6 hours
     (50_000, 500_000): (5, 8),  # 50k-500k rows needs 4-8 hours
