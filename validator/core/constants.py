@@ -79,7 +79,7 @@ TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     (10_000, 25_000): (3, 6),  # 10k-25k rows needs 2-4 hours
     (25_000, 50_000): (4, 7),  # 25k-50k rows needs 3-6 hours
     (50_000, 500_000): (5, 8),  # 50k-500k rows needs 4-8 hours
-    (500_000, 5_000_000): (6, 12),  # 500k+ rows needs 5-12 hours
+    (500_000, 5_000_000): (8, 12),  # 500k+ rows needs 5-12 hours
 }
 
 SYNTH_MODEL = "chat-llama-3-2-3b"
