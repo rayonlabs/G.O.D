@@ -1,5 +1,7 @@
 import asyncio
 
+from core.models.utility_models import FileFormat
+from validator.core.config import load_config
 from validator.tasks.task_prep import prepare_task
 from validator.utils.logging import get_logger
 
@@ -8,14 +10,22 @@ logger = get_logger(__name__)
 
 
 async def main():
-    dataset_name = "mhenrichsen/alpaca_2k_test"
-    columns_to_sample = ["input", "output", "instruction", "text"]
-    repo_name = "cwaud/test_ds"
+    dataset_name = "OpenSafetyLab/Salad-Data"
+    columns_to_sample = ["augq", "baseq"]
 
-    test_dataset, synthetic_data = await prepare_task(dataset_name, columns_to_sample, repo_name)
+    config = load_config()
 
-    logger.info(f"Test dataset size: {len(test_dataset)}")
-    logger.info(f"Synthetic data size: {len(synthetic_data)}")
+    try:
+        test_data, synth_data, train_data = await prepare_task(
+            dataset_name=dataset_name, file_format=FileFormat.HF, columns_to_sample=columns_to_sample, keypair=config.keypair
+        )
+
+        logger.info(f"Test data URL: {test_data}")
+        logger.info(f"Synthetic data URL: {synth_data}")
+        logger.info(f"Training data URL: {train_data}")
+
+    except Exception as e:
+        logger.error(f"Error in task preparation: {e}", exc_info=True)
 
 
 if __name__ == "__main__":

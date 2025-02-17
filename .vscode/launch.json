@@ -57,6 +57,17 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
+        },
+        {
+            "name": "Python Debugger: Task Prep Test",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.tests.prepare_task_test",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         }
     ]
 }

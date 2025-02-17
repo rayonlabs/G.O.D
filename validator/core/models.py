@@ -314,3 +314,9 @@ class TextTaskWithHotkeyDetails(TextTask):
 
 class ImageTaskWithHotkeyDetails(ImageTask):
     hotkey_details: list[HotkeyDetails]
+
+
+class Dataset(BaseModel):
+    dataset_id: str
+    num_rows: int
+    num_bytes_parquet_files: int

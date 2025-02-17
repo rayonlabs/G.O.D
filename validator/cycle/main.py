@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 
 
-load_dotenv(".vali.env")
+load_dotenv(".vali.env", override=True)
 
 import asyncio
 

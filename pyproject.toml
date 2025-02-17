@@ -24,13 +24,12 @@ dependencies = [
     "scalar-fastapi==1.0.3",
     "fastapi>=0.110.3,<0.113.0",
     "uvicorn>=0.30.5,<0.32.0",
-    "fiber @ git+https://github.com/rayonlabs/fiber.git@2.1.0",
+    "fiber @ git+https://github.com/rayonlabs/fiber.git@2.2.2",
     "asyncpg==0.29.0",
     "httpx==0.27.0",
     "loguru==0.7.2",
     "python-dotenv==1.0.1",
     "redis==5.0.8",
-    "bittensor==8.3.0",
     "scipy>=1.10.0",
     "numpy>=2.0.0",
     "datasets>=2.16.0,<3.0.0",
@@ -49,7 +48,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "asgi-lifespan==2.1.0",
-    "bittensor==8.3.0",
     "freezegun>=1.5.1",
     "ipython==8.28.0",
     "pre-commit==4.0.1",

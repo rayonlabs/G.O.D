@@ -221,6 +221,9 @@ async def prepare_text_task(
     train_dataset = dataset_dict["train"]
     test_dataset = dataset_dict["test"]
 
+    if any(col not in train_dataset.column_names for col in columns_to_sample):
+        raise ValueError(f"Column {columns_to_sample} not found in train dataset")
+
     synthetic_data = []
     try:
         if cst.GET_SYNTH_DATA:

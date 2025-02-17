@@ -49,6 +49,7 @@ tasks:
 
   validator:
     cmds:
+      - source $HOME/.venv/bin/activate
       - ./utils/setup_grafana.sh
       - docker compose --env-file .vali.env -f docker-compose.yml up -d --build --remove-orphans
       - docker compose rm -f -v grafana
@@ -67,6 +68,7 @@ tasks:
 
   auditor:
     cmds:
+      - source $HOME/.venv/bin/activate
       - pm2 delete auditor || true
       - pm2 start "python -m auditing.audit" --name auditor
 

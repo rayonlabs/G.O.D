@@ -55,7 +55,7 @@ NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 5
 TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
 GET_SYNTH_DATA = True
-MAX_SYNTH_DATA_POINTS = 100
+MAX_SYNTH_DATA_POINTS = 500
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
@@ -73,6 +73,21 @@ _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
 
+# we sample datasets with these num_rows ranges equally
+DATASET_BINS_TO_SAMPLE = [
+    (10_000, 50_000),  # we don't sample these for now as they are too small
+    (50_000, 1_500_000),
+]
+
+# dataset row bins to training hours range
+TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
+    #   (5_000, 10_000): (3, 5),  # 5k-10k rows needs 1-2 hours
+    (10_000, 25_000): (3, 6),  # 10k-25k rows needs 2-4 hours
+    (25_000, 50_000): (4, 7),  # 25k-50k rows needs 3-6 hours
+    (50_000, 500_000): (5, 8),  # 50k-500k rows needs 4-8 hours
+    (500_000, 5_000_000): (8, 12),  # 500k+ rows needs 5-12 hours
+}
+
 SYNTH_MODEL = "chat-llama-3-2-3b"
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
 IMAGE_GEN_ENDPOINT = "https://api.nineteen.ai/v1/text-to-image"
@@ -86,10 +101,10 @@ OUTPUT_REFORMULATION_PROBABILITY = 0.5
 MINIMUM_MINER_POOL = 1
 
 
-MIN_IDEAL_NUM_MINERS_IN_POOL = 9
-MAX_IDEAL_NUM_MINERS_IN_POOL = 18
+MIN_IDEAL_NUM_MINERS_IN_POOL = 10
+MAX_IDEAL_NUM_MINERS_IN_POOL = 20
 MIN_TEXT_COMPETITION_HOURS = 1
-MAX_TEXT_COMPETITION_HOURS = 8
+MAX_TEXT_COMPETITION_HOURS = 12
 MIN_IMAGE_COMPETITION_HOURS = 1
 MAX_IMAGE_COMPETITION_HOURS = 2
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
@@ -141,7 +156,7 @@ DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.7
 
 # Max jobs
 MAX_CONCURRENT_JOBS = 60
-MAX_CONCURRENT_SYNTHETIC_JOBS = 50
+MAX_CONCURRENT_SYNTHETIC_JOBS = 15
 ## This leaves room for MAX_CONCURRENT_JOBS - MAX_CONCURRENT_SYNTHETIC_JOBS at all times
 
 
