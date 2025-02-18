@@ -10,6 +10,7 @@ from datetime import timezone
 
 from dotenv import load_dotenv
 
+from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 
@@ -55,15 +56,52 @@ async def get_period_scores_from_task_results(task_results: list[TaskResults]) -
     three_days_ago = datetime.now(timezone.utc) - timedelta(days=3)
     one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
 
-    seven_day_task_results = [i for i in task_results if i.task.created_at > seven_days_ago]
-    three_day_task_results = [i for i in task_results if i.task.created_at > three_days_ago]
-    one_day_task_results = [i for i in task_results if i.task.created_at > one_day_ago]
+    seven_day_text_tasks = [
+        i for i in task_results if i.task.created_at > seven_days_ago and i.task.task_type == TaskType.TEXTTASK
+    ]
+    seven_day_image_tasks = [
+        i for i in task_results if i.task.created_at > seven_days_ago and i.task.task_type == TaskType.IMAGETASK
+    ]
 
-    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.25)
-    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.4)
-    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.35)
+    three_day_text_tasks = [
+        i for i in task_results if i.task.created_at > three_days_ago and i.task.task_type == TaskType.TEXTTASK
+    ]
+    three_day_image_tasks = [
+        i for i in task_results if i.task.created_at > three_days_ago and i.task.task_type == TaskType.IMAGETASK
+    ]
 
-    all_period_scores = seven_day_scores + three_day_scores + one_day_scores
+    one_day_text_tasks = [i for i in task_results if i.task.created_at > one_day_ago and i.task.task_type == TaskType.TEXTTASK]
+    one_day_image_tasks = [i for i in task_results if i.task.created_at > one_day_ago and i.task.task_type == TaskType.IMAGETASK]
+
+    seven_day_text_scores = await get_period_scores_from_results(
+        seven_day_text_tasks, weight_multiplier=cts.SEVEN_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    )
+    seven_day_image_scores = await get_period_scores_from_results(
+        seven_day_image_tasks, weight_multiplier=cts.SEVEN_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
+    )
+
+    three_day_text_scores = await get_period_scores_from_results(
+        three_day_text_tasks, weight_multiplier=cts.THREE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    )
+    three_day_image_scores = await get_period_scores_from_results(
+        three_day_image_tasks, weight_multiplier=cts.THREE_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
+    )
+
+    one_day_text_scores = await get_period_scores_from_results(
+        one_day_text_tasks, weight_multiplier=cts.ONE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    )
+    one_day_image_scores = await get_period_scores_from_results(
+        one_day_image_tasks, weight_multiplier=cts.ONE_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
+    )
+
+    all_period_scores = (
+        seven_day_text_scores
+        + three_day_text_scores
+        + one_day_text_scores
+        + seven_day_image_scores
+        + three_day_image_scores
+        + one_day_image_scores
+    )
 
     return all_period_scores
 
