@@ -113,7 +113,11 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
             if i > 0 and i % 5 == 0:
                 logger.info(f"We have made {i} offers so far for task {task.task_id}")
 
-            offer_response = await _make_offer(node, task_request, config)
+            try:
+                offer_response = await _make_offer(node, task_request, config)
+            except Exception as e:
+                logger.error(f"Error while trying to offer node {node.node_id}: {str(e)}")
+                continue
 
             # Store offer response
             await tasks_sql.store_offer_response(task.task_id, node.hotkey, offer_response.model_dump_json(), config.psql_db)
