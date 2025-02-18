@@ -80,32 +80,28 @@ def get_default_dataset_config(dataset_name: str) -> str | None:
 
 def adjust_image_size(image: Image.Image) -> Image.Image:
     width, height = image.size
-    new_width = (width // 8) * 8
-    new_height = (height // 8) * 8
-
-    if width % 8 != 0 or height % 8 != 0:
-        aspect_ratio = width / height
-        if width > height:
-            new_width = (width // 8) * 8
-            new_height = int(new_width / aspect_ratio)
-        else:
-            new_height = (height // 8) * 8
-            new_width = int(new_height * aspect_ratio)
-        new_width = (new_width // 8) * 8
-        new_height = (new_height // 8) * 8
-        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
+    
+    if width > height:
+        new_width = 1024
+        new_height = int((height / width) * 1024)
+    else:
+        new_height = 1024
+        new_width = int((width / height) * 1024)
+    
+    image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
+    new_width = (new_width // 8) * 8
+    new_height = (new_height // 8) * 8
+    
     width, height = image.size
-    crop_width = (width // 8) * 8
-    crop_height = (height // 8) * 8
-
-    if width != crop_width or height != crop_height:
-        left = (width - crop_width) // 2
-        top = (height - crop_height) // 2
-        right = left + crop_width
-        bottom = top + crop_height
-        image = image.crop((left, top, right, bottom))
-
+    crop_width = min(width, new_width)
+    crop_height = min(height, new_height)
+    left = (width - crop_width) // 2
+    top = (height - crop_height) // 2
+    right = left + crop_width
+    bottom = top + crop_height
+    image = image.crop((left, top, right, bottom))
+    
     return image
 
 

@@ -146,12 +146,12 @@ LORA_WORKFLOW_PATH_DIFFUSERS = "validator/evaluation/comfy_workflows/lora_diffus
 CHECKPOINTS_SAVE_PATH = "validator/evaluation/ComfyUI/models/checkpoints"
 DIFFUSERS_PATH = "validator/evaluation/ComfyUI/models/diffusers"
 LORAS_SAVE_PATH = "validator/evaluation/ComfyUI/models/loras"
-DEFAULT_STEPS = 10
-DEFAULT_CFG = 4
+DEFAULT_STEPS = 20
+DEFAULT_CFG = 8
 DEFAULT_DENOISE = 0.9
 DIFFUSION_HF_DEFAULT_FOLDER = "checkpoint"
 DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
-DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.7
+DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.5
 
 
 # Max jobs
