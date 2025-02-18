@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
+from typing import AsyncGenerator
 from typing import List
 
 from fiber import Keypair
@@ -107,8 +108,6 @@ IMAGE_STYLES = [
     "Fantasy Realism",
 ]
 
-IMAGE_MODEL_TO_FINETUNE = "stabilityai/stable-diffusion-xl-base-1.0"
-
 
 def create_diffusion_messages(style: str, num_prompts: int) -> List[Message]:
     system_content = """You are an expert in creating diverse and descriptive prompts for image generation models.
@@ -196,10 +195,12 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
         raise ValueError("Failed to generate image")
 
 
-async def create_synthetic_image_task(config: Config) -> RawTask:
+async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str, None]) -> RawTask:
+    """Create a synthetic image task with random model and style."""
     number_of_hours = random.randint(cst.MIN_IMAGE_COMPETITION_HOURS, cst.MAX_IMAGE_COMPETITION_HOURS)
     style = random.choice(IMAGE_STYLES)
     num_prompts = random.randint(cst.MIN_IMAGE_SYNTH_PAIRS, cst.MAX_IMAGE_SYNTH_PAIRS)
+    model_id = await anext(models)
 
     try:
         prompts = await generate_diffusion_prompts(style, config.keypair, num_prompts)
@@ -227,7 +228,7 @@ async def create_synthetic_image_task(config: Config) -> RawTask:
         image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
 
     task = ImageRawTask(
-        model_id=IMAGE_MODEL_TO_FINETUNE,
+        model_id=model_id,
         ds=style.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
         image_text_pairs=image_text_pairs,
         status=TaskStatus.PENDING,

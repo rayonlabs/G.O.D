@@ -24,7 +24,7 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:
+async def _get_text_models(keypair: Keypair) -> AsyncGenerator[str, None]:
     while True:
         response = await call_content_service(cst.GET_RANDOM_MODELS_ENDPOINT, keypair)
         if not isinstance(response, list):
@@ -34,6 +34,17 @@ async def _get_models(keypair: Keypair) -> AsyncGenerator[str, None]:
         random.shuffle(model_ids)
         for model_id in model_ids:
             yield model_id
+
+
+async def _get_image_models(keypair: Keypair) -> AsyncGenerator[str, None]:
+    while True:
+        response = await call_content_service(cst.GET_IMAGE_MODELS_ENDPOINT, keypair)
+        if not isinstance(response, dict) or "models" not in response:
+            raise TypeError(f"Expected a dict with 'models' key from {cst.GET_IMAGE_MODELS_ENDPOINT}")
+        models: list[str] = response["models"]
+        random.shuffle(models)
+        for model in models:
+            yield model
 
 
 async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair) -> AsyncGenerator[Dataset, None]:
@@ -57,7 +68,7 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair) 
             await asyncio.sleep(5)
 
 
-async def _get_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
+async def _get_text_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
     bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
@@ -141,6 +152,7 @@ async def _add_new_task_to_network_if_not_enough(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[Dataset, None],
+    image_models: AsyncGenerator[str, None],
 ):
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
     current_preeval_tasks = await get_tasks_with_status(TaskStatus.PREEVALUATION, config.psql_db)
@@ -161,26 +173,27 @@ async def _add_new_task_to_network_if_not_enough(
         if random.random() < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT:
             await create_synthetic_text_task(config, models, datasets)
         else:
-            await create_synthetic_image_task(config)
+            await create_synthetic_image_task(config, image_models)
 
 
 async def schedule_synthetics_periodically(config: Config):
     logger.info("Starting the synthetic schedule loop...")
-    datasets = _get_datasets(config.keypair)
-    models = _get_models(config.keypair)
+    datasets = _get_text_datasets(config.keypair)
+    models = _get_text_models(config.keypair)
+
+    image_models = _get_image_models(config.keypair)
 
     current_try = 0
     while True:
         try:
             logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
-            await _add_new_task_to_network_if_not_enough(config, models, datasets)
+            await _add_new_task_to_network_if_not_enough(config, models, datasets, image_models)
             current_try = 0
             await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
         except Exception as e:
             if current_try < cst.NUM_SYNTH_RETRIES - 1:
                 logger.info(
                     f"Synthetic task creation try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} failed, retrying. Error: {e}",
-                    exc_info=True,
                 )
                 current_try += 1
             else:
