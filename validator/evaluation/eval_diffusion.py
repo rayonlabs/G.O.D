@@ -99,9 +99,16 @@ def download_base_model(repo_id: str, safetensors_filename: str | None = None) -
 
 
 def download_lora(repo_id: str) -> str:
-    lora_filename = find_latest_lora_submission_name(repo_id)
-    local_path = download_from_huggingface(repo_id, lora_filename, cst.LORAS_SAVE_PATH)
-    return local_path
+    lora_save_name = repo_id.split("/")[-1]
+    if not os.path.exists(f"{cst.LORAS_SAVE_PATH}/{lora_save_name}.safetensors"):
+        lora_filename = find_latest_lora_submission_name(repo_id)
+        local_path = download_from_huggingface(repo_id, lora_filename, cst.LORAS_SAVE_PATH)
+        unique_path = f"{cst.LORAS_SAVE_PATH}/{lora_save_name}.safetensors"
+        os.rename(local_path, unique_path)
+        logger.info(f"Downloaded {unique_path}")
+        return unique_path
+    else:
+        return f"{cst.LORAS_SAVE_PATH}/{lora_save_name}.safetensors"
 
 
 def calculate_l2_loss(test_image: Image.Image, generated_image: Image.Image) -> float:
