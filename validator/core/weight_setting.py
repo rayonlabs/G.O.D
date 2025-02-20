@@ -10,6 +10,7 @@ from datetime import timezone
 
 from dotenv import load_dotenv
 
+from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 
@@ -37,7 +38,7 @@ from validator.evaluation.scoring import get_period_scores_from_results
 from validator.utils.logging import get_logger
 from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import try_db_connections
-from validator.utils.util import upload_json_to_minio
+from validator.utils.util import upload_file_to_minio
 
 
 logger = get_logger(__name__)
@@ -55,15 +56,52 @@ async def get_period_scores_from_task_results(task_results: list[TaskResults]) -
     three_days_ago = datetime.now(timezone.utc) - timedelta(days=3)
     one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
 
-    seven_day_task_results = [i for i in task_results if i.task.created_at > seven_days_ago]
-    three_day_task_results = [i for i in task_results if i.task.created_at > three_days_ago]
-    one_day_task_results = [i for i in task_results if i.task.created_at > one_day_ago]
+    seven_day_text_tasks = [
+        i for i in task_results if i.task.created_at > seven_days_ago and i.task.task_type == TaskType.TEXTTASK
+    ]
+    seven_day_image_tasks = [
+        i for i in task_results if i.task.created_at > seven_days_ago and i.task.task_type == TaskType.IMAGETASK
+    ]
 
-    seven_day_scores = await get_period_scores_from_results(seven_day_task_results, weight_multiplier=0.25)
-    three_day_scores = await get_period_scores_from_results(three_day_task_results, weight_multiplier=0.4)
-    one_day_scores = await get_period_scores_from_results(one_day_task_results, weight_multiplier=0.35)
+    three_day_text_tasks = [
+        i for i in task_results if i.task.created_at > three_days_ago and i.task.task_type == TaskType.TEXTTASK
+    ]
+    three_day_image_tasks = [
+        i for i in task_results if i.task.created_at > three_days_ago and i.task.task_type == TaskType.IMAGETASK
+    ]
 
-    all_period_scores = seven_day_scores + three_day_scores + one_day_scores
+    one_day_text_tasks = [i for i in task_results if i.task.created_at > one_day_ago and i.task.task_type == TaskType.TEXTTASK]
+    one_day_image_tasks = [i for i in task_results if i.task.created_at > one_day_ago and i.task.task_type == TaskType.IMAGETASK]
+
+    seven_day_text_scores = await get_period_scores_from_results(
+        seven_day_text_tasks, weight_multiplier=cts.SEVEN_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    )
+    seven_day_image_scores = await get_period_scores_from_results(
+        seven_day_image_tasks, weight_multiplier=cts.SEVEN_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
+    )
+
+    three_day_text_scores = await get_period_scores_from_results(
+        three_day_text_tasks, weight_multiplier=cts.THREE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    )
+    three_day_image_scores = await get_period_scores_from_results(
+        three_day_image_tasks, weight_multiplier=cts.THREE_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
+    )
+
+    one_day_text_scores = await get_period_scores_from_results(
+        one_day_text_tasks, weight_multiplier=cts.ONE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    )
+    one_day_image_scores = await get_period_scores_from_results(
+        one_day_image_tasks, weight_multiplier=cts.ONE_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
+    )
+
+    all_period_scores = (
+        seven_day_text_scores
+        + three_day_text_scores
+        + one_day_text_scores
+        + seven_day_image_scores
+        + three_day_image_scores
+        + one_day_image_scores
+    )
 
     return all_period_scores
 
@@ -100,7 +138,7 @@ async def _upload_results_to_s3(config: Config, task_results: list[TaskResults])
 
     temp_file, _ = await save_json_to_temp_file(scores_json, "latest_scores", dump_json=False)
     datetime_of_upload = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    presigned_url = await upload_json_to_minio(temp_file, BUCKET_NAME, f"latest_scores_{datetime_of_upload}.json")
+    presigned_url = await upload_file_to_minio(temp_file, BUCKET_NAME, f"latest_scores_{datetime_of_upload}.json")
     os.remove(temp_file)
     await store_latest_scores_url(presigned_url, config)
     return presigned_url
@@ -174,7 +212,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
     logger.info("Weights calculated, about to set...")
 
     success = await set_weights(config, all_node_ids, all_node_weights, validator_node_id)
-    if success:
+    if success and task_results:
         url = await _upload_results_to_s3(config, task_results)
         logger.info(f"Uploaded the scores to s3 for auditing - url: {url}")
 

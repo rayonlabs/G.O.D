@@ -379,7 +379,7 @@ async def get_node_model_metrics(hotkey: str, interval: str, psql_db: PSQLDB) ->
                 LIMIT 1
             ), 'none') as modal_model,
             COUNT(DISTINCT CASE WHEN tn.{cst.QUALITY_SCORE} IS NOT NULL THEN t.{cst.MODEL_ID} END) as unique_models,
-            COUNT(DISTINCT CASE WHEN tn.{cst.QUALITY_SCORE} IS NOT NULL THEN t.{cst.DS_ID} END) as unique_datasets
+            COUNT(DISTINCT CASE WHEN tn.{cst.QUALITY_SCORE} IS NOT NULL THEN t.{cst.DS} END) as unique_datasets
         FROM {cst.TASK_NODES_TABLE} tn
         JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
         WHERE tn.{cst.HOTKEY} = $1

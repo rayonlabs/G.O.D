@@ -1,42 +1,58 @@
 from datetime import datetime
 from uuid import UUID
+from uuid import uuid4
 
 from fiber.logging_utils import get_logger
 from pydantic import BaseModel
 from pydantic import Field
 
+from core import constants as cst
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import ImageTextPair
+from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from validator.core.models import AllNodeStats
 
 
 logger = get_logger(__name__)
 
 
-class MinerTaskRequest(BaseModel):
+class MinerTaskOffer(BaseModel):
     ds_size: int
     model: str
     hours_to_complete: int
     task_id: str
+    task_type: TaskType
 
 
 class TrainRequest(BaseModel):
+    model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
+    task_id: str
+    hours_to_complete: int
+    expected_repo_name: str | None = None
+
+
+class TrainRequestText(TrainRequest):
     dataset: str = Field(
         ...,
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
     dataset_type: DatasetType | CustomDatasetType
     file_format: FileFormat
-    task_id: str
-    hours_to_complete: int
-    expected_repo_name: str | None = None
 
+
+class TrainRequestImage(TrainRequest):
+    dataset_zip: str = Field(
+        ...,
+        description="Link to dataset zip file",
+        min_length=1,
+    )
 
 
 class TrainResponse(BaseModel):
@@ -44,7 +60,36 @@ class TrainResponse(BaseModel):
     task_id: UUID
 
 
-class EvaluationResult(BaseModel):
+class JobStatusPayload(BaseModel):
+    task_id: UUID
+
+
+class JobStatusResponse(BaseModel):
+    task_id: UUID
+    status: JobStatus
+
+
+class EvaluationRequest(TrainRequest):
+    original_model: str
+
+
+class EvaluationRequestDiffusion(BaseModel):
+    test_split_url: str
+    original_model_repo: str
+    models: list[str]
+
+
+class DiffusionLosses(BaseModel):
+    text_guided_losses: list[float]
+    no_text_losses: list[float]
+
+
+class EvaluationResultImage(BaseModel):
+    eval_loss: DiffusionLosses | float
+    is_finetune: bool | None = None
+
+
+class EvaluationResultText(BaseModel):
     is_finetune: bool
     eval_loss: float
     perplexity: float
@@ -63,7 +108,11 @@ class DatasetColumnsResponse(BaseModel):
 
 class NewTaskRequest(BaseModel):
     account_id: UUID
+    hours_to_complete: int = Field(..., description="The number of hours to complete the task", examples=[1])
+    result_model_name: str | None = Field(None, description="The name to give to a model that is created by this task")
 
+
+class NewTaskRequestText(NewTaskRequest):
     field_instruction: str = Field(..., description="The column name for the instruction", examples=["instruction"])
     field_input: str | None = Field(None, description="The column name for the input", examples=["input"])
     field_output: str | None = Field(None, description="The column name for the output", examples=["output"])
@@ -74,14 +123,24 @@ class NewTaskRequest(BaseModel):
         FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
     )
     model_repo: str = Field(..., description="The repository for the model", examples=["Qwen/Qwen2.5-Coder-32B-Instruct"])
-
-    hours_to_complete: int = Field(..., description="The number of hours to complete the task", examples=[1])
-
     format: None = None
     no_input_format: None = None
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
+
+
+class NewTaskRequestImage(NewTaskRequest):
+    model_repo: str = Field(..., description="The model repository to use")
+    image_text_pairs: list[ImageTextPair] = Field(
+        ...,
+        description="List of image and text file pairs",
+        min_length=cst.MIN_IMAGE_TEXT_PAIRS,
+        max_length=cst.MAX_IMAGE_TEXT_PAIRS,
+    )
+    ds_id: str = Field(
+        default_factory=lambda: str(uuid4()), description="A ds name. The actual dataset is provided via the image_text_pairs"
+    )
 
 
 class NewTaskWithFixedDatasetsRequest(NewTaskRequest):
@@ -113,6 +172,17 @@ class TaskDetails(BaseModel):
     id: UUID
     account_id: UUID
     status: TaskStatus
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    hours_to_complete: int
+    trained_model_repository: str | None
+    task_type: TaskType
+    result_model_name: str | None = None
+
+
+class TextTaskDetails(TaskDetails):
+    task_type: TaskType = TaskType.TEXTTASK
     base_model_repository: str
     ds_repo: str
 
@@ -130,14 +200,20 @@ class TaskDetails(BaseModel):
     )
     system_format: None = Field(None, description="How to format the `system (prompt)`", examples=["{system}"])
 
-    started_at: datetime | None
-    finished_at: datetime | None
-    created_at: datetime
-    hours_to_complete: int
-    trained_model_repository: str | None = Field(None, description="The winning model repository or backup repository if set")
-
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
+
+
+class ImageTaskDetails(TaskDetails):
+    task_type: TaskType = TaskType.IMAGETASK
+    image_text_pairs: list[ImageTextPair]
+    base_model_repository: str = Field(..., description="The repository for the model")
+
+
+class TaskListResponse(BaseModel):
+    success: bool
+    task_id: UUID
+    status: TaskStatus
 
 
 class LeaderboardRow(BaseModel):

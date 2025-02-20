@@ -7,25 +7,32 @@ from fiber.chain.models import Node
 from scipy.stats import gmean
 
 import validator.core.constants as cts
-from core.models.payload_models import EvaluationResult
+from core.models.payload_models import DiffusionLosses
+from core.models.payload_models import EvaluationResultImage
+from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from validator.core.config import Config
+from validator.core.models import ImageRawTask
 from validator.core.models import MinerResults
+from validator.core.models import MinerResultsImage
+from validator.core.models import MinerResultsText
 from validator.core.models import MiniTaskWithScoringOnly
 from validator.core.models import NodeAggregationResult
 from validator.core.models import PeriodScore
-from validator.core.models import RawTask
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
+from validator.core.models import TextRawTask
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
-from validator.evaluation.docker_evaluation import run_evaluation_docker
+from validator.evaluation.docker_evaluation import run_evaluation_docker_image
+from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
 from validator.utils.logging import LogContext
@@ -37,7 +44,7 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
+def get_task_work_score(task: MiniTaskWithScoringOnly | TextRawTask | ImageRawTask) -> float:
     """Calculate work score for a task based on hours and model size."""
     assert task.hours_to_complete > 0, "Hours to complete must be positive"
     assert task.model_id, "Model ID must be present"
@@ -137,6 +144,8 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
 
 async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
+    if not task_results:
+        return []
 
     node_aggregations: dict[str, NodeAggregationResult] = {}
 
@@ -166,7 +175,7 @@ def calculate_scaled_score(weighted_loss: float, scale_factor: float) -> float:
     return float(np.exp(-weighted_loss * scale_factor))
 
 
-def compute_adaptive_scale_factor(miner_results: list[MinerResults]) -> float:
+def compute_adaptive_scale_factor(miner_results: list[MinerResultsImage | MinerResultsText]) -> float:
     """Compute scale factor based only on finetuned submissions."""
     finetuned_results = [
         res for res in miner_results if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
@@ -190,7 +199,9 @@ def compute_adaptive_scale_factor(miner_results: list[MinerResults]) -> float:
     return scale
 
 
-def adjust_miner_scores_to_be_relative_to_other_comps(miner_results: list[MinerResults]) -> list[MinerResults]:
+def adjust_miner_scores_to_be_relative_to_other_comps(
+    miner_results: list[MinerResultsImage | MinerResultsText],
+) -> list[MinerResultsImage | MinerResultsText]:
     """Adjusts scores to have geometric mean of 1.0 for finetuned submissions only."""
     valid_scores = [
         res.score
@@ -226,7 +237,9 @@ def adjust_miner_scores_to_be_relative_to_other_comps(miner_results: list[MinerR
     return miner_results
 
 
-def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[MinerResults]:
+def add_raw_scores_to_miner_results(
+    miner_results: list[MinerResultsText | MinerResultsImage],
+) -> list[MinerResultsText | MinerResultsImage]:
     """Calculate scores using only finetuned submissions."""
     logger.info("Beginning score calculation...")
 
@@ -277,7 +290,7 @@ def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[M
     return miner_results
 
 
-def _get_dataset_type(task: RawTask) -> CustomDatasetType:
+def _get_dataset_type(task: TextRawTask) -> CustomDatasetType:
     return CustomDatasetType(
         field_system=task.field_system,
         field_instruction=task.field_instruction,
@@ -288,9 +301,38 @@ def _get_dataset_type(task: RawTask) -> CustomDatasetType:
     )
 
 
-def _create_failed_miner_result(hotkey: str, reason: str) -> MinerResults:
+def _create_failed_miner_result(hotkey: str, reason: str, task_type: TaskType) -> MinerResults:
     """Create a failed miner result with zero score."""
-    return MinerResults(hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason)
+    if task_type == TaskType.TEXTTASK:
+        return MinerResultsText(
+            hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason
+        )
+    else:
+        return MinerResultsImage(
+            hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason
+        )
+
+
+def _calculate_weighted_loss_for_image_eval(eval_result: EvaluationResultImage) -> float:
+    if isinstance(eval_result.eval_loss, DiffusionLosses):
+        text_guided_avg = (
+            sum(eval_result.eval_loss.text_guided_losses) / len(eval_result.eval_loss.text_guided_losses)
+            if eval_result.eval_loss.text_guided_losses
+            else 0
+        )
+
+        no_text_avg = (
+            sum(eval_result.eval_loss.no_text_losses) / len(eval_result.eval_loss.no_text_losses)
+            if eval_result.eval_loss.no_text_losses
+            else 0
+        )
+
+        weighted_loss = (
+            cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT * text_guided_avg + (1 - cts.DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT) * no_text_avg
+        )
+        return weighted_loss
+
+    return None
 
 
 async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str | None:
@@ -304,78 +346,111 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str
 
 
 async def _evaluate_submissions(
-    task: RawTask, submission_repos: list[str], dataset_type: CustomDatasetType, gpu_ids: list[int]
-) -> dict[str, tuple[EvaluationResult, EvaluationResult] | Exception]:
+    task: TextRawTask | ImageRawTask,
+    submission_repos: list[str],
+    gpu_ids: list[int],
+    dataset_type: CustomDatasetType | None = None,
+) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
     """Evaluate same task submissions within same docker container.
     Docker evaluations with an exception will return the Exception for the repo."""
     unique_repos = list(set(submission_repos))
     if len(unique_repos) != len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
 
-    results: dict[str, tuple[EvaluationResult, EvaluationResult] | Exception] = {}
-    repos_to_evaluate = []
-    for repo in unique_repos:
-        if repo == task.model_id:
-            logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
-            results[repo] = (
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-            )
-        else:
-            repos_to_evaluate.append(repo)
-
-    if not repos_to_evaluate:
-        return results
-
-    evaluation_params = {
-        "file_format": FileFormat.JSON,
-        "original_model": task.model_id,
-        "models": repos_to_evaluate,
-        "dataset_type": dataset_type,
-        "gpu_ids": gpu_ids,
-    }
-
-    assert task.synthetic_data is not None, "Synthetic data shouldn't be none"
-    assert task.test_data is not None, "Test data shouldn't be none"
-
-    logger.info("Starting synth evaluation")
-    synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-    synth_eval_results = await run_evaluation_docker(dataset=synthetic_data_filepath, **evaluation_params)
-    try:
-        os.remove(synthetic_data_filepath)
-    except Exception as e:
-        logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
-
-    finetuned_repos = []
-    for repo in repos_to_evaluate:
-        if isinstance(synth_eval_results.get(repo), Exception):
-            results[repo] = synth_eval_results[repo]
-            continue
-
-        synth_result = synth_eval_results[repo]
-        if not synth_result.is_finetune:
-            results[repo] = (
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                EvaluationResult(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-            )
-        else:
-            finetuned_repos.append(repo)
-
-    if finetuned_repos:
-        test_data_filepath = await download_s3_file(task.test_data)
-        test_eval_results = await run_evaluation_docker(
-            dataset=test_data_filepath, models=finetuned_repos, **{k: v for k, v in evaluation_params.items() if k != "models"}
-        )
-        try:
-            os.remove(test_data_filepath)
-        except Exception as e:
-            logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
-
-        for repo in finetuned_repos:
-            if isinstance(test_eval_results.get(repo), Exception):
-                results[repo] = test_eval_results[repo]
+    if isinstance(task, TextRawTask):
+        results: dict[str, tuple[EvaluationResultText, EvaluationResultText] | Exception] = {}
+        repos_to_evaluate = []
+        for repo in unique_repos:
+            if repo == task.model_id:
+                logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
+                results[repo] = (
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                )
             else:
-                results[repo] = (synth_eval_results[repo], test_eval_results[repo])
+                repos_to_evaluate.append(repo)
+
+        if not repos_to_evaluate:
+            return results
+
+        evaluation_params = {
+            "file_format": FileFormat.JSON,
+            "original_model": task.model_id,
+            "models": repos_to_evaluate,
+            "dataset_type": dataset_type,
+            "gpu_ids": gpu_ids,
+        }
+
+        assert task.synthetic_data is not None, "Synthetic data shouldn't be none for text tasks"
+        assert task.test_data is not None, "Test data shouldn't be none for text tasks"
+
+        logger.info("Starting synth evaluation")
+        synthetic_data_filepath = await download_s3_file(task.synthetic_data)
+        synth_eval_results = await run_evaluation_docker_text(dataset=synthetic_data_filepath, **evaluation_params)
+        try:
+            os.remove(synthetic_data_filepath)
+        except Exception as e:
+            logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
+
+        finetuned_repos = []
+        for repo in repos_to_evaluate:
+            if isinstance(synth_eval_results.get(repo), Exception):
+                results[repo] = synth_eval_results[repo]
+                continue
+
+            synth_result = synth_eval_results[repo]
+            if not synth_result.is_finetune:
+                results[repo] = (
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                )
+            else:
+                finetuned_repos.append(repo)
+        if finetuned_repos:
+            test_data_filepath = await download_s3_file(task.test_data)
+            test_eval_results = await run_evaluation_docker_text(
+                dataset=test_data_filepath,
+                models=finetuned_repos,
+                **{k: v for k, v in evaluation_params.items() if k != "models"},
+            )
+            try:
+                os.remove(test_data_filepath)
+            except Exception as e:
+                logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
+
+            for repo in finetuned_repos:
+                if isinstance(test_eval_results.get(repo), Exception):
+                    results[repo] = test_eval_results[repo]
+                else:
+                    results[repo] = (synth_eval_results[repo], test_eval_results[repo])
+
+    elif isinstance(task, ImageRawTask):
+        results: dict[str, EvaluationResultImage | Exception] = {}
+        repos_to_evaluate = []
+        for repo in unique_repos:
+            if repo == task.model_id:
+                logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
+                results[repo] = EvaluationResultImage(
+                    eval_losses=DiffusionLosses(text_guided_losses=[0], no_text_losses=[0]), is_finetune=False
+                )
+            else:
+                repos_to_evaluate.append(repo)
+
+        if not repos_to_evaluate:
+            return results
+
+        evaluation_params = {
+            "test_split_url": task.test_data,
+            "original_model_repo": task.model_id,
+            "models": repos_to_evaluate,
+            "gpu_ids": gpu_ids,
+        }
+
+        assert task.test_data is not None, "Test data shouldn't be none for image tasks"
+        logger.info("Starting image model evaluation")
+        image_eval_results = await run_evaluation_docker_image(**evaluation_params)
+        for repo in repos_to_evaluate:
+            results[repo] = image_eval_results[repo]
 
     for repo in unique_repos:
         if repo not in results:
@@ -396,7 +471,9 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
             logger.error(f"Failed to delete file {file_path} from MinIO: {e}")
 
 
-async def _update_scores(task: RawTask, task_results: list[MinerResults], psql_db) -> None:
+async def _update_scores(
+    task: TextRawTask | ImageRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
+) -> None:
     assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
         with LogContext(miner_hotkey=result.hotkey):
@@ -465,7 +542,7 @@ async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[s
     return earliest_hotkey, earliest_repo, duplicates
 
 
-async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict[str, bool]:
+async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
     """Process submissions and identify duplicates."""
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
@@ -487,7 +564,9 @@ async def handle_duplicate_submissions(task_results: list[MinerResults]) -> dict
     return keep_submission
 
 
-def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dict[str, bool]) -> list[MinerResults]:
+def zero_duplicate_scores(
+    task_results: list[MinerResultsText | MinerResultsImage], keep_submission: dict[str, bool]
+) -> list[MinerResultsText | MinerResultsImage]:
     """Zero out scores for duplicate submissions."""
     for result in task_results:
         if not keep_submission[result.hotkey]:
@@ -536,8 +615,12 @@ def _reject_loss_outliers(miner_results: list[MinerResults], n_std: float = cts.
 
 
 async def process_miners_pool(
-    miners: list[Node], task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
-) -> list[MinerResults]:
+    miners: list[Node],
+    task: ImageRawTask | TextRawTask,
+    config: Config,
+    gpu_ids: list[int],
+    dataset_type: CustomDatasetType | None = None,
+) -> list[MinerResultsText | MinerResultsImage]:
     """Process same task miners"""
     assert task.task_id is not None, "We should have a task id when processing miners"
 
@@ -562,7 +645,7 @@ async def process_miners_pool(
             logger.info(f"Found repo {repo} for miner {miner.hotkey}")
 
     results = [
-        _create_failed_miner_result(miner.hotkey, reason="No repo submitted")
+        _create_failed_miner_result(miner.hotkey, reason="No repo submitted", task_type=task.task_type)
         for miner in miners
         if miner.hotkey not in miner_repos
     ]
@@ -570,7 +653,7 @@ async def process_miners_pool(
     if miner_repos:
         try:
             eval_results = await _evaluate_submissions(
-                task=task, submission_repos=list(miner_repos.values()), dataset_type=dataset_type, gpu_ids=gpu_ids
+                task=task, submission_repos=list(miner_repos.values()), gpu_ids=gpu_ids, dataset_type=dataset_type or None
             )
 
             for miner in miners:
@@ -583,10 +666,17 @@ async def process_miners_pool(
 
                     if isinstance(eval_result, Exception):
                         logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
-                        results.append(_create_failed_miner_result(miner.hotkey, reason="Evaluation failed"))
+                        results.append(
+                            _create_failed_miner_result(miner.hotkey, reason="Evaluation failed", task_type=task.task_type)
+                        )
                         continue
+                    elif isinstance(task, TextRawTask):
+                        synth_result, test_result = eval_result
+                    else:
+                        test_result = eval_result
+                        test_result.eval_loss = _calculate_weighted_loss_for_image_eval(test_result)
+                        synth_result = test_result
 
-                    synth_result, test_result = eval_result
                     submission = Submission(
                         task_id=task.task_id,
                         hotkey=miner.hotkey,
@@ -595,8 +685,19 @@ async def process_miners_pool(
                         updated_on=datetime.now(),
                     )
 
+                if isinstance(task, TextRawTask):
                     results.append(
-                        MinerResults(
+                        MinerResultsText(
+                            hotkey=miner.hotkey,
+                            test_loss=float(test_result.eval_loss),
+                            synth_loss=float(synth_result.eval_loss),
+                            is_finetune=test_result.is_finetune,
+                            submission=submission,
+                        )
+                    )
+                else:
+                    results.append(
+                        MinerResultsImage(
                             hotkey=miner.hotkey,
                             test_loss=float(test_result.eval_loss),
                             synth_loss=float(synth_result.eval_loss),
@@ -609,7 +710,7 @@ async def process_miners_pool(
             logger.error(f"Error during batch evaluation: {e}", exc_info=True)
             results.extend(
                 [
-                    _create_failed_miner_result(miner.hotkey, reason="Evaluation failed")
+                    _create_failed_miner_result(miner.hotkey, reason="Evaluation failed", task_type=task.task_type)
                     for miner in miners
                     if miner.hotkey not in [r.hotkey for r in results]
                 ]
@@ -618,17 +719,19 @@ async def process_miners_pool(
     return results
 
 
-async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) -> RawTask:
+async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int], config: Config) -> TextRawTask | ImageRawTask:
     """Main function to evaluate and score task submissions."""
     assert task.task_id is not None, "Task ID must be present"
-    assert task.synthetic_data is not None, "Synthetic data must be present"
     assert task.test_data is not None, "Test data must be present"
 
     miner_pool = await get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
-    dataset_type = _get_dataset_type(task)
+    if isinstance(task, TextRawTask):
+        dataset_type = _get_dataset_type(task)
+    else:
+        dataset_type = None
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
-    task_results = await process_miners_pool(miner_pool, task, dataset_type, config, gpu_ids)
+    task_results = await process_miners_pool(miner_pool, task, config, gpu_ids, dataset_type)
 
     logger.info("Checking for duplicates ...")
     keep_submission = await handle_duplicate_submissions(task_results)
@@ -646,7 +749,13 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
         logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")
     else:
         if cts.DELETE_S3_AFTER_COMPLETE:
-            await _clear_up_s3([task.training_data, task.test_data, task.synthetic_data])
+            if task.task_type == TaskType.TEXTTASK:
+                files_to_delete = [task.training_data, task.test_data, task.synthetic_data]
+            elif task.task_type == TaskType.IMAGETASK:
+                files_to_delete = [task.training_data, task.test_data]
+            else:
+                raise ValueError(f"Unknown task type: {task.task_type}")
+            await _clear_up_s3(files_to_delete)
         task.status = TaskStatus.SUCCESS
         add_context_tag("status", task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")

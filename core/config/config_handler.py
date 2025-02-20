@@ -1,6 +1,7 @@
 import os
 import uuid
 
+import toml
 import yaml
 from fiber.logging_utils import get_logger
 from transformers import AutoTokenizer
@@ -54,7 +55,7 @@ def update_model_info(config: dict, model: str, job_id: str = "", expected_repo_
     config["base_model"] = model
     config["wandb_runid"] = job_id
     config["wandb_name"] = job_id
-    config["hub_model_id"] = f"{cst.REPO_ID}/{expected_repo_name or str(uuid.uuid4())}"
+    config["hub_model_id"] = f"{cst.HUGGINGFACE_USERNAME}/{expected_repo_name or str(uuid.uuid4())}"
 
     return config
 
@@ -62,6 +63,11 @@ def update_model_info(config: dict, model: str, job_id: str = "", expected_repo_
 def save_config(config: dict, config_path: str):
     with open(config_path, "w") as file:
         yaml.dump(config, file)
+
+
+def save_config_toml(config: dict, config_path: str):
+    with open(config_path, "w") as file:
+        toml.dump(config, file)
 
 
 def _process_custom_dataset_fields(custom_type_dict: dict) -> dict:

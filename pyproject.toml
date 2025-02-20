@@ -42,6 +42,7 @@ dependencies = [
     "tiktoken==0.8.0",
     "sentencepiece==0.2.0",
     "peft",
+    "Pillow==11.1.0",
 ]
 
 [project.optional-dependencies]

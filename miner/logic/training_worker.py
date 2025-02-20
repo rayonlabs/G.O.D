@@ -5,9 +5,12 @@ from uuid import UUID
 import docker
 from fiber.logging_utils import get_logger
 
+from core.models.utility_models import DiffusionJob
 from core.models.utility_models import Job
 from core.models.utility_models import JobStatus
+from core.models.utility_models import TextJob
 from miner.logic.job_handler import start_tuning_container
+from miner.logic.job_handler import start_tuning_container_diffusion
 
 
 logger = get_logger(__name__)
@@ -31,7 +34,10 @@ class TrainingWorker:
             if job is None:
                 break
             try:
-                start_tuning_container(job)
+                if isinstance(job, TextJob):
+                    start_tuning_container(job)
+                elif isinstance(job, DiffusionJob):
+                    start_tuning_container_diffusion(job)
                 job.status = JobStatus.COMPLETED
             except Exception as e:
                 logger.error(f"Error processing job {job.job_id}: {str(e)}")

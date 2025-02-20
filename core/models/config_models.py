@@ -15,7 +15,7 @@ class BaseConfig:
 @dataclass
 class MinerConfig(BaseConfig):
     wandb_token: str
-    repo_id: str
+    huggingface_username: str
     huggingface_token: str
     min_stake_threshold: str
     refresh_nodes: bool

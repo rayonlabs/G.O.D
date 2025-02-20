@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from core.models.utility_models import FileFormat
+from core.models.utility_models import ImageTextPair
+from core.models.utility_models import TaskType
 
 
 class TokenizerConfig(BaseModel):
@@ -65,26 +67,18 @@ class ModelData(BaseModel):
 class RawTask(BaseModel):
     is_organic: bool
     task_id: UUID | None = None
-    model_id: str
-    ds_id: str
-    file_format: FileFormat = FileFormat.HF
     status: str
+    model_id: str
+    ds: str
     account_id: UUID
     times_delayed: int = 0
     hours_to_complete: int
-    field_system: str | None = None
-    field_instruction: str
-    field_input: str | None = None
-    field_output: str | None = None
-    format: str | None = None
-    no_input_format: str | None = None
-    system_format: None = None  # NOTE: Needs updating to be optional once we accept it
     test_data: str | None = None
-    synthetic_data: str | None = None
     training_data: str | None = None
     assigned_miners: list[int] | None = None
     miner_scores: list[float] | None = None
     training_repo_backup: str | None = None
+    result_model_name: str | None = None
 
     created_at: datetime
     next_delay_at: datetime | None = None
@@ -93,14 +87,41 @@ class RawTask(BaseModel):
     termination_at: datetime | None = None
     completed_at: datetime | None = None
     n_eval_attempts: int = 0
+    task_type: TaskType
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
 
 
-# NOTE: As time goes on we will expand this class to be more of a 'submmited task'?
+class TextRawTask(RawTask):
+    field_system: str | None = None
+    field_instruction: str
+    field_input: str | None = None
+    field_output: str | None = None
+    format: str | None = None
+    no_input_format: str | None = None
+    system_format: None = None  # NOTE: Needs updating to be optional once we accept it
+    synthetic_data: str | None = None
+    file_format: FileFormat = FileFormat.HF
+    task_type: TaskType = TaskType.TEXTTASK
+
+
+class ImageRawTask(RawTask):
+    image_text_pairs: list[ImageTextPair] | None = None
+    task_type: TaskType = TaskType.IMAGETASK
+
+
+# NOTE: As time goes on we will expand this class to be more of a 'submitted task'?
 # Might wanna rename this some more
 class Task(RawTask):
+    trained_model_repository: str | None = None
+
+
+class TextTask(TextRawTask):
+    trained_model_repository: str | None = None
+
+
+class ImageTask(ImageRawTask):
     trained_model_repository: str | None = None
 
 
@@ -123,7 +144,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     is_organic: bool
     task_id: UUID | None = None
     model_id: str
-    ds_id: str
+    ds: str
     file_format: FileFormat = FileFormat.HF
     status: str
     account_id: UUID
@@ -131,7 +152,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     hours_to_complete: int
     assigned_miners: list[int] | None = None
     miner_scores: list[float] | None = None
-
+    task_type: TaskType
     created_at: datetime
     next_delay_at: datetime | None = None
     updated_at: datetime | None = None
@@ -180,6 +201,14 @@ class MinerResults(BaseModel):
     score: float | None = 0.0
     submission: Submission | None = None
     score_reason: str | None = None
+
+
+class MinerResultsText(MinerResults):
+    task_type: TaskType = TaskType.TEXTTASK
+
+
+class MinerResultsImage(MinerResults):
+    task_type: TaskType = TaskType.IMAGETASK
 
 
 class QualityMetrics(BaseModel):
@@ -244,6 +273,20 @@ class DatasetJsons(BaseModel):
         }
 
 
+class Img2ImgPayload(BaseModel):
+    ckpt_name: str
+    lora_name: str
+    steps: int
+    cfg: float
+    denoise: float
+    comfy_template: dict
+    height: int = 1024
+    width: int = 1024
+    is_safetensors: bool = True
+    prompt: str | None = None
+    base_image: str | None = None
+
+
 class NetworkStats(BaseModel):
     number_of_jobs_training: int
     number_of_jobs_preevaluation: int
@@ -265,7 +308,11 @@ class HotkeyDetails(BaseModel):
     offer_response: dict | None = None
 
 
-class TaskWithHotkeyDetails(Task):
+class TextTaskWithHotkeyDetails(TextTask):
+    hotkey_details: list[HotkeyDetails]
+
+
+class ImageTaskWithHotkeyDetails(ImageTask):
     hotkey_details: list[HotkeyDetails]
 
 
