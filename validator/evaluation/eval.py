@@ -119,7 +119,10 @@ def _process_evaluation_batches(
 
             if time_logger.should_log():
                 progress = (batch_idx + 1) / total_batches * 100
-                logger.info(f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) - Current loss: {batch_loss}")
+                logger.info(
+                    f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) "
+                    f"- Current loss: {batch_loss}"
+                )
 
             if torch.isnan(torch.tensor(batch_loss)):
                 consecutive_nans += 1
@@ -285,7 +288,6 @@ def main():
     except ValueError:
         dataset_type = CustomDatasetType.model_validate_json(dataset_type_str)
 
-    base_model = load_model(original_model)
     tokenizer = load_tokenizer(original_model)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -297,6 +299,7 @@ def main():
     for repo in lora_repos:
         try:
             try:
+                base_model = load_model(original_model)
                 finetuned_model = load_finetuned_model(base_model, repo)
                 is_finetune = True
             except Exception as lora_error:
