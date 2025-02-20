@@ -31,6 +31,21 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
+def _weighted_random_shuffle(nodes: list[Node]):
+    top_node_chance = 3  # This is the chance that the top node is picked compared to the bottom node
+    nodes.sort(key=lambda x: x.incentive if x.incentive is not None else 0, reverse=True)
+    weights = [top_node_chance - i * (top_node_chance - 1) / len(nodes) for i in range(1, len(nodes) + 1)]
+
+    shuffled_nodes = []
+    for _ in range(len(nodes)):
+        index = random.choices(range(len(nodes)), weights=weights, k=1)[0]
+        shuffled_nodes.append(nodes[index])
+        nodes.pop(index)
+        weights.pop(index)
+
+    return shuffled_nodes
+
+
 async def _get_total_dataset_size(repo_name: str, file_format: FileFormat) -> int:
     if file_format == FileFormat.S3:
         bucket_name, object_name = async_minio_client.parse_s3_url(repo_name)
@@ -101,12 +116,12 @@ async def _select_miner_pool_and_add_to_task(task: RawTask, nodes: list[Node], c
         return task
 
     num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
-    random.shuffle(available_nodes)
+    nodes_to_try_for = _weighted_random_shuffle(available_nodes)
 
     # TODO: Improve by selecting high score miners first, then lower score miners, etc
     i = 0
-    while len(selected_miners) < num_of_miners_to_try_for and available_nodes:
-        node = available_nodes.pop()
+    while len(selected_miners) < num_of_miners_to_try_for and nodes_to_try_for:
+        node = nodes_to_try_for.pop()
         with LogContext(node_id=node.node_id, miner_hotkey=node.hotkey):
             # try:
             # TODO: Batch the boi
@@ -184,9 +199,9 @@ async def _find_and_select_miners_for_task(task: RawTask, config: Config):
 
 
 def _attempt_delay_task(task: RawTask):
-    assert (
-        task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None
-    ), "We wanted to check delay vs created timestamps but they are missing"
+    assert task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None, (
+        "We wanted to check delay vs created timestamps but they are missing"
+    )
 
     if task.times_delayed >= cst.MAX_DELAY_TIMES or not task.is_organic:
         if task.is_organic:

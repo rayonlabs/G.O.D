@@ -93,8 +93,8 @@ OUTPUT_REFORMULATION_PROBABILITY = 0.5
 # Task Stuff
 MINIMUM_MINER_POOL = 1
 
-MIN_IDEAL_NUM_MINERS_IN_POOL = 10
-MAX_IDEAL_NUM_MINERS_IN_POOL = 20
+MIN_IDEAL_NUM_MINERS_IN_POOL = 5
+MAX_IDEAL_NUM_MINERS_IN_POOL = 15
 MIN_COMPETITION_HOURS = 1
 MAX_COMPETITION_HOURS = 12
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
@@ -105,16 +105,16 @@ MAX_EVAL_ATTEMPTS = 3
 
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
-TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
+TEST_SCORE_WEIGHTING = 0.7  # Augmented will be (1 - this)
 TARGET_SCORE_RATIO = 1.5
-MIN_TASK_SCORE = -0.05  # very tiny punishment while miners find their feet
+MIN_TASK_SCORE = -0.05
 MAX_TASK_SCORE = 1.8
-TASK_SCORE_THRESHOLD = 0.95
+TASK_SCORE_THRESHOLD = 0.95  # You need to be higher than this to get a good score
 
 SIGMOID_STEEPNESS = 15  # Higher = sharper transition
 SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
-SIGMOID_POWER = 4  # Higher = more extreme difference between high and low scores
-LINEAR_WEIGHT = 0.25  # Weight for linear component (0-1) - benefits low scores
+SIGMOID_POWER = 5  # Higher = more extreme difference between high and low scores
+LINEAR_WEIGHT = 0.15  # Weight for linear component (0-1) - benefits low scores
 SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
 
 REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
