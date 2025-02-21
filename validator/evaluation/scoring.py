@@ -743,7 +743,7 @@ async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int
     task_results = adjust_miner_scores_to_be_relative_to_other_comps(task_results)
     await _update_scores(task, task_results, config.psql_db)
     all_scores_zero = all(result.score == 0.0 for result in task_results)
-    if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS:
+    if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS - 1:
         task.status = TaskStatus.PREEVALUATION
         add_context_tag("status", task.status.value)
         logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")

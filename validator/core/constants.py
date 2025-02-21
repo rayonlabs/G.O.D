@@ -56,7 +56,7 @@ NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 5
 TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
 GET_SYNTH_DATA = True
-MAX_SYNTH_DATA_POINTS = 250
+MAX_SYNTH_DATA_POINTS = 150
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
@@ -102,17 +102,17 @@ OUTPUT_REFORMULATION_PROBABILITY = 0.5
 MINIMUM_MINER_POOL = 1
 
 
-MIN_IDEAL_NUM_MINERS_IN_POOL = 5
-MAX_IDEAL_NUM_MINERS_IN_POOL = 15
-MIN_TEXT_COMPETITION_HOURS = 1
+MIN_IDEAL_NUM_MINERS_IN_POOL = 8
+MAX_IDEAL_NUM_MINERS_IN_POOL = 16
+MIN_TEXT_COMPETITION_HOURS = 2
 MAX_TEXT_COMPETITION_HOURS = 12
 MIN_IMAGE_COMPETITION_HOURS = 1
 MAX_IMAGE_COMPETITION_HOURS = 2
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 # how many times in total do we attempt to delay an organic request looking for miners
 MAX_DELAY_TIMES = 6
-# Maximum number of times we retry a task after node training failure
-MAX_EVAL_ATTEMPTS = 3
+# Maximum number of evaluation attempts when all scores are zero (including the first one)
+MAX_EVAL_ATTEMPTS = 4
 
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing

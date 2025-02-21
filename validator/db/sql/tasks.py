@@ -47,6 +47,7 @@ base_task_fields = {
     cst.ASSIGNED_MINERS,
     cst.TASK_TYPE,
     cst.RESULT_MODEL_NAME,
+    cst.N_EVAL_ATTEMPTS,
 }
 
 text_specific_fields = [
