@@ -12,7 +12,7 @@ zero_score_tasks AS (
     SELECT DISTINCT t.task_id
     FROM tasks_last_12h t
     JOIN task_nodes tn ON t.task_id = tn.task_id
-    WHERE t.n_eval_attempts = 4
+    WHERE t.n_eval_attempts = 4 -- MAX_EVAL_ATTEMPTS in validator/core/constants.py
     GROUP BY t.task_id
     HAVING MAX(tn.quality_score) = 0 AND MIN(tn.quality_score) = 0
 ),
@@ -65,10 +65,10 @@ ORDER BY ts.task_id;
 --------------------------------
 
 -- Count tasks for all possible statuses
-SELECT 
+SELECT
     status,
     COUNT(*) AS count
-FROM tasks 
+FROM tasks
 WHERE status IN (
     'pending',
     'preparing_data',
@@ -146,15 +146,15 @@ UPDATE tasks SET termination_at = NOW() WHERE status = 'training' AND task_id IN
 UPDATE tasks SET status = 'preevaluation' WHERE task_id IN ('TASK_UUID');
 
 -- Move all tasks in training to failure status
-UPDATE tasks 
+UPDATE tasks
 SET status = 'failure'
 WHERE status IN ('training', 'preevaluation', 'looking_for_nodes');
 
 -- Only eval the task in last line, others wait
-UPDATE tasks 
-SET 
+UPDATE tasks
+SET
     status = 'training',
     termination_at = NOW() + INTERVAL '1 hour'
-WHERE 
-    status = 'preevaluation' 
+WHERE
+    status = 'preevaluation'
     AND task_id != 'TASK_UUID';
