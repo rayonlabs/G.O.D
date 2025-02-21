@@ -41,6 +41,8 @@ async def insert_nodes(connection: Connection, nodes: list[Node]) -> None:
             {dcst.NODE_ID},
             {dcst.INCENTIVE},
             {dcst.NETUID},
+            {dcst.ALPHA_STAKE},
+            {dcst.TAO_STAKE},
             {dcst.STAKE},
             {dcst.TRUST},
             {dcst.VTRUST},
@@ -50,7 +52,7 @@ async def insert_nodes(connection: Connection, nodes: list[Node]) -> None:
             {dcst.PORT},
             {dcst.PROTOCOL}
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         """,
         [
             (
@@ -59,6 +61,8 @@ async def insert_nodes(connection: Connection, nodes: list[Node]) -> None:
                 node.node_id,
                 node.incentive,
                 node.netuid,
+                node.alpha_stake,
+                node.tao_stake,
                 node.stake,
                 node.trust,
                 node.vtrust,
@@ -133,6 +137,8 @@ async def migrate_nodes_to_history(connection: Connection) -> None:
                 {dcst.COLDKEY},
                 {dcst.INCENTIVE},
                 {dcst.NETUID},
+                {dcst.ALPHA_STAKE},
+                {dcst.TAO_STAKE},
                 {dcst.STAKE},
                 {dcst.TRUST},
                 {dcst.VTRUST},
@@ -148,6 +154,8 @@ async def migrate_nodes_to_history(connection: Connection) -> None:
                 {dcst.COLDKEY},
                 {dcst.INCENTIVE},
                 {dcst.NETUID},
+                {dcst.ALPHA_STAKE},
+                {dcst.TAO_STAKE},
                 {dcst.STAKE},
                 {dcst.TRUST},
                 {dcst.VTRUST},
