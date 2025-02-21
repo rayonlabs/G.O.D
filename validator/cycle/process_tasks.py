@@ -26,10 +26,13 @@ from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
 def _weighted_random_shuffle(nodes: list[Node]):
-    top_node_chance = 3  # This is the chance that the top node is picked compared to the bottom node
+    if len(nodes) == 0:
+        return []
+    top_node_chance_multiplier = 3  # This is the chance that the top node is picked compared to the bottom node
     nodes.sort(key=lambda x: x.incentive if x.incentive is not None else 0, reverse=True)
-    weights = [top_node_chance - i * (top_node_chance - 1) / len(nodes) for i in range(1, len(nodes) + 1)]
+    weights = [top_node_chance_multiplier - i * (top_node_chance_multiplier - 1) / len(nodes) for i in range(1, len(nodes) + 1)]
 
     shuffled_nodes = []
     for _ in range(len(nodes)):
