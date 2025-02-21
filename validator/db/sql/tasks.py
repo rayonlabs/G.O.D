@@ -24,44 +24,6 @@ from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Temporary list to not change so it works smoothly for now
-
-base_task_fields = {
-    cst.TASK_ID,
-    cst.ACCOUNT_ID,
-    cst.MODEL_ID,
-    cst.DS,
-    cst.STATUS,
-    cst.HOURS_TO_COMPLETE,
-    cst.TEST_DATA,
-    cst.TRAINING_DATA,
-    cst.MINER_SCORES,
-    cst.CREATED_AT,
-    cst.NEXT_DELAY_AT,
-    cst.UPDATED_AT,
-    cst.STARTED_AT,
-    cst.COMPLETED_AT,
-    cst.TERMINATION_AT,
-    cst.IS_ORGANIC,
-    cst.TIMES_DELAYED,
-    cst.ASSIGNED_MINERS,
-    cst.TASK_TYPE,
-    cst.RESULT_MODEL_NAME,
-    cst.N_EVAL_ATTEMPTS,
-}
-
-text_specific_fields = [
-    cst.FIELD_SYSTEM,
-    cst.FIELD_INSTRUCTION,
-    cst.FIELD_INPUT,
-    cst.FIELD_OUTPUT,
-    cst.FORMAT,
-    cst.NO_INPUT_FORMAT,
-    cst.SYNTHETIC_DATA,
-]
-
-image_specific_fields = [cst.IMAGE_TEXT_PAIRS]
-
 
 async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
     """Add a new task"""
@@ -234,6 +196,17 @@ async def set_expected_repo_name(task_id: str, node: Node, psql_db: PSQLDB, expe
         await connection.execute(query, expected_repo_name, task_id, node.hotkey, NETUID)
 
 
+async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
+    """Get all column names for a given table"""
+    query = """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = $1
+    """
+    rows = await connection.fetch(query, table_name)
+    return {row['column_name'] for row in rows}
+
+
 async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)
 
@@ -249,6 +222,10 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
     async with await psql_db.connection() as connection:
         connection: Connection
         async with connection.transaction():
+            base_task_fields = await get_table_fields(cst.TASKS_TABLE, connection)
+            text_fields = await get_table_fields(cst.TEXT_TASKS_TABLE, connection)
+            text_specific_fields = [f for f in text_fields if f != cst.TASK_ID]
+
             base_updates = {k: v for k, v in updates.items() if k in base_task_fields}
             if base_updates:
                 set_clause = ", ".join([f"{column} = ${i + 2}" for i, column in enumerate(base_updates.keys())])
