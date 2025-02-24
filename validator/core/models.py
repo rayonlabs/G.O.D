@@ -247,6 +247,16 @@ class AllNodeStats(BaseModel):
     monthly: NodeStats
     all_time: NodeStats
 
+    @classmethod
+    def get_periods_sql_mapping(cls) -> dict[str, str]:
+        return {
+            "daily": "24 hours",
+            "three_day": "3 days",
+            "weekly": "7 days",
+            "monthly": "30 days",
+            "all_time": "all"
+        }
+
 
 class DatasetUrls(BaseModel):
     test_url: str

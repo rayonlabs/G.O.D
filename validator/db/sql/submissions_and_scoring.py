@@ -413,3 +413,179 @@ async def get_all_node_stats(hotkey: str, psql_db: PSQLDB) -> AllNodeStats:
     )
 
     return AllNodeStats(daily=daily, three_day=three_day, weekly=weekly, monthly=monthly, all_time=all_time)
+
+
+async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dict[str, AllNodeStats]:
+    period_mapping = AllNodeStats.get_periods_sql_mapping()
+
+    async with await psql_db.connection() as connection:
+        query = f"""
+        WITH periods AS (
+            SELECT 
+                unnest($3::text[]) as interval
+        ),
+        quality_metrics AS (
+            SELECT
+                tn.{cst.HOTKEY},
+                p.interval,
+                COALESCE(AVG(tn.{cst.QUALITY_SCORE}), 0) as avg_quality_score,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as success_rate,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.9 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate,
+                COALESCE(COUNT(*), 0) as total_count,
+                COALESCE(SUM(tn.{cst.QUALITY_SCORE}), 0) as total_score,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END), 0) as total_success,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.95 THEN 1 END), 0) as total_quality
+            FROM periods p
+            CROSS JOIN {cst.TASK_NODES_TABLE} tn
+            JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
+            WHERE tn.{cst.HOTKEY} = ANY($1)
+            AND tn.{cst.NETUID} = $2
+            AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+            AND t.{cst.CREATED_AT} >= CASE
+                WHEN p.interval = 'all' THEN '1970-01-01'::TIMESTAMP
+                ELSE NOW() - p.interval::INTERVAL
+            END
+            GROUP BY tn.{cst.HOTKEY}, p.interval
+        ),
+        workload_metrics AS (
+            SELECT
+                tn.{cst.HOTKEY},
+                p.interval,
+                COALESCE(SUM(t.{cst.HOURS_TO_COMPLETE}), 0)::INTEGER as competition_hours,
+                COALESCE(SUM(
+                    CASE
+                        WHEN LOWER(t.model_id) ~ '.*?([0-9]+\.?[0-9]*)[mb]' THEN
+                            CASE
+                                WHEN LOWER(t.model_id) ~ '.*?([0-9]+\.?[0-9]*)b' THEN
+                                    SUBSTRING(LOWER(t.model_id) FROM '.*?([0-9]+\.?[0-9]*)b')::FLOAT
+                                WHEN LOWER(t.model_id) ~ '.*?([0-9]+\.?[0-9]*)m' THEN
+                                    SUBSTRING(LOWER(t.model_id) FROM '.*?([0-9]+\.?[0-9]*)m')::FLOAT / 1000.0
+                            END
+                        ELSE 1.0
+                    END
+                ), 0) as total_params_billions
+            FROM periods p
+            CROSS JOIN {cst.TASK_NODES_TABLE} tn
+            JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
+            WHERE tn.{cst.HOTKEY} = ANY($1)
+            AND tn.{cst.NETUID} = $2
+            AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+            AND t.{cst.CREATED_AT} >= CASE
+                WHEN p.interval = 'all' THEN '1970-01-01'::TIMESTAMP
+                ELSE NOW() - p.interval::INTERVAL
+            END
+            GROUP BY tn.{cst.HOTKEY}, p.interval
+        ),
+        model_metrics AS (
+            WITH model_counts AS (
+                SELECT
+                    tn.{cst.HOTKEY},
+                    p.interval,
+                    t.{cst.MODEL_ID},
+                    COUNT(*) as model_count
+                FROM periods p
+                CROSS JOIN {cst.TASK_NODES_TABLE} tn
+                JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
+                WHERE tn.{cst.HOTKEY} = ANY($1)
+                AND tn.{cst.NETUID} = $2
+                AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+                AND t.{cst.CREATED_AT} >= CASE
+                    WHEN p.interval = 'all' THEN '1970-01-01'::TIMESTAMP
+                    ELSE NOW() - p.interval::INTERVAL
+                END
+                GROUP BY tn.{cst.HOTKEY}, p.interval, t.{cst.MODEL_ID}
+            )
+            SELECT
+                tn.{cst.HOTKEY},
+                p.interval,
+                COALESCE((
+                    SELECT mc.{cst.MODEL_ID}
+                    FROM model_counts mc
+                    WHERE mc.{cst.HOTKEY} = tn.{cst.HOTKEY}
+                    AND mc.interval = p.interval
+                    ORDER BY mc.model_count DESC
+                    LIMIT 1
+                ), 'none') as modal_model,
+                COUNT(DISTINCT CASE WHEN tn.{cst.QUALITY_SCORE} IS NOT NULL THEN t.{cst.MODEL_ID} END) as unique_models,
+                COUNT(DISTINCT CASE WHEN tn.{cst.QUALITY_SCORE} IS NOT NULL THEN t.{cst.DS} END) as unique_datasets
+            FROM periods p
+            CROSS JOIN {cst.TASK_NODES_TABLE} tn
+            JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
+            WHERE tn.{cst.HOTKEY} = ANY($1)
+            AND tn.{cst.NETUID} = $2
+            AND t.{cst.CREATED_AT} >= CASE
+                WHEN p.interval = 'all' THEN '1970-01-01'::TIMESTAMP
+                ELSE NOW() - p.interval::INTERVAL
+            END
+            GROUP BY tn.{cst.HOTKEY}, p.interval
+        )
+        SELECT
+            qm.{cst.HOTKEY},
+            qm.interval,
+            qm.avg_quality_score,
+            qm.success_rate,
+            qm.quality_rate,
+            qm.total_count,
+            qm.total_score,
+            qm.total_success,
+            qm.total_quality,
+            wm.competition_hours,
+            wm.total_params_billions,
+            mm.modal_model,
+            mm.unique_models,
+            mm.unique_datasets
+        FROM quality_metrics qm
+        JOIN workload_metrics wm ON qm.{cst.HOTKEY} = wm.{cst.HOTKEY} AND qm.interval = wm.interval
+        JOIN model_metrics mm ON qm.{cst.HOTKEY} = mm.{cst.HOTKEY} AND qm.interval = mm.interval
+        """
+
+        intervals = list(period_mapping.values())
+
+        rows = await connection.fetch(query, hotkeys, NETUID, intervals)
+
+        results = {}
+        for hotkey in hotkeys:
+            results[hotkey] = {}
+            # Initialize all periods with empty stats
+            for period_name in period_mapping.keys():
+                results[hotkey][period_name] = NodeStats(
+                    quality_metrics=QualityMetrics(
+                        avg_quality_score=0,
+                        success_rate=0,
+                        quality_rate=0,
+                        total_count=0,
+                        total_score=0,
+                        total_success=0,
+                        total_quality=0,
+                    ),
+                    workload_metrics=WorkloadMetrics(competition_hours=0, total_params_billions=0),
+                    model_metrics=ModelMetrics(modal_model="none", unique_models=0, unique_datasets=0),
+                )
+
+        # Update with actual data from rows
+        for row in rows:
+            hotkey = row[cst.HOTKEY]
+            interval = row["interval"]
+
+            stats = NodeStats(
+                quality_metrics=QualityMetrics(
+                    avg_quality_score=row["avg_quality_score"],
+                    success_rate=row["success_rate"],
+                    quality_rate=row["quality_rate"],
+                    total_count=row["total_count"],
+                    total_score=row["total_score"],
+                    total_success=row["total_success"],
+                    total_quality=row["total_quality"],
+                ),
+                workload_metrics=WorkloadMetrics(
+                    competition_hours=row["competition_hours"], total_params_billions=row["total_params_billions"]
+                ),
+                model_metrics=ModelMetrics(
+                    modal_model=row["modal_model"], unique_models=row["unique_models"], unique_datasets=row["unique_datasets"]
+                ),
+            )
+
+            period_name = next(name for name, value in period_mapping.items() if value == interval)
+            results[hotkey][period_name] = stats
+
+        return {hotkey: AllNodeStats(**stats) for hotkey, stats in results.items()}

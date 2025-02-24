@@ -312,17 +312,18 @@ async def get_leaderboard(
     config: Config = Depends(get_config),
 ) -> list[LeaderboardRow]:
     nodes = await get_all_nodes(config.psql_db)
-    leaderboard_rows = []
+    if not nodes:
+        return []
 
-    for node in nodes:
-        logger.info(f"Trying node {node}")
-        try:
-            node_stats = await submissions_and_scoring_sql.get_all_node_stats(node.hotkey, config.psql_db)
-            leaderboard_rows.append(LeaderboardRow(hotkey=node.hotkey, stats=node_stats))
-        except Exception as e:
-            logger.error(f"Error processing scores for hotkey {node.hotkey}: {e}")
-            continue
-    return leaderboard_rows
+    hotkeys = [node.hotkey for node in nodes]
+    try:
+        all_stats = await submissions_and_scoring_sql.get_all_node_stats_batched(hotkeys, config.psql_db)
+        return [
+            LeaderboardRow(hotkey=node.hotkey, stats=all_stats.get(node.hotkey)) for node in nodes if node.hotkey in all_stats
+        ]
+    except Exception as e:
+        logger.error(f"Error processing leaderboard stats: {e}")
+        return []
 
 
 async def get_network_status(
