@@ -57,6 +57,7 @@ TASK_TYPE = "task_type"
 TRAINING_REPO_BACKUP = "training_repo_backup"
 N_EVAL_ATTEMPTS = "n_eval_attempts"
 RESULT_MODEL_NAME = "result_model_name"
+MODEL_PARAMS_COUNT = "model_params_count"
 
 # Text Tasks Table Columns
 FIELD_SYSTEM = "field_system"

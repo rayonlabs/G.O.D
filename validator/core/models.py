@@ -88,6 +88,7 @@ class RawTask(BaseModel):
     completed_at: datetime | None = None
     n_eval_attempts: int = 0
     task_type: TaskType
+    model_params_count: int = 0
 
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}

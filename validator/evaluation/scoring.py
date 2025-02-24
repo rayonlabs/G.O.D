@@ -386,11 +386,13 @@ async def _evaluate_submissions(
 
         logger.info("Starting synth evaluation")
         synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-        synth_eval_results = await run_evaluation_docker_text(dataset=synthetic_data_filepath, **evaluation_params)
+        synth_results = await run_evaluation_docker_text(dataset=synthetic_data_filepath, **evaluation_params)
         try:
             os.remove(synthetic_data_filepath)
         except Exception as e:
             logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
+        synth_eval_results = synth_results.results
+        task.model_params_count = synth_results.base_model_params_count
 
         finetuned_repos = []
         for repo in repos_to_evaluate:
@@ -408,7 +410,7 @@ async def _evaluate_submissions(
                 finetuned_repos.append(repo)
         if finetuned_repos:
             test_data_filepath = await download_s3_file(task.test_data)
-            test_eval_results = await run_evaluation_docker_text(
+            test_results = await run_evaluation_docker_text(
                 dataset=test_data_filepath,
                 models=finetuned_repos,
                 **{k: v for k, v in evaluation_params.items() if k != "models"},
@@ -417,6 +419,8 @@ async def _evaluate_submissions(
                 os.remove(test_data_filepath)
             except Exception as e:
                 logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
+            test_eval_results = test_results.results
+            task.model_params_count = test_results.base_model_params_count
 
             for repo in finetuned_repos:
                 if isinstance(test_eval_results.get(repo), Exception):
@@ -448,7 +452,9 @@ async def _evaluate_submissions(
 
         assert task.test_data is not None, "Test data shouldn't be none for image tasks"
         logger.info("Starting image model evaluation")
-        image_eval_results = await run_evaluation_docker_image(**evaluation_params)
+        image_results = await run_evaluation_docker_image(**evaluation_params)
+        image_eval_results = image_results.results
+        task.model_params_count = image_results.base_model_params_count
         for repo in repos_to_evaluate:
             results[repo] = image_eval_results[repo]
 

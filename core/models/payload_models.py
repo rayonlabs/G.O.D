@@ -1,9 +1,11 @@
 from datetime import datetime
+from typing import Union
 from uuid import UUID
 from uuid import uuid4
 
 from fiber.logging_utils import get_logger
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 
 from core import constants as cst
@@ -93,6 +95,12 @@ class EvaluationResultText(BaseModel):
     is_finetune: bool
     eval_loss: float
     perplexity: float
+
+
+class DockerEvaluationResults(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    results: dict[str, Union[EvaluationResultText, EvaluationResultImage, Exception]]
+    base_model_params_count: int = 0
 
 
 class MinerTaskResponse(BaseModel):

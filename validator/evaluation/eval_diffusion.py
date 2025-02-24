@@ -2,6 +2,7 @@ import json
 import os
 
 import numpy as np
+import safetensors.torch
 from fiber.logging_utils import get_logger
 from huggingface_hub import HfApi
 from huggingface_hub import snapshot_download
@@ -88,14 +89,14 @@ def is_safetensors_available(repo_id: str) -> tuple[bool, str | None]:
 
 def download_base_model(repo_id: str, safetensors_filename: str | None = None) -> str:
     if safetensors_filename:
-        _ = download_from_huggingface(repo_id, safetensors_filename, cst.CHECKPOINTS_SAVE_PATH)
+        model_path = download_from_huggingface(repo_id, safetensors_filename, cst.CHECKPOINTS_SAVE_PATH)
     else:
         model_name = repo_id.split("/")[-1]
         save_dir = f"{cst.DIFFUSERS_PATH}/{model_name}"
-        _ = snapshot_download(repo_id=repo_id, local_dir=save_dir, repo_type="model")
-        return model_name
+        model_path = snapshot_download(repo_id=repo_id, local_dir=save_dir, repo_type="model")
+        return model_name, model_path
 
-    return safetensors_filename
+    return safetensors_filename, model_path
 
 
 def download_lora(repo_id: str) -> str:
@@ -179,6 +180,15 @@ def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float
     return {"text_guided_losses": lora_losses_text_guided, "no_text_losses": lora_losses_no_text}
 
 
+def _count_model_parameters(model_path: str) -> int:
+    try:
+        state_dict = safetensors.torch.load_file(model_path)
+        return sum(p.numel() for p in state_dict.values()) or 0
+    except Exception as e:
+        logger.error(f"Failed to count model parameters: {e}")
+        return 0
+
+
 def main():
     test_dataset_path = os.environ.get("DATASET")
     base_model_repo = os.environ.get("ORIGINAL_MODEL_REPO")
@@ -190,7 +200,7 @@ def main():
     is_safetensors, safetensors_filename = is_safetensors_available(base_model_repo)
     # Base model download
     logger.info("Downloading base model")
-    model_name_or_path = download_base_model(base_model_repo, safetensors_filename=safetensors_filename)
+    model_name_or_path, model_path = download_base_model(base_model_repo, safetensors_filename=safetensors_filename)
     logger.info("Base model downloaded")
 
     lora_repos = [m.strip() for m in trained_lora_model_repos.split(",") if m.strip()]
@@ -200,7 +210,9 @@ def main():
     lora_comfy_template, diffusers_comfy_template = load_comfy_workflows()
     api_gate.connect()
 
-    results = {}
+    results = {
+        "model_params_count": _count_model_parameters(model_path)
+    }
 
     for repo_id in lora_repos:
         lora_local_path = download_lora(repo_id)
