@@ -99,7 +99,7 @@ class EvaluationResultText(BaseModel):
 
 class DockerEvaluationResults(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    results: dict[str, Union[EvaluationResultText, EvaluationResultImage, Exception]]
+    results: dict[str, EvaluationResultText | EvaluationResultImage | Exception]
     base_model_params_count: int = 0
 
 
