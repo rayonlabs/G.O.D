@@ -29,6 +29,7 @@ WORKDIR /app
 
 RUN pip install -r validator/requirements.txt
 RUN pip install docker
+RUN pip install diffusers
 
 RUN mkdir /aplp
 

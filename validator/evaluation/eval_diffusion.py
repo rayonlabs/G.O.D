@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import safetensors.torch
+from diffusers import StableDiffusionPipeline
 from fiber.logging_utils import get_logger
 from huggingface_hub import HfApi
 from huggingface_hub import snapshot_download
@@ -180,10 +181,18 @@ def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float
     return {"text_guided_losses": lora_losses_text_guided, "no_text_losses": lora_losses_no_text}
 
 
-def _count_model_parameters(model_path: str) -> int:
+def _count_model_parameters(model_path: str, is_safetensors: bool) -> int:
     try:
-        state_dict = safetensors.torch.load_file(model_path)
-        return sum(p.numel() for p in state_dict.values()) or 0
+        if is_safetensors:
+            state_dict = safetensors.torch.load_file(model_path)
+            return sum(p.numel() for p in state_dict.values()) or 0
+        else:
+            pipe = StableDiffusionPipeline.from_pretrained(model_path)
+            total_params = 0
+            for attr in pipe.__dict__.values():
+                if hasattr(attr, 'parameters'):
+                    total_params += sum(p.numel() for p in attr.parameters())
+            return total_params
     except Exception as e:
         logger.error(f"Failed to count model parameters: {e}")
         return 0
@@ -211,7 +220,7 @@ def main():
     api_gate.connect()
 
     results = {
-        "model_params_count": _count_model_parameters(model_path)
+        "model_params_count": _count_model_parameters(model_path, is_safetensors)
     }
 
     for repo_id in lora_repos:
