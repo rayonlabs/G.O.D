@@ -1,3 +1,10 @@
+# Connection Pool Constants
+MIN_POOL_SIZE = 10  # Minimum number of connections to stay open
+MAX_POOL_SIZE = 20  # Maximum number of connections to reach if needed
+COMMAND_TIMEOUT = 20.0  # If sql query takes longer than this, raise an error
+TIMEOUT = 10.0  # If no connection is available after this time, raise an error
+MAX_QUERIES = 1000  # Maximum number of queries to execute before closing a connection in the pool ( and opening a new one)
+
 # Tables
 NODES_TABLE = "nodes"
 NODES_HISTORY_TABLE = "nodes_history"
