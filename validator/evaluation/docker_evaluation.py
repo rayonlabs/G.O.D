@@ -62,7 +62,7 @@ def process_evaluation_results(results: dict, is_image: bool = False) -> DockerE
         else:
             if is_image:
                 result["is_finetune"] = True
-                processed_results[repo] = TypeAdapter(EvaluationResultImage).validate_python(result)
+                processed_results[repo] = EvaluationResultImage.model_validate(result)
             else:
                 processed_results[repo] = TypeAdapter(EvaluationResultText).validate_python(result)
 
