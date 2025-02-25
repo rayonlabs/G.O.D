@@ -8,7 +8,6 @@ from typing import Union
 
 import docker
 from docker.models.containers import Container
-from pydantic import TypeAdapter
 
 from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
@@ -64,7 +63,7 @@ def process_evaluation_results(results: dict, is_image: bool = False) -> DockerE
                 result["is_finetune"] = True
                 processed_results[repo] = EvaluationResultImage.model_validate(result)
             else:
-                processed_results[repo] = TypeAdapter(EvaluationResultText).validate_python(result)
+                processed_results[repo] = EvaluationResultText.model_validate(result)
 
     return DockerEvaluationResults(
         results=processed_results,

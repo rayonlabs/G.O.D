@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Union
 from uuid import UUID
 from uuid import uuid4
 
