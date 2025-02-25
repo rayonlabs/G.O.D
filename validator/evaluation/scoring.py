@@ -54,7 +54,7 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     if getattr(task, 'model_params_count', 0) > 0:
         model_size_value = min(8, max(1, task.model_params_count // 1_000_000_000))
     else:
-        # Fallback to existing logic
+        # Fallback to parsing from model id
         model = task.model_id
         model_size = re.search(r"(\d+)(?=[bB])", model)
         model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
