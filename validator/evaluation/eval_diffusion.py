@@ -190,7 +190,7 @@ def _count_model_parameters(model_path: str, is_safetensors: bool) -> int:
             pipe = StableDiffusionPipeline.from_pretrained(model_path)
             total_params = 0
             for attr in pipe.__dict__.values():
-                if hasattr(attr, 'parameters'):
+                if hasattr(attr, "parameters"):
                     total_params += sum(p.numel() for p in attr.parameters())
             return total_params
     except Exception as e:
@@ -219,27 +219,29 @@ def main():
     lora_comfy_template, diffusers_comfy_template = load_comfy_workflows()
     api_gate.connect()
 
-    results = {
-        "model_params_count": _count_model_parameters(model_path, is_safetensors)
-    }
+    results = {"model_params_count": _count_model_parameters(model_path, is_safetensors)}
 
     for repo_id in lora_repos:
-        lora_local_path = download_lora(repo_id)
-        img2img_payload = Img2ImgPayload(
-            ckpt_name=model_name_or_path,
-            lora_name=os.path.basename(lora_local_path),
-            steps=cst.DEFAULT_STEPS,
-            cfg=cst.DEFAULT_CFG,
-            denoise=cst.DEFAULT_DENOISE,
-            comfy_template=lora_comfy_template if is_safetensors else diffusers_comfy_template,
-            is_safetensors=is_safetensors,
-        )
+        try:
+            lora_local_path = download_lora(repo_id)
+            img2img_payload = Img2ImgPayload(
+                ckpt_name=model_name_or_path,
+                lora_name=os.path.basename(lora_local_path),
+                steps=cst.DEFAULT_STEPS,
+                cfg=cst.DEFAULT_CFG,
+                denoise=cst.DEFAULT_DENOISE,
+                comfy_template=lora_comfy_template if is_safetensors else diffusers_comfy_template,
+                is_safetensors=is_safetensors,
+            )
 
-        loss_data = eval_loop(test_dataset_path, img2img_payload)
+            loss_data = eval_loop(test_dataset_path, img2img_payload)
+            results[repo_id] = {"eval_loss": loss_data}
 
-        results[repo_id] = {"eval_loss": loss_data}
-        if os.path.exists(lora_local_path):
-            os.remove(lora_local_path)
+            if os.path.exists(lora_local_path):
+                os.remove(lora_local_path)
+        except Exception as e:
+            logger.error(f"Error evaluating repo {repo_id}: {str(e)}")
+            results[repo_id] = str(e)
 
     output_file = "/aplp/evaluation_results.json"
     output_dir = os.path.dirname(output_file)
