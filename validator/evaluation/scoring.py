@@ -52,20 +52,20 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     hours = task.hours_to_complete
 
     if getattr(task, 'model_params_count', 0) > 0:
-        model_size_value = min(8, max(1, task.model_params_count // 1_000_000_000))
+        model_size_billions = min(8, max(1, task.model_params_count // 1_000_000_000))
     else:
         # Fallback to parsing from model id
         model = task.model_id
         model_size = re.search(r"(\d+)(?=[bB])", model)
-        model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
+        model_size_billions = min(8, int(model_size.group(1)) if model_size else 1)
 
-    if hours * model_size_value == 0:
+    if hours * model_size_billions == 0:
         logger.error(
-            f"Hours to complete: {hours} and model size value: {model_size_value} for task {task.task_id} "
+            f"Hours to complete: {hours} and model size in billions: {model_size_billions} for task {task.task_id} "
             f"and model id: {task.model_id}\nReturning 1 regardless as a failsafe, but please look into this"
         )
         return 1
-    return max(1, 2 * np.sqrt(float(hours * model_size_value)))
+    return max(1, 2 * np.sqrt(float(hours * model_size_billions)))
 
 
 def calculate_adjusted_task_score(quality_score: float, task_work_score: float) -> float:
