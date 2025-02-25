@@ -44,19 +44,25 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-def get_task_work_score(task: MiniTaskWithScoringOnly | TextRawTask | ImageRawTask) -> float:
+def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     """Calculate work score for a task based on hours and model size."""
     assert task.hours_to_complete > 0, "Hours to complete must be positive"
     assert task.model_id, "Model ID must be present"
 
     hours = task.hours_to_complete
-    model = task.model_id
-    model_size = re.search(r"(\d+)(?=[bB])", model)
-    model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
+
+    if getattr(task, 'model_params_count', 0) > 0:
+        model_size_value = min(8, max(1, task.model_params_count // 1_000_000_000))
+    else:
+        # Fallback to existing logic
+        model = task.model_id
+        model_size = re.search(r"(\d+)(?=[bB])", model)
+        model_size_value = min(8, int(model_size.group(1)) if model_size else 1)
+
     if hours * model_size_value == 0:
         logger.error(
-            f"Hours to complete: {hours} and model size value: {model_size_value} for task {task.task_id} and model id: {model}"
-            "\nReturning 1 regardless as a failsafe, but please look into this"
+            f"Hours to complete: {hours} and model size value: {model_size_value} for task {task.task_id} "
+            f"and model id: {task.model_id}\nReturning 1 regardless as a failsafe, but please look into this"
         )
         return 1
     return max(1, 2 * np.sqrt(float(hours * model_size_value)))
