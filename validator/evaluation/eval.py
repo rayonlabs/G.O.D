@@ -50,11 +50,12 @@ def _load_and_update_evaluation_config(
         file_format=file_format,
     )
     config_dict["datasets"] = [dataset_entry]
-    if (
-        finetuned_model.config.max_position_embeddings
-        and finetuned_model.config.max_position_embeddings < 2 * config_dict["sequence_len"]
-    ):
-        config_dict["sequence_len"] = ceil(finetuned_model.config.max_position_embeddings / 2)
+
+    max_embeddings = getattr(finetuned_model.config, "max_position_embeddings", None)
+
+    if max_embeddings and max_embeddings < 2 * config_dict["sequence_len"]:
+        config_dict["sequence_len"] = ceil(max_embeddings / 2)
+
     return DictDefault(config_dict)
 
 
@@ -119,10 +120,7 @@ def _process_evaluation_batches(
 
             if time_logger.should_log():
                 progress = (batch_idx + 1) / total_batches * 100
-                logger.info(
-                    f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) "
-                    f"- Current loss: {batch_loss}"
-                )
+                logger.info(f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) - Current loss: {batch_loss}")
 
             if torch.isnan(torch.tensor(batch_loss)):
                 consecutive_nans += 1
