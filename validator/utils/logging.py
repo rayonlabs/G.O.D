@@ -115,6 +115,8 @@ def stream_container_logs(container: Container, log_context: dict | None = None)
                 logger.info(buffer)
         except Exception as e:
             logger.error(f"Error streaming logs: {str(e)}")
+        finally:
+            remove_context_tag("docker_container_name")
 
 
 def get_logger(name: str) -> Logger:
