@@ -2,12 +2,11 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY . .
-
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app/validator/evaluation
+RUN mkdir /aplp
 
+WORKDIR /app/validator/evaluation
 RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ComfyUI && \
     cd ComfyUI && \
     git fetch --depth 1 origin a220d11e6b8dd0dbbf50f81ab9398ec202a96fe6 && \
@@ -19,6 +18,8 @@ RUN cd ComfyUI/custom_nodes && \
     git clone --depth 1 https://github.com/Acly/comfyui-tooling-nodes && \
     cd ..
 
+RUN pip install docker diffusers
+
 ENV TEST_DATASET_PATH=""
 ENV TRAINED_LORA_MODEL_REPOS=""
 ENV BASE_MODEL_REPO=""
@@ -26,12 +27,9 @@ ENV BASE_MODEL_FILENAME=""
 ENV LORA_MODEL_FILENAMES=""
 
 WORKDIR /app
+COPY . .
 
 RUN pip install -r validator/requirements.txt
-RUN pip install docker
-RUN pip install diffusers
-
-RUN mkdir /aplp
 
 RUN echo '#!/bin/bash\n\
 python /app/validator/evaluation/ComfyUI/main.py &\n\
