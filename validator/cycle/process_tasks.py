@@ -335,20 +335,21 @@ async def cleanup_model_cache(psql_db: PSQLDB):
             for task in evaluating_tasks + preevaluation_tasks:
                 if task.model_id:
                     protected_models.add(str(task.model_id))
-            
+
             cache_stats = await tasks_sql.get_model_cache_stats(
                 psql_db,
                 tau_days=cst.CACHE_TAU_DAYS,
                 max_lookup_days=cst.CACHE_MAX_LOOKUP_DAYS
             )
-            
+
             # Set cache score to infinity for protected models to prevent deletion
+            logger.info(f"Protected models: {protected_models}")
             for model_id in protected_models:
                 if model_id not in cache_stats:
                     cache_stats[model_id] = {'cache_score': float('inf')}
                 else:
                     cache_stats[model_id]['cache_score'] = float('inf')
-            
+
             manage_models_cache(cache_stats, cst.MAX_CACHE_SIZE_BYTES)
         except Exception as e:
             logger.error(f"Error in cache cleanup: {e}", exc_info=True)
