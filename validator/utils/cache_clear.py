@@ -126,10 +126,7 @@ def remove_cache_models_except(models_to_keep: list[str]):
             except Exception as e:
                 logger.error(f"Error deleting safetensor file {file_name}: {e}")
 
-    logger.info(
-        f"Cleaned cache: kept {len(models_to_keep)} models, "
-        f"removed {deleted_count} dirs and {deleted_files} safetensors files."
-    )
+    logger.info(f"Cleaned cache: removed {deleted_count} dirs and {deleted_files} safetensors files.")
 
 
 def get_directory_size(path: str) -> int:
@@ -182,7 +179,9 @@ def manage_models_cache(model_stats: dict[str, dict], max_size: int) -> None:
     logger.info(f"Model stats: {model_stats}")
 
     # First pass: keep only models in stats
-    remove_cache_models_except(list(model_stats.keys()))
+    allowed_models = list(model_stats.keys())
+    logger.info(f"Cache cleanup: Will remove models with no cache score record ({len(allowed_models)} records)")
+    remove_cache_models_except(allowed_models)
 
     current_size = get_directory_size(cst.CACHE_DIR_HUB)
     if current_size <= max_size:
@@ -212,6 +211,7 @@ def manage_models_cache(model_stats: dict[str, dict], max_size: int) -> None:
         if model_id not in models_to_remove
     ]
 
+    logger.info(f"Cache cleanup: Will keep {len(models_to_keep)} models")
     remove_cache_models_except(models_to_keep)
     final_size = get_directory_size(cst.CACHE_DIR_HUB)
     logger.info(f"Cache cleanup complete. Final size: {final_size / 1024**3:.2f}GB")
