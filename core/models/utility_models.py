@@ -30,7 +30,6 @@ class JobStatus(str, Enum):
 class TaskStatus(str, Enum):
     PENDING = "pending"
     PREPARING_DATA = "preparing_data"
-    IDLE = "idle"
     READY = "ready"
     SUCCESS = "success"
     LOOKING_FOR_NODES = "looking_for_nodes"

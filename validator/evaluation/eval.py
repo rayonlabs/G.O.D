@@ -242,13 +242,27 @@ def retry_on_5xx():
     )
 
 
+def create_finetuned_cache_dir():
+    """Create and return a dedicated cache directory for finetuned models."""
+    finetuned_cache_dir = os.path.join(cst.DOCKER_EVAL_HF_CACHE_DIR, "finetuned_repos")
+    os.makedirs(finetuned_cache_dir, exist_ok=True)
+    return finetuned_cache_dir
+
+
 @retry_on_5xx()
-def load_model(model_name_or_path: str) -> AutoModelForCausalLM:
+def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoModelForCausalLM:
     try:
-        return AutoModelForCausalLM.from_pretrained(model_name_or_path, token=os.environ.get("HUGGINGFACE_TOKEN"))
+        # Only use default cache for the base model
+        cache_dir = None if is_base_model else create_finetuned_cache_dir()
+
+        return AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            token=os.environ.get("HUGGINGFACE_TOKEN"),
+            cache_dir=cache_dir
+        )
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
-        raise  # Re-raise the exception to trigger retry
+        raise
 
 
 @retry_on_5xx()
@@ -257,16 +271,22 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
         return AutoTokenizer.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
-        raise  # Re-raise the exception to trigger retry
+        raise
 
 
 @retry_on_5xx()
 def load_finetuned_model(base_model, repo: str) -> PeftModel:
     try:
-        return PeftModel.from_pretrained(base_model, repo, is_trainable=False)
+        cache_dir = create_finetuned_cache_dir()
+        return PeftModel.from_pretrained(
+            base_model,
+            repo,
+            is_trainable=False,
+            cache_dir=cache_dir
+        )
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
-        raise  # Re-raise the exception to trigger retry
+        raise
 
 
 def _count_model_parameters(model: AutoModelForCausalLM) -> int:
@@ -305,14 +325,14 @@ def main():
     for repo in lora_repos:
         try:
             try:
-                base_model = load_model(original_model)
+                base_model = load_model(original_model, is_base_model=True)
                 if "model_params_count" not in results_dict:
                     results_dict["model_params_count"] = _count_model_parameters(base_model)
                 finetuned_model = load_finetuned_model(base_model, repo)
                 is_finetune = True
             except Exception as lora_error:
                 logger.info(f"Loading full model... failed to load as LoRA: {lora_error}")
-                finetuned_model = load_model(repo)
+                finetuned_model = load_model(repo, is_base_model=False)
                 try:
                     is_finetune = model_is_a_finetune(original_model, finetuned_model)
                 except Exception as e:
