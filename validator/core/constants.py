@@ -194,3 +194,6 @@ CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
 CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
 MAX_CACHE_SIZE_BYTES = 600 * 1024**3  # in bytes
 CACHE_CLEANUP_INTERVAL = 30 * 60  # in seconds
+
+# Docker evaluation
+DOCKER_EVAL_HF_CACHE_DIR = "/root/.cache/huggingface"

@@ -107,8 +107,8 @@ async def run_evaluation_docker_text(
             "bind": "/workspace/input_data",
             "mode": "ro",
         },
-        os.path.expanduser(cst.CACHE_DIR): {
-            "bind": "/root/.cache/huggingface",
+        os.path.expanduser(cst.CACHE_DIR_HUB): {
+            "bind": "/root/.cache/huggingface/hub",
             "mode": "rw",
         }
     }

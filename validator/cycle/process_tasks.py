@@ -380,10 +380,11 @@ async def cleanup_model_cache(psql_db: PSQLDB):
     async with _cache_cleanup_lock:
         try:
             logger.info("Cleaning up model cache")
+            training_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.TRAINING, psql_db=psql_db)
             evaluating_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.EVALUATING, psql_db=psql_db)
             preevaluation_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=psql_db)
             protected_models = set()
-            for task in evaluating_tasks + preevaluation_tasks:
+            for task in evaluating_tasks + preevaluation_tasks + training_tasks:
                 if task.model_id:
                     protected_models.add(str(task.model_id))
 
