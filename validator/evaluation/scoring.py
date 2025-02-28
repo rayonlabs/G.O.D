@@ -772,7 +772,7 @@ async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int
         else:
             task.status = TaskStatus.FAILURE
             add_context_tag("status", task.status.value)
-            logger.info(f"Task {task.task_id} failed evaluation after {cts.MAX_EVAL_ATTEMPTS-1} attempts.")
+            logger.info(f"Task {task.task_id} marked as failure")
             await _clear_up_s3(files_to_delete)
     else:
         await _clear_up_s3(files_to_delete)
