@@ -185,9 +185,3 @@ IMAGE_TASK_SCORE_WEIGHT = 1 - TEXT_TASK_SCORE_WEIGHT
 SEVEN_DAY_SCORE_WEIGHT = 0.25
 THREE_DAY_SCORE_WEIGHT = 0.4
 ONE_DAY_SCORE_WEIGHT = 0.35
-
-# HF models cache management
-CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
-CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
-MAX_CACHE_SIZE_BYTES = 600 * 1024**3  # in bytes
-CACHE_CLEANUP_INTERVAL = 30 * 60  # in seconds

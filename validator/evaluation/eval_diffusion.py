@@ -91,12 +91,13 @@ def is_safetensors_available(repo_id: str) -> tuple[bool, str | None]:
 def download_base_model(repo_id: str, safetensors_filename: str | None = None) -> str:
     if safetensors_filename:
         model_path = download_from_huggingface(repo_id, safetensors_filename, cst.CHECKPOINTS_SAVE_PATH)
-        model_name = os.path.basename(model_path)
     else:
-        model_name = f"models--{repo_id.replace('/', '--')}"
+        model_name = repo_id.split("/")[-1]
         save_dir = f"{cst.DIFFUSERS_PATH}/{model_name}"
         model_path = snapshot_download(repo_id=repo_id, local_dir=save_dir, repo_type="model")
-    return model_name, model_path
+        return model_name, model_path
+
+    return safetensors_filename, model_path
 
 
 def download_lora(repo_id: str) -> str:
