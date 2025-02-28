@@ -2,7 +2,6 @@ import glob
 import os
 import shutil
 import tempfile
-from pathlib import Path
 
 from core import constants as cst
 from validator.utils.logging import get_logger
@@ -109,13 +108,13 @@ def remove_cache_models_except(models_to_keep: list[str]):
             deleted_count += 1
         except Exception as e:
             logger.error(f"Error deleting cache for directory {dir_name}: {e}")
-    
+
     # Handle safetensor files
     safetensor_files = [
-        f for f in os.listdir(cst.CACHE_DIR_HUB) 
+        f for f in os.listdir(cst.CACHE_DIR_HUB)
         if f.endswith('.safetensors')
     ]
-    
+
     deleted_files = 0
     for file_name in safetensor_files:
         # Check if file belongs to a model we want to keep
@@ -137,7 +136,14 @@ def get_directory_size(path: str) -> int:
     """Calculate total size of a directory in bytes.
     Returns 0 if directory doesn't exist."""
     try:
-        return sum(f.stat().st_size for f in Path(path).rglob('*') if f.is_file())
+        total = 0
+        with os.scandir(path) as it:
+            for entry in it:
+                if entry.is_file(follow_symlinks=False):
+                    total += entry.stat(follow_symlinks=False).st_size
+                elif entry.is_dir(follow_symlinks=False):
+                    total += get_directory_size(entry.path)
+        return total
     except (FileNotFoundError, PermissionError):
         return 0
 
@@ -153,7 +159,7 @@ def get_hf_model_cache_size(model_id: str) -> int:
         for dir_name in os.listdir(cst.CACHE_DIR_HUB):
             if dir_name.lower() == model_pattern:
                 total_size += get_directory_size(os.path.join(cst.CACHE_DIR_HUB, dir_name))
-        
+
         # Check for matching safetensor files
         for file_name in os.listdir(cst.CACHE_DIR_HUB):
             if file_name.endswith('.safetensors') and file_name.lower().startswith(model_pattern):
@@ -162,7 +168,7 @@ def get_hf_model_cache_size(model_id: str) -> int:
                     total_size += os.path.getsize(file_path)
                 except (OSError, FileNotFoundError):
                     pass
-                    
+
     return total_size
 
 
