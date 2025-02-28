@@ -755,19 +755,27 @@ async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int
     task_results = adjust_miner_scores_to_be_relative_to_other_comps(task_results)
     await _update_scores(task, task_results, config.psql_db)
     all_scores_zero = all(result.score == 0.0 for result in task_results)
-    if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS - 1:
-        task.status = TaskStatus.PREEVALUATION
-        add_context_tag("status", task.status.value)
-        logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")
-    else:
-        if cts.DELETE_S3_AFTER_COMPLETE:
-            if task.task_type == TaskType.TEXTTASK:
-                files_to_delete = [task.training_data, task.test_data, task.synthetic_data]
-            elif task.task_type == TaskType.IMAGETASK:
-                files_to_delete = [task.training_data, task.test_data]
-            else:
-                raise ValueError(f"Unknown task type: {task.task_type}")
+
+    if cts.DELETE_S3_AFTER_COMPLETE:
+        if task.task_type == TaskType.TEXTTASK:
+            files_to_delete = [task.training_data, task.test_data, task.synthetic_data]
+        elif task.task_type == TaskType.IMAGETASK:
+            files_to_delete = [task.training_data, task.test_data]
+        else:
+            raise ValueError(f"Unknown task type: {task.task_type}")
+
+    if all_scores_zero:
+        if task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS - 1:
+            task.status = TaskStatus.PREEVALUATION
+            add_context_tag("status", task.status.value)
+            logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")
+        else:
+            task.status = TaskStatus.FAILURE
+            add_context_tag("status", task.status.value)
+            logger.info(f"Task {task.task_id} marked as failure")
             await _clear_up_s3(files_to_delete)
+    else:
+        await _clear_up_s3(files_to_delete)
         task.status = TaskStatus.SUCCESS
         add_context_tag("status", task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
