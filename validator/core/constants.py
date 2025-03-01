@@ -118,9 +118,9 @@ MAX_EVAL_ATTEMPTS = 4
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # Augmented will be (1 - this)
 TARGET_SCORE_RATIO = 1.5
-MIN_TASK_SCORE = -0.001
+MIN_TASK_SCORE = 0.0
 MAX_TASK_SCORE = 1.8
-TASK_SCORE_THRESHOLD = 1.0  # You need to be higher than this to get a good score
+TASK_SCORE_THRESHOLD = 1.05  # You need to be higher than this to get a good score
 
 SIGMOID_STEEPNESS = 15  # Higher = sharper transition
 SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
@@ -157,7 +157,7 @@ DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.5
 
 # Max jobs
 MAX_CONCURRENT_JOBS = 60
-MAX_CONCURRENT_SYNTHETIC_JOBS = 15
+MAX_CONCURRENT_SYNTHETIC_JOBS = 20
 ## This leaves room for MAX_CONCURRENT_JOBS - MAX_CONCURRENT_SYNTHETIC_JOBS at all times
 
 
