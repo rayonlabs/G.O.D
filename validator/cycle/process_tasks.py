@@ -8,6 +8,7 @@ from fiber.chain.models import Node
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.tasks as tasks_sql
+import validator.db.sql.submissions_and_scoring as scores_sql
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
@@ -46,7 +47,7 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
     MIN_SCORE = 0.01
 
     hotkeys = [node.hotkey for node in nodes]
-    nodes_status = await nodes_sql.get_nodes_daily_status(hotkeys, psql_db)
+    nodes_status = await scores_sql.get_nodes_daily_status(hotkeys, psql_db)
 
     node_scores = {}
     for node in nodes:
