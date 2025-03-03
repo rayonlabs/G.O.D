@@ -223,7 +223,7 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
     # Assign scores for top 2 miners
     for i, (result, metric) in enumerate(ranked_results[:2]):
         with LogContext(miner_hotkey=result.hotkey):
-            result.score = 2.0 if i == 0 else 1.0
+            result.score = cts.FIRST_PLACE_SCORE if i == 0 else cts.SECOND_PLACE_SCORE
             rank = "1st" if i == 0 else "2nd"
             result.score_reason = f"Ranked {rank} by {ranking_type}"
             logger.info(
