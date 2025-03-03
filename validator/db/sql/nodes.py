@@ -27,32 +27,32 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
-            SELECT n.* FROM {cst.NODES_TABLE} n
-            WHERE n.{cst.NETUID} = $1
+            SELECT n.* FROM {dcst.NODES_TABLE} n
+            WHERE n.{dcst.NETUID} = $1
             AND (
                 -- Condition a: No entries in task_nodes table
                 NOT EXISTS (
                     SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
-                    WHERE tn.{cst.HOTKEY} = n.{cst.HOTKEY}
+                    WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
                 )
                 OR
                 -- Condition b: At least one entry with quality_score > 0
                 EXISTS (
                     SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
-                    WHERE tn.{cst.HOTKEY} = n.{cst.HOTKEY}
-                    AND tn.{cst.TASK_NODE_QUALITY_SCORE} > 0
+                    WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
+                    AND tn.{dcst.TASK_NODE_QUALITY_SCORE} > 0
                 )
                 OR
                 -- Condition c: Has entries but all scores are NULL
                 (
                     EXISTS (
-                        SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
-                        WHERE tn.{cst.HOTKEY} = n.{cst.HOTKEY}
+                        SELECT 1 FROM {dcst.TASK_NODES_TABLE} tn
+                        WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
                     )
                     AND NOT EXISTS (
-                        SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
-                        WHERE tn.{cst.HOTKEY} = n.{cst.HOTKEY}
-                        AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+                        SELECT 1 FROM {dcst.TASK_NODES_TABLE} tn
+                        WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
+                        AND tn.{dcst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
                     )
                 )
             )
