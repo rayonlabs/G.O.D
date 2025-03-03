@@ -31,19 +31,55 @@ logger = get_logger(__name__)
 _cache_cleanup_lock = asyncio.Lock()
 
 
-def _weighted_random_shuffle(nodes: list[Node]):
+async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[Node]:
+    """
+    Perform a weighted random shuffle of nodes with priority:
+    1. Highest priority: Nodes that haven't participated today yet (treated as score=1.0)
+    2. Medium priority: Nodes that have participated today (use their actual score)
+    All nodes have a minimum score of 0.01 to ensure even low performers have some (v small) chance.
+    """
+
     if len(nodes) == 0:
         return []
-    top_node_chance_multiplier = 3  # This is the chance that the top node is picked compared to the bottom node
-    nodes.sort(key=lambda x: x.incentive if x.incentive is not None else 0, reverse=True)
-    weights = [top_node_chance_multiplier - i * (top_node_chance_multiplier - 1) / len(nodes) for i in range(1, len(nodes) + 1)]
+
+    DEFAULT_SCORE_FOR_NEW_NODES = 1.0
+    MIN_SCORE = 0.01
+
+    hotkeys = [node.hotkey for node in nodes]
+    nodes_status = await get_nodes_daily_status(hotkeys, psql_db)
+
+    node_scores = {}
+    for node in nodes:
+        status = nodes_status[node.hotkey]
+
+        if not status["has_participated_today"]:
+            # Nodes that haven't participated today get perfect scores so they will be picked at least once a day
+            node_scores[node.hotkey] = DEFAULT_SCORE_FOR_NEW_NODES
+        elif status["avg_quality_score"] is not None:
+            # Nodes with scores use their actual scores (with minimum threshold)
+            node_scores[node.hotkey] = max(status["avg_quality_score"], MIN_SCORE)
+        else:
+            # fallback
+            node_scores[node.hotkey] = MIN_SCORE
+
+    sorted_nodes = sorted(nodes, key=lambda x: node_scores[x.hotkey], reverse=True)
+
+    # Now we be calcin position-based weights
+    top_node_chance_multiplier = 3  # Top node is 3x more likely than bottom node
+    weights = [top_node_chance_multiplier - i * (top_node_chance_multiplier - 1) / len(sorted_nodes)
+               for i in range(len(sorted_nodes))]
 
     shuffled_nodes = []
-    for _ in range(len(nodes)):
-        index = random.choices(range(len(nodes)), weights=weights, k=1)[0]
-        shuffled_nodes.append(nodes[index])
-        nodes.pop(index)
-        weights.pop(index)
+    nodes_to_shuffle = sorted_nodes.copy()
+    weights_copy = weights.copy()
+
+    for _ in range(len(sorted_nodes)):
+        if not nodes_to_shuffle:
+            break
+        index = random.choices(range(len(nodes_to_shuffle)), weights=weights_copy, k=1)[0]
+        shuffled_nodes.append(nodes_to_shuffle[index])
+        nodes_to_shuffle.pop(index)
+        weights_copy.pop(index)
 
     return shuffled_nodes
 
@@ -150,7 +186,7 @@ async def _let_miners_know_to_start_training(task: ImageRawTask | TextRawTask, n
 async def _find_and_select_miners_for_task(task: TextRawTask | ImageRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
-            nodes = await nodes_sql.get_all_nodes(config.psql_db)
+            nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
             task = await _select_miner_pool_and_add_to_task(task, nodes, config)
             logger.info(f"After assigning miners here is the current task info {task}")
             await tasks_sql.update_task(task, config.psql_db)

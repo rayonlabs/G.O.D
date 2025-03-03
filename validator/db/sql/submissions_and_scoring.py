@@ -23,6 +23,44 @@ from validator.core.models import WorkloadMetrics
 from validator.db.database import PSQLDB
 
 
+async def get_nodes_daily_status(hotkeys: List[str], psql_db: PSQLDB) -> Dict[str, Dict]:
+    """
+    Get both daily participation status and average scores for nodes.
+    """
+    if not hotkeys:
+        return {}
+
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            SELECT
+                tn.{cst.HOTKEY},
+                AVG(tn.{cst.QUALITY_SCORE}) as avg_quality_score,
+                COUNT(*) > 0 as has_participated_today
+            FROM {cst.TASK_NODES_TABLE} tn
+            JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
+            WHERE tn.{cst.HOTKEY} = ANY($1)
+            AND tn.{cst.NETUID} = $2
+            AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+            AND t.{cst.CREATED_AT} >= CURRENT_DATE  -- Only tasks from today
+            GROUP BY tn.{cst.HOTKEY}
+        """
+        rows = await connection.fetch(query, hotkeys, NETUID)
+
+        result = {
+            hotkey: {
+                "has_participated_today": False,
+                "avg_quality_score": None
+            } for hotkey in hotkeys
+        }
+
+        for row in rows:
+            hotkey = row[cst.HOTKEY]
+            result[hotkey]["has_participated_today"] = row["has_participated_today"]
+            result[hotkey]["avg_quality_score"] = row["avg_quality_score"]
+
+        return result
+
 async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
     """Add a new submission for the current NETUID"""
     async with await psql_db.connection() as connection:
@@ -424,7 +462,7 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
             SELECT unnest($3::text[]) as interval
         ),
         model_counts AS (
-            SELECT 
+            SELECT
                 tn.{cst.HOTKEY},
                 p.interval,
                 t.{cst.MODEL_ID},
@@ -442,7 +480,7 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
             GROUP BY tn.{cst.HOTKEY}, p.interval, t.{cst.MODEL_ID}
         ),
         aggregated_metrics AS (
-            SELECT 
+            SELECT
                 tn.{cst.HOTKEY},
                 p.interval,
                 -- Quality metrics
@@ -453,7 +491,7 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
                 COALESCE(SUM(tn.{cst.QUALITY_SCORE}), 0) as total_score,
                 COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END), 0) as total_success,
                 COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.95 THEN 1 END), 0) as total_quality,
-                
+
                 -- Workload metrics
                 COALESCE(SUM(t.{cst.HOURS_TO_COMPLETE}), 0)::INTEGER as competition_hours,
                 COALESCE(SUM(
@@ -468,7 +506,7 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
                         ELSE 1.0
                     END
                 ), 0) as total_params_billions,
-                
+
                 -- Model metrics
                 COALESCE((
                     SELECT mc.{cst.MODEL_ID}
@@ -480,7 +518,7 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
                 ), 'none') as modal_model,
                 COUNT(DISTINCT t.{cst.MODEL_ID}) as unique_models,
                 COUNT(DISTINCT t.{cst.DS}) as unique_datasets
-                
+
             FROM periods p
             CROSS JOIN {cst.TASK_NODES_TABLE} tn
             JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
