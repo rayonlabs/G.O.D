@@ -50,11 +50,12 @@ def _load_and_update_evaluation_config(
         file_format=file_format,
     )
     config_dict["datasets"] = [dataset_entry]
-    if (
-        finetuned_model.config.max_position_embeddings
-        and finetuned_model.config.max_position_embeddings < 2 * config_dict["sequence_len"]
-    ):
-        config_dict["sequence_len"] = ceil(finetuned_model.config.max_position_embeddings / 2)
+
+    max_embeddings = getattr(finetuned_model.config, "max_position_embeddings", None)
+
+    if max_embeddings and max_embeddings < 2 * config_dict["sequence_len"]:
+        config_dict["sequence_len"] = ceil(max_embeddings / 2)
+
     return DictDefault(config_dict)
 
 
@@ -119,10 +120,7 @@ def _process_evaluation_batches(
 
             if time_logger.should_log():
                 progress = (batch_idx + 1) / total_batches * 100
-                logger.info(
-                    f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) "
-                    f"- Current loss: {batch_loss}"
-                )
+                logger.info(f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) - Current loss: {batch_loss}")
 
             if torch.isnan(torch.tensor(batch_loss)):
                 consecutive_nans += 1
@@ -271,6 +269,14 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
         raise  # Re-raise the exception to trigger retry
 
 
+def _count_model_parameters(model: AutoModelForCausalLM) -> int:
+    try:
+        return sum(p.numel() for p in model.parameters())
+    except Exception as e:
+        logger.error(f"Failed to count model parameters: {e}")
+        return 0
+
+
 def main():
     dataset = os.environ.get("DATASET")
     original_model = os.environ.get("ORIGINAL_MODEL")
@@ -300,6 +306,8 @@ def main():
         try:
             try:
                 base_model = load_model(original_model)
+                if "model_params_count" not in results_dict:
+                    results_dict["model_params_count"] = _count_model_parameters(base_model)
                 finetuned_model = load_finetuned_model(base_model, repo)
                 is_finetune = True
             except Exception as lora_error:

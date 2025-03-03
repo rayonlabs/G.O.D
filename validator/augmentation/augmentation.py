@@ -17,7 +17,7 @@ from validator.core.constants import SYNTH_GEN_BATCH_SIZE
 from validator.core.constants import SYNTH_MODEL
 from validator.core.constants import SYNTH_MODEL_TEMPERATURE
 from validator.evaluation.utils import get_default_dataset_config
-from validator.utils.call_endpoint import post_to_nineteen_ai
+from validator.utils.call_endpoint import post_to_nineteen_chat
 from validator.utils.logging import get_logger
 
 
@@ -107,7 +107,7 @@ def convert_to_nineteen_payload(
 async def generate_from_distribution(row: dict, prompts: Prompts, keypair: Keypair) -> str:
     messages = create_messages_for_distribution_replication(row, prompts)
     payload = convert_to_nineteen_payload(messages)
-    synthetic_data_point = await post_to_nineteen_ai(payload, keypair)
+    synthetic_data_point = await post_to_nineteen_chat(payload, keypair)
     json_synthetic_data_point = (
         json.loads(synthetic_data_point) if isinstance(synthetic_data_point, str) else synthetic_data_point
     )
@@ -118,7 +118,7 @@ async def generate_from_output(row: dict, output_field: str, prompts: Prompts, k
     # Step 1: Reformulate output and get description
     messages = create_messages_for_output_reformulation(row, output_field, prompts)
     payload = convert_to_nineteen_payload(messages)
-    result = await post_to_nineteen_ai(payload, keypair)
+    result = await post_to_nineteen_chat(payload, keypair)
     result_dict = json.loads(result) if isinstance(result, str) else result
     reformulated_output = result_dict["reformulated_output"]
     description = result_dict["description"]
@@ -127,14 +127,16 @@ async def generate_from_output(row: dict, output_field: str, prompts: Prompts, k
     schema = {k: type(v).__name__ for k, v in row.items()}
     messages = create_messages_for_input_generation(reformulated_output, description, output_field, schema, prompts)
     payload = convert_to_nineteen_payload(messages)
-    result = await post_to_nineteen_ai(payload, keypair)
+    result = await post_to_nineteen_chat(payload, keypair)
     generated_inputs = json.loads(result) if isinstance(result, str) else result
     generated_inputs[output_field] = reformulated_output  # Double check the output is unchanged
 
     return generated_inputs
 
 
-async def generate_augmented_dataset(sampled_data: List[dict], column_to_reformulate: str | None, keypair: Keypair) -> List[dict]:
+async def generate_augmented_text_dataset(
+    sampled_data: List[dict], column_to_reformulate: str | None, keypair: Keypair
+) -> List[dict]:
     prompts = load_prompts()
     logger.info("Creating an augmented dataset...")  # Task id would be nice here
     synthetic_dataset = []

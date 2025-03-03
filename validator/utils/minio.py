@@ -38,11 +38,9 @@ class AsyncMinioClient:
     async def upload_file(self, bucket_name, object_name, file_path):
         func = self.client.fput_object
         args = (bucket_name, object_name, file_path)
-        logger.info("Attempting to upload")
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(self.executor, func, *args)
-            logger.info(f"The bucket_name is {bucket_name} and the result was {result}")
             return result
         except Exception as e:
             logger.info(f"There was an issue with uploading file to s3. {e}")
@@ -95,8 +93,8 @@ class AsyncMinioClient:
     def parse_s3_url(self, url: str) -> tuple[str, str]:
         """Extract bucket name and object name from S3 URL."""
         parsed_url = urlparse(url)
-        bucket_name = parsed_url.hostname.split('.')[0]
-        object_name = parsed_url.path.lstrip('/').split('?')[0]
+        bucket_name = parsed_url.hostname.split(".")[0]
+        object_name = parsed_url.path.lstrip("/").split("?")[0]
         return bucket_name, object_name
 
     def __del__(self):

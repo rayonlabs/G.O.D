@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY validator/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install docker
+RUN pip install docker toml
 
 COPY . .
 

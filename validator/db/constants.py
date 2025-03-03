@@ -1,11 +1,21 @@
+# Connection Pool Constants
+MIN_POOL_SIZE = 10  # Minimum number of connections to stay open
+MAX_POOL_SIZE = 20  # Maximum number of connections to reach if needed
+COMMAND_TIMEOUT = 20.0  # If sql query takes longer than this, raise an error
+TIMEOUT = 10.0  # If no connection is available after this time, raise an error
+MAX_QUERIES = 1000  # Maximum number of queries to execute before closing a connection in the pool ( and opening a new one)
+
 # Tables
 NODES_TABLE = "nodes"
 NODES_HISTORY_TABLE = "nodes_history"
 TASKS_TABLE = "tasks"
+TEXT_TASKS_TABLE = "text_tasks"
+IMAGE_TASKS_TABLE = "image_tasks"
 TASK_NODES_TABLE = "task_nodes"
 SUBMISSIONS_TABLE = "submissions"
 OFFER_RESPONSES_TABLE = "offer_responses"
 LATEST_SCORES_URL_TABLE = "latest_scores_url"
+IMAGE_TEXT_PAIRS_TABLE = "image_text_pairs"
 
 # Node Table Columns
 NODE_ID = "node_id"
@@ -18,6 +28,8 @@ SYMMETRIC_KEY = "symmetric_key"
 SYMMETRIC_KEY_UUID = "symmetric_key_uuid"
 NETUID = "netuid"
 NETWORK = "network"
+ALPHA_STAKE = "alpha_stake"
+TAO_STAKE = "tao_stake"
 STAKE = "stake"
 TRUST = "trust"
 VTRUST = "vtrust"
@@ -33,18 +45,10 @@ ASSIGNED_MINERS = "assigned_miners"
 TASK_ID = "task_id"
 ACCOUNT_ID = "account_id"
 MODEL_ID = "model_id"
-DS_ID = "ds_id"
-FILE_FORMAT = "file_format"
-FIELD_SYSTEM = "field_system"
-FIELD_INSTRUCTION = "field_instruction"
-FIELD_INPUT = "field_input"
-FIELD_OUTPUT = "field_output"
-FORMAT = "format"
-NO_INPUT_FORMAT = "no_input_format"
+DS = "ds"
 STATUS = "status"
 HOURS_TO_COMPLETE = "hours_to_complete"
 TEST_DATA = "test_data"
-SYNTHETIC_DATA = "synthetic_data"
 TRAINING_DATA = "training_data"
 MINER_SCORES = "miner_scores"
 CREATED_AT = "created_at"
@@ -56,8 +60,28 @@ TERMINATION_AT = "termination_at"
 IS_ORGANIC = "is_organic"
 TIMES_DELAYED = "times_delayed"
 ASSIGNED_MINERS = "assigned_miners"
+TASK_TYPE = "task_type"
 TRAINING_REPO_BACKUP = "training_repo_backup"
 N_EVAL_ATTEMPTS = "n_eval_attempts"
+RESULT_MODEL_NAME = "result_model_name"
+MODEL_PARAMS_COUNT = "model_params_count"
+
+# Text Tasks Table Columns
+FIELD_SYSTEM = "field_system"
+FIELD_INSTRUCTION = "field_instruction"
+FIELD_INPUT = "field_input"
+FIELD_OUTPUT = "field_output"
+FORMAT = "format"
+NO_INPUT_FORMAT = "no_input_format"
+SYNTHETIC_DATA = "synthetic_data"
+FILE_FORMAT = "file_format"
+
+# Image Text Pairs Table Columns
+IMAGE_TEXT_PAIRS = "image_text_pairs"
+IMAGE_URL = "image_url"
+TEXT_URL = "text_url"
+ID = "id"
+
 
 # Submissions Table Columns
 SUBMISSION_ID = "submission_id"

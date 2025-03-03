@@ -68,6 +68,17 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
+        },
+        {
+            "name": "Python Debugger: Job Handler",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "miner.logic.job_handler",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         }
     ]
 }

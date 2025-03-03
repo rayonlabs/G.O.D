@@ -18,9 +18,10 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
-from core.constants import NETUID
 from validator.core.config import Config
 from validator.core.constants import GRADIENTS_ENDPOINT
+from validator.core.constants import IMAGE_GEN_ENDPOINT
+from validator.core.constants import NETUID
 from validator.core.constants import NINETEEN_API_KEY
 from validator.core.constants import PROMPT_GEN_ENDPOINT
 from validator.utils.logging import get_logger
@@ -106,8 +107,24 @@ async def process_non_stream_fiber(
     return response.json()
 
 
+async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> str | None:
+    response = await _post_to_nineteen_ai(PROMPT_GEN_ENDPOINT, payload, keypair)
+    response_json = response.json()
+    try:
+        return response_json["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        logger.error(f"Error in nineteen ai chat response: {response_json}")
+        logger.exception(e)
+        return None
+
+
+async def post_to_nineteen_image(payload: dict[str, Any], keypair: Keypair) -> str | None:
+    response = await _post_to_nineteen_ai(IMAGE_GEN_ENDPOINT, payload, keypair)
+    return response.json()
+
+
 @retry_with_backoff
-async def post_to_nineteen_ai(payload: dict[str, Any], keypair: Keypair) -> str | None:
+async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypair) -> httpx.Response:
     if NINETEEN_API_KEY is None:
         headers = _get_headers_for_signed_https_request(keypair)
     else:
@@ -117,18 +134,13 @@ async def post_to_nineteen_ai(payload: dict[str, Any], keypair: Keypair) -> str 
         }
 
     async with httpx.AsyncClient(timeout=120) as client:
-        response = await client.post(url=PROMPT_GEN_ENDPOINT, json=payload, headers=headers)
+        response = await client.post(url=url, json=payload, headers=headers)
         if response.status_code != 200:
             # NOTE: What do to about these as they pollute everywhere
             logger.error(f"Error in nineteen ai response: {response.content}")
             response.raise_for_status()
-        response_json = response.json()
-        try:
-            return response_json["choices"][0]["message"]["content"]
-        except (KeyError, IndexError) as e:
-            logger.error(f"Error in nineteen ai response: {response_json}")
-            logger.exception(e)
-            return None
+
+        return response
 
 
 # If this it to talk to the miner, its already in fiber

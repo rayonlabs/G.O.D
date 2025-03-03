@@ -15,6 +15,52 @@ from validator.utils.query_substrate import query_substrate
 
 logger = get_logger(__name__)
 
+async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
+    """
+    Get all nodes that either:
+    a) Do not have any entries in the task_nodes table (new nodes with no scores)
+    b) Have at least one entry in the task_nodes table with a task_node_quality_score > 0
+    c) Have entries in task_nodes but all scores are NULL (not yet evaluated nodes)
+    This only excludes nodes that have been scored but ALL their non-NULL scores are ≤ 0
+    """
+    logger.info("Getting eligible nodes (new nodes, nodes with NULL scores, or nodes with positive scores)")
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            SELECT n.* FROM {cst.NODES_TABLE} n
+            WHERE n.{cst.NETUID} = $1
+            AND (
+                -- Condition a: No entries in task_nodes table
+                NOT EXISTS (
+                    SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
+                    WHERE tn.{cst.HOTKEY} = n.{cst.HOTKEY}
+                )
+                OR
+                -- Condition b: At least one entry with quality_score > 0
+                EXISTS (
+                    SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
+                    WHERE tn.{cst.HOTKEY} = n.{cst.HOTKEY}
+                    AND tn.{cst.TASK_NODE_QUALITY_SCORE} > 0
+                )
+                OR
+                -- Condition c: Has entries but all scores are NULL
+                (
+                    EXISTS (
+                        SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
+                        WHERE tn.{cst.HOTKEY} = n.{cst.HOTKEY}
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
+                        WHERE tn.{cst.HOTKEY} = n.{cst.HOTKEY}
+                        AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+                    )
+                )
+            )
+        """
+        rows = await connection.fetch(query, NETUID)
+        eligible_nodes = [Node(**dict(row)) for row in rows]
+        logger.info(f"Found {len(eligible_nodes)} eligible nodes")
+        return eligible_nodes
 
 async def get_all_nodes(psql_db: PSQLDB) -> List[Node]:
     """Get all nodes for the current NETUID"""
@@ -41,6 +87,8 @@ async def insert_nodes(connection: Connection, nodes: list[Node]) -> None:
             {dcst.NODE_ID},
             {dcst.INCENTIVE},
             {dcst.NETUID},
+            {dcst.ALPHA_STAKE},
+            {dcst.TAO_STAKE},
             {dcst.STAKE},
             {dcst.TRUST},
             {dcst.VTRUST},
@@ -50,7 +98,7 @@ async def insert_nodes(connection: Connection, nodes: list[Node]) -> None:
             {dcst.PORT},
             {dcst.PROTOCOL}
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         """,
         [
             (
@@ -59,6 +107,8 @@ async def insert_nodes(connection: Connection, nodes: list[Node]) -> None:
                 node.node_id,
                 node.incentive,
                 node.netuid,
+                node.alpha_stake,
+                node.tao_stake,
                 node.stake,
                 node.trust,
                 node.vtrust,
@@ -133,6 +183,8 @@ async def migrate_nodes_to_history(connection: Connection) -> None:
                 {dcst.COLDKEY},
                 {dcst.INCENTIVE},
                 {dcst.NETUID},
+                {dcst.ALPHA_STAKE},
+                {dcst.TAO_STAKE},
                 {dcst.STAKE},
                 {dcst.TRUST},
                 {dcst.VTRUST},
@@ -148,6 +200,8 @@ async def migrate_nodes_to_history(connection: Connection) -> None:
                 {dcst.COLDKEY},
                 {dcst.INCENTIVE},
                 {dcst.NETUID},
+                {dcst.ALPHA_STAKE},
+                {dcst.TAO_STAKE},
                 {dcst.STAKE},
                 {dcst.TRUST},
                 {dcst.VTRUST},

@@ -7,6 +7,7 @@ from asyncpg import Pool
 from asyncpg.pool import PoolAcquireContext
 from dotenv import load_dotenv
 
+import validator.db.constants as cst
 from validator.utils.logging import get_logger
 
 
@@ -65,7 +66,14 @@ class PSQLDB:
 
             logger.debug(f"Connecting to {self.connection_string}....")
             try:
-                self.pool = await asyncpg.create_pool(self.connection_string)
+                self.pool = await asyncpg.create_pool(
+                    self.connection_string,
+                    min_size=cst.MIN_POOL_SIZE,
+                    max_size=cst.MAX_POOL_SIZE,
+                    command_timeout=cst.COMMAND_TIMEOUT,
+                    timeout=cst.TIMEOUT,
+                    max_queries=cst.MAX_QUERIES,
+                )
                 if self.pool is None:
                     raise ConnectionError("Failed to create connection pool")
                 else:
