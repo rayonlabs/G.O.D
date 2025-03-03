@@ -46,7 +46,7 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
     MIN_SCORE = 0.01
 
     hotkeys = [node.hotkey for node in nodes]
-    nodes_status = await get_nodes_daily_status(hotkeys, psql_db)
+    nodes_status = await nodes_sql.get_nodes_daily_status(hotkeys, psql_db)
 
     node_scores = {}
     for node in nodes:
