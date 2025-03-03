@@ -23,7 +23,7 @@ from validator.core.models import WorkloadMetrics
 from validator.db.database import PSQLDB
 
 
-async def get_nodes_daily_status(hotkeys: List[str], psql_db: PSQLDB) -> Dict[str, Dict]:
+async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> Dict[str, Dict]:
     """
     Get both daily participation status and average scores for nodes.
     """
