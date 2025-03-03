@@ -130,7 +130,7 @@ async def _select_miner_pool_and_add_to_task(
         return task
 
     num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
-    nodes_to_try_for = _weighted_random_shuffle(available_nodes)
+    nodes_to_try_for = _weighted_random_shuffle(available_nodes, config.psql_db)
 
     # TODO: Improve by selecting high score miners first, then lower score miners, etc
     i = 0
