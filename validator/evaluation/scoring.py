@@ -59,7 +59,7 @@ def calculate_adjusted_task_score(quality_score: float, task_work_score: float) 
     """Calculate adjusted task score based on quality score and work score."""
     assert not np.isnan(quality_score), "Quality score cannot be NaN"
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
-    return max(cts.MIN_TASK_SCORE, quality_score - cts.TASK_SCORE_THRESHOLD) * task_work_score
+    return quality_score * task_work_score
 
 
 def update_node_aggregation(
@@ -158,124 +158,87 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
-def calculate_scaled_score(weighted_loss: float, scale_factor: float) -> float:
-    """Calculate score using exponential decay."""
-    assert not np.isnan(weighted_loss), "Weighted loss cannot be NaN"
-    if scale_factor <= 0:
-        scale_factor = 1.0
-    return float(np.exp(-weighted_loss * scale_factor))
+def is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 3.0) -> bool:
+    """
+    If ANY miner has a valid synth/test ratio, we consider the group valid.
+    """
+    if not miner_results:
+        return False
+    for result in miner_results:
+        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
+            if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
+                return True
+    return False
 
 
-def compute_adaptive_scale_factor(miner_results: list[MinerResults]) -> float:
-    """Compute scale factor based only on finetuned submissions."""
-    finetuned_results = [
-        res for res in miner_results if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
-    ]
-
-    if not finetuned_results or len(finetuned_results) == 1:
-        logger.info("No finetuned results found for scale factor calculation")
-        return 1.0
-
-    weighted_losses = [calculate_weighted_loss(res.test_loss, res.synth_loss) for res in finetuned_results]
-
-    min_loss, max_loss = min(weighted_losses), max(weighted_losses)
-    logger.info(f"Loss range for finetuned submissions - min: {min_loss:.4f}, max: {max_loss:.4f}")
-
-    if min_loss == max_loss:
-        logger.info("All finetuned submissions have identical losses, using default scale factor")
-        return 2.0
-
-    scale = float(np.log(cts.TARGET_SCORE_RATIO) / (max_loss - min_loss))
-    logger.info(f"Computed scale factor: {scale:.4f}")
-    return scale
-
-
-def adjust_miner_scores_to_be_relative_to_other_comps(miner_results: list[MinerResults]) -> list[MinerResults]:
-    """Adjusts scores to have geometric mean of 1.0 for finetuned submissions only."""
-    valid_scores = [
-        res.score
-        for res in miner_results
-        if res.is_finetune and res.score is not None and not np.isnan(res.score) and res.score > 0
-    ]
-
-    if not valid_scores:
-        logger.warning("No valid finetuned submissions found for score adjustment")
-        return miner_results
-
-    logger.info(f"Adjusting scores for {len(valid_scores)} finetuned submissions")
-    logger.info(f"Pre-adjustment scores: {valid_scores}")
-
-    geometric_mean = float(gmean(np.array(valid_scores)))
-
-    if np.isnan(geometric_mean) or np.isinf(geometric_mean) or geometric_mean <= 0:
-        logger.warning(f"Invalid geometric mean: {geometric_mean}. Scores unchanged.")
-        geometric_mean = 1.0
-
-    logger.info(f"Geometric mean: {geometric_mean:.4f}")
-
-    for res in miner_results:
-        with LogContext(miner_hotkey=res.hotkey):
-            if res.is_finetune and res.score is not None and not np.isnan(res.score):
-                original_score = res.score
-                res.score = min(float(res.score / geometric_mean), cts.MAX_TASK_SCORE)
-                logger.info(f"Miner {res.hotkey}: {original_score:.4f} -> {res.score:.4f}")
-            else:
-                res.score = 0.0
-                logger.info(f"Miner {res.hotkey}: score set to 0.0 (non-finetuned or invalid)")
-
-    return miner_results
-
-
-def add_raw_scores_to_miner_results(miner_results: list[MinerResults]) -> list[MinerResults]:
-    """Calculate scores using only finetuned submissions."""
+def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> list[MinerResults]:
+    """Calculate scores based on either test_loss or weighted_loss.
+    Top ranked gets score=2, second gets score=1, others get 0."""
     logger.info("Beginning score calculation...")
 
     for result in miner_results:
         with LogContext(miner_hotkey=result.hotkey):
-            if not result.is_finetune:
-                result.score = 0.0
-                result.score_reason = result.score_reason or "Non-finetuned submission"
-                logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
+            result.score = 0.0
 
-    finetuned_results = [
-        res for res in miner_results if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
+            if not result.is_finetune:
+                result.score_reason = "Non-finetuned submission"
+                logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
+            elif np.isnan(result.test_loss) or np.isnan(result.synth_loss):
+                result.score_reason = "Invalid loss"
+                logger.info(f"Miner {result.hotkey}: Invalid loss, score set to 0.0")
+
+    valid_results = [
+        result for result in miner_results
+        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss)
     ]
 
-    if not finetuned_results:
+    if not valid_results:
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
-        for result in miner_results:
-            result.score = 0.0
         return miner_results
 
-    scale_factor = compute_adaptive_scale_factor(finetuned_results)
-    logger.info(f"Using scale factor: {scale_factor} (calculated from {len(finetuned_results)} finetuned submissions)")
+    # Check if synth losses are valid across all the miners, if it isn't then we just use the test loss
+    use_weighted_loss = is_synth_loss_valid_for_group(valid_results)
 
-    for result in miner_results:
+    if use_weighted_loss:
+        logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
+        ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss))
+                          for result in valid_results]
+        ranked_results.sort(key=lambda x: x[1])
+        ranking_type = "weighted_loss"
+    else:
+        logger.info("Using test loss only for ranking (all synth losses are invalid)")
+        ranked_results = [(result, result.test_loss) for result in valid_results]
+        ranked_results.sort(key=lambda x: x[1])
+        ranking_type = "test_loss_only"
+
+    for i, (result, metric) in enumerate(ranked_results[:2]):
         with LogContext(miner_hotkey=result.hotkey):
-            if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
-                weighted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss)
-                result.score = calculate_scaled_score(weighted_loss, scale_factor)
-                result.score_reason = "Computed score based on loss"
-                logger.info(
-                    f"Miner {result.hotkey} (finetuned):"
-                    f" test_loss={result.test_loss:.4f}"
-                    f" synth_loss={result.synth_loss:.4f}"
-                    f" weighted_loss={weighted_loss:.4f}"
-                    f" score={result.score:.4f}"
-                    f" score_reason={result.score_reason}"
-                )
-            else:
-                result.score = 0.0
-                if not result.score_reason:
-                    if result.is_finetune:
-                        result.score_reason = result.score_reason or "Invalid loss"
-                    else:
-                        result.score_reason = result.score_reason or "Non-finetuned submission"
+            result.score = 2.0 if i == 0 else 1.0
+            rank = "1st" if i == 0 else "2nd"
+            result.score_reason = f"Ranked {rank} by {ranking_type}"
 
-                logger.info(f"Miner {result.hotkey}: score=0.0, score_reason={result.score_reason}")
+            logger.info(
+                f"Miner {result.hotkey} (finetuned):"
+                f" test_loss={result.test_loss:.4f}"
+                f" synth_loss={result.synth_loss:.4f}"
+                f" {ranking_type}={metric:.4f}"
+                f" score={result.score:.4f}"
+                f" score_reason={result.score_reason}"
+            )
+
+    for result, metric in ranked_results[2:]:
+        with LogContext(miner_hotkey=result.hotkey):
+            result.score_reason = f"Ranked below top 2 by {ranking_type}"
+            logger.info(
+                f"Miner {result.hotkey} (finetuned):"
+                f" test_loss={result.test_loss:.4f}"
+                f" synth_loss={result.synth_loss:.4f}"
+                f" {ranking_type}={metric:.4f}"
+                f" score=0.0"
+                f" score_reason={result.score_reason}"
+            )
 
     return miner_results
-
 
 def _get_dataset_type(task: RawTask) -> CustomDatasetType:
     return CustomDatasetType(
@@ -497,44 +460,6 @@ def zero_duplicate_scores(task_results: list[MinerResults], keep_submission: dic
             result.score_reason = result.score_reason or "Duplicated submission"
     return task_results
 
-
-def _reject_loss_outliers(miner_results: list[MinerResults], n_std: float = cts.OUTLIER_STD_THRESHOLD) -> list[MinerResults]:
-    """Reject outliers based on weighted loss values that are too high."""
-    weighted_losses = [
-        calculate_weighted_loss(res.test_loss, res.synth_loss)
-        for res in miner_results
-        if res.is_finetune and not np.isnan(res.test_loss) and not np.isnan(res.synth_loss)
-    ]
-
-    if not weighted_losses:
-        return miner_results
-
-    losses_array = np.array(weighted_losses)
-    mean = np.mean(losses_array)
-    std = np.std(losses_array)
-
-    upper_bound = mean + (n_std * std)
-
-    logger.info(f"Mean loss: {mean:.4f}, Std: {std:.4f}, Upper bound: {upper_bound:.4f}")
-
-    for res in miner_results:
-        if not res.is_finetune or np.isnan(res.test_loss) or np.isnan(res.synth_loss):
-            continue
-
-        weighted_loss = calculate_weighted_loss(res.test_loss, res.synth_loss)
-        if weighted_loss > upper_bound or np.isnan(weighted_loss) or np.isinf(weighted_loss):
-            logger.info(
-                f"Loss rejected as an outlier for miner {res.hotkey}: "
-                f"weighted_loss={weighted_loss:.4f} "
-                f"(test_loss={res.test_loss:.4f}, synth_loss={res.synth_loss:.4f})"
-            )
-            res.score = 0.0
-            res.is_finetune = False
-            res.score_reason = "Loss rejected as an outlier"
-
-    return miner_results
-
-
 async def process_miners_pool(
     miners: list[Node], task: RawTask, dataset_type: CustomDatasetType, config: Config, gpu_ids: list[int]
 ) -> list[MinerResults]:
@@ -635,9 +560,7 @@ async def evaluate_and_score(task: RawTask, gpu_ids: list[int], config: Config) 
     task_results = zero_duplicate_scores(task_results, keep_submission)
 
     logger.info("Calculating final scores...")
-    task_results = _reject_loss_outliers(task_results)
-    task_results = add_raw_scores_to_miner_results(task_results)
-    task_results = adjust_miner_scores_to_be_relative_to_other_comps(task_results)
+    task_results = calculate_miner_ranking_and_scores(task_results)
     await _update_scores(task, task_results, config.psql_db)
     all_scores_zero = all(result.score == 0.0 for result in task_results)
     if all_scores_zero and task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS:
