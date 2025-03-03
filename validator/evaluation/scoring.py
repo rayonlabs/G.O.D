@@ -158,7 +158,7 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
-def is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 3.0) -> bool:
+def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0) -> bool:
     """
     If ANY miner has a valid synth/test ratio, we consider the group valid.
     """
@@ -170,35 +170,29 @@ def is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: 
                 return True
     return False
 
-
 def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> list[MinerResults]:
     """Calculate scores based on either test_loss or weighted_loss.
-    Top ranked gets score=2, second gets score=1, others get 0."""
+    Top ranked gets score=2, second gets score=1, others get 0.
+    Bottom 25% get a penalty (cts.SCORE_PENALTY) if there are more than cts.MIN_IDEAL_NUM_MINERS_IN_POOL miners."""
     logger.info("Beginning score calculation...")
-
     for result in miner_results:
         with LogContext(miner_hotkey=result.hotkey):
             result.score = 0.0
-
             if not result.is_finetune:
                 result.score_reason = "Non-finetuned submission"
                 logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
             elif np.isnan(result.test_loss) or np.isnan(result.synth_loss):
                 result.score_reason = "Invalid loss"
                 logger.info(f"Miner {result.hotkey}: Invalid loss, score set to 0.0")
-
     valid_results = [
         result for result in miner_results
         if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss)
     ]
-
     if not valid_results:
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
-
     # Check if synth losses are valid across all the miners, if it isn't then we just use the test loss
-    use_weighted_loss = is_synth_loss_valid_for_group(valid_results)
-
+    use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
         logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
         ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss))
@@ -211,12 +205,12 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
         ranked_results.sort(key=lambda x: x[1])
         ranking_type = "test_loss_only"
 
+    # Assign scores for top 2 miners
     for i, (result, metric) in enumerate(ranked_results[:2]):
         with LogContext(miner_hotkey=result.hotkey):
             result.score = 2.0 if i == 0 else 1.0
             rank = "1st" if i == 0 else "2nd"
             result.score_reason = f"Ranked {rank} by {ranking_type}"
-
             logger.info(
                 f"Miner {result.hotkey} (finetuned):"
                 f" test_loss={result.test_loss:.4f}"
@@ -226,17 +220,51 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
                 f" score_reason={result.score_reason}"
             )
 
-    for result, metric in ranked_results[2:]:
-        with LogContext(miner_hotkey=result.hotkey):
-            result.score_reason = f"Ranked below top 2 by {ranking_type}"
-            logger.info(
-                f"Miner {result.hotkey} (finetuned):"
-                f" test_loss={result.test_loss:.4f}"
-                f" synth_loss={result.synth_loss:.4f}"
-                f" {ranking_type}={metric:.4f}"
-                f" score=0.0"
-                f" score_reason={result.score_reason}"
-            )
+    # Apply penalties to bottom 25% if enough miners are in the competition
+    total_valid_miners = len(valid_results)
+    if total_valid_miners > cts.MIN_IDEAL_NUM_MINERS_IN_POOL:
+        penalty_count = max(1, int(total_valid_miners * 0.25))
+        penalty_start_idx = total_valid_miners - penalty_count
+
+        # Log miners ranked below top 2 but not in bottom 25%
+        for result, metric in ranked_results[2:penalty_start_idx]:
+            with LogContext(miner_hotkey=result.hotkey):
+                result.score_reason = f"Ranked below top 2 by {ranking_type}"
+                logger.info(
+                    f"Miner {result.hotkey} (finetuned):"
+                    f" test_loss={result.test_loss:.4f}"
+                    f" synth_loss={result.synth_loss:.4f}"
+                    f" {ranking_type}={metric:.4f}"
+                    f" score=0.0"
+                    f" score_reason={result.score_reason}"
+                )
+
+        # Apply penalty to bottom 25%
+        for result, metric in ranked_results[penalty_start_idx:]:
+            with LogContext(miner_hotkey=result.hotkey):
+                result.score = cts.SCORE_PENALTY
+                result.score_reason = f"Bottom 25% ranked by {ranking_type}"
+                logger.info(
+                    f"Miner {result.hotkey} (finetuned):"
+                    f" test_loss={result.test_loss:.4f}"
+                    f" synth_loss={result.synth_loss:.4f}"
+                    f" {ranking_type}={metric:.4f}"
+                    f" score={result.score:.4f}"
+                    f" score_reason={result.score_reason}"
+                )
+    else:
+        # No penalties if not enough miners
+        for result, metric in ranked_results[2:]:
+            with LogContext(miner_hotkey=result.hotkey):
+                result.score_reason = f"Ranked below top 2 by {ranking_type}"
+                logger.info(
+                    f"Miner {result.hotkey} (finetuned):"
+                    f" test_loss={result.test_loss:.4f}"
+                    f" synth_loss={result.synth_loss:.4f}"
+                    f" {ranking_type}={metric:.4f}"
+                    f" score=0.0"
+                    f" score_reason={result.score_reason}"
+                )
 
     return miner_results
 

@@ -106,8 +106,8 @@ MAX_EVAL_ATTEMPTS = 3
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
-MIN_TASK_SCORE = -0.00
-TASK_SCORE_THRESHOLD = 0.95
+SCORE_PENALTY = -0.05
+
 
 SIGMOID_STEEPNESS = 15  # Higher = sharper transition
 SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
