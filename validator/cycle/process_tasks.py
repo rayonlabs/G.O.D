@@ -42,7 +42,7 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
     if len(nodes) == 0:
         return []
 
-    DEFAULT_SCORE_FOR_NEW_NODES = 1.0
+    DEFAULT_SCORE_FOR_FIRST_DAILY_COMP = 2.0
     MIN_SCORE = 0.01
 
     hotkeys = [node.hotkey for node in nodes]
@@ -54,7 +54,7 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
 
         if not status["has_participated_today"]:
             # Nodes that haven't participated today get perfect scores so they will be picked at least once a day
-            node_scores[node.hotkey] = DEFAULT_SCORE_FOR_NEW_NODES
+            node_scores[node.hotkey] = DEFAULT_SCORE_FOR_FIRST_DAILY_COMP
         elif status["avg_quality_score"] is not None:
             # Nodes with scores use their actual scores (with minimum threshold)
             node_scores[node.hotkey] = max(status["avg_quality_score"], MIN_SCORE)
