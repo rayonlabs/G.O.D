@@ -32,7 +32,7 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
             AND (
                 -- Condition a: No entries in task_nodes table
                 NOT EXISTS (
-                    SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
+                    SELECT 1 FROM {dcst.TASK_NODES_TABLE} tn
                     WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
                 )
                 OR
