@@ -118,7 +118,7 @@ MAX_EVAL_ATTEMPTS = 4
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # Augmented will be (1 - this)
 TARGET_SCORE_RATIO = 1.5
-MIN_TASK_SCORE = -0.05
+MIN_TASK_SCORE = -0.005
 MAX_TASK_SCORE = 1.8
 TASK_SCORE_THRESHOLD = 0.95  # You need to be higher than this to get a good score
 
