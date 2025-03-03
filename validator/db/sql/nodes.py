@@ -38,7 +38,7 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
                 OR
                 -- Condition b: At least one entry with quality_score > 0
                 EXISTS (
-                    SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
+                    SELECT 1 FROM {dcst.TASK_NODES_TABLE} tn
                     WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
                     AND tn.{dcst.TASK_NODE_QUALITY_SCORE} > 0
                 )
