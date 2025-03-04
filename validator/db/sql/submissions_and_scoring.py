@@ -252,11 +252,10 @@ async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> List[Dict]:
         rows = await connection.fetch(query, hotkey, NETUID, TaskStatus.SUCCESS.value)
         return [dict(row) for row in rows]
 
-
 async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> List[TaskResults]:
     """
     Get aggregate scores for all completed tasks since the given start time.
-    Only includes tasks that have at least one node with score > 0.
+    Only includes tasks that have at least one node with score >= 1 or < 0.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -283,24 +282,21 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                 SELECT 1
                 FROM {cst.TASK_NODES_TABLE} tn2
                 WHERE tn2.{cst.TASK_ID} = t.{cst.TASK_ID}
-                AND tn2.{cst.TASK_NODE_QUALITY_SCORE} > 0
+                AND (tn2.{cst.TASK_NODE_QUALITY_SCORE} >= 1 OR tn2.{cst.TASK_NODE_QUALITY_SCORE} < 0)
                 AND tn2.{cst.NETUID} = $2
             )
             GROUP BY t.{cst.TASK_ID}
             ORDER BY t.{cst.CREATED_AT} DESC
         """
         rows = await connection.fetch(query, start_time, NETUID)
-
         results = []
         for row in rows:
             row_dict = dict(row)
             task_dict = {k: v for k, v in row_dict.items() if k != "node_scores"}
             task = MiniTaskWithScoringOnly(**task_dict)
-
             node_scores_data = row_dict["node_scores"]
             if isinstance(node_scores_data, str):
                 node_scores_data = json.loads(node_scores_data)
-
             node_scores = [
                 TaskNode(
                     task_id=str(node[cst.TASK_ID]),
@@ -308,12 +304,10 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                     quality_score=float(node[cst.QUALITY_SCORE]) if node[cst.QUALITY_SCORE] is not None else None,
                 )
                 for node in node_scores_data
+                if node[cst.QUALITY_SCORE] is not None and (float(node[cst.QUALITY_SCORE]) >= 1 or float(node[cst.QUALITY_SCORE]) < 0)
             ]
-
             results.append(TaskResults(task=task, node_scores=node_scores))
-
         return results
-
 
 async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) -> QualityMetrics:
     async with await psql_db.connection() as connection:

@@ -23,6 +23,7 @@ from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
+from validator.db.database import PSQLDB
 
 
 logger = get_logger(__name__)
