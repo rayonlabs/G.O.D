@@ -172,7 +172,7 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
-def is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
+def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
     """
