@@ -81,18 +81,30 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
 
     return shuffled_nodes
 
-
-# TODO: Improve by batching these up
 async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> MinerTaskResponse:
     endpoint = cst.TASK_OFFER_IMAGE_ENDPOINT if request.task_type == TaskType.IMAGETASK else cst.TASK_OFFER_ENDPOINT
-    response = await process_non_stream_fiber(endpoint, config, node, request.model_dump(), timeout=3)
-    logger.info(f"The response from make {request.task_type} offer for node {node.node_id} was {response}")
-    if response is None:
-        response = {}
-    return MinerTaskResponse(
-        message=response.get("message", "No message given"),
-        accepted=response.get("accepted", False),
-    )
+    try:
+        response = await process_non_stream_fiber(endpoint, config, node, request.model_dump(), timeout=3)
+        logger.info(f"The response from make {request.task_type} offer for node {node.node_id} was {response}")
+        if response is None or not isinstance(response, dict):
+            logger.warning(f"Received invalid response format from node {node.node_id}: {response}")
+            response = {}
+        return MinerTaskResponse(
+            message=response.get("message", "No message given"),
+            accepted=response.get("accepted", False),
+        )
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decoding error when processing response from node {node.node_id}: {str(e)}")
+        return MinerTaskResponse(
+            message=f"Failed to parse response: {str(e)}",
+            accepted=False,
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error when making offer to node {node.node_id}: {str(e)}")
+        return MinerTaskResponse(
+            message=f"Error during offer: {str(e)}",
+            accepted=False,
+        )
 
 
 async def _select_miner_pool_and_add_to_task(
