@@ -92,7 +92,7 @@ async def train_test_split(dataset_name: str, file_format: FileFormat, test_size
 
     test_size = min(
         int(len(combined_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE),
-        cst.MAX_SYNTH_DATA_POINTS,
+        cst.MAX_TEST_DATA_POINTS,
     )
     split_dataset = combined_dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
     logger.info(f"Train set size: {len(split_dataset['train'])}")
