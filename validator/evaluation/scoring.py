@@ -172,18 +172,26 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
-
-def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0) -> bool:
+def is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
-    If ANY miner has a valid synth/test ratio, we consider the group valid.
+    Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
     """
     if not miner_results:
         return False
+
+    valid_miners = 0
+    valid_ratios = 0
+
     for result in miner_results:
         if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
+            valid_miners += 1
             if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
-                return True
-    return False
+                valid_ratios += 1
+
+    if valid_miners == 0:
+        return False
+
+    return (valid_ratios / valid_miners) >= threshold
 
 def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> list[MinerResults]:
     """Calculate scores based on either test_loss or weighted_loss.
