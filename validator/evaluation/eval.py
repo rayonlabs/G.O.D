@@ -7,6 +7,7 @@ from typing import Union
 import torch
 import torch.nn.functional as F
 import yaml
+from accelerate.utils import find_executable_batch_size
 from axolotl.utils.data import load_tokenized_prepared_datasets
 from axolotl.utils.dict import DictDefault
 from peft import PeftModel
@@ -78,15 +79,6 @@ def _log_dataset_and_model_info(
     logger.info(f"Model vocabulary size: {language_model.config.vocab_size}")
 
 
-def _create_evaluation_dataloader(eval_dataset: Dataset, evaluation_config: DictDefault, tokenizer: AutoTokenizer) -> DataLoader:
-    return DataLoader(
-        eval_dataset,
-        batch_size=evaluation_config.micro_batch_size,
-        collate_fn=lambda batch: _collate_evaluation_batch(batch, tokenizer),
-        shuffle=False,
-    )
-
-
 def _collate_evaluation_batch(batch: list[dict[str, list[int]]], tokenizer: AutoTokenizer) -> dict[str, torch.Tensor]:
     input_ids = [torch.tensor(item["input_ids"]) for item in batch]
     attention_mask = [torch.tensor(item["attention_mask"]) for item in batch]
@@ -99,41 +91,55 @@ def _collate_evaluation_batch(batch: list[dict[str, list[int]]], tokenizer: Auto
     return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
 
-def _process_evaluation_batches(
+def _evaluate_with_optimal_batch_size(
+    eval_dataset: Dataset,
     language_model: AutoModelForCausalLM,
-    eval_dataloader: DataLoader,
+    tokenizer: AutoTokenizer,
     device: torch.device,
     evaluation_config: DictDefault,
 ) -> tuple[list[float], int]:
-    batch_losses = []
-    num_batches = 0
-    consecutive_nans = 0
-    max_consecutive_nans = evaluation_config.get("max_consecutive_nans")
+    @find_executable_batch_size()
+    def process_with_batch_size(batch_size):
+        dataloader = DataLoader(
+            eval_dataset,
+            batch_size=batch_size,
+            collate_fn=lambda batch: _collate_evaluation_batch(batch, tokenizer),
+            shuffle=False,
+        )
+        batch_losses = []
+        num_batches = 0
+        consecutive_nans = 0
+        max_consecutive_nans = evaluation_config.get("max_consecutive_nans")
 
-    total_batches = len(eval_dataloader)
-    time_logger = TimeBasedLogger(interval_seconds=10.0)
+        total_batches = len(dataloader)
+        time_logger = TimeBasedLogger(interval_seconds=10.0)
 
-    language_model.eval()
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(eval_dataloader):
-            batch_loss = _compute_batch_loss(language_model, batch, device)
+        language_model.eval()
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(dataloader):
+                batch_loss = _compute_batch_loss(language_model, batch, device)
 
-            if time_logger.should_log():
-                progress = (batch_idx + 1) / total_batches * 100
-                logger.info(f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) - Current loss: {batch_loss}")
+                if time_logger.should_log():
+                    progress = (batch_idx + 1) / total_batches * 100
+                    logger.info(
+                        f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) - "
+                        f"Current loss: {batch_loss} (batch size: {batch_size})"
+                    )
 
-            if torch.isnan(torch.tensor(batch_loss)):
-                consecutive_nans += 1
-                if consecutive_nans >= max_consecutive_nans:
-                    logger.error(f"Stopping evaluation early: {max_consecutive_nans} consecutive NaN losses detected")
-                    return [float("nan")], 1
-            else:
-                consecutive_nans = 0
+                if torch.isnan(torch.tensor(batch_loss)):
+                    consecutive_nans += 1
+                    if consecutive_nans >= max_consecutive_nans:
+                        logger.error(f"Stopping evaluation early: {max_consecutive_nans} consecutive NaN losses detected")
+                        return [float("nan")], 1
+                else:
+                    consecutive_nans = 0
 
-            batch_losses.append(batch_loss)
-            num_batches += 1
+                batch_losses.append(batch_loss)
+                num_batches += 1
 
-    return batch_losses, num_batches
+        return batch_losses, num_batches
+
+    return process_with_batch_size()
 
 
 def _compute_batch_loss(language_model: AutoModelForCausalLM, batch: dict, device: torch.device) -> float:
@@ -201,11 +207,12 @@ def evaluate_language_model_loss(
 
     eval_dataset = _load_evaluation_dataset(evaluation_config, tokenizer)
     _log_dataset_and_model_info(eval_dataset, language_model, tokenizer)
-    eval_dataloader = _create_evaluation_dataloader(eval_dataset, evaluation_config, tokenizer)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     language_model.to(device)
-    losses, num_batches = _process_evaluation_batches(language_model, eval_dataloader, device, evaluation_config)
+    losses, num_batches = _evaluate_with_optimal_batch_size(
+        eval_dataset, language_model, tokenizer, device, evaluation_config
+    )
+
     evaluation_results = _calculate_evaluation_metrics(losses, num_batches, evaluation_config)
     logger.info(f"Final evaluation results: {evaluation_results}")
 
