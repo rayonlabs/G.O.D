@@ -186,6 +186,7 @@ def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio:
         if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
             valid_miners += 1
             if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
+                logger.info(f"ratio between is {result.synth_loss / result.test_loss}")
                 valid_ratios += 1
 
     if valid_miners == 0:
