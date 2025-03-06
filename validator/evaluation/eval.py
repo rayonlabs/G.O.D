@@ -116,117 +116,6 @@ def _collate_evaluation_batch(batch: list[dict[str, list[int]]], tokenizer: Auto
     return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
 
-def _evaluate_with_optimal_batch_size(
-    eval_dataset: Dataset,
-    language_model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
-    device: torch.device,
-    evaluation_config: DictDefault,
-) -> tuple[list[dict[str, float]], int]:
-    @find_executable_batch_size(starting_batch_size=32)
-    def process_with_batch_size(batch_size):
-        dataloader = DataLoader(
-            eval_dataset,
-            batch_size=batch_size,
-            collate_fn=lambda batch: _collate_evaluation_batch(batch, tokenizer),
-            shuffle=False,
-        )
-        batch_results = []
-        num_batches = 0
-        consecutive_nans = 0
-        max_consecutive_nans = evaluation_config.get("max_consecutive_nans")
-
-        total_batches = len(dataloader)
-        time_logger = TimeBasedLogger(interval_seconds=10.0)
-
-        language_model.eval()
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(dataloader):
-                batch_loss = _compute_batch_loss(language_model, batch, device)
-                samples_in_batch = batch["input_ids"].size(0)
-
-                if time_logger.should_log():
-                    progress = (batch_idx + 1) / total_batches * 100
-                    logger.info(
-                        f"Processing batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) - "
-                        f"Current loss: {batch_loss} (batch size: {batch_size})"
-                    )
-
-                if torch.isnan(torch.tensor(batch_loss)):
-                    consecutive_nans += 1
-                    if consecutive_nans >= max_consecutive_nans:
-                        logger.error(f"Stopping evaluation early: {max_consecutive_nans} consecutive NaN losses detected")
-                        return [{"loss": float("nan"), "sample_count": 0}], 1
-                else:
-                    consecutive_nans = 0
-
-                batch_results.append({"loss": batch_loss, "sample_count": samples_in_batch})
-                num_batches += 1
-
-        return batch_results, num_batches
-
-    return process_with_batch_size()
-
-
-def _compute_batch_loss(language_model: AutoModelForCausalLM, batch: dict, device: torch.device) -> float:
-    input_ids = batch["input_ids"].to(device)
-    attention_mask = batch["attention_mask"].to(device)
-    labels = batch["labels"].to(device)
-
-    outputs = language_model(input_ids=input_ids, attention_mask=attention_mask)
-    logits = outputs.logits
-
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-
-    loss = F.cross_entropy(
-        shift_logits.view(-1, shift_logits.size(-1)),
-        shift_labels.view(-1),
-        ignore_index=-100,
-    )
-
-    return loss.item()
-
-
-def _calculate_evaluation_metrics(
-    batch_results: list[dict[str, float]],
-    num_batches: int,
-    evaluation_config: DictDefault,
-) -> dict[str, float]:
-    valid_results = [result for result in batch_results if not torch.isnan(torch.tensor(result["loss"]))]
-    nan_count = len(batch_results) - len(valid_results)
-    nan_percentage = (nan_count / num_batches) * 100 if num_batches > 0 else 0
-
-    if not valid_results:
-        logger.error("No valid losses were found during evaluation.")
-        return {
-            "eval_loss": float("inf"),
-            "perplexity": float("inf"),
-        }
-
-    if nan_percentage > evaluation_config.get("max_nan_percentage"):
-        logger.error(f"Too many nan values ({nan_percentage:.2f}% of batches)")
-        return {
-            "eval_loss": float("inf"),
-            "perplexity": float("inf"),
-        }
-
-    # Calculate weighted average based on sample count
-    total_samples = sum(result["sample_count"] for result in valid_results)
-    weighted_loss_sum = sum(result["loss"] * result["sample_count"] for result in valid_results)
-    average_loss = weighted_loss_sum / total_samples if total_samples > 0 else float("inf")
-
-    logger.info(f"Average loss: {average_loss} (calculated from {len(valid_results)} valid batches, {total_samples} samples)")
-
-    if nan_count > 0:
-        logger.warning(f"Skipped {nan_count} batches with nan values ({nan_percentage:.2f}% of total)")
-
-    return {
-        "eval_loss": average_loss,
-        "perplexity": torch.exp(torch.tensor(average_loss)).item(),
-    }
-
-
 def evaluate_language_model_loss(
     evaluation_config: DictDefault,
     language_model: AutoModelForCausalLM,
@@ -237,16 +126,37 @@ def evaluate_language_model_loss(
 
     eval_dataset = _load_evaluation_dataset(evaluation_config, tokenizer)
     _log_dataset_and_model_info(eval_dataset, language_model, tokenizer)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    language_model.to(device)
 
-    batch_results, num_batches = _evaluate_with_optimal_batch_size(
-        eval_dataset, language_model, tokenizer, device, evaluation_config
-    )
+    def custom_data_collator(features):
+        return _collate_evaluation_batch(features, tokenizer)
 
-    evaluation_results = _calculate_evaluation_metrics(batch_results, num_batches, evaluation_config)
-    logger.info(f"Final evaluation results: {evaluation_results}")
+    @find_executable_batch_size(starting_batch_size=evaluation_config.starting_batch_size)
+    def evaluate_with_batch_size(batch_size):
+        training_args = TrainingArguments(
+            output_dir=evaluation_config.output_dir,
+            per_device_eval_batch_size=batch_size,
+            fp16=torch.cuda.is_available(),
+            report_to="none",
+        )
 
+        trainer = Trainer(
+            model=language_model,
+            args=training_args,
+            tokenizer=tokenizer,
+            eval_dataset=eval_dataset,
+            data_collator=custom_data_collator,
+            callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)]
+        )
+
+        eval_results = trainer.evaluate()
+        return eval_results
+
+    eval_results = evaluate_with_batch_size()
+    logger.info(f"Final evaluation results: {eval_results}")
+    evaluation_results = {
+        "eval_loss": eval_results["eval_loss"],
+        "perplexity": torch.exp(torch.tensor(eval_results["eval_loss"])).item(),
+    }
     return evaluation_results
 
 
