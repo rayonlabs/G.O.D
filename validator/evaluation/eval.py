@@ -3,6 +3,7 @@ import os
 from math import ceil
 from pathlib import Path
 from typing import Union
+import re
 
 import torch
 import torch.nn.functional as F
@@ -259,11 +260,25 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
 
-
 @retry_on_5xx()
 def load_finetuned_model(base_model, repo: str) -> PeftModel:
     try:
         return PeftModel.from_pretrained(base_model, repo, is_trainable=False)
+    except RuntimeError as e:
+        error_msg = str(e)
+        if "size mismatch for" in error_msg and "lm_head.weight" in error_msg:
+            pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
+            if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
+                logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
+                return PeftModel.from_pretrained(
+                    base_model,
+                    repo,
+                    is_trainable=False,
+                    ignore_mismatched_sizes=True
+                )
+
+        logger.error(f"Exception type: {type(e)}, message: {str(e)}")
+        raise
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
