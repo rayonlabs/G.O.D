@@ -278,7 +278,7 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
         return PeftModel.from_pretrained(base_model, repo, is_trainable=False)
     except RuntimeError as e:
         error_msg = str(e)
-        if "size mismatch for" in error_msg and "lm_head.weight" in error_msg:
+        if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
             pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
