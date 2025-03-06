@@ -3,8 +3,8 @@ import os
 from math import ceil
 from pathlib import Path
 from typing import Union
-import re
 
+import re
 import torch
 import torch.nn.functional as F
 import yaml
