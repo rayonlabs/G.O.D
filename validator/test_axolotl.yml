@@ -21,3 +21,5 @@ num_epochs: 1
 
 max_consecutive_nans: 5
 max_nan_percentage: 5
+starting_batch_size: 1
+log_interval_seconds: 10
