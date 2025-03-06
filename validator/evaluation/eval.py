@@ -85,6 +85,7 @@ def _load_and_update_evaluation_config(
 def _load_evaluation_dataset(evaluation_config: DictDefault, tokenizer: AutoTokenizer) -> Dataset:
     prepared_path = Path(evaluation_config.output_dir) / "prepared"
     eval_dataset, _ = load_tokenized_prepared_datasets(tokenizer, evaluation_config, prepared_path)
+    eval_dataset = sorted(eval_dataset, key=lambda x: len(x["input_ids"]))
     logger.info(f"Loaded evaluation dataset with {len(eval_dataset)} samples")
     return eval_dataset
 
