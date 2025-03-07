@@ -239,7 +239,7 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
                     repo,
                     is_trainable=False,
                     ignore_mismatched_sizes=True,
-                    torch_dtype=torch.bfloat16  # Keep bfloat16 here too
+                    torch_dtype=torch.bfloat16
                 )
 
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
@@ -289,6 +289,7 @@ def main():
                 if "model_params_count" not in results_dict:
                     results_dict["model_params_count"] = _count_model_parameters(base_model)
                 finetuned_model = load_finetuned_model(base_model, repo)
+                finetuned_model.print_trainable_parameters()
                 is_finetune = True
             except Exception as lora_error:
                 logger.info(f"Loading full model... failed to load as LoRA: {lora_error}")
