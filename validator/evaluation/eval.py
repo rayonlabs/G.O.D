@@ -4,6 +4,7 @@ import time
 from math import ceil
 from pathlib import Path
 from typing import Union
+import requests
 
 import re
 import torch
@@ -218,28 +219,48 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
 
-@retry_on_5xx()
+
 def load_finetuned_model(base_model, repo: str) -> PeftModel:
     try:
-        return PeftModel.from_pretrained(base_model, repo, is_trainable=False)
-    except RuntimeError as e:
-        error_msg = str(e)
-        if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
-            pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
-            if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
-                logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
-                return PeftModel.from_pretrained(
-                    base_model,
-                    repo,
-                    is_trainable=False,
-                    ignore_mismatched_sizes=True
-                )
 
-        logger.error(f"Exception type: {type(e)}, message: {str(e)}")
-        raise
+        precision_info = {}
+
+        adapter_config_path = os.path.join(repo, "adapter_config.json")
+
+        if not os.path.exists(adapter_config_path):
+            try:
+                config_url = f"https://huggingface.co/{repo}/raw/main/adapter_config.json"
+                response = requests.get(config_url)
+                if response.status_code == 200:
+                    adapter_config = response.json()
+                else:
+                    adapter_config = {}
+            except Exception:
+                adapter_config = {}
+        else:
+            with open(adapter_config_path, 'r') as f:
+                adapter_config = json.load(f)
+
+        if adapter_config and 'dtype' in adapter_config:
+            if 'bfloat16' in adapter_config['dtype']:
+                precision_info['torch_dtype'] = torch.bfloat16
+                logger.info("Using bfloat16 precision from adapter config")
+            elif 'float16' in adapter_config['dtype']:
+                precision_info['torch_dtype'] = torch.float16
+                logger.info("Using float16 precision from adapter config")
+        else:
+            precision_info['torch_dtype'] = torch.bfloat16
+            logger.info("No precision info in adapter config, defaulting to bfloat16")
+
+        return PeftModel.from_pretrained(
+            base_model,
+            repo,
+            is_trainable=False,
+            **precision_info
+        )
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
-        raise  # Re-raise the exception to trigger retry
+        raise
 
 
 def _count_model_parameters(model: AutoModelForCausalLM) -> int:
