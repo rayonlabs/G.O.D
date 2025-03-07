@@ -396,19 +396,31 @@ async def _evaluate_submissions(
         logger.info("Starting test evaluation")
         test_data_filepath = await download_s3_file(task.test_data)
         test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
+        logger.info("Starting test evaluation")
+        test_data_filepath = await download_s3_file(task.test_data)
+        test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
         try:
+            os.remove(test_data_filepath)
             os.remove(test_data_filepath)
         except Exception as e:
             logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
         test_eval_results = test_results.results
         task.model_params_count = test_results.base_model_params_count
+            logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
+        test_eval_results = test_results.results
+        task.model_params_count = test_results.base_model_params_count
 
+        test_losses = []
         test_losses = []
         for repo in repos_to_evaluate:
             if isinstance(test_eval_results.get(repo), Exception):
                 results[repo] = test_eval_results[repo]
+            if isinstance(test_eval_results.get(repo), Exception):
+                results[repo] = test_eval_results[repo]
                 continue
 
+            test_result = test_eval_results[repo]
+            if not test_result.is_finetune:
             test_result = test_eval_results[repo]
             if not test_result.is_finetune:
                 results[repo] = (
@@ -420,11 +432,10 @@ async def _evaluate_submissions(
 
         test_losses.sort(key=lambda x: x[1])
         top_4_repos = [repo for repo, _ in test_losses[:4]]
-
+        
         for repo, _ in test_losses[4:]:
             results[repo] = (
-                # setting to 1k for now
-                EvaluationResultText(is_finetune=False, eval_loss=1000.0, perplexity=1000.0),
+                EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
                 test_eval_results[repo],
             )
 
@@ -438,10 +449,16 @@ async def _evaluate_submissions(
             )
             try:
                 os.remove(synthetic_data_filepath)
+                os.remove(synthetic_data_filepath)
             except Exception as e:
                 logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
             synth_eval_results = synth_results.results
+                logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
+            synth_eval_results = synth_results.results
 
+            for repo in top_4_repos:
+                if isinstance(synth_eval_results.get(repo), Exception):
+                    results[repo] = synth_eval_results[repo]
             for repo in top_4_repos:
                 if isinstance(synth_eval_results.get(repo), Exception):
                     results[repo] = synth_eval_results[repo]
