@@ -378,47 +378,57 @@ async def _evaluate_submissions(
         assert task.synthetic_data is not None, "Synthetic data shouldn't be none for text tasks"
         assert task.test_data is not None, "Test data shouldn't be none for text tasks"
 
-        logger.info("Starting synth evaluation")
-        synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-        synth_results = await run_evaluation_docker_text(dataset=synthetic_data_filepath, **evaluation_params)
+        logger.info("Starting test evaluation")
+        test_data_filepath = await download_s3_file(task.test_data)
+        test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
         try:
-            os.remove(synthetic_data_filepath)
+            os.remove(test_data_filepath)
         except Exception as e:
-            logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
-        synth_eval_results = synth_results.results
-        task.model_params_count = synth_results.base_model_params_count
+            logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
+        test_eval_results = test_results.results
+        task.model_params_count = test_results.base_model_params_count
 
-        finetuned_repos = []
+        test_losses = []
         for repo in repos_to_evaluate:
-            if isinstance(synth_eval_results.get(repo), Exception):
-                results[repo] = synth_eval_results[repo]
+            if isinstance(test_eval_results.get(repo), Exception):
+                results[repo] = test_eval_results[repo]
                 continue
 
-            synth_result = synth_eval_results[repo]
-            if not synth_result.is_finetune:
+            test_result = test_eval_results[repo]
+            if not test_result.is_finetune:
                 results[repo] = (
                     EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
                     EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
                 )
             else:
-                finetuned_repos.append(repo)
-        if finetuned_repos:
-            test_data_filepath = await download_s3_file(task.test_data)
-            test_results = await run_evaluation_docker_text(
-                dataset=test_data_filepath,
-                models=finetuned_repos,
+                test_losses.append((repo, test_result.eval_loss))
+
+        test_losses.sort(key=lambda x: x[1])
+        top_4_repos = [repo for repo, _ in test_losses[:4]]
+        
+        for repo, _ in test_losses[4:]:
+            results[repo] = (
+                EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                test_eval_results[repo],
+            )
+
+        if top_4_repos:
+            logger.info(f"Evaluating synthetic data for top {len(top_4_repos)} models")
+            synthetic_data_filepath = await download_s3_file(task.synthetic_data)
+            synth_results = await run_evaluation_docker_text(
+                dataset=synthetic_data_filepath,
+                models=top_4_repos,
                 **{k: v for k, v in evaluation_params.items() if k != "models"},
             )
             try:
-                os.remove(test_data_filepath)
+                os.remove(synthetic_data_filepath)
             except Exception as e:
-                logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
-            test_eval_results = test_results.results
-            task.model_params_count = test_results.base_model_params_count
+                logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
+            synth_eval_results = synth_results.results
 
-            for repo in finetuned_repos:
-                if isinstance(test_eval_results.get(repo), Exception):
-                    results[repo] = test_eval_results[repo]
+            for repo in top_4_repos:
+                if isinstance(synth_eval_results.get(repo), Exception):
+                    results[repo] = synth_eval_results[repo]
                 else:
                     results[repo] = (synth_eval_results[repo], test_eval_results[repo])
 
