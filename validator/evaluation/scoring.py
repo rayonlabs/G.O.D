@@ -52,7 +52,7 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     hours = task.hours_to_complete
 
     if getattr(task, 'model_params_count', 0) > 0:
-        model_size_billions = min(8, max(1, task.model_params_count // 1_000_000_000))
+        model_size_billions = min(14, max(1, task.model_params_count // 1_000_000_000))
     else:
         # Fallback to parsing from model id
         model = task.model_id
