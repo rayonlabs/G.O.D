@@ -127,7 +127,7 @@ SECOND_PLACE_SCORE = 1
 
 SIGMOID_STEEPNESS = 10  # Higher = sharper transition
 SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
-SIGMOID_POWER = 3  # Higher = more extreme difference between high and low scores
+SIGMOID_POWER = 2  # Higher = more extreme difference between high and low scores
 LINEAR_WEIGHT = 0.15  # Weight for linear component (0-1) - benefits low scores
 SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
 
@@ -142,7 +142,7 @@ MAX_CONCURRENT_TASK_PREPS = 3
 MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.8  # image is currently 1 minus this
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.75  # image is currently 1 minus this
 
 # diffusion eval stuff
 LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
@@ -182,7 +182,7 @@ MAX_IMAGE_HEIGHT = 1024
 IMAGE_RESOLUTION_STEP = 64  # Ensures we get resolutions divisible by 64
 
 # scoring stuff
-TEXT_TASK_SCORE_WEIGHT = 0.90
+TEXT_TASK_SCORE_WEIGHT = 0.75
 IMAGE_TASK_SCORE_WEIGHT = 1 - TEXT_TASK_SCORE_WEIGHT
 
 SEVEN_DAY_SCORE_WEIGHT = 0.25
