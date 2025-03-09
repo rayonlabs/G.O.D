@@ -5,7 +5,7 @@ from math import ceil
 from pathlib import Path
 from typing import Union
 
-import re
+import psutil
 import torch
 import yaml
 from accelerate.utils import find_executable_batch_size
@@ -36,6 +36,23 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def print_gpu_memory_usage(step: str = ""):
+    """GPU/CPU memory monitoring"""
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / 1024**2
+        reserved = torch.cuda.memory_reserved() / 1024**2
+        logger.info(f"GPU Memory [{step}]:")
+        logger.info(f"  Allocated: {allocated:.2f} MB")
+        print(f"GPU Allocated: {allocated:.2f} MB")
+        logger.info(f"  Reserved:  {reserved:.2f} MB")
+        print(f"GPU Reserved: {reserved:.2f} MB")
+
+    ram = psutil.Process().memory_info()
+    logger.info(f"RAM Usage [{step}]:")
+    logger.info(f"  RSS (Resident Set Size): {ram.rss / 1024**2:.2f} MB")
+    print(f"RAM RSS: {ram.rss / 1024**2:.2f} MB")
 
 
 class ProgressLoggerCallback(TrainerCallback):
