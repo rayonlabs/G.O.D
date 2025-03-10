@@ -210,6 +210,8 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
             elif np.isnan(result.test_loss) or np.isnan(result.synth_loss):
                 result.score_reason = "Invalid loss"
                 logger.info(f"Miner {result.hotkey}: Invalid loss, score set to 0.0")
+            elif result.synth_loss == 1000.0:
+                result.score_reason = "Not in the top 4 test losses - not considered"
     valid_results = [
         result
         for result in miner_results
