@@ -69,7 +69,7 @@ async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
             ON CONFLICT ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID})
             DO UPDATE SET 
                 {cst.REPO} = EXCLUDED.{cst.REPO},
-                {cst.UPDATED_ON} = CURRENT_TIMESTAMP
+                updated_on = CURRENT_TIMESTAMP 
             RETURNING {cst.SUBMISSION_ID}
         """
         submission_id = await connection.fetchval(
