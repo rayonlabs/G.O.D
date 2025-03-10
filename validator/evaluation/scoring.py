@@ -51,7 +51,7 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
 
     hours = task.hours_to_complete
 
-    if getattr(task, 'model_params_count', 0) > 0:
+    if getattr(task, "model_params_count", 0) > 0:
         model_size_billions = min(14, max(1, task.model_params_count // 1_000_000_000))
     else:
         # Fallback to parsing from model id
@@ -172,6 +172,7 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
+
 def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
@@ -194,6 +195,7 @@ def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio:
 
     return (valid_ratios / valid_miners) >= threshold
 
+
 def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> list[MinerResults]:
     """Calculate scores based on either test_loss or weighted_loss.
     Top ranked gets score=2, second gets score=1, others get 0.
@@ -209,7 +211,8 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
                 result.score_reason = "Invalid loss"
                 logger.info(f"Miner {result.hotkey}: Invalid loss, score set to 0.0")
     valid_results = [
-        result for result in miner_results
+        result
+        for result in miner_results
         if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss)
     ]
     if not valid_results:
@@ -219,8 +222,7 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
     use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
         logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
-        ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss))
-                          for result in valid_results]
+        ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss)) for result in valid_results]
         ranked_results.sort(key=lambda x: x[1])
         ranking_type = "weighted_loss"
     else:
@@ -414,10 +416,10 @@ async def _evaluate_submissions(
 
         test_losses.sort(key=lambda x: x[1])
         top_4_repos = [repo for repo, _ in test_losses[:4]]
-        
+
         for repo, _ in test_losses[4:]:
             results[repo] = (
-                EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                EvaluationResultText(is_finetune=False, eval_loss=1000.0, perplexity=1000.0),
                 test_eval_results[repo],
             )
 
@@ -594,6 +596,7 @@ def zero_duplicate_scores(
             result.is_finetune = False
             result.score_reason = result.score_reason or "Duplicated submission"
     return task_results
+
 
 async def process_miners_pool(
     miners: list[Node],
