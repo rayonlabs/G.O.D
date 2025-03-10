@@ -211,7 +211,9 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
                 result.score_reason = "Invalid loss"
                 logger.info(f"Miner {result.hotkey}: Invalid loss, score set to 0.0")
             elif result.synth_loss == 1000.0:
-                result.score_reason = "Not in the top 4 test losses - not considered"
+                result.score_reason = "Outside of top-4 test doesn't get scored."
+                logger.info(f"Miner {result.hotkey}: Outside of top-4")
+
     valid_results = [
         result
         for result in miner_results
@@ -421,6 +423,7 @@ async def _evaluate_submissions(
 
         for repo, _ in test_losses[4:]:
             results[repo] = (
+                # setting to 1k for now
                 EvaluationResultText(is_finetune=False, eval_loss=1000.0, perplexity=1000.0),
                 test_eval_results[repo],
             )
