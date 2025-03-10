@@ -423,7 +423,7 @@ async def _evaluate_submissions(
         for repo, _ in test_losses[4:]:
             results[repo] = (
                 # setting to 1k for now
-                EvaluationResultText(is_finetune=False, eval_loss=1000.0, perplexity=1000.0),
+                EvaluationResultText(is_finetune=True, eval_loss=1000.0, perplexity=1000.0),
                 test_eval_results[repo],
             )
 
