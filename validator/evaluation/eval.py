@@ -3,14 +3,10 @@ import os
 import re
 import subprocess
 import time
-import re
-import subprocess
-import time
 from math import ceil
 from pathlib import Path
 from typing import Union
 
-import psutil
 import psutil
 import torch
 import yaml
@@ -30,9 +26,6 @@ from transformers import AutoTokenizer
 from transformers import Trainer
 from transformers import TrainerCallback
 from transformers import TrainingArguments
-from transformers import Trainer
-from transformers import TrainerCallback
-from transformers import TrainingArguments
 
 from core.config.config_handler import create_dataset_entry
 from core.models.utility_models import CustomDatasetType
@@ -44,38 +37,6 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
-
-
-def log_memory_stats():
-    """GPU/CPU memory monitoring"""
-    if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated() / 1024**2
-        reserved = torch.cuda.memory_reserved() / 1024**2
-        logger.info(f"GPU Memory: Allocated: {allocated:.2f} MB, Reserved: {reserved:.2f} MB")
-
-    ram = psutil.Process().memory_info()
-    logger.info(f"RAM Usage: RSS (Resident Set Size): {ram.rss / 1024**2:.2f} MB")
-
-
-class ProgressLoggerCallback(TrainerCallback):
-    """
-    A callback that logs the progress of the evaluation every log_interval_seconds seconds.
-    """
-    def __init__(self, log_interval_seconds):
-        self.step = 0
-        self.last_log_time = time.time()
-        self.log_interval_seconds = log_interval_seconds
-
-
-    def on_prediction_step(self, args, state, control, **kwargs):
-        self.step += 1
-        current_time = time.time()
-
-        if current_time - self.last_log_time >= self.log_interval_seconds:
-            self.last_log_time = current_time
-            logger.info(f"Evaluation step: {self.step}")
-
-        return control
 
 
 def log_memory_stats():
@@ -139,7 +100,6 @@ def _load_evaluation_dataset(evaluation_config: DictDefault, tokenizer: AutoToke
     prepared_path = Path(evaluation_config.output_dir) / "prepared"
     eval_dataset, _ = load_tokenized_prepared_datasets(tokenizer, evaluation_config, prepared_path)
     eval_dataset = sorted(eval_dataset, key=lambda x: len(x["input_ids"]))
-    eval_dataset = sorted(eval_dataset, key=lambda x: len(x["input_ids"]))
     logger.info(f"Loaded evaluation dataset with {len(eval_dataset)} samples")
     return eval_dataset
 
@@ -178,39 +138,6 @@ def evaluate_language_model_loss(
 
     eval_dataset = _load_evaluation_dataset(evaluation_config, tokenizer)
     _log_dataset_and_model_info(eval_dataset, language_model, tokenizer)
-    log_memory_stats()
-
-    def custom_data_collator(features):
-        return _collate_evaluation_batch(features, tokenizer)
-
-    @find_executable_batch_size(starting_batch_size=evaluation_config.starting_batch_size)
-    def evaluate_with_batch_size(batch_size):
-        training_args = TrainingArguments(
-            output_dir=evaluation_config.output_dir,
-            per_device_eval_batch_size=batch_size,
-            fp16=torch.cuda.is_available(),
-            report_to="none",
-        )
-
-        trainer = Trainer(
-            model=language_model,
-            args=training_args,
-            tokenizer=tokenizer,
-            eval_dataset=eval_dataset,
-            data_collator=custom_data_collator,
-            callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)]
-        )
-
-        eval_results = trainer.evaluate()
-        return eval_results
-
-    eval_results = evaluate_with_batch_size()
-    logger.info(f"Final evaluation results: {eval_results}")
-    evaluation_results = {
-        "eval_loss": eval_results["eval_loss"],
-        "perplexity": torch.exp(torch.tensor(eval_results["eval_loss"])).item(),
-    }
-    log_memory_stats()
     log_memory_stats()
 
     def custom_data_collator(features):
@@ -387,25 +314,6 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
     if repo in results_dict:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
-def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str: str, file_format_str: str) -> None:
-    """Evaluate a single model repository and save results directly to file."""
-    output_dir = os.path.dirname(cst.CONTAINER_EVAL_RESULTS_PATH)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # Load existing results
-    results_dict = {}
-    if os.path.exists(cst.CONTAINER_EVAL_RESULTS_PATH):
-        try:
-            with open(cst.CONTAINER_EVAL_RESULTS_PATH, "r") as f:
-                results_dict = json.load(f)
-        except json.JSONDecodeError:
-            logger.warning(f"Could not read existing results from {cst.CONTAINER_EVAL_RESULTS_PATH}, starting fresh")
-
-    # Skip if duplicate
-    if repo in results_dict:
-        logger.info(f"Skipping {repo} as it's already evaluated")
-        return
 
     file_format = FileFormat(file_format_str)
     try:
@@ -436,58 +344,7 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
                 is_finetune = False
 
         finetuned_model.eval()
-        finetuned_model.eval()
 
-        results = evaluate_finetuned_model(
-            dataset_name=dataset,
-            finetuned_model=finetuned_model,
-            dataset_type=dataset_type,
-            file_format=file_format,
-            tokenizer=tokenizer,
-        )
-        results["is_finetune"] = is_finetune
-        results_dict[repo] = results
-    except Exception as e:
-        logger.error(f"Error evaluating {repo}: {e}", exc_info=True)
-        results_dict[repo] = str(e)
-    finally:
-        with open(cst.CONTAINER_EVAL_RESULTS_PATH, "w") as f:
-            json.dump(results_dict, f, indent=2)
-        logger.info(f"Saved evaluation results for {repo}")
-        log_memory_stats()
-
-
-def main():
-    dataset = os.environ.get("DATASET")
-    original_model = os.environ.get("ORIGINAL_MODEL")
-    dataset_type_str = os.environ.get("DATASET_TYPE", "")
-    file_format_str = os.environ.get("FILE_FORMAT")
-    models_str = os.environ.get("MODELS", "")  # Comma-separated list of LoRA repos
-    if not all([dataset, original_model, file_format_str, models_str]):
-        logger.error("Missing required environment variables.")
-        exit(1)
-
-    lora_repos = [m.strip() for m in models_str.split(",") if m.strip()]
-
-    for repo in lora_repos:
-        try:
-            # Launching subprocess to purge memory: https://github.com/huggingface/transformers/issues/26571
-            subprocess.run([
-                "python",
-                "-m",
-                "validator.evaluation.single_eval",
-                repo,
-                dataset,
-                original_model,
-                dataset_type_str,
-                file_format_str
-            ], check=True)
-            logger.info(f"Subprocess completed for {repo}")
-            log_memory_stats()
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error running subprocess for {repo}: {e}")
-
-    logger.info("All evaluations completed")
         results = evaluate_finetuned_model(
             dataset_name=dataset,
             finetuned_model=finetuned_model,
