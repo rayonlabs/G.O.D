@@ -11,7 +11,6 @@ import psutil
 import torch
 import yaml
 from accelerate.utils import find_executable_batch_size
-from accelerate.utils import find_executable_batch_size
 from axolotl.utils.data import load_tokenized_prepared_datasets
 from axolotl.utils.dict import DictDefault
 from peft import PeftModel
@@ -55,11 +54,11 @@ class ProgressLoggerCallback(TrainerCallback):
     """
     A callback that logs the progress of the evaluation every log_interval_seconds seconds.
     """
+
     def __init__(self, log_interval_seconds):
         self.step = 0
         self.last_log_time = time.time()
         self.log_interval_seconds = log_interval_seconds
-
 
     def on_prediction_step(self, args, state, control, **kwargs):
         self.step += 1
@@ -159,7 +158,7 @@ def evaluate_language_model_loss(
             tokenizer=tokenizer,
             eval_dataset=eval_dataset,
             data_collator=custom_data_collator,
-            callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)]
+            callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)],
         )
 
         eval_results = trainer.evaluate()
@@ -204,26 +203,22 @@ def retry_on_5xx():
         reraise=True,
     )
 
+
 @retry_on_5xx()
 def load_model(model_name_or_path: str) -> AutoModelForCausalLM:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
         return AutoModelForCausalLM.from_pretrained(
-            model_name_or_path,
-            token=os.environ.get("HUGGINGFACE_TOKEN"),
-            device_map=device
+            model_name_or_path, token=os.environ.get("HUGGINGFACE_TOKEN"), device_map=device
         )
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
-            pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
+            pattern = re.search(r"shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)", error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 return AutoModelForCausalLM.from_pretrained(
-                    model_name_or_path,
-                    token=os.environ.get("HUGGINGFACE_TOKEN"),
-                    ignore_mismatched_sizes=True,
-                    device_map=device
+                    model_name_or_path, token=os.environ.get("HUGGINGFACE_TOKEN"), ignore_mismatched_sizes=True, device_map=device
                 )
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise
@@ -240,29 +235,21 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
 
+
 @retry_on_5xx()
 def load_finetuned_model(base_model, repo: str) -> PeftModel:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
-        model = PeftModel.from_pretrained(
-            base_model,
-            repo,
-            is_trainable=False,
-            device_map=device
-        )
+        model = PeftModel.from_pretrained(base_model, repo, is_trainable=False, device_map=device)
         return model
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
-            pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
+            pattern = re.search(r"shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)", error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 return PeftModel.from_pretrained(
-                    base_model,
-                    repo,
-                    is_trainable=False,
-                    ignore_mismatched_sizes=True,
-                    device_map=device
+                    base_model, repo, is_trainable=False, ignore_mismatched_sizes=True, device_map=device
                 )
 
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
@@ -346,6 +333,7 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
         with open(cst.CONTAINER_EVAL_RESULTS_PATH, "w") as f:
             json.dump(results_dict, f, indent=2)
         logger.info(f"Saved evaluation results for {repo}")
+        logger.info(json.dumps(results_dict, indent=2))
         log_memory_stats()
 
 
@@ -364,16 +352,19 @@ def main():
     for repo in lora_repos:
         try:
             # Launching subprocess to purge memory: https://github.com/huggingface/transformers/issues/26571
-            subprocess.run([
-                "python",
-                "-m",
-                "validator.evaluation.single_eval",
-                repo,
-                dataset,
-                original_model,
-                dataset_type_str,
-                file_format_str
-            ], check=True)
+            subprocess.run(
+                [
+                    "python",
+                    "-m",
+                    "validator.evaluation.single_eval",
+                    repo,
+                    dataset,
+                    original_model,
+                    dataset_type_str,
+                    file_format_str,
+                ],
+                check=True,
+            )
             logger.info(f"Subprocess completed for {repo}")
             log_memory_stats()
         except subprocess.CalledProcessError as e:
