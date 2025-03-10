@@ -59,6 +59,17 @@
             }
         },
         {
+            "name": "Python Debugger: eval",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.evaluation.eval",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
             "name": "Python Debugger: Task Prep Test",
             "type": "debugpy",
             "request": "launch",
