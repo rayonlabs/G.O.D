@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import time
 from math import ceil
@@ -205,13 +206,27 @@ def retry_on_5xx():
 
 @retry_on_5xx()
 def load_model(model_name_or_path: str) -> AutoModelForCausalLM:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
         return AutoModelForCausalLM.from_pretrained(
             model_name_or_path,
             token=os.environ.get("HUGGINGFACE_TOKEN"),
             device_map=device
         )
+    except RuntimeError as e:
+        error_msg = str(e)
+        if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
+            pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
+            if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
+                logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
+                return AutoModelForCausalLM.from_pretrained(
+                    model_name_or_path,
+                    token=os.environ.get("HUGGINGFACE_TOKEN"),
+                    ignore_mismatched_sizes=True,
+                    device_map=device
+                )
+        logger.error(f"Exception type: {type(e)}, message: {str(e)}")
+        raise
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
@@ -227,8 +242,8 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
 
 @retry_on_5xx()
 def load_finetuned_model(base_model, repo: str) -> PeftModel:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
         model = PeftModel.from_pretrained(
             base_model,
             repo,
@@ -236,6 +251,22 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
             device_map=device
         )
         return model
+    except RuntimeError as e:
+        error_msg = str(e)
+        if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
+            pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
+            if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
+                logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
+                return PeftModel.from_pretrained(
+                    base_model,
+                    repo,
+                    is_trainable=False,
+                    ignore_mismatched_sizes=True,
+                    device_map=device
+                )
+
+        logger.error(f"Exception type: {type(e)}, message: {str(e)}")
+        raise
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
