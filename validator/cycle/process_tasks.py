@@ -451,11 +451,14 @@ async def evaluate_tasks_loop(config: Config):
                         await task_queue.put(task)
             else:
                 logger.info("No new tasks awaiting evaluation - waiting 30 seconds")
-            await cleanup_model_cache(config.psql_db)
         else:
             logger.info("Evaluation queue is full - waiting for 30 seconds")
         await asyncio.sleep(30)
 
 
 async def process_completed_tasks(config: Config) -> None:
-    await asyncio.gather(move_tasks_to_preevaluation_loop(config), evaluate_tasks_loop(config))
+    await asyncio.gather(
+        move_tasks_to_preevaluation_loop(config), 
+        evaluate_tasks_loop(config),
+        cleanup_model_cache(config.psql_db)
+    )
