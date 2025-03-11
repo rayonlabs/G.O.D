@@ -3,6 +3,7 @@ import random
 import shutil
 import tempfile
 import zipfile
+import uuid
 from math import ceil
 from pathlib import Path
 from typing import List
@@ -42,7 +43,8 @@ def create_zip_for_image_dataset(split_keys: set, zip_name: str, entries: dict, 
 
 
 def unzip_to_temp_path(zip_file_path: str) -> str:
-    tmp_dir = cst.TEMP_PATH_FOR_IMAGES
+    random_tmp_id = uuid.uuid4()
+    tmp_dir = f"{cst.TEMP_PATH_FOR_IMAGES}/{random_tmp_id}"
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
     with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
