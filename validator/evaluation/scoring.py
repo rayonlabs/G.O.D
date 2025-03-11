@@ -1,3 +1,4 @@
+import math
 import os
 import re
 from datetime import datetime
@@ -226,12 +227,12 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
     if use_weighted_loss:
         logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
         ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss)) for result in valid_results]
-        ranked_results.sort(key=lambda x: x[1])
+        ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
         ranking_type = "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
-        ranked_results.sort(key=lambda x: x[1])
+        ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
         ranking_type = "test_loss_only"
 
     # Assign scores for top 2 miners
@@ -417,7 +418,7 @@ async def _evaluate_submissions(
             else:
                 test_losses.append((repo, test_result.eval_loss))
 
-        test_losses.sort(key=lambda x: x[1])
+        test_losses.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
         top_4_repos = [repo for repo, _ in test_losses[:4]]
 
         for repo, _ in test_losses[4:]:
