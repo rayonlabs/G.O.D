@@ -197,9 +197,6 @@ async def run_evaluation_docker_image(
 
         eval_results_dict = await get_evaluation_results(container)
 
-        if os.path.exists(dataset_dir):
-            shutil.rmtree(dataset_dir)
-
         return process_evaluation_results(eval_results_dict, is_image=True)
 
     except Exception as e:
@@ -210,6 +207,8 @@ async def run_evaluation_docker_image(
         try:
             await asyncio.to_thread(container.remove, force=True)
             await cleanup_resources()
+            if os.path.exists(dataset_dir):
+                shutil.rmtree(dataset_dir)
         except Exception as e:
             logger.info(f"A problem with cleaning up {e}")
         client.close()
