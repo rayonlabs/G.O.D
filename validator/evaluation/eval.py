@@ -54,11 +54,11 @@ class ProgressLoggerCallback(TrainerCallback):
     """
     A callback that logs the progress of the evaluation every log_interval_seconds seconds.
     """
+
     def __init__(self, log_interval_seconds):
         self.step = 0
         self.last_log_time = time.time()
         self.log_interval_seconds = log_interval_seconds
-
 
     def on_prediction_step(self, args, state, control, **kwargs):
         self.step += 1
@@ -158,7 +158,7 @@ def evaluate_language_model_loss(
             tokenizer=tokenizer,
             eval_dataset=eval_dataset,
             data_collator=custom_data_collator,
-            callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)]
+            callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)],
         )
 
         eval_results = trainer.evaluate()
@@ -361,6 +361,7 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
         with open(cst.CONTAINER_EVAL_RESULTS_PATH, "w") as f:
             json.dump(results_dict, f, indent=2)
         logger.info(f"Saved evaluation results for {repo}")
+        logger.info(json.dumps(results_dict, indent=2))
         log_memory_stats()
 
 

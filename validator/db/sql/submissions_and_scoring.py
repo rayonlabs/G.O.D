@@ -47,12 +47,7 @@ async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> Dict[st
         """
         rows = await connection.fetch(query, hotkeys, NETUID)
 
-        result = {
-            hotkey: {
-                "has_participated_today": False,
-                "avg_quality_score": None
-            } for hotkey in hotkeys
-        }
+        result = {hotkey: {"has_participated_today": False, "avg_quality_score": None} for hotkey in hotkeys}
 
         for row in rows:
             hotkey = row[cst.HOTKEY]
@@ -61,8 +56,9 @@ async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> Dict[st
 
         return result
 
+
 async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
-    """Add a new submission for the current NETUID"""
+    """Add or update a submission for the current NETUID"""
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -70,6 +66,10 @@ async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
                 {cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID}, {cst.REPO}
             )
             VALUES ($1, $2, $3, $4)
+            ON CONFLICT ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID})
+            DO UPDATE SET 
+                {cst.REPO} = EXCLUDED.{cst.REPO},
+                updated_on = CURRENT_TIMESTAMP 
             RETURNING {cst.SUBMISSION_ID}
         """
         submission_id = await connection.fetchval(
@@ -252,6 +252,7 @@ async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> List[Dict]:
         rows = await connection.fetch(query, hotkey, NETUID, TaskStatus.SUCCESS.value)
         return [dict(row) for row in rows]
 
+
 async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> List[TaskResults]:
     """
     Get aggregate scores for all completed tasks since the given start time.
@@ -304,10 +305,12 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                     quality_score=float(node[cst.QUALITY_SCORE]) if node[cst.QUALITY_SCORE] is not None else None,
                 )
                 for node in node_scores_data
-                if node[cst.QUALITY_SCORE] is not None and (float(node[cst.QUALITY_SCORE]) >= 1 or float(node[cst.QUALITY_SCORE]) < 0)
+                if node[cst.QUALITY_SCORE] is not None
+                and (float(node[cst.QUALITY_SCORE]) >= 1 or float(node[cst.QUALITY_SCORE]) < 0)
             ]
             results.append(TaskResults(task=task, node_scores=node_scores))
         return results
+
 
 async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) -> QualityMetrics:
     async with await psql_db.connection() as connection:
