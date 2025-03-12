@@ -41,8 +41,8 @@ def extract_json_from_response(response: str) -> dict:
         if json_match:
             return json.loads(json_match.group())
         else:
-            raise json.JSONDecodeError(f"No JSON found in response: {response}")
-    except json.JSONDecodeError as e:
+            raise ValueError(f"No JSON found in response: {response}")
+    except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"Failed to parse JSON from response: {response}")
         raise e
 
