@@ -95,6 +95,7 @@ TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
 # text augmentation synth
 TEXT_SYNTH_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
 TEXT_SYNTH_MODEL_TEMPERATURE = 0.4
+TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
 END_OF_REASONING_TAG = "</think>"
 
 # image prompt generation synth
