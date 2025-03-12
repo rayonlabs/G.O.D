@@ -335,6 +335,9 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
             is_finetune = True
         except Exception as lora_error:
             logger.info(f"Loading full model... failed to load as LoRA: {lora_error}")
+            base_model.to('cpu')
+            del base_model
+            torch.cuda.empty_cache()
             finetuned_model = load_model(repo, is_base_model=False)
             try:
                 is_finetune = model_is_a_finetune(original_model, finetuned_model)
