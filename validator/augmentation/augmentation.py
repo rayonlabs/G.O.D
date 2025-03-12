@@ -10,14 +10,16 @@ from fiber import Keypair
 from core.models.utility_models import Message
 from core.models.utility_models import Prompts
 from core.models.utility_models import Role
+from validator.core.constants import END_OF_REASONING_TAG
 from validator.core.constants import MAX_SYNTH_DATA_POINTS
 from validator.core.constants import OUTPUT_REFORMULATION_PROBABILITY
 from validator.core.constants import PROMPT_PATH
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
-from validator.core.constants import SYNTH_MODEL
-from validator.core.constants import SYNTH_MODEL_TEMPERATURE
+from validator.core.constants import TEXT_SYNTH_MODEL
+from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
 from validator.evaluation.utils import get_default_dataset_config
-from validator.utils.call_endpoint import post_to_nineteen_chat
+from validator.utils.llm import convert_to_nineteen_payload
+from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
 
 
@@ -93,21 +95,10 @@ def check_the_synthetic_data(synthetic_data_point: dict, original_data_columns: 
     return set(synthetic_data_point.keys()) == set(original_data_columns)
 
 
-def convert_to_nineteen_payload(
-    messages: List[Message], model: str = SYNTH_MODEL, temperature: float = SYNTH_MODEL_TEMPERATURE, stream: bool = False
-) -> dict:
-    return {
-        "messages": [message.model_dump() for message in messages],
-        "model": model,
-        "temperature": temperature,
-        "stream": stream,
-    }
-
-
 async def generate_from_distribution(row: dict, prompts: Prompts, keypair: Keypair) -> str:
     messages = create_messages_for_distribution_replication(row, prompts)
-    payload = convert_to_nineteen_payload(messages)
-    synthetic_data_point = await post_to_nineteen_chat(payload, keypair)
+    payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE)
+    synthetic_data_point = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
     json_synthetic_data_point = (
         json.loads(synthetic_data_point) if isinstance(synthetic_data_point, str) else synthetic_data_point
     )
@@ -117,8 +108,8 @@ async def generate_from_distribution(row: dict, prompts: Prompts, keypair: Keypa
 async def generate_from_output(row: dict, output_field: str, prompts: Prompts, keypair: Keypair) -> str:
     # Step 1: Reformulate output and get description
     messages = create_messages_for_output_reformulation(row, output_field, prompts)
-    payload = convert_to_nineteen_payload(messages)
-    result = await post_to_nineteen_chat(payload, keypair)
+    payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE)
+    result = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
     result_dict = json.loads(result) if isinstance(result, str) else result
     reformulated_output = result_dict["reformulated_output"]
     description = result_dict["description"]
@@ -126,8 +117,8 @@ async def generate_from_output(row: dict, output_field: str, prompts: Prompts, k
     # Step 2: Generate inputs based on reformulated output
     schema = {k: type(v).__name__ for k, v in row.items()}
     messages = create_messages_for_input_generation(reformulated_output, description, output_field, schema, prompts)
-    payload = convert_to_nineteen_payload(messages)
-    result = await post_to_nineteen_chat(payload, keypair)
+    payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE)
+    result = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
     generated_inputs = json.loads(result) if isinstance(result, str) else result
     generated_inputs[output_field] = reformulated_output  # Double check the output is unchanged
 

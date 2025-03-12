@@ -70,7 +70,6 @@ MINIMUM_DATASET_ROWS = 5000  # Minimum number of rows required in a dataset
 # synth stuff
 NUM_SYNTH_RETRIES = 3
 SYNTH_GEN_BATCH_SIZE = 10
-SYNTH_MODEL_TEMPERATURE = 0.4
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
@@ -78,7 +77,7 @@ GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
-    (30_000, 80_000), # we don't sample these for now as they are too small
+    (30_000, 80_000),  # we don't sample these for now as they are too small
     (80_000, 150_000),
     (150_000, 1_500_000),
 ]
@@ -93,7 +92,16 @@ TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     (500_000, 5_000_000): (8, 12),  # 500k+ rows needs 5-12 hours
 }
 
-SYNTH_MODEL = "chat-llama-3-2-3b"
+# text augmentation synth
+TEXT_SYNTH_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
+TEXT_SYNTH_MODEL_TEMPERATURE = 0.4
+END_OF_REASONING_TAG = "</think>"
+
+# image prompt generation synth
+IMAGE_PROMPT_GEN_MODEL = "chat-llama-3-2-3b"
+IMAGE_PROMPT_GEN_MODEL_TEMPERATURE = 0.4
+
+# endpoints
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
 IMAGE_GEN_ENDPOINT = "https://api.nineteen.ai/v1/text-to-image"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
@@ -122,7 +130,7 @@ MAX_EVAL_ATTEMPTS = 4
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 SCORE_PENALTY = -0.05
-FIRST_PLACE_SCORE  = 2
+FIRST_PLACE_SCORE = 2
 SECOND_PLACE_SCORE = 1
 
 SIGMOID_STEEPNESS = 10  # Higher = sharper transition

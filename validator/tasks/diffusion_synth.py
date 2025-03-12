@@ -19,8 +19,6 @@ from core.models.utility_models import Message
 from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
-from validator.core.constants import SYNTH_MODEL
-from validator.core.constants import SYNTH_MODEL_TEMPERATURE
 from validator.core.models import ImageRawTask
 from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
@@ -28,6 +26,7 @@ from validator.tasks.task_prep import upload_file_to_minio
 from validator.utils.call_endpoint import post_to_nineteen_chat
 from validator.utils.call_endpoint import post_to_nineteen_image
 from validator.utils.call_endpoint import retry_with_backoff
+from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.logging import get_logger
 
 
@@ -130,21 +129,10 @@ Return only the JSON response."""
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
 
 
-def convert_to_nineteen_payload(
-    messages: List[Message], model: str = SYNTH_MODEL, temperature: float = SYNTH_MODEL_TEMPERATURE, stream: bool = False
-) -> dict:
-    return {
-        "messages": [message.model_dump() for message in messages],
-        "model": model,
-        "temperature": temperature,
-        "stream": stream,
-    }
-
-
 @retry_with_backoff
 async def generate_diffusion_prompts(style: str, keypair: Keypair, num_prompts: int) -> List[str]:
     messages = create_diffusion_messages(style, num_prompts)
-    payload = convert_to_nineteen_payload(messages)
+    payload = convert_to_nineteen_payload(messages, cst.IMAGE_PROMPT_GEN_MODEL, cst.IMAGE_PROMPT_GEN_MODEL_TEMPERATURE)
 
     result = await post_to_nineteen_chat(payload, keypair)
 
