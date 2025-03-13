@@ -69,7 +69,7 @@ MINIMUM_DATASET_ROWS = 5000  # Minimum number of rows required in a dataset
 
 # synth stuff
 NUM_SYNTH_RETRIES = 3
-SYNTH_GEN_BATCH_SIZE = 10
+SYNTH_GEN_BATCH_SIZE = 30
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
