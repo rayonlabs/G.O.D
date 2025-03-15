@@ -77,9 +77,9 @@ GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
-    (30_000, 80_000),  # we don't sample these for now as they are too small
-    (80_000, 150_000),
-    (150_000, 1_500_000),
+    (20_000, 50_000),  
+    (50_000, 100_000),
+    (100_000, 250_000),
 ]
 
 # dataset row bins to training hours range
@@ -89,7 +89,6 @@ TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     (25_000, 50_000): (4, 8),  # 25k-50k rows needs 3-6 hours
     (50_000, 500_000): (5, 9),  # 50k-500k rows needs 4-8 hours
     (100_000, 500_000): (7, 10),  # 50k-500k rows needs 4-8 hours
-    (500_000, 5_000_000): (8, 12),  # 500k+ rows needs 5-12 hours
 }
 
 # text augmentation synth
@@ -151,7 +150,7 @@ MAX_CONCURRENT_TASK_PREPS = 3
 MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.8  # image is currently 1 minus this
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.75  # image is currently 1 minus this
 
 # diffusion eval stuff
 LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
