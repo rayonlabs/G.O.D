@@ -2,8 +2,8 @@ import os
 import random
 import shutil
 import tempfile
-import zipfile
 import uuid
+import zipfile
 from math import ceil
 from pathlib import Path
 from typing import List
@@ -161,9 +161,7 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
         logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
         return None
 
-    synthetic_data = await generate_augmented_text_dataset(
-        sampled_data_list, column_to_reformulate=column_to_reformulate, keypair=keypair
-    )
+    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair)
 
     return synthetic_data
 

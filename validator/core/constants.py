@@ -77,7 +77,7 @@ GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
-    (20_000, 50_000),  
+    (20_000, 50_000),
     (50_000, 100_000),
     (100_000, 250_000),
 ]
@@ -107,8 +107,7 @@ IMAGE_GEN_ENDPOINT = "https://api.nineteen.ai/v1/text-to-image"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
-# Probability for using output reformulation method
-OUTPUT_REFORMULATION_PROBABILITY = 0.5
+
 
 # Task Stuff
 MINIMUM_MINER_POOL = 1
