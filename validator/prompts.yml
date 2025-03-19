@@ -5,8 +5,7 @@ input_output_reformulation_sys: >
   1. Create a paraphrased version of each column while preserving the meaning
   2. Keep the style of the original text
   3. Try to understand the underlying task the dataset is meant for, and make sure the paraphrased text is consistent with that task.
-  4. If it is a mathematical dataset, try to make a new mathematical problem that is similar to the original one but is not the same.
-  You will return only the JSON with the reformulated fields, no other text.
+
 
 input_output_reformulation_user: >
   Given this data point:
