@@ -150,7 +150,7 @@ class NewTaskRequestImage(NewTaskRequest):
     )
 
 
-class NewTaskWithFixedDatasetsRequest(NewTaskRequest):
+class NewTaskWithFixedDatasetsRequest(NewTaskRequestText):
     ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
     training_data: str = Field(..., description="The prepared training dataset")
     synthetic_data: str = Field(..., description="The prepared synthetic dataset")
