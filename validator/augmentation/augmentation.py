@@ -116,7 +116,7 @@ async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Key
     json_errors = 0
     generic_errors = 0
     consecutive_errors = 0
-    max_consecutive_errors = 3
+    max_consecutive_errors = 10
 
     total_batches = (len(sampled_data) + SYNTH_GEN_BATCH_SIZE - 1) // SYNTH_GEN_BATCH_SIZE
     for batch_idx in range(0, len(sampled_data), SYNTH_GEN_BATCH_SIZE):
