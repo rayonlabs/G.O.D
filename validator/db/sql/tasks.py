@@ -142,7 +142,7 @@ async def get_tasks_with_status(
                 specific_query = f"""
                     SELECT t.*, tt.field_system,
                            tt.field_instruction, tt.field_input, tt.field_output,
-                           tt.format, tt.no_input_format, tt.synthetic_data
+                           tt.format, tt.no_input_format, tt.synthetic_data, tt.file_format
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
