@@ -90,6 +90,28 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
+        },
+        {
+            "name": "Python Debugger: Validator API",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "--factory",
+                "validator.asgi:factory",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "9001",
+                "--env-file",
+                ".vali.env"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "preLaunchTask": "validator-setup",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         }
     ]
 }
