@@ -67,9 +67,9 @@ async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
             )
             VALUES ($1, $2, $3, $4)
             ON CONFLICT ({cst.TASK_ID}, {cst.HOTKEY}, {cst.NETUID})
-            DO UPDATE SET 
+            DO UPDATE SET
                 {cst.REPO} = EXCLUDED.{cst.REPO},
-                updated_on = CURRENT_TIMESTAMP 
+                updated_on = CURRENT_TIMESTAMP
             RETURNING {cst.SUBMISSION_ID}
         """
         submission_id = await connection.fetchval(
@@ -252,11 +252,11 @@ async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> List[Dict]:
         rows = await connection.fetch(query, hotkey, NETUID, TaskStatus.SUCCESS.value)
         return [dict(row) for row in rows]
 
+
 async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> List[TaskResults]:
     """
     Get aggregate scores for all completed tasks since the given start time.
     Only includes tasks that have at least one node with score >= 1 or < 0,
-    and where organic = False.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -279,7 +279,6 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
             WHERE t.{cst.STATUS} = 'success'
             AND t.{cst.CREATED_AT} >= $1
             AND tn.{cst.NETUID} = $2
-            AND t.is_organic = FALSE
             AND EXISTS (
                 SELECT 1
                 FROM {cst.TASK_NODES_TABLE} tn2
@@ -311,7 +310,6 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
             ]
             results.append(TaskResults(task=task, node_scores=node_scores))
         return results
-
 
 
 async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) -> QualityMetrics:
