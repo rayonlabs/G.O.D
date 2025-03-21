@@ -133,7 +133,7 @@ FIRST_PLACE_SCORE = 2
 SECOND_PLACE_SCORE = 1
 
 SIGMOID_STEEPNESS = 7  # Higher = sharper transition
-SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
+SIGMOID_SHIFT = 0.5  # Shifts sigmoid curve horizontally
 SIGMOID_POWER = 1  # Higher = more extreme difference between high and low scores
 LINEAR_WEIGHT = 0.1  # Weight for linear component (0-1) - benefits low scores
 SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
