@@ -1,3 +1,5 @@
+import asyncio
+
 from datasets import get_dataset_infos
 from fiber import Keypair
 
@@ -11,13 +13,22 @@ from validator.core.models import TextRawTask
 from validator.tasks.task_prep import prepare_image_task
 from validator.tasks.task_prep import prepare_text_task
 from validator.utils.logging import get_logger
+from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
 
 
-def get_total_text_dataset_size(task: TextRawTask) -> int:
-    return int(sum(info.dataset_size for info in get_dataset_infos(task.ds).values() if info.dataset_size))
+async def get_total_text_dataset_size(task: TextRawTask) -> int:
+    if task.file_format == FileFormat.S3:
+        bucket_name, object_name = async_minio_client.parse_s3_url(task.ds)
+        stats = await async_minio_client.get_stats(bucket_name, object_name)
+        size = stats.size
+    else:
+        loop = asyncio.get_running_loop()
+        dataset_infos = await loop.run_in_executor(None, get_dataset_infos, task.ds)
+        size = sum(info.dataset_size for info in dataset_infos.values() if info.dataset_size)
+    return int(size)
 
 
 def get_total_image_dataset_size(task: ImageRawTask) -> int:

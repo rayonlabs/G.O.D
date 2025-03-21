@@ -1,15 +1,15 @@
 import asyncio
 import datetime
+import json
 import random
 import uuid
-import json
 
 from fiber.chain.models import Node
 
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
-import validator.db.sql.tasks as tasks_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
+import validator.db.sql.tasks as tasks_sql
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
@@ -26,7 +26,6 @@ from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
-from validator.db.database import PSQLDB
 
 
 logger = get_logger(__name__)
@@ -121,7 +120,7 @@ async def _select_miner_pool_and_add_to_task(
         return task
 
     selected_miners: list[str] = []
-    ds_size = get_task_config(task).data_size_function(task)
+    ds_size = await get_task_config(task).data_size_function(task)
     task_request = MinerTaskOffer(
         ds_size=ds_size,
         model=task.model_id,
@@ -458,7 +457,7 @@ async def evaluate_tasks_loop(config: Config):
 
 async def process_completed_tasks(config: Config) -> None:
     await asyncio.gather(
-        move_tasks_to_preevaluation_loop(config), 
+        move_tasks_to_preevaluation_loop(config),
         evaluate_tasks_loop(config),
         cleanup_model_cache(config.psql_db)
     )
