@@ -257,6 +257,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
     """
     Get aggregate scores for all completed tasks since the given start time.
     Only includes tasks that have at least one node with score >= 1 or < 0,
+    and where organic = False.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -279,6 +280,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
             WHERE t.{cst.STATUS} = 'success'
             AND t.{cst.CREATED_AT} >= $1
             AND tn.{cst.NETUID} = $2
+            AND t.is_organic = FALSE
             AND EXISTS (
                 SELECT 1
                 FROM {cst.TASK_NODES_TABLE} tn2
