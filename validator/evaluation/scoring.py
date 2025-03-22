@@ -173,26 +173,29 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
-def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
+def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
+    If all synth losses are NaN, return False to use test_loss only.
     """
-    if not miner_results:
+    # If all synth losses are NaN, return False
+    if all(np.isnan(result.synth_loss) for result in valid_results):
+        logger.info("All synth losses are NaN, using test_loss only for ranking")
         return False
 
+    # Original ratio-based validation logic
+    if not valid_results:
+        return False
     valid_miners = 0
     valid_ratios = 0
-
-    for result in miner_results:
+    for result in valid_results:
         if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
             valid_miners += 1
             if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
                 logger.info(f"ratio between is {result.synth_loss / result.test_loss}")
                 valid_ratios += 1
-
     if valid_miners == 0:
         return False
-
     return (valid_ratios / valid_miners) >= threshold
 
 
