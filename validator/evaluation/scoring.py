@@ -177,12 +177,10 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
     If all synth losses are NaN, return False to use test_loss only.
     """
-    # If all synth losses are NaN, return False
     if all(np.isnan(result.synth_loss) for result in valid_results):
         logger.info("All synth losses are NaN, using test_loss only for ranking")
         return False
 
-    # Original ratio-based validation logic
     if not valid_results:
         return False
     valid_miners = 0
