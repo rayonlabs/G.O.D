@@ -208,7 +208,6 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
                 result.score_reason = "Non-finetuned submission"
                 logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
             elif np.isnan(result.test_loss):
-                # Only test_loss is required to be valid
                 result.score_reason = "Invalid test loss"
                 logger.info(f"Miner {result.hotkey}: Invalid test loss, score set to 0.0")
             elif result.synth_loss == 1000.0:
