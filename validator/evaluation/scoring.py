@@ -172,27 +172,27 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
-
-def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
+def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
+    If all synth losses are NaN, return False to use test_loss only.
     """
-    if not miner_results:
+    if all(np.isnan(result.synth_loss) for result in valid_results):
+        logger.info("All synth losses are NaN, using test_loss only for ranking")
         return False
 
+    if not valid_results:
+        return False
     valid_miners = 0
     valid_ratios = 0
-
-    for result in miner_results:
+    for result in valid_results:
         if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
             valid_miners += 1
             if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
                 logger.info(f"ratio between is {result.synth_loss / result.test_loss}")
                 valid_ratios += 1
-
     if valid_miners == 0:
         return False
-
     return (valid_ratios / valid_miners) >= threshold
 
 
@@ -207,9 +207,9 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
             if not result.is_finetune:
                 result.score_reason = "Non-finetuned submission"
                 logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
-            elif np.isnan(result.test_loss) or np.isnan(result.synth_loss):
-                result.score_reason = "Invalid loss"
-                logger.info(f"Miner {result.hotkey}: Invalid loss, score set to 0.0")
+            elif np.isnan(result.test_loss):
+                result.score_reason = "Invalid test loss"
+                logger.info(f"Miner {result.hotkey}: Invalid test loss, score set to 0.0")
             elif result.synth_loss == 1000.0:
                 result.score_reason = "Outside of top-4 test doesn't get scored."
                 logger.info(f"Miner {result.hotkey}: Outside of top-4")
@@ -217,11 +217,12 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
     valid_results = [
         result
         for result in miner_results
-        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss)
+        if result.is_finetune and not np.isnan(result.test_loss)
     ]
     if not valid_results:
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
+
     # Check if synth losses are valid across all the miners, if it isn't then we just use the test loss
     use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
