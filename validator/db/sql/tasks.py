@@ -561,7 +561,6 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[
         rows = await connection.fetch(query, limit, offset)
         return [Task(**dict(row)) for row in rows]
 
-
 async def get_tasks_by_account_id(
     psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0
 ) -> List[TextTask | ImageTask]:
@@ -591,6 +590,7 @@ async def get_tasks_by_account_id(
                 ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
                AND victorious_repo.rn = 1
             WHERE tasks.{cst.ACCOUNT_ID} = $1
+              AND tasks.organic = FALSE
             ORDER BY tasks.{cst.CREATED_AT} DESC
             LIMIT $2 OFFSET $3
         """
