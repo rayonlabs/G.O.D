@@ -172,6 +172,7 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
+
 def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
@@ -183,17 +184,29 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
 
     if not valid_results:
         return False
-    valid_miners = 0
-    valid_ratios = 0
-    for result in valid_results:
-        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
-            valid_miners += 1
-            if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
-                logger.info(f"ratio between is {result.synth_loss / result.test_loss}")
-                valid_ratios += 1
-    if valid_miners == 0:
+
+    # Only consider miners with real synthetic loss values (not placeholders)
+    real_synth_miners = [result for result in valid_results
+                        if result.is_finetune
+                        and not np.isnan(result.test_loss)
+                        and not np.isnan(result.synth_loss)
+                        and result.synth_loss < 999.0]  # Exclude placeholder values
+
+    if not real_synth_miners:
+        logger.info("No miners with real synthetic loss values")
         return False
-    return (valid_ratios / valid_miners) >= threshold
+
+    valid_miners = len(real_synth_miners)
+    valid_ratios = 0
+
+    for result in real_synth_miners:
+        if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
+            logger.info(f"ratio between is {result.synth_loss / result.test_loss}")
+            valid_ratios += 1
+
+    ratio = valid_ratios / valid_miners if valid_miners > 0 else 0
+    logger.info(f"Valid ratios: {valid_ratios}/{valid_miners} = {ratio:.3f}, threshold is {threshold}")
+    return ratio >= threshold
 
 
 def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> list[MinerResults]:
