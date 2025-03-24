@@ -148,6 +148,7 @@ class PeriodScore(BaseModel):
     quality_score: float
     summed_task_score: float
     average_score: float
+    std_score: float | None = 0.0
     hotkey: str
     weight_multiplier: float
     normalised_score: float | None = 0.0
