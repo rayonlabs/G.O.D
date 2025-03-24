@@ -83,22 +83,16 @@ def remove_cache_models_except(models_to_keep: list[str]):
     Args:
         models_to_keep: List of model identifiers in format 'org/model-name' to preserve
     """
-    keep_patterns = {
-        f"models--{name.lower().replace('/', '--')}"
-        for name in models_to_keep
-    }
+    keep_patterns = {f"models--{name.lower().replace('/', '--')}" for name in models_to_keep}
 
     # Handle directories
     existing_models = {
         orig_dir: orig_dir.lower()
         for orig_dir in os.listdir(cst.CACHE_DIR_HUB)
-        if orig_dir.startswith('models--')
+        if orig_dir.startswith("models--") and os.path.isdir(os.path.join(cst.CACHE_DIR_HUB, orig_dir))
     }
 
-    to_delete = {
-        orig_dir for orig_dir, lower_dir in existing_models.items()
-        if lower_dir not in keep_patterns
-    }
+    to_delete = {orig_dir for orig_dir, lower_dir in existing_models.items() if lower_dir not in keep_patterns}
 
     deleted_count = 0
     for dir_name in to_delete:
@@ -110,10 +104,7 @@ def remove_cache_models_except(models_to_keep: list[str]):
             logger.error(f"Error deleting cache for directory {dir_name}: {e}")
 
     # Handle safetensor files
-    safetensor_files = [
-        f for f in os.listdir(cst.CACHE_DIR_HUB)
-        if f.endswith('.safetensors')
-    ]
+    safetensor_files = [f for f in os.listdir(cst.CACHE_DIR_HUB) if f.endswith(".safetensors")]
 
     deleted_files = 0
     for file_name in safetensor_files:
@@ -159,7 +150,7 @@ def get_hf_model_cache_size(model_id: str) -> int:
 
         # Check for matching safetensor files
         for file_name in os.listdir(cst.CACHE_DIR_HUB):
-            if file_name.endswith('.safetensors') and file_name.lower().startswith(model_pattern):
+            if file_name.endswith(".safetensors") and file_name.lower().startswith(model_pattern):
                 try:
                     file_path = os.path.join(cst.CACHE_DIR_HUB, file_name)
                     total_size += os.path.getsize(file_path)
@@ -189,10 +180,7 @@ def manage_models_cache(model_stats: dict[str, dict], max_size: int) -> None:
         return
 
     # Second pass: calculate which models to remove based on scores and sizes
-    sorted_models = sorted(
-        model_stats.items(),
-        key=lambda x: x[1]['cache_score']
-    )
+    sorted_models = sorted(model_stats.items(), key=lambda x: x[1]["cache_score"])
 
     size_to_free = current_size - max_size
     cumulative_size = 0
@@ -206,10 +194,7 @@ def manage_models_cache(model_stats: dict[str, dict], max_size: int) -> None:
         if cumulative_size >= size_to_free:
             break
 
-    models_to_keep = [
-        model_id for model_id in model_stats.keys()
-        if model_id not in models_to_remove
-    ]
+    models_to_keep = [model_id for model_id in model_stats.keys() if model_id not in models_to_remove]
 
     logger.info(f"Cache cleanup: Will keep {len(models_to_keep)} models")
     remove_cache_models_except(models_to_keep)
