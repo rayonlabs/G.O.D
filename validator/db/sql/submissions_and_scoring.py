@@ -314,6 +314,45 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
         return results
 
 
+async def get_organic_proportion_since(
+    start_time: datetime,
+    psql_db: PSQLDB,
+    task_type: str | None = None
+) -> float:
+    """
+    Get the proportion of organic tasks since the given start time.
+    Optionally filter by task_type.
+
+    Args:
+        start_time: datetime to start counting from
+        psql_db: database connection
+        task_type: optional task type to filter by
+
+    Returns:
+        float: proportion of organic tasks (0.0 to 1.0)
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            SELECT
+                COALESCE(
+                    COUNT(CASE WHEN is_organic = TRUE THEN 1 END)::FLOAT /
+                    NULLIF(COUNT(*), 0),
+                    0.0
+                ) as organic_proportion
+            FROM {cst.TASKS_TABLE} t
+            WHERE t.{cst.CREATED_AT} >= $1
+            AND t.{cst.NETUID} = $2
+            {"AND t.task_type = $3" if task_type else ""}
+        """
+        params = [start_time, NETUID]
+        if task_type:
+            params.append(task_type)
+
+        row = await connection.fetchrow(query, *params)
+        return float(row['organic_proportion']) if row else 0.0
+
+
 async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) -> QualityMetrics:
     async with await psql_db.connection() as connection:
         connection: Connection
