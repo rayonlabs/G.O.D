@@ -41,8 +41,9 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 {cst.TRAINING_DATA},
                 {cst.CREATED_AT},
                 {cst.TASK_TYPE},
-                {cst.RESULT_MODEL_NAME})
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                {cst.RESULT_MODEL_NAME},
+                {cst.TRAINING_REPO_BACKUP})
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 RETURNING *
             """
             task_record = await connection.fetchrow(
@@ -58,6 +59,7 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 task.created_at,
                 task.task_type.value,
                 task.result_model_name,
+                task.training_repo_backup,
             )
 
             if isinstance(task, TextRawTask):
@@ -819,7 +821,9 @@ async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_looku
         }
 
 
-async def get_successful_matching_task(model_id: str, ds: str, psql_db: PSQLDB) -> Optional[TextTask]:
+async def get_successful_matching_tasks(
+    model_repo: str, ds_repo: str, field_instruction: str, field_input: str, field_output: str, psql_db: PSQLDB
+) -> List[TextTask]:
     """Get most recent successful task with matching model_id and dataset within last 7 days"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -847,17 +851,30 @@ async def get_successful_matching_task(model_id: str, ds: str, psql_db: PSQLDB) 
             LEFT JOIN victorious_repo vr ON t.{cst.TASK_ID} = vr.{cst.TASK_ID} AND vr.rn = 1
             WHERE t.{cst.MODEL_ID} = $1 
             AND t.{cst.DS} = $2
-            AND t.{cst.STATUS} = $3
-            AND t.{cst.TASK_TYPE} = $4
+            AND tt.{cst.FIELD_INSTRUCTION} = $3
+            AND tt.{cst.FIELD_INPUT} = $4
+            AND tt.{cst.FIELD_OUTPUT} = $5
+            AND t.{cst.STATUS} = $6
+            AND t.{cst.TASK_TYPE} = $7
             AND t.{cst.CREATED_AT} >= NOW() - INTERVAL '7 days'
             ORDER BY t.{cst.CREATED_AT} DESC
-            LIMIT 1
+            LIMIT 100
         """
 
-        row = await connection.fetchrow(query, model_id, ds, TaskStatus.SUCCESS.value, TaskType.TEXTTASK.value)
+        rows = await connection.fetch(
+            query,
+            model_repo,
+            ds_repo,
+            field_instruction,
+            field_input,
+            field_output,
+            TaskStatus.SUCCESS.value,
+            TaskType.TEXTTASK.value,
+        )
 
-        if row:
+        tasks = []
+        for row in rows:
             task_data = dict(row)
             task = TextTask(**task_data)
-            return task
-        return None
+            tasks.append(task)
+        return tasks

@@ -71,9 +71,19 @@ async def create_task_text(
     request: NewTaskRequestText,
     config: Config = Depends(get_config),
 ) -> NewTaskResponse:
-    existing_task = await task_sql.get_successful_matching_task(request.model_id, request.ds, config.psql_db)
+    existing_tasks = await task_sql.get_successful_matching_tasks(
+        request.model_repo,
+        request.ds_repo,
+        request.field_instruction,
+        request.field_input,
+        request.field_output,
+        config.psql_db,
+    )
 
-    if existing_task:
+    existing_tasks = [task for task in existing_tasks if task.training_repo_backup or task.trained_model_repository]
+
+    if existing_tasks:
+        existing_task = existing_tasks[0]
         logger.info(f"Found matching successful task {existing_task.task_id}, reusing results")
         result_repo = None
         if existing_task.training_repo_backup:
@@ -86,8 +96,8 @@ async def create_task_text(
 
         new_task = TextRawTask(
             account_id=request.account_id,
-            model_id=request.model_id,
-            ds=request.ds,
+            model_id=request.model_repo,
+            ds=request.ds_repo,
             field_system=existing_task.field_system,
             field_instruction=existing_task.field_instruction,
             field_input=existing_task.field_input,
@@ -110,7 +120,9 @@ async def create_task_text(
         )
 
         new_task = await task_sql.add_task(new_task, config.psql_db)
-        return NewTaskResponse(task_id=new_task.task_id)
+        return NewTaskResponse(
+            success=True, task_id=new_task.task_id, created_at=new_task.created_at, account_id=new_task.account_id
+        )
 
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
