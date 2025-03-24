@@ -47,57 +47,148 @@ logger = get_logger(__name__)
 TIME_PER_BLOCK: int = 500
 
 
-async def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list[PeriodScore]:
+def get_organic_proportion(task_results: list[TaskResults], task_type: TaskType, days: int) -> float:
+    """
+    Calculate the proportion of organic vs non-organic text tasks over a specified time period.
+
+    Args:
+        task_results: List of task results to analyze
+        days: Number of days to look back (default 14)
+
+    Returns:
+        tuple[float, float]: (organic_proportion, synth_proportion)
+    """
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+    text_tasks = [
+        i for i in task_results
+        if i.task.created_at > cutoff_date and i.task.task_type == task_type
+    ]
+
+    organic_count = sum(1 for task in text_tasks if task.task.is_organic)
+    total_count = len(text_tasks)
+
+    organic_proportion = organic_count / total_count if total_count > 0 else 0.0
+    return organic_proportion
+
+
+def adjust_organic_scores(organic_scores: list[PeriodScore], synth_scores: list[PeriodScore]) -> list[PeriodScore]:
+    """
+    For each hotkey present in both organic and synthetic scores:
+    If organic_score > synth_score + 0.5 * synth_std, zero out the organic weight_multiplier
+
+    Args:
+        organic_scores: List of PeriodScore for organic tasks
+        synth_scores: List of PeriodScore for synthetic tasks
+
+    Returns:
+        list[PeriodScore]: Modified organic scores with adjusted weight multipliers
+    """
+    # Create dictionaries for easy lookup
+    synth_by_hotkey = {score.hotkey: score for score in synth_scores}
+
+    for organic_score in organic_scores:
+        if organic_score.hotkey in synth_by_hotkey:
+            synth_score = synth_by_hotkey[organic_score.hotkey]
+            # Check if organic performance is significantly better than synthetic
+            if organic_score.average_score > (synth_score.average_score + 0.5 * synth_score.std_score):
+                organic_score.weight_multiplier = 0.0
+
+
+def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list[PeriodScore]:
     if not task_results:
         logger.info("There were not results to be scored")
         return []
+
+    organic_text_proportion = get_organic_proportion(task_results, TaskType.TEXTTASK, days=14)
+    synth_text_proportion = 1 - organic_text_proportion
 
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     three_days_ago = datetime.now(timezone.utc) - timedelta(days=3)
     one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
 
-    seven_day_text_tasks = [
-        i for i in task_results if i.task.created_at > seven_days_ago and i.task.task_type == TaskType.TEXTTASK
+    seven_day_text_tasks_organic = [
+        i for i in task_results
+        if i.task.created_at > seven_days_ago and i.task.task_type == TaskType.TEXTTASK and i.task.is_organic
+    ]
+    seven_day_text_tasks_synth = [
+        i for i in task_results
+        if i.task.created_at > seven_days_ago and i.task.task_type == TaskType.TEXTTASK and not i.task.is_organic
     ]
     seven_day_image_tasks = [
         i for i in task_results if i.task.created_at > seven_days_ago and i.task.task_type == TaskType.IMAGETASK
     ]
 
-    three_day_text_tasks = [
-        i for i in task_results if i.task.created_at > three_days_ago and i.task.task_type == TaskType.TEXTTASK
+    three_day_text_tasks_organic = [
+        i for i in task_results
+        if i.task.created_at > three_days_ago and i.task.task_type == TaskType.TEXTTASK and i.task.is_organic
+    ]
+    three_day_text_tasks_synth = [
+        i for i in task_results
+        if i.task.created_at > three_days_ago and i.task.task_type == TaskType.TEXTTASK and not i.task.is_organic
     ]
     three_day_image_tasks = [
         i for i in task_results if i.task.created_at > three_days_ago and i.task.task_type == TaskType.IMAGETASK
     ]
 
-    one_day_text_tasks = [i for i in task_results if i.task.created_at > one_day_ago and i.task.task_type == TaskType.TEXTTASK]
-    one_day_image_tasks = [i for i in task_results if i.task.created_at > one_day_ago and i.task.task_type == TaskType.IMAGETASK]
+    one_day_text_tasks_organic = [
+        i for i in task_results
+        if i.task.created_at > one_day_ago and i.task.task_type == TaskType.TEXTTASK and i.task.is_organic
+    ]
+    one_day_text_tasks_synth = [
+        i for i in task_results
+        if i.task.created_at > one_day_ago and i.task.task_type == TaskType.TEXTTASK and not i.task.is_organic
+    ]
+    one_day_image_tasks = [
+        i for i in task_results if i.task.created_at > one_day_ago and i.task.task_type == TaskType.IMAGETASK
+    ]
 
-    seven_day_text_scores = await get_period_scores_from_results(
-        seven_day_text_tasks, weight_multiplier=cts.SEVEN_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    seven_day_text_scores_organic = get_period_scores_from_results(
+        seven_day_text_tasks_organic,
+        weight_multiplier=cts.SEVEN_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT * organic_text_proportion
     )
-    seven_day_image_scores = await get_period_scores_from_results(
+    seven_day_text_scores_synth = get_period_scores_from_results(
+        seven_day_text_tasks_synth,
+        weight_multiplier=cts.SEVEN_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT * synth_text_proportion
+    )
+    seven_day_image_scores = get_period_scores_from_results(
         seven_day_image_tasks, weight_multiplier=cts.SEVEN_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
     )
 
-    three_day_text_scores = await get_period_scores_from_results(
-        three_day_text_tasks, weight_multiplier=cts.THREE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    three_day_text_scores_organic = get_period_scores_from_results(
+        three_day_text_tasks_organic,
+        weight_multiplier=cts.THREE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT * organic_text_proportion
     )
-    three_day_image_scores = await get_period_scores_from_results(
+    three_day_text_scores_synth = get_period_scores_from_results(
+        three_day_text_tasks_synth,
+        weight_multiplier=cts.THREE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT * synth_text_proportion
+    )
+    three_day_image_scores = get_period_scores_from_results(
         three_day_image_tasks, weight_multiplier=cts.THREE_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
     )
 
-    one_day_text_scores = await get_period_scores_from_results(
-        one_day_text_tasks, weight_multiplier=cts.ONE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT
+    one_day_text_scores_organic = get_period_scores_from_results(
+        one_day_text_tasks_organic,
+        weight_multiplier=cts.ONE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT * organic_text_proportion
     )
-    one_day_image_scores = await get_period_scores_from_results(
+    one_day_text_scores_synth = get_period_scores_from_results(
+        one_day_text_tasks_synth,
+        weight_multiplier=cts.ONE_DAY_SCORE_WEIGHT * cts.TEXT_TASK_SCORE_WEIGHT * synth_text_proportion
+    )
+    one_day_image_scores = get_period_scores_from_results(
         one_day_image_tasks, weight_multiplier=cts.ONE_DAY_SCORE_WEIGHT * cts.IMAGE_TASK_SCORE_WEIGHT
     )
 
+    adjust_organic_scores(seven_day_text_scores_organic, seven_day_text_scores_synth)
+    adjust_organic_scores(three_day_text_scores_organic, three_day_text_scores_synth)
+    adjust_organic_scores(one_day_text_scores_organic, one_day_text_scores_synth)
+
     all_period_scores = (
-        seven_day_text_scores
-        + three_day_text_scores
-        + one_day_text_scores
+        seven_day_text_scores_organic
+        + seven_day_text_scores_synth
+        + three_day_text_scores_organic
+        + three_day_text_scores_synth
+        + one_day_text_scores_organic
+        + one_day_text_scores_synth
         + seven_day_image_scores
         + three_day_image_scores
         + one_day_image_scores
@@ -120,7 +211,7 @@ async def _get_weights_to_set(config: Config) -> tuple[list[PeriodScore], list[T
     date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
     task_results: list[TaskResults] = await get_aggregate_scores_since(date, config.psql_db)
 
-    all_period_scores = await get_period_scores_from_task_results(task_results)
+    all_period_scores = get_period_scores_from_task_results(task_results)
 
     return all_period_scores, task_results
 

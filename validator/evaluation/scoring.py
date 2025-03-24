@@ -106,6 +106,7 @@ def calculate_node_quality_scores(
         assert node_agg.task_raw_scores, f"No raw scores available for node {hotkey}"
 
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
+        std_score=float(np.std(node_agg.task_raw_scores))
         score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
         node_agg.quality_score = score
 
@@ -114,6 +115,7 @@ def calculate_node_quality_scores(
                 hotkey=hotkey,
                 quality_score=score,
                 average_score=node_agg.average_raw_score,
+                std_score=std_score,
                 summed_task_score=node_agg.summed_adjusted_task_scores,
                 weight_multiplier=weight_multiplier,
             )
@@ -148,7 +150,7 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
+def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
     if not task_results:
         return []
