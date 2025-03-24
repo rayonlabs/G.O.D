@@ -590,7 +590,6 @@ async def get_tasks_by_account_id(
                 ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
                AND victorious_repo.rn = 1
             WHERE tasks.{cst.ACCOUNT_ID} = $1
-              AND tasks.is_organic = FALSE
             ORDER BY tasks.{cst.CREATED_AT} DESC
             LIMIT $2 OFFSET $3
         """
