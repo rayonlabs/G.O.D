@@ -65,6 +65,10 @@ class ModelData(BaseModel):
 
 
 class RawTask(BaseModel):
+    """
+    Task data as stored in the base Task table.
+    """
+
     is_organic: bool
     task_id: UUID | None = None
     status: str
@@ -95,6 +99,10 @@ class RawTask(BaseModel):
 
 
 class TextRawTask(RawTask):
+    """
+    Text task data as stored in the database. It expand the RawTask with fields from the TextTask table.
+    """
+
     field_system: str | None = None
     field_instruction: str
     field_input: str | None = None
@@ -108,6 +116,10 @@ class TextRawTask(RawTask):
 
 
 class ImageRawTask(RawTask):
+    """
+    Image task data as stored in the database. It expand the RawTask with fields from the ImageTask table.
+    """
+
     image_text_pairs: list[ImageTextPair] | None = None
     task_type: TaskType = TaskType.IMAGETASK
 
@@ -119,6 +131,12 @@ class Task(RawTask):
 
 
 class TextTask(TextRawTask):
+    """
+    Expands on the TextRawTask with the trained_model_repository field.
+    This field is not stored in the db directly, but is computed from the submissions table.
+
+    """
+
     trained_model_repository: str | None = None
 
 
@@ -251,13 +269,7 @@ class AllNodeStats(BaseModel):
 
     @classmethod
     def get_periods_sql_mapping(cls) -> dict[str, str]:
-        return {
-            "daily": "24 hours",
-            "three_day": "3 days",
-            "weekly": "7 days",
-            "monthly": "30 days",
-            "all_time": "all"
-        }
+        return {"daily": "24 hours", "three_day": "3 days", "weekly": "7 days", "monthly": "30 days", "all_time": "all"}
 
 
 class DatasetUrls(BaseModel):

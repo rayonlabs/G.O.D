@@ -71,6 +71,47 @@ async def create_task_text(
     request: NewTaskRequestText,
     config: Config = Depends(get_config),
 ) -> NewTaskResponse:
+    existing_task = await task_sql.get_successful_matching_task(request.model_id, request.ds, config.psql_db)
+
+    if existing_task:
+        logger.info(f"Found matching successful task {existing_task.task_id}, reusing results")
+        result_repo = None
+        if existing_task.training_repo_backup:
+            result_repo = existing_task.training_repo_backup
+        else:
+            result_repo = existing_task.trained_model_repository
+
+        if not result_repo:
+            raise HTTPException(status_code=400, detail="Found matching task but no result repo found")
+
+        new_task = TextRawTask(
+            account_id=request.account_id,
+            model_id=request.model_id,
+            ds=request.ds,
+            field_system=existing_task.field_system,
+            field_instruction=existing_task.field_instruction,
+            field_input=existing_task.field_input,
+            field_output=existing_task.field_output,
+            format=existing_task.format,
+            no_input_format=existing_task.no_input_format,
+            system_format=existing_task.system_format,
+            status=TaskStatus.SUCCESS,
+            is_organic=True,
+            created_at=datetime.utcnow(),
+            termination_at=datetime.utcnow(),
+            hours_to_complete=request.hours_to_complete,
+            training_repo_backup=result_repo,
+            test_data=existing_task.test_data,
+            training_data=existing_task.training_data,
+            synthetic_data=existing_task.synthetic_data,
+            task_type=TaskType.TEXTTASK,
+            result_model_name=existing_task.result_model_name,
+            file_format=existing_task.file_format,
+        )
+
+        new_task = await task_sql.add_task(new_task, config.psql_db)
+        return NewTaskResponse(task_id=new_task.task_id)
+
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
 
