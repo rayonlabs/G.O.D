@@ -83,7 +83,7 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
     organic_text_proportion = get_organic_proportion(task_results, TaskType.TEXTTASK, days=7)
     synth_text_proportion = 1 - organic_text_proportion
 
-    seven_day_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    seven_day_cutoff = datetime.now(timezone.utc) + timedelta(days=7)
 
     seven_day_text_tasks_organic = [
         task for task in task_results
