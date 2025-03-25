@@ -320,14 +320,6 @@ async def get_organic_proportion_since(
     """
     Get the proportion of organic tasks since the given start time.
     Optionally filter by task_type.
-
-    Args:
-        start_time: datetime to start counting from
-        psql_db: database connection
-        task_type: optional task type to filter by
-
-    Returns:
-        float: proportion of organic tasks (0.0 to 1.0)
     """
     async with await psql_db.connection() as connection:
         connection: Connection
