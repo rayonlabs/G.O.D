@@ -1,7 +1,6 @@
 import os
 
 from core.constants import NETUID
-constants
 
 SUCCESS = "success"
 ACCOUNT_ID = "account_id"
