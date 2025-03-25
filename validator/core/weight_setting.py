@@ -67,6 +67,7 @@ def get_organic_proportion(task_results: list[TaskResults], task_type: TaskType,
     organic_count = sum(1 for task in text_tasks if task.task.is_organic)
     total_count = len(text_tasks)
 
+    logger.info(f'The total count is {total_count} with organic_count {organic_count}')
     organic_proportion = organic_count / total_count if total_count > 0 else 0.0
     logger.info(f'THE ORGANIC PROPORTION RIGHT NOW IS {organic_proportion}')
     return organic_proportion
