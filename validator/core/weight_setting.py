@@ -154,7 +154,7 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
 
 
 def filter_tasks_by_period(tasks: list[TaskResults], cutoff_time: datetime) -> list[TaskResults]:
-    return [task for task in tasks if task.task.created_at < cutoff_time]
+    return [task for task in tasks if task.task.created_at <= cutoff_time]
 
 
 def filter_tasks_by_type(
