@@ -82,7 +82,6 @@ def adjust_organic_scores(organic_scores: list[PeriodScore], synth_scores: list[
     for organic_score in organic_scores:
         if organic_score.hotkey in synth_by_hotkey:
             synth_score = synth_by_hotkey[organic_score.hotkey]
-            assert synth_score.std_score
             if organic_score.average_score > (synth_score.average_score + 0.5 * synth_score.std_score):
                 logger.info(f"Node {organic_score.hotkey} has a much higher organic vs synth score and so will get a zero weighted organic component")
                 organic_score.weight_multiplier = 0.0
