@@ -61,7 +61,7 @@ def get_organic_proportion(task_results: list[TaskResults], task_type: TaskType,
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
     text_tasks = [
         i for i in task_results
-        if i.task.created_at > cutoff_date and i.task.task_type == task_type
+        if i.task.created_at <= cutoff_date and i.task.task_type == task_type
     ]
 
     organic_count = sum(1 for task in text_tasks if task.task.is_organic)
