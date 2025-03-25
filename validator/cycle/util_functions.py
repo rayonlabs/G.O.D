@@ -31,7 +31,7 @@ async def get_total_text_dataset_size(task: TextRawTask) -> int:
     return int(size)
 
 
-def get_total_image_dataset_size(task: ImageRawTask) -> int:
+async def get_total_image_dataset_size(task: ImageRawTask) -> int:
     if not task.image_text_pairs:
         return 0
     return len(task.image_text_pairs)
