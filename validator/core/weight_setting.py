@@ -61,7 +61,7 @@ def get_organic_proportion(task_results: list[TaskResults], task_type: TaskType,
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
     text_tasks = [
         i for i in task_results
-        if i.task.created_at < cutoff_date and i.task.task_type == task_type
+        if i.task.created_at > cutoff_date and i.task.task_type == task_type
     ]
 
     organic_count = sum(1 for task in text_tasks if task.task.is_organic)
@@ -83,20 +83,20 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
     organic_text_proportion = get_organic_proportion(task_results, TaskType.TEXTTASK, days=7)
     synth_text_proportion = 1 - organic_text_proportion
 
-    seven_day_cutoff = datetime.now(timezone.utc) + timedelta(days=7)
+    seven_day_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 
     seven_day_text_tasks_organic = [
         task for task in task_results
         if task.task.task_type == TaskType.TEXTTASK
         and task.task.is_organic
-        and task.task.created_at < seven_day_cutoff
+        and task.task.created_at > seven_day_cutoff
     ]
 
     seven_day_text_tasks_synth = [
         task for task in task_results
         if task.task.task_type == TaskType.TEXTTASK
         and not task.task.is_organic
-        and task.task.created_at < seven_day_cutoff
+        and task.task.created_at > seven_day_cutoff
     ]
 
     seven_day_organic_scores = get_period_scores_from_results(
@@ -178,7 +178,7 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
 
 
 def filter_tasks_by_period(tasks: list[TaskResults], cutoff_time: datetime) -> list[TaskResults]:
-    return [task for task in tasks if task.task.created_at < cutoff_time]
+    return [task for task in tasks if task.task.created_at > cutoff_time]
 
 
 def filter_tasks_by_type(
