@@ -134,7 +134,7 @@ SECOND_PLACE_SCORE = 1
 
 SIGMOID_STEEPNESS = 9  # Higher = sharper transition
 SIGMOID_SHIFT = 0.5  # Shifts sigmoid curve horizontally
-SIGMOID_POWER = 1  # Higher = more extreme difference between high and low scores
+SIGMOID_POWER = 0.5  # Higher = more extreme difference between high and low scores
 LINEAR_WEIGHT = 0.1  # Weight for linear component (0-1) - benefits low scores
 SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
 
@@ -189,7 +189,7 @@ MAX_IMAGE_HEIGHT = 1024
 IMAGE_RESOLUTION_STEP = 64  # Ensures we get resolutions divisible by 64
 
 # scoring stuff
-TEXT_TASK_SCORE_WEIGHT = 0.70
+TEXT_TASK_SCORE_WEIGHT = 0.675
 IMAGE_TASK_SCORE_WEIGHT = 1 - TEXT_TASK_SCORE_WEIGHT
 
 SEVEN_DAY_SCORE_WEIGHT = 0.25
