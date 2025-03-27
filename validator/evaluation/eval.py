@@ -154,7 +154,6 @@ def evaluate_language_model_loss(
         training_args = TrainingArguments(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
-            fp16=torch.cuda.is_available(),
             report_to="none",
         )
 
