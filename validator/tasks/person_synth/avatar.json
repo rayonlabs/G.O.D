@@ -1,0 +1,237 @@
+{
+    "8": {
+      "inputs": {
+        "samples": [
+          "Sampler",
+          0
+        ],
+        "vae": [
+          "75",
+          2
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE Decode"
+      }
+    },
+    "11": {
+      "inputs": {
+        "instantid_file": "ip-adapter.bin"
+      },
+      "class_type": "InstantIDModelLoader",
+      "_meta": {
+        "title": "Load InstantID Model"
+      }
+    },
+    "13": {
+      "inputs": {
+        "image": "person.jpg",
+        "upload": "image"
+      },
+      "class_type": "LoadImage",
+      "_meta": {
+        "title": "Load Image"
+      }
+    },
+    "15": {
+      "inputs": {
+        "images": [
+          "8",
+          0
+        ]
+      },
+      "class_type": "PreviewImage",
+      "_meta": {
+        "title": "Preview Image"
+      }
+    },
+    "16": {
+      "inputs": {
+        "control_net_name": "diffusion_pytorch_model.safetensors"
+      },
+      "class_type": "ControlNetLoader",
+      "_meta": {
+        "title": "Load ControlNet Model"
+      }
+    },
+    "38": {
+      "inputs": {
+        "provider": "CUDA"
+      },
+      "class_type": "InstantIDFaceAnalysis",
+      "_meta": {
+        "title": "InstantID Face Analysis"
+      }
+    },
+    "71": {
+      "inputs": {
+        "samples": [
+          "Sampler_initial",
+          0
+        ],
+        "vae": [
+          "75",
+          2
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE Decode"
+      }
+    },
+    "75": {
+      "inputs": {
+        "ckpt_name": "realvisxl.safetensors",
+        "key_opt": "",
+        "mode": "Auto"
+      },
+      "class_type": "CheckpointLoaderSimpleShared //Inspire",
+      "_meta": {
+        "title": "Shared Checkpoint Loader (Inspire)"
+      }
+    },
+    "Latent": {
+      "inputs": {
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {
+        "title": "Empty Latent Image"
+      }
+    },
+    "Prompt": {
+      "inputs": {
+        "text": "(portrait:1.5), ",
+        "clip": [
+          "75",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "Negative_prompt": {
+      "inputs": {
+        "text": "",
+        "clip": [
+          "75",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "Sampler_initial": {
+      "inputs": {
+        "seed": 927578480132631,
+        "steps": 10,
+        "cfg": 2,
+        "sampler_name": "dpmpp_sde_gpu",
+        "scheduler": "karras",
+        "denoise": 1,
+        "model": [
+          "75",
+          0
+        ],
+        "positive": [
+          "Prompt",
+          0
+        ],
+        "negative": [
+          "Negative_prompt",
+          0
+        ],
+        "latent_image": [
+          "Latent",
+          0
+        ]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "KSampler"
+      }
+    },
+    "InstantID": {
+      "inputs": {
+        "ip_weight": 0.7000000000000001,
+        "cn_strength": 0.9,
+        "start_at": 0,
+        "end_at": 1,
+        "noise": 0.2,
+        "combine_embeds": "average",
+        "instantid": [
+          "11",
+          0
+        ],
+        "insightface": [
+          "38",
+          0
+        ],
+        "control_net": [
+          "16",
+          0
+        ],
+        "image": [
+          "13",
+          0
+        ],
+        "model": [
+          "75",
+          0
+        ],
+        "positive": [
+          "Prompt",
+          0
+        ],
+        "negative": [
+          "Negative_prompt",
+          0
+        ],
+        "image_kps": [
+          "71",
+          0
+        ]
+      },
+      "class_type": "ApplyInstantIDAdvanced",
+      "_meta": {
+        "title": "Apply InstantID Advanced"
+      }
+    },
+    "Sampler": {
+      "inputs": {
+        "seed": 1057538968623838,
+        "steps": 15,
+        "cfg": 1.5,
+        "sampler_name": "dpmpp_sde_gpu",
+        "scheduler": "karras",
+        "denoise": 1,
+        "model": [
+          "InstantID",
+          0
+        ],
+        "positive": [
+          "InstantID",
+          1
+        ],
+        "negative": [
+          "InstantID",
+          2
+        ],
+        "latent_image": [
+          "Latent",
+          0
+        ]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "KSampler"
+      }
+    }
+  }

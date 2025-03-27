@@ -5,11 +5,15 @@ import random
 import re
 import tempfile
 import uuid
+import shutil
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 from typing import AsyncGenerator
 from typing import List
+import asyncio
+import docker
+from docker.models.containers import Container
 
 from fiber import Keypair
 
@@ -210,22 +214,49 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str
 
     Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
     image_text_pairs = []
-    for i, prompt in enumerate(prompts):
-        width = random.randrange(cst.MIN_IMAGE_WIDTH, cst.MAX_IMAGE_WIDTH + 1, cst.IMAGE_RESOLUTION_STEP)
-        height = random.randrange(cst.MIN_IMAGE_HEIGHT, cst.MAX_IMAGE_HEIGHT + 1, cst.IMAGE_RESOLUTION_STEP)
-        image = await generate_image(prompt, config.keypair, width, height)
+    if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE:
+        for i, prompt in enumerate(prompts):
+            width = random.randrange(cst.MIN_IMAGE_WIDTH, cst.MAX_IMAGE_WIDTH + 1, cst.IMAGE_RESOLUTION_STEP)
+            height = random.randrange(cst.MIN_IMAGE_HEIGHT, cst.MAX_IMAGE_HEIGHT + 1, cst.IMAGE_RESOLUTION_STEP)
+            image = await generate_image(prompt, config.keypair, width, height)
 
-        with tempfile.NamedTemporaryFile(dir=cst.TEMP_PATH_FOR_IMAGES, suffix=".png") as img_file:
-            img_file.write(base64.b64decode(image))
-            img_url = await upload_file_to_minio(img_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.png")
+            with tempfile.NamedTemporaryFile(dir=cst.TEMP_PATH_FOR_IMAGES, suffix=".png") as img_file:
+                img_file.write(base64.b64decode(image))
+                img_url = await upload_file_to_minio(img_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.png")
 
-        with tempfile.NamedTemporaryFile(suffix=".txt") as txt_file:
-            txt_file.write(prompt.encode())
-            txt_file.flush()
-            txt_file.seek(0)
-            txt_url = await upload_file_to_minio(txt_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.txt")
+            with tempfile.NamedTemporaryFile(suffix=".txt") as txt_file:
+                txt_file.write(prompt.encode())
+                txt_file.flush()
+                txt_file.seek(0)
+                txt_url = await upload_file_to_minio(txt_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.txt")
 
-        image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
+            image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
+    else:
+        client = docker.from_env()
+        with tempfile.TemporaryDirectory(dir=cst.TEMP_PATH_FOR_IMAGES) as tmp_dir_path:
+            container = await asyncio.to_thread(
+                client.containers.run,
+                image=cst.PERSON_SYNTH_DOCKER_IMAGE,
+                environment={"SAVE_DIR": cst.PERSON_SYNTH_CONTAINER_SAVE_PATH},
+                volumes={tmp_dir_path: {"bind": cst.PERSON_SYNTH_CONTAINER_SAVE_PATH, "mode": "rw"}},
+                device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=["0"])],
+                detach=True
+            )
+            result = await asyncio.to_thread(container.wait)
+            images_dir = Path(tmp_dir_path)
+            for file in images_dir.iterdir():
+                if file.is_file():
+                    if file.suffix == ".png":
+                        img_url = await upload_file_to_minio(file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png")
+                        txt_url = await upload_file_to_minio(f"{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt")
+                image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
+            if os.path.exists(tmp_dir_path):
+                shutil.rmtree(tmp_dir_path)
+
+
+        await asyncio.to_thread(client.containers.prune)
+        await asyncio.to_thread(client.images.prune, filters={"dangling": True})
+        await asyncio.to_thread(client.volumes.prune)
 
     task = ImageRawTask(
         model_id=model_id,

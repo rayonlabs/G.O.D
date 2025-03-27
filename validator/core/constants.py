@@ -140,7 +140,10 @@ MAX_CONCURRENT_TASK_PREPS = 3
 MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.8  # image is currently 1 minus this
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0  # image is currently 1 minus this
+PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = 0 # person synth chance is 1 minus this
+PERSON_SYNTH_DOCKER_IMAGE = "diagonalge/person_synth:latest"
+PERSON_SYNTH_CONTAINER_SAVE_PATH = "/app/avatars/"
 
 # diffusion eval stuff
 LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
