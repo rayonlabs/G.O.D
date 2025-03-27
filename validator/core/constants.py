@@ -2,6 +2,7 @@ import os
 
 from core.constants import NETUID
 
+
 SUCCESS = "success"
 ACCOUNT_ID = "account_id"
 MESSAGE = "message"
@@ -56,7 +57,7 @@ TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
 GET_SYNTH_DATA = True
 MAX_SYNTH_DATA_POINTS = 300
-MAX_TEST_DATA_POINTS = 800
+MAX_TEST_DATA_POINTS = 1200
 
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
