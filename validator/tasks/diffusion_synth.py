@@ -242,8 +242,8 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
         for file in images_dir.iterdir():
             if file.is_file():
                 if file.suffix == ".png":
-                    img_url = await upload_file_to_minio(file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png")
-                    txt_url = await upload_file_to_minio(f"{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt")
+                    img_url = await upload_file_to_minio(f"{tmp_dir_path}/{file.name}", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png")
+                    txt_url = await upload_file_to_minio(f"{tmp_dir_path}/{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt")
             image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
         if os.path.exists(tmp_dir_path):
             shutil.rmtree(tmp_dir_path)
