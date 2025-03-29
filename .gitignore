@@ -64,6 +64,7 @@ config.yaml
 
 test_images/
 ComfyUI/
+cache/
 
 score_records.csv
 models_cache/*

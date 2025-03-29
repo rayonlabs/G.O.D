@@ -5,17 +5,14 @@ import torch
 from torch import nn
 from diffusers import StableDiffusionPipeline
 from transformers import CLIPFeatureExtractor
-from typing import Tuple
 import os
 
 import validator.tasks.person_synth.constants as cst
-
 
 def cosine_distance(image_embeds, text_embeds):
     normalized_image_embeds = nn.functional.normalize(image_embeds)
     normalized_text_embeds = nn.functional.normalize(text_embeds)
     return torch.mm(normalized_image_embeds, normalized_text_embeds.t())
-
 
 @torch.no_grad()
 def forward_inspect(self, clip_input, images):
@@ -56,21 +53,19 @@ def forward_inspect(self, clip_input, images):
 
     return matches, has_nsfw_concepts
 
+device = os.getenv("DEVICE", "cuda:0")
+device = device if "cuda" in device else f"cuda:{device}"
+safety_pipe = StableDiffusionPipeline.from_pretrained(cst.SAFETY_CHECKER_MODEL_PATH, torch_dtype=torch.bfloat16, local_files_only=True).to(device)
+safety_pipe.safety_checker.forward = partial(forward_inspect, self=safety_pipe.safety_checker)
+safety_feature_extractor = CLIPFeatureExtractor.from_pretrained(f"{cst.SAFETY_CHECKER_MODEL_PATH}/feature_extractor", local_files_only=True)
+safety_checker = safety_pipe.safety_checker
 
-class Safety_Checker:
-    def __init__(self):
-        _device = os.getenv("DEVICE", "cuda:0")
-        self.device = _device if "cuda" in _device else f"cuda:{_device}"
-        safety_pipe = StableDiffusionPipeline.from_pretrained(cst.SAFETY_CHECKER_MODEL_PATH, torch_dtype=torch.bfloat16, local_files_only=True).to(self.device)
-        safety_pipe.safety_checker.forward = partial(forward_inspect, self=safety_pipe.safety_checker)
-        self.safety_feature_extractor = CLIPFeatureExtractor.from_pretrained(f"{cst.SAFETY_CHECKER_MODEL_PATH}/feature_extractor", local_files_only=True)
-        self.safety_checker = safety_pipe.safety_checker
 
-    def nsfw_check(self, image: Image.Image) -> bool:
-        image_np = np.array(image)
-        if np.all(image_np == 0):
-            return True
-        with torch.cuda.amp.autocast():
-            safety_checker_input = self.safety_feature_extractor(images=image, return_tensors="pt").to(self.device)
-            result, has_nsfw_concepts = self.safety_checker.forward(clip_input=safety_checker_input.pixel_values, images=image)
-        return bool(has_nsfw_concepts)
+def nsfw_check(image: Image.Image) -> bool:
+    image_np = np.array(image)
+    if np.all(image_np == 0):
+        return True
+    with torch.cuda.amp.autocast():
+        safety_checker_input = safety_feature_extractor(images=image, return_tensors="pt").to(device)
+        result, has_nsfw_concepts = safety_checker.forward(clip_input=safety_checker_input.pixel_values, images=image)
+    return bool(has_nsfw_concepts)
