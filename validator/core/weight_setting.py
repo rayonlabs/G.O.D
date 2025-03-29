@@ -61,12 +61,13 @@ def get_organic_proportion(task_results: list[TaskResults], task_type: TaskType,
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
     text_tasks = [
         i for i in task_results
-        if i.task.created_at <= cutoff_date and i.task.task_type == task_type
+        if i.task.created_at > cutoff_date and i.task.task_type == task_type
     ]
 
     organic_count = sum(1 for task in text_tasks if task.task.is_organic)
     total_count = len(text_tasks)
 
+    logger.info(f'The total count is {total_count} with organic_count {organic_count}')
     organic_proportion = organic_count / total_count if total_count > 0 else 0.0
     logger.info(f'THE ORGANIC PROPORTION RIGHT NOW IS {organic_proportion}')
     return organic_proportion
@@ -178,7 +179,7 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
 
 
 def filter_tasks_by_period(tasks: list[TaskResults], cutoff_time: datetime) -> list[TaskResults]:
-    return [task for task in tasks if task.task.created_at <= cutoff_time]
+    return [task for task in tasks if task.task.created_at > cutoff_time]
 
 
 def filter_tasks_by_type(

@@ -57,7 +57,7 @@ TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
 GET_SYNTH_DATA = True
 MAX_SYNTH_DATA_POINTS = 300
-MAX_TEST_DATA_POINTS = 800
+MAX_TEST_DATA_POINTS = 1200
 
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
@@ -134,7 +134,7 @@ SECOND_PLACE_SCORE = 1
 
 SIGMOID_STEEPNESS = 9  # Higher = sharper transition
 SIGMOID_SHIFT = 0.5  # Shifts sigmoid curve horizontally
-SIGMOID_POWER = 0.5  # Higher = more extreme difference between high and low scores
+SIGMOID_POWER = 1.0  # Higher = more extreme difference between high and low scores
 LINEAR_WEIGHT = 0.1  # Weight for linear component (0-1) - benefits low scores
 SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
 
@@ -167,7 +167,7 @@ DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.5
 
 # Max jobs
 MAX_CONCURRENT_JOBS = 60
-MAX_CONCURRENT_SYNTHETIC_JOBS = 10
+MAX_CONCURRENT_SYNTHETIC_JOBS = 18
 ## This leaves room for MAX_CONCURRENT_JOBS - MAX_CONCURRENT_SYNTHETIC_JOBS at all times
 
 

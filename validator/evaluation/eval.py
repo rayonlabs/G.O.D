@@ -99,8 +99,14 @@ def _load_and_update_evaluation_config(
 def _load_evaluation_dataset(evaluation_config: DictDefault, tokenizer: AutoTokenizer) -> Dataset:
     prepared_path = Path(evaluation_config.output_dir) / "prepared"
     eval_dataset, _ = load_tokenized_prepared_datasets(tokenizer, evaluation_config, prepared_path)
+
+    original_length = len(eval_dataset)
+    eval_dataset = [sample for sample in eval_dataset if any(label != -100 for label in sample["labels"])]
+    filtered_length = len(eval_dataset)
+
+    logger.info(f"Filtered out {original_length - filtered_length} samples with empty outputs")
     eval_dataset = sorted(eval_dataset, key=lambda x: len(x["input_ids"]))
-    logger.info(f"Loaded evaluation dataset with {len(eval_dataset)} samples")
+    logger.info(f"Loaded evaluation dataset with {filtered_length} samples")
     return eval_dataset
 
 
@@ -148,7 +154,6 @@ def evaluate_language_model_loss(
         training_args = TrainingArguments(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
-            fp16=torch.cuda.is_available(),
             report_to="none",
         )
 

@@ -117,6 +117,7 @@ async def create_task_text(
             task_type=TaskType.TEXTTASK,
             result_model_name=existing_task.result_model_name,
             file_format=existing_task.file_format,
+            started_at=datetime.utcnow(),
         )
 
         new_task = await task_sql.add_task(new_task, config.psql_db)

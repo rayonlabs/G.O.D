@@ -42,8 +42,10 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 {cst.CREATED_AT},
                 {cst.TASK_TYPE},
                 {cst.RESULT_MODEL_NAME},
-                {cst.TRAINING_REPO_BACKUP})
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                {cst.TRAINING_REPO_BACKUP},
+                {cst.STARTED_AT},
+                {cst.TERMINATION_AT})
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 RETURNING *
             """
             task_record = await connection.fetchrow(
@@ -60,6 +62,8 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 task.task_type.value,
                 task.result_model_name,
                 task.training_repo_backup,
+                task.started_at,
+                task.termination_at,
             )
 
             if isinstance(task, TextRawTask):
@@ -562,6 +566,7 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[
 
         rows = await connection.fetch(query, limit, offset)
         return [Task(**dict(row)) for row in rows]
+
 
 async def get_tasks_by_account_id(
     psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0
