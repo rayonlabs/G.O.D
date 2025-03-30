@@ -30,7 +30,6 @@ class JobStatus(str, Enum):
 class TaskStatus(str, Enum):
     PENDING = "pending"
     PREPARING_DATA = "preparing_data"
-    IDLE = "idle"
     READY = "ready"
     SUCCESS = "success"
     LOOKING_FOR_NODES = "looking_for_nodes"
@@ -113,16 +112,8 @@ class Message(BaseModel):
 
 
 class Prompts(BaseModel):
-    # synthetic data generation prompts
-    # in-context learning prompts
-    in_context_learning_generation_sys: str
-    in_context_learning_generation_user: str
-    # correctness-focused prompts (step 1/2)
-    output_field_reformulation_sys: str
-    output_field_reformulation_user: str
-    # correctness-focused prompts (step 2/2)
-    input_field_generation_sys: str
-    input_field_generation_user: str
+    input_output_reformulation_sys: str
+    input_output_reformulation_user: str
 
 
 class TaskType(str, Enum):

@@ -59,6 +59,17 @@
             }
         },
         {
+            "name": "Python Debugger: eval",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.evaluation.eval",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
             "name": "Python Debugger: Task Prep Test",
             "type": "debugpy",
             "request": "launch",
@@ -76,6 +87,28 @@
             "module": "miner.logic.job_handler",
             "console": "integratedTerminal",
             "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Python Debugger: Validator API",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "--factory",
+                "validator.asgi:factory",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "9001",
+                "--env-file",
+                ".vali.env"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "preLaunchTask": "validator-setup",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }

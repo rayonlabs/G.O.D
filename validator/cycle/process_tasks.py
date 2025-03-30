@@ -1,15 +1,15 @@
 import asyncio
 import datetime
+import json
 import random
 import uuid
-import json
 
 from fiber.chain.models import Node
 
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
-import validator.db.sql.tasks as tasks_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
+import validator.db.sql.tasks as tasks_sql
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
@@ -18,16 +18,19 @@ from validator.core.config import Config
 from validator.core.models import ImageRawTask
 from validator.core.models import TextRawTask
 from validator.core.task_config_models import get_task_config
+from validator.db.database import PSQLDB
 from validator.evaluation.scoring import evaluate_and_score
 from validator.utils.cache_clear import clean_all_hf_datasets_cache
+from validator.utils.cache_clear import manage_models_cache
 from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
-from validator.db.database import PSQLDB
 
 
 logger = get_logger(__name__)
+
+_cache_cleanup_lock = asyncio.Lock()
 
 
 async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[Node]:
@@ -117,7 +120,7 @@ async def _select_miner_pool_and_add_to_task(
         return task
 
     selected_miners: list[str] = []
-    ds_size = get_task_config(task).data_size_function(task)
+    ds_size = await get_task_config(task).data_size_function(task)
     task_request = MinerTaskOffer(
         ds_size=ds_size,
         model=task.model_id,
@@ -368,6 +371,43 @@ async def move_tasks_to_preevaluation_loop(config: Config):
         await asyncio.sleep(60)
 
 
+async def cleanup_model_cache(psql_db: PSQLDB):
+    """Clean up model cache when it exceeds size limit."""
+    if _cache_cleanup_lock.locked():
+        return
+
+    async with _cache_cleanup_lock:
+        try:
+            logger.info("Cleaning up model cache")
+            training_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.TRAINING, psql_db=psql_db)
+            evaluating_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.EVALUATING, psql_db=psql_db)
+            preevaluation_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=psql_db)
+            protected_models = set()
+            for task in evaluating_tasks + preevaluation_tasks + training_tasks:
+                if task.model_id:
+                    protected_models.add(str(task.model_id))
+
+            cache_stats = await tasks_sql.get_model_cache_stats(
+                psql_db,
+                tau_days=cst.CACHE_TAU_DAYS,
+                max_lookup_days=cst.CACHE_MAX_LOOKUP_DAYS
+            )
+
+            # Set cache score to infinity for protected models to prevent deletion
+            logger.info(f"Protected models: {protected_models}")
+            for model_id in protected_models:
+                if model_id not in cache_stats:
+                    cache_stats[model_id] = {'cache_score': float('inf')}
+                else:
+                    cache_stats[model_id]['cache_score'] = float('inf')
+
+            manage_models_cache(cache_stats, cst.MAX_CACHE_SIZE_BYTES)
+        except Exception as e:
+            logger.error(f"Error in cache cleanup: {e}", exc_info=True)
+        finally:
+            await asyncio.sleep(cst.CACHE_CLEANUP_INTERVAL)
+
+
 async def evaluate_tasks_loop(config: Config):
     task_queue = asyncio.Queue()
     gpu_queue = asyncio.Queue()
@@ -416,4 +456,8 @@ async def evaluate_tasks_loop(config: Config):
 
 
 async def process_completed_tasks(config: Config) -> None:
-    await asyncio.gather(move_tasks_to_preevaluation_loop(config), evaluate_tasks_loop(config))
+    await asyncio.gather(
+        move_tasks_to_preevaluation_loop(config),
+        evaluate_tasks_loop(config),
+        cleanup_model_cache(config.psql_db)
+    )

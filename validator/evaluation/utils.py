@@ -115,7 +115,7 @@ def base64_to_image(base64_string: str) -> Image.Image:
 def download_from_huggingface(repo_id: str, filename: str, local_dir: str) -> str:
     # Use a temp folder to ensure correct file placement
     try:
-        local_filename = os.path.basename(filename)
+        local_filename = f"models--{repo_id.replace('/', '--')}.safetensors"
         final_path = os.path.join(local_dir, local_filename)
         if os.path.exists(final_path):
             logger.info(f"File {filename} already exists. Skipping download.")

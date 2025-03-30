@@ -2,6 +2,7 @@ import os
 import random
 import shutil
 import tempfile
+import uuid
 import zipfile
 from math import ceil
 from pathlib import Path
@@ -42,7 +43,8 @@ def create_zip_for_image_dataset(split_keys: set, zip_name: str, entries: dict, 
 
 
 def unzip_to_temp_path(zip_file_path: str) -> str:
-    tmp_dir = cst.TEMP_PATH_FOR_IMAGES
+    random_tmp_id = uuid.uuid4()
+    tmp_dir = f"{cst.TEMP_PATH_FOR_IMAGES}/{random_tmp_id}"
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
     with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
@@ -159,9 +161,7 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
         logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
         return None
 
-    synthetic_data = await generate_augmented_text_dataset(
-        sampled_data_list, column_to_reformulate=column_to_reformulate, keypair=keypair
-    )
+    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair)
 
     return synthetic_data
 

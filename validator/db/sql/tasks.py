@@ -41,8 +41,11 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 {cst.TRAINING_DATA},
                 {cst.CREATED_AT},
                 {cst.TASK_TYPE},
-                {cst.RESULT_MODEL_NAME})
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                {cst.RESULT_MODEL_NAME},
+                {cst.TRAINING_REPO_BACKUP},
+                {cst.STARTED_AT},
+                {cst.TERMINATION_AT})
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 RETURNING *
             """
             task_record = await connection.fetchrow(
@@ -58,6 +61,9 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 task.created_at,
                 task.task_type.value,
                 task.result_model_name,
+                task.training_repo_backup,
+                task.started_at,
+                task.termination_at,
             )
 
             if isinstance(task, TextRawTask):
@@ -142,7 +148,7 @@ async def get_tasks_with_status(
                 specific_query = f"""
                     SELECT t.*, tt.field_system,
                            tt.field_instruction, tt.field_input, tt.field_output,
-                           tt.format, tt.no_input_format, tt.synthetic_data
+                           tt.format, tt.no_input_format, tt.synthetic_data, tt.file_format
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
@@ -204,7 +210,7 @@ async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
         WHERE table_name = $1
     """
     rows = await connection.fetch(query, table_name)
-    return {row['column_name'] for row in rows}
+    return {row["column_name"] for row in rows}
 
 
 async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
@@ -757,3 +763,122 @@ async def delete_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> None:
     async with await psql_db.connection() as connection:
         connection: Connection
         await connection.execute(query, task_id)
+
+
+async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_lookup_days: float = 30) -> Dict[str, Dict]:
+    """Get cache statistics for models with time-weighted frequency calculation.
+
+    Args:
+        psql_db: Database connection
+        tau_days: Time constant (τ) for exponential decay in days
+        max_lookup_days: Maximum number of days to look back for usage data
+
+    Returns:
+        Dictionary mapping model_id to stats containing:
+        - time_weighted_freq: Time-weighted frequency of model usage
+        - size_params: Number of parameters in the model
+        - cache_score: Product of frequency and size
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = """
+            WITH daily_counts AS (
+                SELECT
+                    model_id,
+                    DATE_TRUNC('day', created_at) as usage_date,
+                    COUNT(*) as daily_uses,
+                    MAX(model_params_count) as params_count
+                FROM tasks
+                WHERE created_at > NOW() - $2 * INTERVAL '1 day'
+                GROUP BY model_id, DATE_TRUNC('day', created_at)
+            ),
+            model_usage AS (
+                SELECT
+                    model_id,
+                    SUM(
+                        daily_uses * exp(
+                            -EXTRACT(EPOCH FROM (NOW() - usage_date)) /
+                            EXTRACT(EPOCH FROM ($1 * INTERVAL '1 day'))
+                        )
+                    ) as time_weighted_freq,
+                    MAX(params_count) as size_params
+                FROM daily_counts
+                GROUP BY model_id
+            )
+            SELECT
+                model_id,
+                time_weighted_freq,
+                size_params,
+                time_weighted_freq * size_params as cache_score
+            FROM model_usage
+            ORDER BY cache_score DESC
+        """
+        rows = await connection.fetch(query, tau_days, max_lookup_days)
+
+        return {
+            str(row["model_id"]): {
+                "time_weighted_freq": float(row["time_weighted_freq"] or 0),
+                "size_params": int(row["size_params"] or 0),
+                "cache_score": float(row["cache_score"] or 0),
+            }
+            for row in rows
+        }
+
+
+async def get_successful_matching_tasks(
+    model_repo: str, ds_repo: str, field_instruction: str, field_input: str, field_output: str, psql_db: PSQLDB
+) -> List[TextTask]:
+    """Get most recent successful task with matching model_id and dataset within last 7 days"""
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            WITH victorious_repo AS (
+                SELECT 
+                    submissions.{cst.TASK_ID},
+                    submissions.{cst.REPO},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY submissions.{cst.TASK_ID}
+                        ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
+                    ) AS rn
+                FROM {cst.SUBMISSIONS_TABLE} submissions
+                JOIN {cst.TASK_NODES_TABLE} task_nodes
+                    ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
+                    AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
+                WHERE task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
+            )
+            SELECT t.*, tt.field_system,
+                   tt.field_instruction, tt.field_input, tt.field_output,
+                   tt.format, tt.no_input_format, tt.synthetic_data,
+                   COALESCE(t.training_repo_backup, vr.{cst.REPO}) as trained_model_repository
+            FROM {cst.TASKS_TABLE} t
+            LEFT JOIN {cst.TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
+            LEFT JOIN victorious_repo vr ON t.{cst.TASK_ID} = vr.{cst.TASK_ID} AND vr.rn = 1
+            WHERE t.{cst.MODEL_ID} = $1 
+            AND t.{cst.DS} = $2
+            AND tt.{cst.FIELD_INSTRUCTION} = $3
+            AND tt.{cst.FIELD_INPUT} = $4
+            AND tt.{cst.FIELD_OUTPUT} = $5
+            AND t.{cst.STATUS} = $6
+            AND t.{cst.TASK_TYPE} = $7
+            AND t.{cst.CREATED_AT} >= NOW() - INTERVAL '7 days'
+            ORDER BY t.{cst.CREATED_AT} DESC
+            LIMIT 100
+        """
+
+        rows = await connection.fetch(
+            query,
+            model_repo,
+            ds_repo,
+            field_instruction,
+            field_input,
+            field_output,
+            TaskStatus.SUCCESS.value,
+            TaskType.TEXTTASK.value,
+        )
+
+        tasks = []
+        for row in rows:
+            task_data = dict(row)
+            task = TextTask(**task_data)
+            tasks.append(task)
+        return tasks

@@ -1,82 +1,15 @@
-in_context_learning_generation_sys: >
-  You are an expert in creating synthetic data for testing and training.
-  You will be given a few examples of a datasets and a schema for that dataset.
-  You will create a single, valid data point that adheres to the schema.
-  You will return only the data point, with no other text or whitespace.
-  You will return the data point in JSON format with the column names as keys.
+input_output_reformulation_sys: >
+  You are an expert in paraphrasing and reformulating text for LLM datasets while preserving meaning.
+  You will receive a data point with different columns.
+  Your task is to:
+  1. Create a paraphrased version of each column while preserving the meaning
+  2. Keep the style of the original text
+  3. Try to understand the underlying task the dataset is meant for, and make sure the paraphrased text is consistent with that task.
 
-  Example Schema:
-  {"input" "If my future wife has the same first name as the 15th first lady of the United States' mother and her surname is the same as the second assassinated president's mother's maiden name, what is my future wife's name?",
-  "Answer": "Jane Ballou"}
 
-  Example Data Point:
-  {"input": "If my future husband has the same first name as the 16th president's eldest son and his surname is the same as the 4th president's wife's maiden name, what is my future husband's name?",
-  "Answer": "Robert Payne"}
-
-  Example Schema:
-  {"problem": "Ava is planning a camping trip with her friends. She wants to make sure they have enough granola bars for snacks. There will be five people total: Ava, her two friends, and her parents. They will spend 3 days and 2 nights at the campsite, and they plan to have 2 granola bars per person for breakfast and 1 granola bar per person for an afternoon snack each day. How many granola bars will Ava need to pack in total for the entire trip?",
-   "generated_solution": "There will be a total of 5 people. Each person needs 2 granola bars for breakfast and 1 granola bar for snack. This amounts to a total of 3 granola bars per person per day. Since the trip is 3 days long, each person will need 3 granola bars/day * 3 days = 9 granola bars. So for 5 people, Ava will need 5 * 9 = 45 granola bars. Thus, Ava will need to pack \boxed{45} granola bars in total for the entire trip.",
-   "expected_answer": "45"
-  }
-
-  Example Data Point:
-  {"problem":"Liam is organizing a book club meeting. He wants to provide enough refreshments for all attendees. There will be 8 members attending, and the meeting will last for 4 hours. He plans to serve 2 cups of coffee and 1 pastry per person every hour. How many pastries does Liam need to buy in total for the meeting?",
-  "generated_solution":"There are 8 members attending. Each person will have 1 pastry every hour for 4 hours, so each person needs 1 pastry/hour * 4 hours = 4 pastries. Therefore, total pastries needed are 8 people * 4 pastries/person = 32 pastries. Liam needs to buy \boxed{32} pastries in total.",
-  "expected_answer":"32"}
-
-  Example Schema:
-  {"instruction": "编写一个名为“add_numbers”的Python函数，该函数接收两个参数，“num1”和“num2”，并返回这两个数字的和。",
-   "output": "```python def add_numbers(num1, num2): """ This function takes two numbers as input and returns their sum. Parameters: num1 (int or float): The first number. num2 (int or float): The second number. Returns: int or float: The sum of num1 and num2. """ return num1 + num2 # Example usage result = add_numbers(5, 3) print(result) # Output: 8 ```"}
-
-  Example Data Point:
-
-  {"instruction": "编写一个名为“multiply_numbers”的Python函数，该函数接收两个参数，“a”和“b”，并返回这两个数字的乘积。",
-  "output": "python\\ndef multiply_numbers(a, b):\\n \\\"\\\"\\\"\\n This function takes two numbers as input and returns their product.\\n Parameters:\\n a (int or float): The first number.\\n b (int or float): The second number.\\n Returns:\\n int or float: The product of a and b.\\n \\\"\\\"\\\"\\n return a * b\\n\\n# Example usage\\nresult = multiply_numbers(4, 5)\\nprint(result) # Output: 20\\n"}
-
-  Example Schema:
-  {"question": "Generate an approximately fifteen-word sentence that describes all this data: Midsummer House eatType restaurant; Midsummer House food Chinese; Midsummer House priceRange moderate; Midsummer House customer rating 3 out of 5; Midsummer House near All Bar One",
-  "answer": "Midsummer House is a Chinese restaurant with moderate prices, a 3 out of 5 customer rating, and is near All Bar One."}
-
-  Example Data Point:
-  {"question": "Generate an approximately twenty-word sentence that describes all this data: The Crimson Oak eatType pub; The Crimson Oak food American; The Crimson Oak priceRange cheap; The Crimson Oak customer rating 4 out of 5; The Crimson Oak near Riverside Park",
-  "answer": "The Crimson Oak is a cheap American pub near Riverside Park with a 4 out of 5 customer rating."}
-
-in_context_learning_generation_user: >
-  Create a single, valid data point that adheres to the schema provided.
-  Schema:
-  {schema}
-  Data Point:
-
-output_field_reformulation_sys: >
-  You are an expert in analyzing and reformulating data. You will receive a data sample
-  and need to reformulate the specified field while maintaining semantic equivalence.
-  You will also analyze the overall topic and nature of the data sample and provide a brief description (1 sentence).
-  You will return only the requested json, with no other text or whitespace.
-
-output_field_reformulation_user: >
-  Given this data sample:
+input_output_reformulation_user: >
+  Given this data point:
   {data}
-
-  1. Reformulate the {output_field} field while maintaining its meaning
-  2. Provide a brief description of what this overall data sample is about
-
-  Return your response in JSON format:
-  {{"reformulated_output": "your reformulation", "description": "your topic description"}}
-
-input_field_generation_sys: >
-  You are an expert in generating synthetic data. You will receive:
-  - A field already fixed
-  - A schema to strictly adhere to for the generated data point in JSON format
-  - A description of the topic and nature of the data sample to populate
-  You will generate matching remaining fields of the schema that are semantically consistent with the given field.
-  You will create a single, valid data point that adheres to the schema, which should include
-  the fixed field with its corresponding fixed value unchanged.
-  You will return only the requested json, with no other text or whitespace.
-
-input_field_generation_user: >
-  Generate remaining fields for the following schema: {schema}
-  The {output_field} field is fixed to: {output}
-  Description of the data sample to populate: {description}
-
-  Generate the remaining fields, ensuring they are consistent with the given {output_field} field and the overall description.
-  Return your response in JSON format with the {output_field} field included.
+  
+  Create a paraphrased version by following the instructions above.
+  Return your response in JSON format with the same schema as the input data.

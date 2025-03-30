@@ -1,10 +1,10 @@
+import math
 import os
 import re
 from datetime import datetime
 
 import numpy as np
 from fiber.chain.models import Node
-from scipy.stats import gmean
 
 import validator.core.constants as cts
 from core.models.payload_models import DiffusionLosses
@@ -51,8 +51,8 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
 
     hours = task.hours_to_complete
 
-    if getattr(task, 'model_params_count', 0) > 0:
-        model_size_billions = min(8, max(1, task.model_params_count // 1_000_000_000))
+    if getattr(task, "model_params_count", 0) > 0:
+        model_size_billions = min(14, max(1, task.model_params_count // 1_000_000_000))
     else:
         # Fallback to parsing from model id
         model = task.model_id
@@ -106,6 +106,7 @@ def calculate_node_quality_scores(
         assert node_agg.task_raw_scores, f"No raw scores available for node {hotkey}"
 
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
+        std_score=float(np.std(node_agg.task_raw_scores))
         score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
         node_agg.quality_score = score
 
@@ -114,6 +115,7 @@ def calculate_node_quality_scores(
                 hotkey=hotkey,
                 quality_score=score,
                 average_score=node_agg.average_raw_score,
+                std_score=std_score,
                 summed_task_score=node_agg.summed_adjusted_task_scores,
                 weight_multiplier=weight_multiplier,
             )
@@ -148,7 +150,7 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
     return period_scores
 
 
-async def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
+def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
     """Aggregate and normalise scores across all nodes."""
     if not task_results:
         return []
@@ -172,27 +174,42 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
-def _is_synth_loss_valid_for_group(miner_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
+
+def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
+    If all synth losses are NaN, return False to use test_loss only.
     """
-    if not miner_results:
+    if all(np.isnan(result.synth_loss) for result in valid_results):
+        logger.info("All synth losses are NaN, using test_loss only for ranking")
         return False
 
-    valid_miners = 0
+    if not valid_results:
+        return False
+
+    # Only consider miners with real synthetic loss values (not placeholders)
+    real_synth_miners = [result for result in valid_results
+                        if result.is_finetune
+                        and not np.isnan(result.test_loss)
+                        and not np.isnan(result.synth_loss)
+                        and result.synth_loss < 999.0]  # Exclude placeholder values
+
+    if not real_synth_miners:
+        logger.info("No miners with real synthetic loss values")
+        return False
+
+    valid_miners = len(real_synth_miners)
     valid_ratios = 0
 
-    for result in miner_results:
-        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss):
-            valid_miners += 1
-            if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
-                logger.info(f"ratio between is {result.synth_loss / result.test_loss}")
-                valid_ratios += 1
+    for result in real_synth_miners:
+        if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
+            logger.info(f"ratio between is {result.synth_loss / result.test_loss}")
+            valid_ratios += 1
 
-    if valid_miners == 0:
-        return False
+    ratio = valid_ratios / valid_miners if valid_miners > 0 else 0
+    logger.info(f"Valid ratios: {valid_ratios}/{valid_miners} = {ratio:.3f}, threshold is {threshold}")
+    return ratio >= threshold
 
-    return (valid_ratios / valid_miners) >= threshold
 
 def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> list[MinerResults]:
     """Calculate scores based on either test_loss or weighted_loss.
@@ -205,28 +222,33 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
             if not result.is_finetune:
                 result.score_reason = "Non-finetuned submission"
                 logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
-            elif np.isnan(result.test_loss) or np.isnan(result.synth_loss):
-                result.score_reason = "Invalid loss"
-                logger.info(f"Miner {result.hotkey}: Invalid loss, score set to 0.0")
+            elif np.isnan(result.test_loss):
+                result.score_reason = "Invalid test loss"
+                logger.info(f"Miner {result.hotkey}: Invalid test loss, score set to 0.0")
+            elif result.synth_loss == 1000.0:
+                result.score_reason = "Outside of top-4 test doesn't get scored."
+                logger.info(f"Miner {result.hotkey}: Outside of top-4")
+
     valid_results = [
-        result for result in miner_results
-        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss)
+        result
+        for result in miner_results
+        if result.is_finetune and not np.isnan(result.test_loss)
     ]
     if not valid_results:
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
+
     # Check if synth losses are valid across all the miners, if it isn't then we just use the test loss
     use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
         logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
-        ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss))
-                          for result in valid_results]
-        ranked_results.sort(key=lambda x: x[1])
+        ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss)) for result in valid_results]
+        ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
         ranking_type = "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
-        ranked_results.sort(key=lambda x: x[1])
+        ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
         ranking_type = "test_loss_only"
 
     # Assign scores for top 2 miners
@@ -387,47 +409,58 @@ async def _evaluate_submissions(
         assert task.synthetic_data is not None, "Synthetic data shouldn't be none for text tasks"
         assert task.test_data is not None, "Test data shouldn't be none for text tasks"
 
-        logger.info("Starting synth evaluation")
-        synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-        synth_results = await run_evaluation_docker_text(dataset=synthetic_data_filepath, **evaluation_params)
+        logger.info("Starting test evaluation")
+        test_data_filepath = await download_s3_file(task.test_data)
+        test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
         try:
-            os.remove(synthetic_data_filepath)
+            os.remove(test_data_filepath)
         except Exception as e:
-            logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
-        synth_eval_results = synth_results.results
-        task.model_params_count = synth_results.base_model_params_count
+            logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
+        test_eval_results = test_results.results
+        task.model_params_count = test_results.base_model_params_count
 
-        finetuned_repos = []
+        test_losses = []
         for repo in repos_to_evaluate:
-            if isinstance(synth_eval_results.get(repo), Exception):
-                results[repo] = synth_eval_results[repo]
+            if isinstance(test_eval_results.get(repo), Exception):
+                results[repo] = test_eval_results[repo]
                 continue
 
-            synth_result = synth_eval_results[repo]
-            if not synth_result.is_finetune:
+            test_result = test_eval_results[repo]
+            if not test_result.is_finetune:
                 results[repo] = (
                     EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
                     EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
                 )
             else:
-                finetuned_repos.append(repo)
-        if finetuned_repos:
-            test_data_filepath = await download_s3_file(task.test_data)
-            test_results = await run_evaluation_docker_text(
-                dataset=test_data_filepath,
-                models=finetuned_repos,
+                test_losses.append((repo, test_result.eval_loss))
+
+        test_losses.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
+        top_4_repos = [repo for repo, _ in test_losses[:4]]
+
+        for repo, _ in test_losses[4:]:
+            results[repo] = (
+                # setting to 1k for now
+                EvaluationResultText(is_finetune=True, eval_loss=1000.0, perplexity=1000.0),
+                test_eval_results[repo],
+            )
+
+        if top_4_repos:
+            logger.info(f"Evaluating synthetic data for top {len(top_4_repos)} models")
+            synthetic_data_filepath = await download_s3_file(task.synthetic_data)
+            synth_results = await run_evaluation_docker_text(
+                dataset=synthetic_data_filepath,
+                models=top_4_repos,
                 **{k: v for k, v in evaluation_params.items() if k != "models"},
             )
             try:
-                os.remove(test_data_filepath)
+                os.remove(synthetic_data_filepath)
             except Exception as e:
-                logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
-            test_eval_results = test_results.results
-            task.model_params_count = test_results.base_model_params_count
+                logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
+            synth_eval_results = synth_results.results
 
-            for repo in finetuned_repos:
-                if isinstance(test_eval_results.get(repo), Exception):
-                    results[repo] = test_eval_results[repo]
+            for repo in top_4_repos:
+                if isinstance(synth_eval_results.get(repo), Exception):
+                    results[repo] = synth_eval_results[repo]
                 else:
                     results[repo] = (synth_eval_results[repo], test_eval_results[repo])
 
@@ -584,6 +617,7 @@ def zero_duplicate_scores(
             result.is_finetune = False
             result.score_reason = result.score_reason or "Duplicated submission"
     return task_results
+
 
 async def process_miners_pool(
     miners: list[Node],

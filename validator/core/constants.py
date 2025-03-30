@@ -57,7 +57,7 @@ TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
 GET_SYNTH_DATA = True
 MAX_SYNTH_DATA_POINTS = 300
-MAX_TEST_DATA_POINTS = 600
+MAX_TEST_DATA_POINTS = 1000
 
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
@@ -69,8 +69,7 @@ MINIMUM_DATASET_ROWS = 5000  # Minimum number of rows required in a dataset
 
 # synth stuff
 NUM_SYNTH_RETRIES = 3
-SYNTH_GEN_BATCH_SIZE = 10
-SYNTH_MODEL_TEMPERATURE = 0.4
+SYNTH_GEN_BATCH_SIZE = 30
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
@@ -78,27 +77,37 @@ GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
-    (30_000, 50_000), # we don't sample these for now as they are too small
-    (50_000, 1_500_000),
+    (20_000, 50_000),
+    (50_000, 100_000),
+    (100_000, 250_000),
 ]
 
 # dataset row bins to training hours range
 TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     #   (5_000, 10_000): (3, 5),  # 5k-10k rows needs 1-2 hours
     (10_000, 25_000): (3, 6),  # 10k-25k rows needs 2-4 hours
-    (25_000, 50_000): (4, 7),  # 25k-50k rows needs 3-6 hours
-    (50_000, 500_000): (5, 8),  # 50k-500k rows needs 4-8 hours
-    (500_000, 5_000_000): (8, 12),  # 500k+ rows needs 5-12 hours
+    (25_000, 50_000): (4, 8),  # 25k-50k rows needs 3-6 hours
+    (50_000, 100_000): (5, 9),  # 50k-500k rows needs 4-8 hours
+    (100_000, 500_000): (7, 10),  # 50k-500k rows needs 4-8 hours
 }
 
-SYNTH_MODEL = "chat-llama-3-2-3b"
+# text augmentation synth
+TEXT_SYNTH_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
+TEXT_SYNTH_MODEL_TEMPERATURE = 0.4
+TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
+END_OF_REASONING_TAG = "</think>"
+
+# image prompt generation synth
+IMAGE_PROMPT_GEN_MODEL = "chat-llama-3-2-3b"
+IMAGE_PROMPT_GEN_MODEL_TEMPERATURE = 0.4
+
+# endpoints
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
 IMAGE_GEN_ENDPOINT = "https://api.nineteen.ai/v1/text-to-image"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
-# Probability for using output reformulation method
-OUTPUT_REFORMULATION_PROBABILITY = 0.5
+
 
 # Task Stuff
 MINIMUM_MINER_POOL = 1
@@ -120,14 +129,14 @@ MAX_EVAL_ATTEMPTS = 4
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 SCORE_PENALTY = -0.05
-FIRST_PLACE_SCORE  = 2
+FIRST_PLACE_SCORE = 2
 SECOND_PLACE_SCORE = 1
 
-SIGMOID_STEEPNESS = 15  # Higher = sharper transition
-SIGMOID_SHIFT = 0.3  # Shifts sigmoid curve horizontally
-SIGMOID_POWER = 5  # Higher = more extreme difference between high and low scores
-LINEAR_WEIGHT = 0.15  # Weight for linear component (0-1) - benefits low scores
-SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
+SIGMOID_STEEPNESS = 9  # Higher = sharper transition
+SIGMOID_SHIFT = 0.5  # Shifts sigmoid curve horizontally
+SIGMOID_POWER = 0.75  # Higher = more extreme difference between high and low scores
+LINEAR_WEIGHT = 0.05  # Weight for linear component (0-1) - benefits low scores
+SIGMOID_WEIGHT = 0.7  # Weight for sigmoid component (0-1) - benefits high scores
 
 REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
 
@@ -140,11 +149,12 @@ MAX_CONCURRENT_TASK_PREPS = 3
 MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.8  # image is currently 1 minus this
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.7  # image is currently 1 minus this
 PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = 0.5 # person synth chance is 1 minus this
 PERSON_SYNTH_DS_PREFIX = "person"
 PERSON_SYNTH_DOCKER_IMAGE = "diagonalge/person_synth:latest"
 PERSON_SYNTH_CONTAINER_SAVE_PATH = "/app/avatars/"
+
 
 # diffusion eval stuff
 LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
@@ -162,7 +172,7 @@ DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.5
 
 # Max jobs
 MAX_CONCURRENT_JOBS = 60
-MAX_CONCURRENT_SYNTHETIC_JOBS = 15
+MAX_CONCURRENT_SYNTHETIC_JOBS = 18
 ## This leaves room for MAX_CONCURRENT_JOBS - MAX_CONCURRENT_SYNTHETIC_JOBS at all times
 
 
@@ -184,9 +194,18 @@ MAX_IMAGE_HEIGHT = 1024
 IMAGE_RESOLUTION_STEP = 64  # Ensures we get resolutions divisible by 64
 
 # scoring stuff
-TEXT_TASK_SCORE_WEIGHT = 0.90
+TEXT_TASK_SCORE_WEIGHT = 0.7
 IMAGE_TASK_SCORE_WEIGHT = 1 - TEXT_TASK_SCORE_WEIGHT
 
 SEVEN_DAY_SCORE_WEIGHT = 0.25
 THREE_DAY_SCORE_WEIGHT = 0.4
 ONE_DAY_SCORE_WEIGHT = 0.35
+
+# HF models cache management
+CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
+CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
+MAX_CACHE_SIZE_BYTES = 600 * 1024**3  # in bytes
+CACHE_CLEANUP_INTERVAL = 60 * 60  # in seconds
+
+# Docker evaluation
+DOCKER_EVAL_HF_CACHE_DIR = "/root/.cache/huggingface"

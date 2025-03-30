@@ -1,6 +1,6 @@
 *.egg-info
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 sam_vit_l_0b3195.pth

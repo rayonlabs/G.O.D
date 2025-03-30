@@ -6,6 +6,7 @@ from fiber.logging_utils import get_logger
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import model_validator
 
 from core import constants as cst
 from core.models.utility_models import CustomDatasetType
@@ -136,6 +137,14 @@ class NewTaskRequestText(NewTaskRequest):
     # Turn off protected namespace for model
     model_config = {"protected_namespaces": ()}
 
+    @model_validator(mode="before")
+    def convert_empty_strings(cls, values: dict) -> dict:
+        string_fields = ["field_instruction", "field_input", "field_output", "field_system"]
+        for field in string_fields:
+            if field in values and isinstance(values[field], str):
+                values[field] = values[field].strip() or None
+        return values
+
 
 class NewTaskRequestImage(NewTaskRequest):
     model_repo: str = Field(..., description="The model repository to use")
@@ -150,7 +159,7 @@ class NewTaskRequestImage(NewTaskRequest):
     )
 
 
-class NewTaskWithFixedDatasetsRequest(NewTaskRequest):
+class NewTaskWithFixedDatasetsRequest(NewTaskRequestText):
     ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
     training_data: str = Field(..., description="The prepared training dataset")
     synthetic_data: str = Field(..., description="The prepared synthetic dataset")
