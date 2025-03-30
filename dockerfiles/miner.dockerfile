@@ -1,5 +1,5 @@
 
-FROM winglian/axolotl:main-20241101-py3.11-cu124-2.5.0
+FROM axolotlai/axolotl:main-latest
 
 RUN pip install mlflow huggingface_hub wandb
 
