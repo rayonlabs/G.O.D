@@ -1,2 +1,3 @@
 git+https://github.com/rayonlabs/fiber
 datasets==2.21.0
+peft==0.15.1
