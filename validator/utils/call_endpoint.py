@@ -61,8 +61,10 @@ async def process_non_stream_fiber_get(endpoint: str, config: Config, node: Node
     try:
         response = await client.make_non_streamed_get(
             httpx_client=config.httpx_client,
-            server_address=server_address,
             validator_ss58_address=config.keypair.ss58_address,
+            miner_ss58_address=node.hotkey,
+            keypair=config.keypair,
+            server_address=server_address,
             endpoint=endpoint,
             timeout=10,
         )
