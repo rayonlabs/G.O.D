@@ -1,4 +1,4 @@
-FROM axolotlai/axolotl:main-latest
+FROM axolotlai/axolotl:main-py3.11-cu124-2.5.1
 
 WORKDIR /app
 
