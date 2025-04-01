@@ -80,21 +80,21 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         logger.info("There were no results to be scored")
         return []
 
-    organic_text_proportion = get_organic_proportion(task_results, TaskType.TEXTTASK, days=7)
+    organic_text_proportion = get_organic_proportion(task_results, TaskType.INSTRUCTTEXTTASK, days=7)
     synth_text_proportion = 1 - organic_text_proportion
 
     seven_day_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 
     seven_day_text_tasks_organic = [
         task for task in task_results
-        if task.task.task_type == TaskType.TEXTTASK
+        if task.task.task_type == TaskType.INSTRUCTTEXTTASK
         and task.task.is_organic
         and task.task.created_at > seven_day_cutoff
     ]
 
     seven_day_text_tasks_synth = [
         task for task in task_results
-        if task.task.task_type == TaskType.TEXTTASK
+        if task.task.task_type == TaskType.INSTRUCTTEXTTASK
         and not task.task.is_organic
         and task.task.created_at > seven_day_cutoff
     ]
@@ -116,11 +116,14 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         if organic_score.hotkey in synth_by_hotkey:
             synth_score = synth_by_hotkey[organic_score.hotkey]
             if organic_score.average_score > (synth_score.average_score + 0.5 * synth_score.std_score):
-                logger.info(f"Node {organic_score.hotkey} has a much higher organic vs synth score in 7-day period - flagging as suspicious")
+                logger.info(
+                    f"Node {organic_score.hotkey} has a much higher organic vs synth score "
+                    "in 7-day period - flagging as suspicious"
+                )
                 suspicious_hotkeys.add(organic_score.hotkey)
 
-    text_tasks_organic = filter_tasks_by_type(task_results, TaskType.TEXTTASK, is_organic=True)
-    text_tasks_synth = filter_tasks_by_type(task_results, TaskType.TEXTTASK, is_organic=False)
+    text_tasks_organic = filter_tasks_by_type(task_results, TaskType.INSTRUCTTEXTTASK, is_organic=True)
+    text_tasks_synth = filter_tasks_by_type(task_results, TaskType.INSTRUCTTEXTTASK, is_organic=False)
     image_tasks = filter_tasks_by_type(task_results, TaskType.IMAGETASK)
 
     periods = {

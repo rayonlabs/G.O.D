@@ -328,7 +328,7 @@ def _get_dataset_type(task: TextRawTask) -> InstructDatasetType:
 
 def _create_failed_miner_result(hotkey: str, reason: str, task_type: TaskType) -> MinerResults:
     """Create a failed miner result with zero score."""
-    if task_type == TaskType.TEXTTASK:
+    if task_type == TaskType.INSTRUCTTEXTTASK:
         return MinerResultsText(
             hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason
         )
@@ -748,7 +748,7 @@ async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int
     all_scores_zero = all(result.score == 0.0 for result in task_results)
 
     if cts.DELETE_S3_AFTER_COMPLETE:
-        if task.task_type == TaskType.TEXTTASK:
+        if task.task_type == TaskType.INSTRUCTTEXTTASK:
             files_to_delete = [task.training_data, task.test_data, task.synthetic_data]
         elif task.task_type == TaskType.IMAGETASK:
             files_to_delete = [task.training_data, task.test_data]

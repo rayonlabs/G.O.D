@@ -139,7 +139,7 @@ async def task_offer(
         # You will want to optimise this as a miner
         global current_job_finish_time
         current_time = datetime.now()
-        if request.task_type != TaskType.TEXTTASK:
+        if request.task_type != TaskType.INSTRUCTTEXTTASK:
             return MinerTaskResponse(message="This endpoint only accepts text tasks", accepted=False)
 
         if "llama" not in request.model.lower():

@@ -112,7 +112,7 @@ class TextRawTask(RawTask):
     system_format: None = None  # NOTE: Needs updating to be optional once we accept it
     synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
-    task_type: TaskType = TaskType.TEXTTASK
+    task_type: TaskType = TaskType.INSTRUCTTEXTTASK
 
 
 class ImageRawTask(RawTask):
@@ -225,7 +225,7 @@ class MinerResults(BaseModel):
 
 
 class MinerResultsText(MinerResults):
-    task_type: TaskType = TaskType.TEXTTASK
+    task_type: TaskType = TaskType.INSTRUCTTEXTTASK
 
 
 class MinerResultsImage(MinerResults):

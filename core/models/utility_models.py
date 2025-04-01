@@ -111,7 +111,7 @@ class Prompts(BaseModel):
 
 
 class TaskType(str, Enum):
-    TEXTTASK = "TextTask"
+    INSTRUCTTEXTTASK = "InstructTextTask"
     IMAGETASK = "ImageTask"
 
 

@@ -27,7 +27,7 @@ def _check_if_task_has_finished(task: TextTask | ImageTask) -> TextTask | ImageT
         TaskStatus.PREP_TASK_FAILURE,
         TaskStatus.NODE_TRAINING_FAILURE,
     ]:
-        if task.task_type == TaskType.TEXTTASK:
+        if task.task_type == TaskType.INSTRUCTTEXTTASK:
             task.synthetic_data = None
         task.test_data = None
         task.training_data = None
@@ -157,7 +157,7 @@ async def get_recent_tasks_for_hotkey(
                     )
                 ]
 
-                if result_dict[cst.TASK_TYPE] == TaskType.TEXTTASK.value:
+                if result_dict[cst.TASK_TYPE] == TaskType.INSTRUCTTEXTTASK.value:
                     task_fields = {k: v for k, v in result_dict.items() if k in TextTask.model_fields}
                     task = TextTask(**task_fields)
                     task = _check_if_task_has_finished(task)
@@ -223,7 +223,7 @@ async def get_task_with_hotkey_details(
 
             hotkey_details.append(HotkeyDetails(**result_dict))
 
-        if task.task_type == TaskType.TEXTTASK:
+        if task.task_type == TaskType.INSTRUCTTEXTTASK:
             return TextTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
         elif task.task_type == TaskType.IMAGETASK:
             return ImageTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)

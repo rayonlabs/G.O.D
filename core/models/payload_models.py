@@ -197,7 +197,7 @@ class TaskDetails(BaseModel):
 
 
 class TextTaskDetails(TaskDetails):
-    task_type: TaskType = TaskType.TEXTTASK
+    task_type: TaskType = TaskType.INSTRUCTTEXTTASK
     base_model_repository: str
     ds_repo: str
 

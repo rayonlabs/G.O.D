@@ -114,7 +114,7 @@ async def create_task_text(
             test_data=existing_task.test_data,
             training_data=existing_task.training_data,
             synthetic_data=existing_task.synthetic_data,
-            task_type=TaskType.TEXTTASK,
+            task_type=TaskType.INSTRUCTTEXTTASK,
             result_model_name=existing_task.result_model_name,
             file_format=existing_task.file_format,
             started_at=datetime.utcnow(),
@@ -150,7 +150,7 @@ async def create_task_text(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        task_type=TaskType.TEXTTASK,
+        task_type=TaskType.INSTRUCTTEXTTASK,
         result_model_name=request.result_model_name,
     )
 
@@ -257,7 +257,7 @@ async def get_task_details_by_account(
 
     task_status_responses = []
     for task in tasks:
-        if task.task_type == TaskType.TEXTTASK:
+        if task.task_type == TaskType.INSTRUCTTEXTTASK:
             task_status_responses.append(
                 TextTaskDetails(
                     id=task.task_id,
@@ -310,7 +310,7 @@ async def get_task_details(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found.")
 
-    if task.task_type.value == TaskType.TEXTTASK.value:
+    if task.task_type.value == TaskType.INSTRUCTTEXTTASK.value:
         return TextTaskDetails(
             id=task_id,
             account_id=task.account_id,
@@ -417,7 +417,7 @@ async def get_completed_organic_tasks(
 
     task_details = []
     for task in tasks:
-        if task.task_type == TaskType.TEXTTASK:
+        if task.task_type == TaskType.INSTRUCTTEXTTASK:
             task_details.append(
                 TextTaskDetails(
                     id=task.task_id,

@@ -46,7 +46,7 @@ class ImageTaskConfig(TaskConfig):
 
 
 class TextTaskConfig(TaskConfig):
-    task_type: TaskType = TaskType.TEXTTASK
+    task_type: TaskType = TaskType.INSTRUCTTEXTTASK
     eval_container: Callable = run_evaluation_docker_text
     synth_data_function: Callable | None = get_additional_synth_data
     data_size_function: Callable = get_total_text_dataset_size
