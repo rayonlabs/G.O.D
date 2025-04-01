@@ -7,8 +7,8 @@ from fiber.logging_utils import get_logger
 from transformers import AutoTokenizer
 
 import core.constants as cst
-from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
 
 
 logger = get_logger(__name__)
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 def create_dataset_entry(
     dataset: str,
-    dataset_type: CustomDatasetType,
+    dataset_type: InstructDatasetType,
     file_format: FileFormat,
 ) -> dict:
     dataset_entry = {"path": dataset}
@@ -24,7 +24,7 @@ def create_dataset_entry(
     if file_format == FileFormat.JSON:
         dataset_entry = {"path": f"/workspace/input_data/{os.path.basename(dataset)}"}
 
-    if isinstance(dataset_type, CustomDatasetType):
+    if isinstance(dataset_type, InstructDatasetType):
         custom_type_dict = {key: value for key, value in dataset_type.model_dump().items() if value is not None}
         dataset_entry.update(_process_custom_dataset_fields(custom_type_dict))
     else:

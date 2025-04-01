@@ -18,9 +18,9 @@ from core.config.config_handler import update_flash_attention
 from core.config.config_handler import update_model_info
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.docker_utils import stream_logs
-from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DiffusionJob
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import TextJob
 
 
@@ -58,7 +58,7 @@ class DockerEnvironment:
 def _load_and_modify_config(
     dataset: str,
     model: str,
-    dataset_type: CustomDatasetType,
+    dataset_type: InstructDatasetType,
     file_format: FileFormat,
     task_id: str,
     expected_repo_name: str | None,
@@ -110,7 +110,7 @@ def create_job_text(
     job_id: str,
     dataset: str,
     model: str,
-    dataset_type: CustomDatasetType,
+    dataset_type: InstructDatasetType,
     file_format: FileFormat,
     expected_repo_name: str | None,
 ):

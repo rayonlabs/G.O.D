@@ -10,8 +10,8 @@ import validator.core.constants as cts
 from core.models.payload_models import DiffusionLosses
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
-from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
@@ -315,8 +315,8 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
     return miner_results
 
 
-def _get_dataset_type(task: TextRawTask) -> CustomDatasetType:
-    return CustomDatasetType(
+def _get_dataset_type(task: TextRawTask) -> InstructDatasetType:
+    return InstructDatasetType(
         field_system=task.field_system,
         field_instruction=task.field_instruction,
         field_input=task.field_input,
@@ -374,7 +374,7 @@ async def _evaluate_submissions(
     task: TextRawTask | ImageRawTask,
     submission_repos: list[str],
     gpu_ids: list[int],
-    dataset_type: CustomDatasetType | None = None,
+    dataset_type: InstructDatasetType | None = None,
 ) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
     """Evaluate same task submissions within same docker container.
     Docker evaluations with an exception will return the Exception for the repo."""
@@ -624,7 +624,7 @@ async def process_miners_pool(
     task: ImageRawTask | TextRawTask,
     config: Config,
     gpu_ids: list[int],
-    dataset_type: CustomDatasetType | None = None,
+    dataset_type: InstructDatasetType | None = None,
 ) -> list[MinerResultsText | MinerResultsImage]:
     """Process same task miners"""
     assert task.task_id is not None, "We should have a task id when processing miners"

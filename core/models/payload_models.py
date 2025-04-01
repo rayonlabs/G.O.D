@@ -9,9 +9,9 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
-from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageTextPair
+from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
@@ -44,7 +44,7 @@ class TrainRequestText(TrainRequest):
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    dataset_type: CustomDatasetType
+    dataset_type: InstructDatasetType
     file_format: FileFormat
 
 

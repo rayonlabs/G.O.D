@@ -60,7 +60,7 @@ class TaskMinerResult(BaseModel):
     quality_score: float
 
 
-class CustomDatasetType(BaseModel):
+class InstructDatasetType(BaseModel):
     system_prompt: str | None = ""
     system_format: str | None = "{system}"
     field_system: str | None = None
@@ -82,7 +82,7 @@ class Job(BaseModel):
 
 class TextJob(Job):
     dataset: str
-    dataset_type: CustomDatasetType
+    dataset_type: InstructDatasetType
     file_format: FileFormat
 
 

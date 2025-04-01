@@ -5,8 +5,8 @@ from fiber import Keypair
 
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
-from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import TaskStatus
 from validator.core.models import ImageRawTask
 from validator.core.models import TextRawTask
@@ -64,7 +64,7 @@ async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask
 
 
 def prepare_text_task_request(task: TextRawTask) -> TrainRequestText:
-    dataset_type = CustomDatasetType(
+    dataset_type = InstructDatasetType(
         field_system=task.field_system,
         field_input=task.field_input,
         field_output=task.field_output,
