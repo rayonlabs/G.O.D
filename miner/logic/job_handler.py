@@ -19,7 +19,6 @@ from core.config.config_handler import update_model_info
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.docker_utils import stream_logs
 from core.models.utility_models import CustomDatasetType
-from core.models.utility_models import DatasetType
 from core.models.utility_models import DiffusionJob
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TextJob
@@ -59,7 +58,7 @@ class DockerEnvironment:
 def _load_and_modify_config(
     dataset: str,
     model: str,
-    dataset_type: DatasetType | CustomDatasetType,
+    dataset_type: CustomDatasetType,
     file_format: FileFormat,
     task_id: str,
     expected_repo_name: str | None,
@@ -111,7 +110,7 @@ def create_job_text(
     job_id: str,
     dataset: str,
     model: str,
-    dataset_type: DatasetType | CustomDatasetType,
+    dataset_type: CustomDatasetType,
     file_format: FileFormat,
     expected_repo_name: str | None,
 ):
@@ -226,7 +225,7 @@ def start_tuning_container(job: TextJob):
         huggingface_token=cst.HUGGINGFACE_TOKEN,
         wandb_token=cst.WANDB_TOKEN,
         job_id=job.job_id,
-        dataset_type=job.dataset_type.value if isinstance(job.dataset_type, DatasetType) else cst.CUSTOM_DATASET_TYPE,
+        dataset_type=cst.CUSTOM_DATASET_TYPE if isinstance(job.dataset_type, CustomDatasetType) else None,
         dataset_filename=os.path.basename(job.dataset) if job.file_format != FileFormat.HF else "",
     ).to_dict()
     logger.info(f"Docker environment: {docker_env}")

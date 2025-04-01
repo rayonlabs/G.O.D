@@ -6,12 +6,6 @@ from pydantic import BaseModel
 from pydantic import Field
 
 
-class DatasetType(str, Enum):
-    INSTRUCT = "instruct"
-    PRETRAIN = "pretrain"
-    ALPACA = "alpaca"
-
-
 class FileFormat(str, Enum):
     CSV = "csv"  # needs to be local file
     JSON = "json"  # needs to be local file
@@ -88,7 +82,7 @@ class Job(BaseModel):
 
 class TextJob(Job):
     dataset: str
-    dataset_type: DatasetType | CustomDatasetType
+    dataset_type: CustomDatasetType
     file_format: FileFormat
 
 

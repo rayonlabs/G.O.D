@@ -5,7 +5,6 @@ import subprocess
 import time
 from math import ceil
 from pathlib import Path
-from typing import Union
 
 import psutil
 import torch
@@ -29,7 +28,6 @@ from transformers import TrainingArguments
 
 from core.config.config_handler import create_dataset_entry
 from core.models.utility_models import CustomDatasetType
-from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
 from validator.core import constants as cst
 from validator.evaluation.utils import model_is_a_finetune
@@ -73,7 +71,7 @@ class ProgressLoggerCallback(TrainerCallback):
 
 def _load_and_update_evaluation_config(
     dataset_name: str,
-    dataset_type: Union[DatasetType, CustomDatasetType],
+    dataset_type: CustomDatasetType,
     file_format: FileFormat,
     finetuned_model: AutoModelForCausalLM,
     config_path: str,
@@ -182,7 +180,7 @@ def evaluate_language_model_loss(
 def evaluate_finetuned_model(
     dataset_name: str,
     finetuned_model: AutoModelForCausalLM,
-    dataset_type: Union[DatasetType, CustomDatasetType],
+    dataset_type: CustomDatasetType,
     file_format: FileFormat,
     tokenizer: AutoTokenizer,
 ) -> dict[str, float]:
@@ -322,9 +320,9 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
 
     file_format = FileFormat(file_format_str)
     try:
-        dataset_type = DatasetType(dataset_type_str)
-    except ValueError:
         dataset_type = CustomDatasetType.model_validate_json(dataset_type_str)
+    except ValueError:
+        logger.error(f"Invalid dataset type: {dataset_type_str}")
 
     tokenizer = load_tokenizer(original_model)
     if tokenizer.pad_token_id is None:
