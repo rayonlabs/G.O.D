@@ -114,6 +114,17 @@ class TaskType(str, Enum):
     INSTRUCTTEXTTASK = "InstructTextTask"
     IMAGETASK = "ImageTask"
 
+    # Temporary for backwards compatibility, otherwise auditing will fail
+    TEXTTASK = "TextTask"
+    def __eq__(self, other):
+        if isinstance(other, (str, TaskType)):
+            self_str = str(self)
+            other_str = str(other)
+            if self_str in ("InstructTextTask", "TextTask") and other_str in ("InstructTextTask", "TextTask"):
+                return True
+            return self_str == other_str
+        return NotImplemented
+
 
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")
