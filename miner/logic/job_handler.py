@@ -225,7 +225,7 @@ def start_tuning_container(job: TextJob):
         huggingface_token=cst.HUGGINGFACE_TOKEN,
         wandb_token=cst.WANDB_TOKEN,
         job_id=job.job_id,
-        dataset_type=cst.CUSTOM_DATASET_TYPE if isinstance(job.dataset_type, CustomDatasetType) else None,
+        dataset_type=cst.CUSTOM_DATASET_TYPE,
         dataset_filename=os.path.basename(job.dataset) if job.file_format != FileFormat.HF else "",
     ).to_dict()
     logger.info(f"Docker environment: {docker_env}")
