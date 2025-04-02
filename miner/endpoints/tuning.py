@@ -11,6 +11,7 @@ from fiber.logging_utils import get_logger
 from fiber.miner.core.configuration import Config
 from fiber.miner.dependencies import blacklist_low_stake
 from fiber.miner.dependencies import get_config
+from fiber.miner.dependencies import verify_get_request
 from fiber.miner.dependencies import verify_request
 from pydantic import ValidationError
 
@@ -99,8 +100,6 @@ async def tune_model_diffusion(
     return {"message": "Training job enqueued.", "task_id": job.job_id}
 
 
-# I think we need to be v careful that it's validators that are asking for this,
-# is there a way to ensure we only reply to validators?
 async def get_latest_model_submission(task_id: str) -> str:
     try:
         # Temporary work around in order to not change the vali a lot
@@ -230,7 +229,7 @@ def factory_router() -> APIRouter:
         response_model=str,
         summary="Get Latest Model Submission",
         description="Retrieve the latest model submission for a given task ID",
-        dependencies=[Depends(blacklist_low_stake)],
+        dependencies=[Depends(blacklist_low_stake), Depends(verify_get_request)],
     )
     router.add_api_route(
         "/start_training/",  # TODO: change to /start_training_text or similar

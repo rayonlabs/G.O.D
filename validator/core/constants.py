@@ -57,7 +57,7 @@ TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
 GET_SYNTH_DATA = True
 MAX_SYNTH_DATA_POINTS = 300
-MAX_TEST_DATA_POINTS = 1200
+MAX_TEST_DATA_POINTS = 1000
 
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
@@ -134,9 +134,9 @@ SECOND_PLACE_SCORE = 1
 
 SIGMOID_STEEPNESS = 9  # Higher = sharper transition
 SIGMOID_SHIFT = 0.5  # Shifts sigmoid curve horizontally
-SIGMOID_POWER = 1.0  # Higher = more extreme difference between high and low scores
-LINEAR_WEIGHT = 0.1  # Weight for linear component (0-1) - benefits low scores
-SIGMOID_WEIGHT = 0.75  # Weight for sigmoid component (0-1) - benefits high scores
+SIGMOID_POWER = 0.75  # Higher = more extreme difference between high and low scores
+LINEAR_WEIGHT = 0.05  # Weight for linear component (0-1) - benefits low scores
+SIGMOID_WEIGHT = 0.7  # Weight for sigmoid component (0-1) - benefits high scores
 
 REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
 
@@ -149,7 +149,12 @@ MAX_CONCURRENT_TASK_PREPS = 3
 MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.5  # image is currently 1 minus this
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.7  # image is currently 1 minus this
+PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = 0.5 # person synth chance is 1 minus this
+PERSON_SYNTH_DS_PREFIX = "person"
+PERSON_SYNTH_DOCKER_IMAGE = "diagonalge/person_synth:latest"
+PERSON_SYNTH_CONTAINER_SAVE_PATH = "/app/avatars/"
+
 
 # diffusion eval stuff
 LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
@@ -189,7 +194,7 @@ MAX_IMAGE_HEIGHT = 1024
 IMAGE_RESOLUTION_STEP = 64  # Ensures we get resolutions divisible by 64
 
 # scoring stuff
-TEXT_TASK_SCORE_WEIGHT = 0.675
+TEXT_TASK_SCORE_WEIGHT = 0.7
 IMAGE_TASK_SCORE_WEIGHT = 1 - TEXT_TASK_SCORE_WEIGHT
 
 SEVEN_DAY_SCORE_WEIGHT = 0.25

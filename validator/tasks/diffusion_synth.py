@@ -5,11 +5,15 @@ import random
 import re
 import tempfile
 import uuid
+import shutil
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 from typing import AsyncGenerator
 from typing import List
+import asyncio
+import docker
+from docker.models.containers import Container
 
 from fiber import Keypair
 
@@ -182,21 +186,13 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
         logger.error(f"Error parsing image generation response: {e}")
         raise ValueError("Failed to generate image")
 
-
-async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str, None]) -> RawTask:
-    """Create a synthetic image task with random model and style."""
-    number_of_hours = random.randint(cst.MIN_IMAGE_COMPETITION_HOURS, cst.MAX_IMAGE_COMPETITION_HOURS)
+async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[list[ImageTextPair], str]:
     style = random.choice(IMAGE_STYLES)
-    num_prompts = random.randint(cst.MIN_IMAGE_SYNTH_PAIRS, cst.MAX_IMAGE_SYNTH_PAIRS)
-    model_id = await anext(models)
-
     try:
         prompts = await generate_diffusion_prompts(style, config.keypair, num_prompts)
     except Exception as e:
         logger.error(f"Failed to generate prompts for {style}: {e}")
         raise e
-
-    Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
     image_text_pairs = []
     for i, prompt in enumerate(prompts):
         width = random.randrange(cst.MIN_IMAGE_WIDTH, cst.MAX_IMAGE_WIDTH + 1, cst.IMAGE_RESOLUTION_STEP)
@@ -215,9 +211,52 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str
 
         image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
 
+    return image_text_pairs, style
+
+async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
+    client = docker.from_env()
+    image_text_pairs = []
+    with tempfile.TemporaryDirectory(dir=cst.TEMP_PATH_FOR_IMAGES) as tmp_dir_path:
+        container = await asyncio.to_thread(
+            client.containers.run,
+            image=cst.PERSON_SYNTH_DOCKER_IMAGE,
+            environment={"SAVE_DIR": cst.PERSON_SYNTH_CONTAINER_SAVE_PATH, "NUM_PROMPTS": num_prompts},
+            volumes={tmp_dir_path: {"bind": cst.PERSON_SYNTH_CONTAINER_SAVE_PATH, "mode": "rw"}},
+            device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=["0"])],
+            detach=True
+        )
+        result = await asyncio.to_thread(container.wait)
+        images_dir = Path(tmp_dir_path)
+        for file in images_dir.iterdir():
+            if file.is_file():
+                if file.suffix == ".png":
+                    img_url = await upload_file_to_minio(f"{tmp_dir_path}/{file.name}", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png")
+                    txt_url = await upload_file_to_minio(f"{tmp_dir_path}/{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt")
+                    image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
+        if os.path.exists(tmp_dir_path):
+            shutil.rmtree(tmp_dir_path)
+
+
+    await asyncio.to_thread(client.containers.prune)
+    await asyncio.to_thread(client.images.prune, filters={"dangling": True})
+    await asyncio.to_thread(client.volumes.prune) 
+
+    return image_text_pairs, cst.PERSON_SYNTH_DS_PREFIX
+
+async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str, None]) -> RawTask:
+    """Create a synthetic image task with random model and style."""
+    number_of_hours = random.randint(cst.MIN_IMAGE_COMPETITION_HOURS, cst.MAX_IMAGE_COMPETITION_HOURS)
+    num_prompts = random.randint(cst.MIN_IMAGE_SYNTH_PAIRS, cst.MAX_IMAGE_SYNTH_PAIRS)
+    model_id = await anext(models)
+    Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
+    if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE:
+        image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
+    else:
+        image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+
     task = ImageRawTask(
         model_id=model_id,
-        ds=style.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
+        ds=ds_prefix.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
         image_text_pairs=image_text_pairs,
         status=TaskStatus.PENDING,
         is_organic=False,
