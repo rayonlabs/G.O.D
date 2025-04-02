@@ -1,20 +1,19 @@
+import asyncio
 import base64
 import json
 import os
 import random
 import re
+import shutil
 import tempfile
 import uuid
-import shutil
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 from typing import AsyncGenerator
 from typing import List
-import asyncio
-import docker
-from docker.models.containers import Container
 
+import docker
 from fiber import Keypair
 
 import validator.core.constants as cst
@@ -144,6 +143,7 @@ async def generate_diffusion_prompts(style: str, keypair: Keypair, num_prompts: 
         if isinstance(result, str):
             json_match = re.search(r"\{[\s\S]*\}", result)
             if json_match:
+                logger.info(f"Full result from prompt generation: {result}")
                 result = json_match.group(0)
             else:
                 raise ValueError("Failed to generate a valid json")
@@ -186,6 +186,7 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
         logger.error(f"Error parsing image generation response: {e}")
         raise ValueError("Failed to generate image")
 
+
 async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[list[ImageTextPair], str]:
     style = random.choice(IMAGE_STYLES)
     try:
@@ -213,6 +214,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
 
     return image_text_pairs, style
 
+
 async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
     client = docker.from_env()
     image_text_pairs = []
@@ -223,25 +225,29 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
             environment={"SAVE_DIR": cst.PERSON_SYNTH_CONTAINER_SAVE_PATH, "NUM_PROMPTS": num_prompts},
             volumes={tmp_dir_path: {"bind": cst.PERSON_SYNTH_CONTAINER_SAVE_PATH, "mode": "rw"}},
             device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=["0"])],
-            detach=True
+            detach=True,
         )
         result = await asyncio.to_thread(container.wait)
         images_dir = Path(tmp_dir_path)
         for file in images_dir.iterdir():
             if file.is_file():
                 if file.suffix == ".png":
-                    img_url = await upload_file_to_minio(f"{tmp_dir_path}/{file.name}", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png")
-                    txt_url = await upload_file_to_minio(f"{tmp_dir_path}/{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt")
+                    img_url = await upload_file_to_minio(
+                        f"{tmp_dir_path}/{file.name}", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png"
+                    )
+                    txt_url = await upload_file_to_minio(
+                        f"{tmp_dir_path}/{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt"
+                    )
                     image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
         if os.path.exists(tmp_dir_path):
             shutil.rmtree(tmp_dir_path)
 
-
     await asyncio.to_thread(client.containers.prune)
     await asyncio.to_thread(client.images.prune, filters={"dangling": True})
-    await asyncio.to_thread(client.volumes.prune) 
+    await asyncio.to_thread(client.volumes.prune)
 
     return image_text_pairs, cst.PERSON_SYNTH_DS_PREFIX
+
 
 async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str, None]) -> RawTask:
     """Create a synthetic image task with random model and style."""
