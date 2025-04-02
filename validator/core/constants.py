@@ -128,9 +128,8 @@ MAX_EVAL_ATTEMPTS = 4
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
-SCORE_PENALTY = -0.05
-FIRST_PLACE_SCORE = 2
-SECOND_PLACE_SCORE = 1
+SCORE_PENALTY = -1
+FIRST_PLACE_SCORE = 3
 
 SIGMOID_STEEPNESS = 9  # Higher = sharper transition
 SIGMOID_SHIFT = 0.5  # Shifts sigmoid curve horizontally

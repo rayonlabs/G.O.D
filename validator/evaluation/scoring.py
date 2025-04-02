@@ -213,7 +213,7 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
 
 def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> list[MinerResults]:
     """Calculate scores based on either test_loss or weighted_loss.
-    Top ranked gets score=2, second gets score=1, others get 0.
+    Top ranked gets score=3, others get 0.
     Bottom 25% get a penalty (cts.SCORE_PENALTY) if there are more than cts.MIN_IDEAL_NUM_MINERS_IN_POOL miners."""
     logger.info("Beginning score calculation...")
     for result in miner_results:
@@ -251,19 +251,20 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
         ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
         ranking_type = "test_loss_only"
 
-    # Assign scores for top 2 miners
-    for i, (result, metric) in enumerate(ranked_results[:2]):
-        with LogContext(miner_hotkey=result.hotkey):
-            result.score = cts.FIRST_PLACE_SCORE if i == 0 else cts.SECOND_PLACE_SCORE
-            rank = "1st" if i == 0 else "2nd"
-            result.score_reason = f"Ranked {rank} by {ranking_type}"
+
+
+    if ranked_results:  # Need one result at least bro
+        top_result, top_metric = ranked_results[0]
+        with LogContext(miner_hotkey=top_result.hotkey):
+            top_result.score = cts.FIRST_PLACE_SCORE
+            top_result.score_reason = f"Ranked 1st by {ranking_type}"
             logger.info(
-                f"Miner {result.hotkey} (finetuned):"
-                f" test_loss={result.test_loss:.4f}"
-                f" synth_loss={result.synth_loss:.4f}"
-                f" {ranking_type}={metric:.4f}"
-                f" score={result.score:.4f}"
-                f" score_reason={result.score_reason}"
+                f"Miner {top_result.hotkey} (finetuned):"
+                f" test_loss={top_result.test_loss:.4f}"
+                f" synth_loss={top_result.synth_loss:.4f}"
+                f" {ranking_type}={top_metric:.4f}"
+                f" score={top_result.score:.4f}"
+                f" score_reason={top_result.score_reason}"
             )
 
     # Apply penalties to bottom 25% if enough miners are in the competition
@@ -272,10 +273,9 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
         penalty_count = max(1, int(total_valid_miners * 0.25))
         penalty_start_idx = total_valid_miners - penalty_count
 
-        # Log miners ranked below top 2 but not in bottom 25%
-        for result, metric in ranked_results[2:penalty_start_idx]:
+        for result, metric in ranked_results[1:penalty_start_idx]:
             with LogContext(miner_hotkey=result.hotkey):
-                result.score_reason = f"Ranked below top 2 by {ranking_type}"
+                result.score_reason = f"Ranked below top 1 by {ranking_type}"
                 logger.info(
                     f"Miner {result.hotkey} (finetuned):"
                     f" test_loss={result.test_loss:.4f}"
@@ -299,10 +299,9 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
                     f" score_reason={result.score_reason}"
                 )
     else:
-        # No penalties if not enough miners
-        for result, metric in ranked_results[2:]:
+        for result, metric in ranked_results[1:]:
             with LogContext(miner_hotkey=result.hotkey):
-                result.score_reason = f"Ranked below top 2 by {ranking_type}"
+                result.score_reason = f"Ranked below top 1 by {ranking_type}"
                 logger.info(
                     f"Miner {result.hotkey} (finetuned):"
                     f" test_loss={result.test_loss:.4f}"
