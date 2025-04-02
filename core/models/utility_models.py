@@ -72,6 +72,16 @@ class InstructDatasetType(BaseModel):
     field: str | None = None
 
 
+class DPODatasetType(BaseModel):
+    field_prompt: str | None = None
+    field_system: str | None = None
+    field_chosen: str | None = None
+    field_rejected: str | None = None
+    prompt_format: str | None = "{prompt}"
+    chosen_format: str | None = "{chosen}"
+    rejected_format: str | None = "{rejected}"
+
+
 class Job(BaseModel):
     job_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     model: str
@@ -82,7 +92,7 @@ class Job(BaseModel):
 
 class TextJob(Job):
     dataset: str
-    dataset_type: InstructDatasetType
+    dataset_type: InstructDatasetType | DPODatasetType
     file_format: FileFormat
 
 

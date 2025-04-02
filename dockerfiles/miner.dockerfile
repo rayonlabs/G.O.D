@@ -1,4 +1,3 @@
-
 FROM winglian/axolotl:main-20241101-py3.11-cu124-2.5.0
 
 RUN pip install mlflow huggingface_hub wandb
@@ -38,6 +37,7 @@ CMD echo 'Preparing data...' && \
     fi && \
     if [ "$DATASET_TYPE" != "hf" ] && [ -f "/workspace/input_data/${DATASET_FILENAME}" ]; then \
         cp /workspace/input_data/${DATASET_FILENAME} /workspace/axolotl/data/${DATASET_FILENAME}; \
+        cp /workspace/input_data/${DATASET_FILENAME} /workspace/axolotl/${DATASET_FILENAME}; \
     fi && \
     echo 'Starting training command' && \
     accelerate launch -m axolotl.cli.train ${CONFIG_DIR}/${JOB_ID}.yml
