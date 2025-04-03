@@ -1,20 +1,19 @@
+import asyncio
 import base64
 import json
 import os
 import random
 import re
+import shutil
 import tempfile
 import uuid
-import shutil
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 from typing import AsyncGenerator
 from typing import List
-import asyncio
-import docker
-from docker.models.containers import Container
 
+import docker
 from fiber import Keypair
 
 import validator.core.constants as cst
@@ -114,7 +113,7 @@ IMAGE_STYLES = [
 
 def create_diffusion_messages(style: str, num_prompts: int) -> List[Message]:
     system_content = """You are an expert in creating diverse and descriptive prompts for image generation models.
-You will generate a set of creative prompts in a specific artistic style.
+Your task is to generate prompts that strongly embody specific artistic styles.
 Each prompt should be detailed and consistent with the given style.
 You will return the prompts in a JSON format with no additional text.
 
@@ -122,13 +121,19 @@ Example Output:
 {
   "prompts": [
     "A pixel art scene of a medieval castle with knights guarding the entrance, surrounded by a moat",
-    "A pixel art depiction of a bustling futuristic city with flying cars zooming past neon-lit skyscrapers"
+    "A depiction of a bustling futuristic city with flying cars zooming past neon-lit skyscrapers - pixel art style"
   ]
 }"""
 
-    user_content = f"""Generate {num_prompts} creative and detailed prompts in the following style: {style}
-Make sure each prompt is descriptive and would work well with image generation models.
-Return only the JSON response."""
+    user_content = f"""Generate {num_prompts} prompts in {style} style.
+
+Requirements:
+- Each prompt must clearly communicate the {style}'s distinctive visual characteristics
+- Include specific visual elements that define this style (textures, colors, techniques)
+- You MUST mention the style in the prompt
+- Vary subject matter while maintaining style consistency
+- Get super creative! 
+- Return JSON only"""
 
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
 
@@ -144,6 +149,7 @@ async def generate_diffusion_prompts(style: str, keypair: Keypair, num_prompts: 
         if isinstance(result, str):
             json_match = re.search(r"\{[\s\S]*\}", result)
             if json_match:
+                logger.info(f"Full result from prompt generation: {result}")
                 result = json_match.group(0)
             else:
                 raise ValueError("Failed to generate a valid json")
@@ -186,6 +192,7 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
         logger.error(f"Error parsing image generation response: {e}")
         raise ValueError("Failed to generate image")
 
+
 async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[list[ImageTextPair], str]:
     style = random.choice(IMAGE_STYLES)
     try:
@@ -213,8 +220,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
 
     return image_text_pairs, style
 
-
-
+  
 async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
     client = docker.from_env()
     image_text_pairs = []
@@ -225,7 +231,7 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
             environment={"SAVE_DIR": cst.PERSON_SYNTH_CONTAINER_SAVE_PATH, "NUM_PROMPTS": num_prompts},
             volumes={tmp_dir_path: {"bind": cst.PERSON_SYNTH_CONTAINER_SAVE_PATH, "mode": "rw"}},
             device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=["0"])],
-            detach=True
+            detach=True,
         )
 
         result = await asyncio.to_thread(container.wait)
@@ -233,18 +239,22 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
         for file in images_dir.iterdir():
             if file.is_file():
                 if file.suffix == ".png":
-                    img_url = await upload_file_to_minio(f"{tmp_dir_path}/{file.name}", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png")
-                    txt_url = await upload_file_to_minio(f"{tmp_dir_path}/{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt")
+                    img_url = await upload_file_to_minio(
+                        f"{tmp_dir_path}/{file.name}", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png"
+                    )
+                    txt_url = await upload_file_to_minio(
+                        f"{tmp_dir_path}/{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt"
+                    )
                     image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
         if os.path.exists(tmp_dir_path):
             shutil.rmtree(tmp_dir_path)
-
 
     await asyncio.to_thread(client.containers.prune)
     await asyncio.to_thread(client.images.prune, filters={"dangling": True})
     await asyncio.to_thread(client.volumes.prune)
 
     return image_text_pairs, cst.PERSON_SYNTH_DS_PREFIX
+
 
 async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str, None]) -> RawTask:
     """Create a synthetic image task with random model and style."""

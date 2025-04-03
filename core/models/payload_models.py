@@ -135,7 +135,7 @@ class NewTaskRequestText(NewTaskRequest):
     no_input_format: None = None
 
     # Turn off protected namespace for model
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
     @model_validator(mode="before")
     def convert_empty_strings(cls, values: dict) -> dict:
@@ -217,7 +217,7 @@ class TextTaskDetails(TaskDetails):
     system_format: None = Field(None, description="How to format the `system (prompt)`", examples=["{system}"])
 
     # Turn off protected namespace for model
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class ImageTaskDetails(TaskDetails):
@@ -235,3 +235,5 @@ class TaskListResponse(BaseModel):
 class LeaderboardRow(BaseModel):
     hotkey: str
     stats: AllNodeStats
+
+
