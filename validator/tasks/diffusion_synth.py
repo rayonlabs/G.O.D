@@ -167,7 +167,7 @@ async def generate_diffusion_prompts(first_style: str, second_style: str, keypai
         if isinstance(result, str):
             json_match = re.search(r"\{[\s\S]*\}", result)
             if json_match:
-                logger.info(f"Full result from prompt generation: {result}")
+                logger.info(f"Full result from prompt generation for {first_style} and {second_style}: {result}")
                 result = json_match.group(0)
             else:
                 raise ValueError("Failed to generate a valid json")
