@@ -21,23 +21,10 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     finetuned_config = finetuned_model.config
 
     try:
-        if hasattr(finetuned_model, "architectures"):
-            finetuned_architectures = finetuned_model.architectures
-        else:
-            finetuned_architectures = finetuned_config._architectures
-
-        adapter_config = os.path.join(finetuned_architectures, "adapter_config.json")
-        if os.path.exists(adapter_config):
-            has_lora_modules = True
-            logger.info(f"Adapter config found: {adapter_config}")
-        else:
-            logger.info(f"Adapter config not found at {adapter_config}")
-            has_lora_modules = False
-        base_model_match = finetuned_config._architectures == original_config._architectures
+        architecture_classes_match = finetuned_config.architectures == original_config.architectures
     except Exception as e:
-        logger.debug(f"There is an issue with checking the finetune path {e}")
-        base_model_match = True
-        has_lora_modules = False
+        logger.debug(f"There is an issue with checking the architecture classes {e}")
+        architecture_classes_match = False
 
     attrs_to_compare = [
         "architectures",
@@ -62,9 +49,9 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
                 break
 
     logger.info(
-        f"Architecture same: {architecture_same}, Base model match: {base_model_match}, Has lora modules: {has_lora_modules}"
+        f"Architecture same: {architecture_same}, Architecture classes match: {architecture_classes_match}"
     )
-    return architecture_same and (base_model_match or has_lora_modules)
+    return architecture_same and architecture_classes_match
 
 
 def get_default_dataset_config(dataset_name: str) -> str | None:
