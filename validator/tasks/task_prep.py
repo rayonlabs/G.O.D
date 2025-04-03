@@ -33,9 +33,15 @@ def create_zip_for_image_dataset(split_keys: set, zip_name: str, entries: dict, 
     subfolder_name = Path(zip_name).stem
     zip_path = dataset_root / zip_name
 
+    if zip_path.exists():
+        logger.error(f"Zip path {zip_path} exists. This should not happen. Deleting it.")
+        zip_path.unlink()
+
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
         for key in split_keys:
             img_file, txt_file = entries[key]
+            with open(txt_file, "r") as f:
+                logger.info(f"Adding the following prompt to the zip: {f.read()}")
             zipf.write(img_file, Path(subfolder_name) / img_file.relative_to(dataset_root))
             zipf.write(txt_file, Path(subfolder_name) / txt_file.relative_to(dataset_root))
 

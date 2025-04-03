@@ -151,6 +151,7 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         period_text_synth = filter_tasks_by_period(text_tasks_synth, cutoff)
         period_image = filter_tasks_by_period(image_tasks, cutoff)
 
+        # Calculate organic scores
         text_scores_organic = get_period_scores_from_results(
             period_text_organic,
             weight_multiplier=weight * cts.TEXT_TASK_SCORE_WEIGHT * organic_text_proportion

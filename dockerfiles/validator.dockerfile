@@ -1,4 +1,4 @@
-FROM winglian/axolotl:main-20241101-py3.11-cu124-2.5.0
+FROM winglian/axolotl:main-20250401
 
 WORKDIR /app
 
