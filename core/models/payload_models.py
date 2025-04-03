@@ -9,6 +9,7 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
+from core.models.utility_models import DPODatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructDatasetType
@@ -44,7 +45,7 @@ class TrainRequestText(TrainRequest):
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    dataset_type: InstructDatasetType
+    dataset_type: InstructDatasetType | DPODatasetType
     file_format: FileFormat
 
 
