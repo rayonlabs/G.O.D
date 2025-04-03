@@ -1,5 +1,6 @@
 import requests
 import uuid
+import names
 import re
 import json
 from PIL import Image
@@ -28,15 +29,58 @@ def get_face_image():
     image = Image.open(BytesIO(response.content))
     return image
 
+def gen_name() -> str:
+    titles = ["Mr.", "Dr.", "Mrs.", "Ms.", "Miss", "Lord", "Lady", "Prof.", "Sir", ""]
+
+    name_type = random.random()
+
+    if name_type < 0.3:
+        return names.get_first_name()
+
+    elif name_type < 0.5:
+        return names.get_last_name()
+
+    elif name_type < 0.7:
+        return names.get_full_name()
+
+    else:
+        title_choice = random.choice(titles)
+
+        if title_choice in ["Mrs.", "Ms.", "Miss", "Lady"]:
+            if random.random() < 0.7:
+                return f"{title_choice} {names.get_last_name()}"
+            else:
+                return f"{title_choice} {names.get_full_name(gender='female')}"
+
+        elif title_choice in ["Mr.", "Lord", "Sir"]:
+            if random.random() < 0.7:
+                return f"{title_choice} {names.get_last_name()}"
+            else:
+                return f"{title_choice} {names.get_full_name(gender='male')}"
+
+        elif title_choice == "Dr." or title_choice == "Prof.":
+            if random.random() < 0.6:
+                return f"{title_choice} {names.get_last_name()}"
+            else:
+                return f"{title_choice} {names.get_full_name()}"
+
+        else:
+            if random.random() < 0.5:
+                return names.get_last_name()
+            else:
+                return names.get_full_name()
+
 if __name__ == "__main__":
     face_image = get_face_image()
     face_image.save(cst.FACE_IMAGE_PATH)
+
+    person_prompt = cst.PERSON_PROMPT.replace("'person_name'", gen_name())
 
     prompts_config = type('Args', (), {
         "model_path": cst.LLAVA_MODEL_PATH,
         "model_base": None,
         "model_name": get_model_name_from_path(cst.LLAVA_MODEL_PATH),
-        "query": cst.PERSON_PROMPT,
+        "query": person_prompt,
         "conv_mode": None,
         "image_file": cst.FACE_IMAGE_PATH,
         "sep": ",",
@@ -67,5 +111,5 @@ if __name__ == "__main__":
             image.save(f"{save_dir}{image_id}.png")
             with open(f"{save_dir}{image_id}.txt", "w") as file:
                 file.write(prompt)
-   
+
 

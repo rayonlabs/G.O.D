@@ -11,7 +11,7 @@ DEFAULT_SAVE_DIR = "/app/avatars/"
 #prompt stuff
 NUM_PROMPTS = int(os.getenv("NUM_PROMPTS", 15))
 PERSON_PROMPT = f"""
-        Here is an image of a person. Generate {NUM_PROMPTS} different prompts for creating an avatar of the person.
+        Here is an image of a person named 'person_name'. Generate {NUM_PROMPTS} different prompts for creating an avatar of the person - make sure there name is listed in the prompt.
         Place them in different places, backgrounds, scenarios, and emotions.
         Use different settings like beach, house, room, park, office, city, and others.
         Also use a different range of emotions like happy, sad, smiling, laughing, angry, thinking for every prompt.
