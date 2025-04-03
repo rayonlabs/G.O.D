@@ -40,6 +40,7 @@ markupsafe==2.1.5
 matplotlib==3.10.0
 mdurl==0.1.2
 mpmath==1.3.0
+names
 narwhals==1.26.0
 networkx==3.4.2
 numpy==1.26.4
