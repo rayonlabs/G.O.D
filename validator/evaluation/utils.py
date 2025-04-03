@@ -21,10 +21,10 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     finetuned_config = finetuned_model.config
 
     try:
-        if hasattr(finetuned_model, "name_or_path"):
-            finetuned_model_path = finetuned_model.name_or_path
+        if hasattr(finetuned_model, "architectures"):
+            finetuned_model_path = finetuned_model.architectures
         else:
-            finetuned_model_path = finetuned_model.config._name_or_path
+            finetuned_model_path = finetuned_model.config._architectures
 
         adapter_config = os.path.join(finetuned_model_path, "adapter_config.json")
         if os.path.exists(adapter_config):
@@ -33,7 +33,7 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
         else:
             logger.info(f"Adapter config not found at {adapter_config}")
             has_lora_modules = False
-        base_model_match = finetuned_config._name_or_path == original_repo
+        base_model_match = finetuned_config._architectures == original_repo
     except Exception as e:
         logger.debug(f"There is an issue with checking the finetune path {e}")
         base_model_match = True
@@ -43,6 +43,9 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
         "architectures",
         "hidden_size",
         "n_layer",
+        "intermediate_size",
+        "head_dim",
+        "hidden_act",
         "model_type",
         "num_hidden_layers",
         "num_attention_heads",
