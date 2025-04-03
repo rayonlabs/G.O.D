@@ -98,6 +98,22 @@ class RawTask(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
+class DpoRawTask(RawTask):
+    """
+    DPO task data as stored in the database. It expand the RawTask with fields from the DpoTask table.
+    """
+    field_prompt: str
+    field_system: str | None = None
+    field_chosen: str
+    field_rejected: str
+    prompt_format: str | None = None
+    chosen_format: str | None = None
+    rejected_format: str | None = None
+    synthetic_data: str | None = None
+    file_format: FileFormat = FileFormat.HF
+    task_type: TaskType = TaskType.DPOTASK
+
+
 class TextRawTask(RawTask):
     """
     Text task data as stored in the database. It expand the RawTask with fields from the TextTask table.
@@ -141,6 +157,10 @@ class TextTask(TextRawTask):
 
 
 class ImageTask(ImageRawTask):
+    trained_model_repository: str | None = None
+
+
+class DpoTask(DpoRawTask):
     trained_model_repository: str | None = None
 
 

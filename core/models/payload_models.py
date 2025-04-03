@@ -146,6 +146,36 @@ class NewTaskRequestText(NewTaskRequest):
         return values
 
 
+class NewTaskRequestDPO(NewTaskRequest):
+    field_prompt: str = Field(..., description="The column name for the prompt", examples=["prompt"])
+    field_system: str | None = Field(None, description="The column name for the system (prompt)", examples=["system"])
+    field_chosen: str = Field(..., description="The column name for the chosen response", examples=["chosen"])
+    field_rejected: str = Field(..., description="The column name for the rejected response", examples=["rejected"])
+
+    prompt_format: str | None = Field(None, description="The format of the prompt", examples=["{system} {prompt}"])
+    chosen_format: str | None = Field(None, description="The format of the chosen response", examples=["{chosen} <|endoftext|>"])
+    rejected_format: str | None = Field(
+        None, description="The format of the rejected response", examples=["{rejected} <|endoftext|>"]
+    )
+
+    ds_repo: str = Field(..., description="The repository for the dataset", examples=["Intel/orca_dpo_pairs"])
+    file_format: FileFormat = Field(
+        FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
+    model_repo: str = Field(..., description="The repository for the model", examples=["Qwen/Qwen2.5-Coder-32B-Instruct"])
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
+    @model_validator(mode="before")
+    def convert_empty_strings(cls, values: dict) -> dict:
+        string_fields = ["field_prompt", "field_system", "field_chosen", "field_rejected"]
+        for field in string_fields:
+            if field in values and isinstance(values[field], str):
+                values[field] = values[field].strip() or None
+        return values
+
+
 class NewTaskRequestImage(NewTaskRequest):
     model_repo: str = Field(..., description="The model repository to use")
     image_text_pairs: list[ImageTextPair] = Field(
@@ -220,6 +250,26 @@ class TextTaskDetails(TaskDetails):
     model_config = ConfigDict(protected_namespaces=())
 
 
+class DpoTaskDetails(TaskDetails):
+    task_type: TaskType = TaskType.DPOTASK
+    base_model_repository: str
+    ds_repo: str
+
+    field_prompt: str = Field(..., description="The column name for the prompt", examples=["prompt"])
+    field_system: str | None = Field(None, description="The column name for the `system (prompt)`", examples=["system"])
+    field_chosen: str = Field(..., description="The column name for the chosen response", examples=["chosen"])
+    field_rejected: str = Field(..., description="The column name for the rejected response", examples=["rejected"])
+
+    prompt_format: str | None = Field(None, description="The format of the prompt", examples=["{system} {prompt}"])
+    chosen_format: str | None = Field(None, description="The format of the chosen response", examples=["{chosen} <|endoftext|>"])
+    rejected_format: str | None = Field(
+        None, description="The format of the rejected response", examples=["{rejected} <|endoftext|>"]
+    )
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
+
 class ImageTaskDetails(TaskDetails):
     task_type: TaskType = TaskType.IMAGETASK
     image_text_pairs: list[ImageTextPair]
@@ -235,5 +285,3 @@ class TaskListResponse(BaseModel):
 class LeaderboardRow(BaseModel):
     hotkey: str
     stats: AllNodeStats
-
-
