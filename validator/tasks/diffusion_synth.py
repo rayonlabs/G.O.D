@@ -262,7 +262,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
 
         image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
 
-    return image_text_pairs, f"{first_style} and {second_style}"
+    return image_text_pairs, f"{first_style}_and_{second_style}"
 
 
 async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
