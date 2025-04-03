@@ -119,10 +119,8 @@ EXAMPLE_PROMPTS = [
     "A comic book style drawing of a superhero fighting a villain, surrounded by a cityscape",
     "A sculpture art depiction of a warrior in full armor, surrounded by a battlefield",
     "A lowbrow art depiction of a cat playing with a ball of yarn, surrounded by a cozy armchair",
-    "A psychedelic art depiction of a unicorn galloping through a field of flowers, surrounded by a rainbow",
     "A vintage poster depicting a glamorous woman in a red dress, surrounded by a starry night sky",
     "A street art depiction of a graffiti artist spray-painting a wall, surrounded by a cityscape",
-    "A flat cartoon style drawing of a superhero fighting a villain, surrounded by a cityscape",
 ]
 
 def create_image_style_compatibility_messages(first_style: str, second_style: str) -> List[Message]:
