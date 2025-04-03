@@ -98,8 +98,11 @@ TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
 END_OF_REASONING_TAG = "</think>"
 
 # image prompt generation synth
-IMAGE_PROMPT_GEN_MODEL = "chat-llama-3-2-3b"
+# IMAGE_PROMPT_GEN_MODEL = "chat-llama-3-2-3b"
+IMAGE_PROMPT_GEN_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
 IMAGE_PROMPT_GEN_MODEL_TEMPERATURE = 0.4
+IMAGE_PROMPT_GEN_MODEL_MAX_TOKENS = 5024
+IMAGE_STYLE_PICKING_NUM_TRIES = 10
 
 # endpoints
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"

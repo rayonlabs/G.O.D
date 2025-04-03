@@ -26,10 +26,10 @@ from validator.core.models import ImageRawTask
 from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
 from validator.tasks.task_prep import upload_file_to_minio
-from validator.utils.call_endpoint import post_to_nineteen_chat
 from validator.utils.call_endpoint import post_to_nineteen_image
 from validator.utils.call_endpoint import retry_with_backoff
 from validator.utils.llm import convert_to_nineteen_payload
+from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
 
 
@@ -111,10 +111,25 @@ IMAGE_STYLES = [
 ]
 
 
-def create_diffusion_messages(style: str, num_prompts: int) -> List[Message]:
+def create_image_style_compatibility_messages(first_style: str, second_style: str) -> List[Message]:
+    system_content = """You are an expert in spotting incompatible artistic styles for image generation.
+Your task is to analyze two artistic styles and determine if they are not compatible to be merged into a style that has both characteristics.
+The styles are meant to be combined in a set of prompts for image generation.
+It is crucial for the generated images to have a coherent style."""
+
+    user_content = f"""Analyze the {first_style} and {second_style} styles and determine if they can be effectively combined.
+Return only a JSON with a boolean 'compatible' field.
+
+Example Output:
+{{"compatible": true}}"""
+
+    return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
+
+
+def create_diffusion_messages(first_style: str, second_style: str, num_prompts: int) -> List[Message]:
     system_content = """You are an expert in creating diverse and descriptive prompts for image generation models.
-Your task is to generate prompts that strongly embody specific artistic styles.
-Each prompt should be detailed and consistent with the given style.
+Your task is to generate prompts that strongly embody a combination of two artistic styles.
+Each prompt should be detailed and consistent with both of the given styles. 
 You will return the prompts in a JSON format with no additional text.
 
 Example Output:
@@ -125,25 +140,28 @@ Example Output:
   ]
 }"""
 
-    user_content = f"""Generate {num_prompts} prompts in {style} style.
+    user_content = f"""Generate {num_prompts} prompts in {first_style} and {second_style} style.
 
 Requirements:
-- Each prompt must clearly communicate the {style}'s distinctive visual characteristics
+- Each prompt must clearly communicate the {first_style} and {second_style}'s distinctive visual characteristics
 - Include specific visual elements that define this style (textures, colors, techniques)
-- You MUST mention the style in the prompt
+- You MUST mention both of the chosen styles in the prompt
 - Vary subject matter while maintaining style consistency
-- Get super creative! 
+- Get super creative and do not repeat similar prompts!
+- The generated images should have a coherent style
 - Return JSON only"""
 
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
 
 
 @retry_with_backoff
-async def generate_diffusion_prompts(style: str, keypair: Keypair, num_prompts: int) -> List[str]:
-    messages = create_diffusion_messages(style, num_prompts)
-    payload = convert_to_nineteen_payload(messages, cst.IMAGE_PROMPT_GEN_MODEL, cst.IMAGE_PROMPT_GEN_MODEL_TEMPERATURE)
+async def generate_diffusion_prompts(first_style: str, second_style: str, keypair: Keypair, num_prompts: int) -> List[str]:
+    messages = create_diffusion_messages(first_style, second_style, num_prompts)
+    payload = convert_to_nineteen_payload(
+        messages, cst.IMAGE_PROMPT_GEN_MODEL, cst.IMAGE_PROMPT_GEN_MODEL_TEMPERATURE, cst.IMAGE_PROMPT_GEN_MODEL_MAX_TOKENS
+    )
 
-    result = await post_to_nineteen_chat(payload, keypair)
+    result = await post_to_nineteen_chat_with_reasoning(payload, keypair, cst.END_OF_REASONING_TAG)
 
     try:
         if isinstance(result, str):
@@ -193,12 +211,38 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
         raise ValueError("Failed to generate image")
 
 
+async def check_style_compatibility(first_style: str, second_style: str, config: Config) -> bool:
+    messages = create_image_style_compatibility_messages(first_style, second_style)
+    payload = convert_to_nineteen_payload(messages, cst.IMAGE_PROMPT_GEN_MODEL, cst.IMAGE_PROMPT_GEN_MODEL_TEMPERATURE)
+    result = await post_to_nineteen_chat_with_reasoning(payload, config.keypair, cst.END_OF_REASONING_TAG)
+    result_dict = json.loads(result) if isinstance(result, str) else result
+    return result_dict.get("compatible", False)
+
+
+async def pick_style_combination(config: Config) -> tuple[str, str]:
+    for i in range(cst.IMAGE_STYLE_PICKING_NUM_TRIES):
+        logger.info(f"Picking style combination. Try {i + 1} of {cst.IMAGE_STYLE_PICKING_NUM_TRIES}")
+        first_style, second_style = random.sample(IMAGE_STYLES, 2)
+        try:
+            compatible = await check_style_compatibility(first_style, second_style, config)
+
+            if compatible:
+                return first_style, second_style
+            logger.info(f"Styles {first_style} and {second_style} were found incompatible, trying new combination")
+            continue
+
+        except Exception as e:
+            logger.error(f"Try {i + 1}/{cst.IMAGE_STYLE_PICKING_NUM_TRIES} failed: {e}")
+
+    raise ValueError("Failed to pick a valid style combination")
+
+
 async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[list[ImageTextPair], str]:
-    style = random.choice(IMAGE_STYLES)
+    first_style, second_style = await pick_style_combination(config)
     try:
-        prompts = await generate_diffusion_prompts(style, config.keypair, num_prompts)
+        prompts = await generate_diffusion_prompts(first_style, second_style, config.keypair, num_prompts)
     except Exception as e:
-        logger.error(f"Failed to generate prompts for {style}: {e}")
+        logger.error(f"Failed to generate prompts for {first_style} and {second_style}: {e}")
         raise e
     image_text_pairs = []
     for i, prompt in enumerate(prompts):
@@ -218,7 +262,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
 
         image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
 
-    return image_text_pairs, style
+    return image_text_pairs, f"{first_style} and {second_style}"
 
 
 async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
