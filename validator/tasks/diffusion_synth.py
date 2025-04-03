@@ -130,7 +130,9 @@ Example Output:
 Requirements:
 - Each prompt must clearly communicate the {style}'s distinctive visual characteristics
 - Include specific visual elements that define this style (textures, colors, techniques)
+- You MUST mention the style in the prompt
 - Vary subject matter while maintaining style consistency
+- Get super creative! 
 - Return JSON only"""
 
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
