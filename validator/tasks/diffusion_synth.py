@@ -179,10 +179,8 @@ def create_single_style_diffusion_messages(style: str, num_prompts: int) -> List
 
 
 @retry_with_backoff
-async def generate_diffusion_prompts(first_style: str, second_style: str, keypair: Keypair, num_prompts: int) -> List[str]:
-    use_combined_styles = random.random() < cst.PROBABILITY_STYLE_COMBINATION
-
-    if use_combined_styles:
+async def generate_diffusion_prompts(first_style: str, second_style: str, keypair: Keypair, num_prompts: int, combined: bool) -> List[str]:
+    if combined:
         messages = create_combined_diffusion_messages(first_style, second_style, num_prompts)
         style_description = f"{first_style} and {second_style}"
     else:
@@ -275,7 +273,9 @@ async def pick_style_combination(config: Config) -> tuple[str, str]:
 async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[list[ImageTextPair], str]:
     first_style, second_style = await pick_style_combination(config)
     try:
-        prompts = await generate_diffusion_prompts(first_style, second_style, config.keypair, num_prompts)
+        use_combined_styles = random.random() < cst.PROBABILITY_STYLE_COMBINATION
+        ds_prefix = f"{first_style}_and_{second_style}" if use_combined_styles else first_style
+        prompts = await generate_diffusion_prompts(first_style, second_style, config.keypair, num_prompts, use_combined_styles)
     except Exception as e:
         logger.error(f"Failed to generate prompts for {first_style} and {second_style}: {e}")
         raise e
@@ -297,7 +297,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
 
         image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
 
-    return image_text_pairs, f"{first_style}_and_{second_style}"
+    return image_text_pairs, ds_prefix
 
 
 async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
