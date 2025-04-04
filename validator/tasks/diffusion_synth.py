@@ -179,13 +179,21 @@ def create_single_style_diffusion_messages(style: str, num_prompts: int) -> List
 
 
 @retry_with_backoff
-async def generate_diffusion_prompts(first_style: str, second_style: str, few_shot_prompts: List[str], keypair: Keypair, num_prompts: int) -> List[str]:
-    if random.random() < cst.PROBABILITY_STYLE_COMBINATION:
-        messages = create_combined_diffusion_messages(first_style, second_style, few_shot_prompts, num_prompts)
+async def generate_diffusion_prompts(first_style: str, second_style: str, keypair: Keypair, num_prompts: int) -> List[str]:
+    use_combined_styles = random.random() < cst.PROBABILITY_STYLE_COMBINATION
+
+    if use_combined_styles:
+        messages = create_combined_diffusion_messages(first_style, second_style, num_prompts)
+        style_description = f"{first_style} and {second_style}"
     else:
         messages = create_single_style_diffusion_messages(first_style, num_prompts)
+        style_description = first_style
+
     payload = convert_to_nineteen_payload(
-        messages, cst.IMAGE_PROMPT_GEN_MODEL, cst.IMAGE_PROMPT_GEN_MODEL_TEMPERATURE, cst.IMAGE_PROMPT_GEN_MODEL_MAX_TOKENS
+        messages,
+        cst.IMAGE_PROMPT_GEN_MODEL,
+        cst.IMAGE_PROMPT_GEN_MODEL_TEMPERATURE,
+        cst.IMAGE_PROMPT_GEN_MODEL_MAX_TOKENS
     )
 
     result = await post_to_nineteen_chat_with_reasoning(payload, keypair, cst.END_OF_REASONING_TAG)
@@ -194,7 +202,7 @@ async def generate_diffusion_prompts(first_style: str, second_style: str, few_sh
         if isinstance(result, str):
             json_match = re.search(r"\{[\s\S]*\}", result)
             if json_match:
-                logger.info(f"Full result from prompt generation for {first_style} and {second_style}: {result}")
+                logger.info(f"Full result from prompt generation for {style_description}: {result}")
                 result = json_match.group(0)
             else:
                 raise ValueError("Failed to generate a valid json")
