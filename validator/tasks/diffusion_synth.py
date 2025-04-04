@@ -113,19 +113,6 @@ IMAGE_STYLES = [
 with open(cst.EXAMPLE_PROMPTS_PATH, 'r') as f:
     FULL_PROMPTS = json.load(f)
 
-EXAMPLE_PROMPTS = [
-    "A pixel art scene of a medieval castle with knights guarding the entrance, surrounded by a moat",
-    "A depiction of a bustling futuristic city with flying cars zooming past neon-lit skyscrapers - pixel art style",
-    "A surrealistic painting of a mermaid swimming through a field of flowers, surrounded by a rainbow",
-    "A watercolor painting of a serene landscape with a river flowing through a valley, surrounded by mountains",
-    "A digital matte painting of a futuristic spaceship docked at a space station, surrounded by a nebula",
-    "A comic book style drawing of a superhero fighting a villain, surrounded by a cityscape",
-    "A sculpture art depiction of a warrior in full armor, surrounded by a battlefield",
-    "A lowbrow art depiction of a cat playing with a ball of yarn, surrounded by a cozy armchair",
-    "A vintage poster depicting a glamorous woman in a red dress, surrounded by a starry night sky",
-    "A street art depiction of a graffiti artist spray-painting a wall, surrounded by a cityscape",
-]
-
 def create_image_style_compatibility_messages(first_style: str, second_style: str) -> List[Message]:
     system_content = """You are an expert in spotting incompatible artistic styles for image generation.
 Your task is to analyze two artistic styles and determine if they are not compatible to be merged into a style that has both characteristics.
@@ -141,20 +128,12 @@ Example Output:
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
 
 
-def create_combined_diffusion_messages(first_style: str, second_style: str, few_shot_prompts: List[str], num_prompts: int) -> List[Message]:
-    prompt_examples = ",\n    ".join([f'"{prompt}"' for prompt in few_shot_prompts])
-    
+def create_combined_diffusion_messages(first_style: str, second_style: str, num_prompts: int) -> List[Message]:
     system_content = f"""You are an expert in creating diverse and descriptive prompts for image generation models.
     Your task is to generate prompts that strongly embody a combination of two artistic styles.
     Each prompt should be detailed and consistent with both of the given styles. 
     You will return the prompts in a JSON format with no additional text.
-
-    Example Output:
-    {{
-    "prompts": [
-        {prompt_examples}
-    ]
-    }}"""
+    """
 
     user_content = f"""Generate {num_prompts} prompts in {first_style} and {second_style} style.
 
