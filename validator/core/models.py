@@ -114,9 +114,9 @@ class DpoRawTask(RawTask):
     task_type: TaskType = TaskType.DPOTASK
 
 
-class TextRawTask(RawTask):
+class InstructTextRawTask(RawTask):
     """
-    Text task data as stored in the database. It expand the RawTask with fields from the TextTask table.
+    Instruct Text task data as stored in the database. It expand the RawTask with fields from the instruct_text_tasks table.
     """
 
     field_system: str | None = None
@@ -146,9 +146,9 @@ class Task(RawTask):
     trained_model_repository: str | None = None
 
 
-class TextTask(TextRawTask):
+class InstructTextTask(InstructTextRawTask):
     """
-    Expands on the TextRawTask with the trained_model_repository field.
+    Expands on the InstructTextRawTask with the trained_model_repository field.
     This field is not stored in the db directly, but is computed from the submissions table.
 
     """
@@ -353,7 +353,7 @@ class HotkeyDetails(BaseModel):
     offer_response: dict | None = None
 
 
-class TextTaskWithHotkeyDetails(TextTask):
+class InstructTextTaskWithHotkeyDetails(InstructTextTask):
     hotkey_details: list[HotkeyDetails]
 
 

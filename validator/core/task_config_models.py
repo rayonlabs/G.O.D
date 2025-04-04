@@ -7,13 +7,13 @@ from pydantic import Field
 from core.models.utility_models import TaskType
 from validator.core import constants as cst
 from validator.core.models import ImageRawTask
-from validator.core.models import TextRawTask
+from validator.core.models import InstructTextRawTask
 from validator.cycle.util_functions import get_total_image_dataset_size
 from validator.cycle.util_functions import get_total_text_dataset_size
 from validator.cycle.util_functions import prepare_image_task_request
 from validator.cycle.util_functions import prepare_text_task_request
 from validator.cycle.util_functions import run_image_task_prep
-from validator.cycle.util_functions import run_text_task_prep
+from validator.cycle.util_functions import run_instruct_text_task_prep
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.tasks.task_prep import get_additional_synth_data
@@ -45,19 +45,19 @@ class ImageTaskConfig(TaskConfig):
     start_training_endpoint: str = cst.START_TRAINING_IMAGE_ENDPOINT
 
 
-class TextTaskConfig(TaskConfig):
+class InstructTextTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.INSTRUCTTEXTTASK
     eval_container: Callable = run_evaluation_docker_text
     synth_data_function: Callable | None = get_additional_synth_data
     data_size_function: Callable = get_total_text_dataset_size
-    task_prep_function: Callable = run_text_task_prep
+    task_prep_function: Callable = run_instruct_text_task_prep
     task_request_prepare_function: Callable = prepare_text_task_request
     start_training_endpoint: str = cst.START_TRAINING_ENDPOINT
 
 
-def get_task_config(task: Union[TextRawTask, ImageRawTask]) -> TaskConfig:
-    if isinstance(task, TextRawTask):
-        return TextTaskConfig()
+def get_task_config(task: Union[InstructTextRawTask, ImageRawTask]) -> TaskConfig:
+    if isinstance(task, InstructTextRawTask):
+        return InstructTextTaskConfig()
     elif isinstance(task, ImageRawTask):
         return ImageTaskConfig()
     else:

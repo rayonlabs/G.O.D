@@ -2,15 +2,18 @@
 ALTER TYPE tasktype RENAME TO tasktype_old;
 CREATE TYPE tasktype AS ENUM ('InstructTextTask', 'ImageTask', 'DpoTask');
 
--- Convert existing data to the new enum type 
-ALTER TABLE tasks 
+-- Convert existing data to the new enum type
+ALTER TABLE tasks
   ALTER COLUMN task_type TYPE VARCHAR;
 
-UPDATE tasks 
-  SET task_type = 'InstructTextTask' 
+UPDATE tasks
+  SET task_type = 'InstructTextTask'
   WHERE task_type = 'TextTask';
 
-ALTER TABLE tasks 
+ALTER TABLE text_tasks RENAME TO instruct_text_tasks;
+ALTER INDEX idx_text_task_id RENAME TO idx_instruct_text_task_id;
+
+ALTER TABLE tasks
   ALTER COLUMN task_type TYPE tasktype USING task_type::tasktype;
 
 DROP TYPE tasktype_old;
@@ -34,6 +37,9 @@ CREATE INDEX IF NOT EXISTS idx_dpo_task_id ON dpo_tasks (task_id);
 DROP TABLE IF EXISTS dpo_tasks;
 DROP INDEX IF EXISTS idx_dpo_task_id;
 
+ALTER TABLE instruct_text_tasks RENAME TO text_tasks;
+ALTER INDEX idx_instruct_text_task_id RENAME TO idx_text_task_id;
+
 DELETE FROM tasks
   WHERE task_type = 'DpoTask';
 
@@ -42,14 +48,14 @@ ALTER TYPE tasktype RENAME TO tasktype_temp;
 CREATE TYPE tasktype AS ENUM ('TextTask', 'ImageTask');
 
 -- Convert data back
-ALTER TABLE tasks 
+ALTER TABLE tasks
   ALTER COLUMN task_type TYPE VARCHAR;
 
-UPDATE tasks 
-  SET task_type = 'TextTask' 
+UPDATE tasks
+  SET task_type = 'TextTask'
   WHERE task_type = 'InstructTextTask';
 
-ALTER TABLE tasks 
+ALTER TABLE tasks
   ALTER COLUMN task_type TYPE tasktype USING task_type::tasktype;
 
-DROP TYPE tasktype_temp; 
+DROP TYPE tasktype_temp;

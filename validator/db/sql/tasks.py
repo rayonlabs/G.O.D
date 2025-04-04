@@ -11,13 +11,15 @@ from core.constants import NETUID
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from validator.core.models import DpoRawTask
+from validator.core.models import DpoTask
 from validator.core.models import ImageRawTask
 from validator.core.models import ImageTask
+from validator.core.models import InstructTextRawTask
+from validator.core.models import InstructTextTask
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
 from validator.core.models import Task
-from validator.core.models import TextRawTask
-from validator.core.models import TextTask
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
 
@@ -25,7 +27,9 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
+async def add_task(
+    task: InstructTextRawTask | ImageRawTask | DpoRawTask, psql_db: PSQLDB
+) -> InstructTextRawTask | ImageRawTask | DpoRawTask:
     """Add a new task"""
     async with await psql_db.connection() as connection:
         async with connection.transaction():
@@ -66,16 +70,16 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                 task.termination_at,
             )
 
-            if isinstance(task, TextRawTask):
-                query_text_tasks = f"""
-                    INSERT INTO {cst.TEXT_TASKS_TABLE}
+            if isinstance(task, InstructTextRawTask):
+                query_instruct_text_tasks = f"""
+                    INSERT INTO {cst.INSTRUCT_TEXT_TASKS_TABLE}
                     ({cst.TASK_ID}, {cst.FIELD_SYSTEM}, {cst.FIELD_INSTRUCTION},
                     {cst.FIELD_INPUT}, {cst.FIELD_OUTPUT}, {cst.FORMAT},
                     {cst.NO_INPUT_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FILE_FORMAT})
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """
                 await connection.execute(
-                    query_text_tasks,
+                    query_instruct_text_tasks,
                     task_record[cst.TASK_ID],
                     task.field_system,
                     task.field_instruction,
@@ -102,6 +106,26 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
                     """
                     for pair in task.image_text_pairs:
                         await connection.execute(query_pairs, task_record[cst.TASK_ID], pair.image_url, pair.text_url)
+            elif isinstance(task, DpoRawTask):
+                query_dpo_tasks = f"""
+                    INSERT INTO {cst.DPO_TASKS_TABLE}
+                    ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FIELD_SYSTEM}, {cst.FIELD_CHOSEN}, {cst.FIELD_REJECTED},
+                    {cst.PROMPT_FORMAT}, {cst.CHOSEN_FORMAT}, {cst.REJECTED_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FILE_FORMAT})
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                """
+                await connection.execute(
+                    query_dpo_tasks,
+                    task_record[cst.TASK_ID],
+                    task.field_prompt,
+                    task.field_system,
+                    task.field_chosen,
+                    task.field_rejected,
+                    task.prompt_format,
+                    task.chosen_format,
+                    task.rejected_format,
+                    task.synthetic_data,
+                    task.file_format,
+                )
 
             task.task_id = task_record[cst.TASK_ID]
             return task
@@ -127,7 +151,7 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node
 
 async def get_tasks_with_status(
     status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False
-) -> List[TextRawTask | ImageRawTask]:
+) -> List[InstructTextRawTask | ImageRawTask]:
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
     )
@@ -150,7 +174,7 @@ async def get_tasks_with_status(
                            tt.field_instruction, tt.field_input, tt.field_output,
                            tt.format, tt.no_input_format, tt.synthetic_data, tt.file_format
                     FROM {cst.TASKS_TABLE} t
-                    LEFT JOIN {cst.TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
+                    LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
                 """
             elif task_type == TaskType.IMAGETASK.value:
@@ -168,7 +192,7 @@ async def get_tasks_with_status(
             if specific_row:
                 task_data = dict(specific_row)
                 if task_type == TaskType.INSTRUCTTEXTTASK.value:
-                    tasks.append(TextRawTask(**task_data))
+                    tasks.append(InstructTextRawTask(**task_data))
                 elif task_type == TaskType.IMAGETASK.value:
                     image_text_pairs = await get_image_text_pairs(row[cst.TASK_ID], psql_db)
                     tasks.append(ImageRawTask(**task_data, image_text_pairs=image_text_pairs))
@@ -213,7 +237,7 @@ async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
     return {row["column_name"] for row in rows}
 
 
-async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRawTask | ImageRawTask:
+async def update_task(updated_task: InstructTextRawTask | ImageRawTask, psql_db: PSQLDB) -> InstructTextRawTask | ImageRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)
 
     if not existing_task:
@@ -229,8 +253,8 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
         connection: Connection
         async with connection.transaction():
             base_task_fields = await get_table_fields(cst.TASKS_TABLE, connection)
-            text_fields = await get_table_fields(cst.TEXT_TASKS_TABLE, connection)
-            text_specific_fields = [f for f in text_fields if f != cst.TASK_ID]
+            instruct_text_fields = await get_table_fields(cst.INSTRUCT_TEXT_TASKS_TABLE, connection)
+            instruct_text_specific_fields = [f for f in instruct_text_fields if f != cst.TASK_ID]
 
             base_updates = {k: v for k, v in updates.items() if k in base_task_fields}
             if base_updates:
@@ -251,12 +275,12 @@ async def update_task(updated_task: TextRawTask | ImageRawTask, psql_db: PSQLDB)
                 await connection.execute(query, updated_task.task_id)
 
             if updated_task.task_type == TaskType.INSTRUCTTEXTTASK:
-                specific_updates = {k: v for k, v in updates.items() if k in text_specific_fields}
+                specific_updates = {k: v for k, v in updates.items() if k in instruct_text_specific_fields}
                 if specific_updates:
                     specific_clause = ", ".join([f"{column} = ${i + 2}" for i, column in enumerate(specific_updates.keys())])
                     specific_values = list(specific_updates.values())
                     query = f"""
-                        UPDATE {cst.TEXT_TASKS_TABLE}
+                        UPDATE {cst.INSTRUCT_TEXT_TASKS_TABLE}
                         SET {specific_clause}
                         WHERE {cst.TASK_ID} = $1
                     """
@@ -398,7 +422,7 @@ async def get_miners_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Node]:
         return [Node(**dict(row)) for row in rows]
 
 
-async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[TextRawTask | ImageRawTask]:
+async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[InstructTextRawTask | ImageRawTask]:
     """Get a full task by ID"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -419,7 +443,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[TextRawTask | Ima
                        tt.field_instruction, tt.field_input, tt.field_output,
                        tt.format, tt.no_input_format, tt.synthetic_data
                 FROM {cst.TASKS_TABLE} t
-                LEFT JOIN {cst.TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
+                LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
             """
         elif task_type == TaskType.IMAGETASK.value:
@@ -439,7 +463,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[TextRawTask | Ima
 
         full_task_data = dict(full_row)
         if task_type == TaskType.INSTRUCTTEXTTASK.value:
-            return TextRawTask(**full_task_data)
+            return InstructTextRawTask(**full_task_data)
         elif task_type == TaskType.IMAGETASK.value:
             image_text_pairs = await get_image_text_pairs(task_id, psql_db)
             return ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs)
@@ -463,7 +487,7 @@ async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> Li
         return [dict(row) for row in rows]
 
 
-async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> TextTask | ImageTask:
+async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> InstructTextTask | ImageTask | DpoTask:
     """Get a task by ID along with its winning submissions and task-specific details"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -478,50 +502,55 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> TextTask | ImageTask
 
         task_type = base_row[cst.TASK_TYPE]
 
+        victorious_repo_cte = f"""
+            WITH victorious_repo AS (
+                SELECT submissions.task_id, submissions.repo
+                FROM {cst.SUBMISSIONS_TABLE} submissions
+                JOIN {cst.TASK_NODES_TABLE} task_nodes
+                ON submissions.task_id = task_nodes.task_id
+                AND submissions.hotkey = task_nodes.hotkey
+                AND submissions.netuid = task_nodes.netuid
+                WHERE submissions.task_id = $1
+                AND task_nodes.quality_score IS NOT NULL
+                ORDER BY task_nodes.quality_score DESC
+                LIMIT 1
+            )
+        """
+
         if task_type == TaskType.INSTRUCTTEXTTASK.value:
             specific_query = f"""
-                WITH victorious_repo AS (
-                    SELECT submissions.task_id, submissions.repo
-                    FROM {cst.SUBMISSIONS_TABLE} submissions
-                    JOIN {cst.TASK_NODES_TABLE} task_nodes
-                    ON submissions.task_id = task_nodes.task_id
-                    AND submissions.hotkey = task_nodes.hotkey
-                    AND submissions.netuid = task_nodes.netuid
-                    WHERE submissions.task_id = $1
-                    AND task_nodes.quality_score IS NOT NULL
-                    ORDER BY task_nodes.quality_score DESC
-                    LIMIT 1
-                )
+                {victorious_repo_cte}
                 SELECT
                     tasks.*,
-                    tt.field_system,
-                    tt.field_instruction, tt.field_input, tt.field_output,
-                    tt.format, tt.no_input_format, tt.synthetic_data,
+                    tt.field_system, tt.field_instruction, tt.field_input, tt.field_output,
+                    tt.format, tt.no_input_format, tt.synthetic_data, tt.system_format, tt.file_format,
                     COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
-                LEFT JOIN {cst.TEXT_TASKS_TABLE} tt ON tasks.{cst.TASK_ID} = tt.{cst.TASK_ID}
+                LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON tasks.{cst.TASK_ID} = tt.{cst.TASK_ID}
                 LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
                 WHERE tasks.{cst.TASK_ID} = $1
             """
         elif task_type == TaskType.IMAGETASK.value:
             specific_query = f"""
-                WITH victorious_repo AS (
-                    SELECT submissions.task_id, submissions.repo
-                    FROM {cst.SUBMISSIONS_TABLE} submissions
-                    JOIN {cst.TASK_NODES_TABLE} task_nodes
-                    ON submissions.task_id = task_nodes.task_id
-                    AND submissions.hotkey = task_nodes.hotkey
-                    AND submissions.netuid = task_nodes.netuid
-                    WHERE submissions.task_id = $1
-                    AND task_nodes.quality_score IS NOT NULL
-                    ORDER BY task_nodes.quality_score DESC
-                    LIMIT 1
-                )
+                {victorious_repo_cte}
                 SELECT
                     tasks.*,
                     victorious_repo.repo as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
                 LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON tasks.{cst.TASK_ID} = it.{cst.TASK_ID}
+                LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
+                WHERE tasks.{cst.TASK_ID} = $1
+            """
+        elif task_type == TaskType.DPOTASK.value:
+            specific_query = f"""
+                {victorious_repo_cte}
+                SELECT
+                    tasks.*,
+                    dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
+                    dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format,
+                    COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
+                FROM {cst.TASKS_TABLE} tasks
+                LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON tasks.{cst.TASK_ID} = dt.{cst.TASK_ID}
                 LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
                 WHERE tasks.{cst.TASK_ID} = $1
             """
@@ -534,10 +563,12 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> TextTask | ImageTask
 
         full_task_data = dict(row)
         if task_type == TaskType.INSTRUCTTEXTTASK.value:
-            return TextTask(**full_task_data)
+            return InstructTextTask(**full_task_data)
         elif task_type == TaskType.IMAGETASK.value:
             image_text_pairs = await get_image_text_pairs(task_id, psql_db)
             return ImageTask(**full_task_data, image_text_pairs=image_text_pairs)
+        elif task_type == TaskType.DPOTASK.value:
+            return DpoTask(**full_task_data)
 
 
 async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[Task]:
@@ -570,7 +601,7 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[
 
 async def get_tasks_by_account_id(
     psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0
-) -> List[TextTask | ImageTask]:
+) -> List[InstructTextTask | ImageTask | DpoTask]:
     async with await psql_db.connection() as connection:
         connection: Connection
         base_query = f"""
@@ -609,20 +640,32 @@ async def get_tasks_by_account_id(
             task_type = task_data[cst.TASK_TYPE]
 
             if task_type == TaskType.INSTRUCTTEXTTASK.value:
-                text_query = f"""
+                instruct_text_query = f"""
                     SELECT field_system, field_instruction, field_input, field_output,
                            format, no_input_format, synthetic_data
-                    FROM {cst.TEXT_TASKS_TABLE}
+                    FROM {cst.INSTRUCT_TEXT_TASKS_TABLE}
                     WHERE {cst.TASK_ID} = $1
                 """
-                text_row = await connection.fetchrow(text_query, task_data[cst.TASK_ID])
-                if text_row:
-                    task_data.update(dict(text_row))
-                tasks.append(TextTask(**task_data))
+                instruct_text_row = await connection.fetchrow(instruct_text_query, task_data[cst.TASK_ID])
+                if instruct_text_row:
+                    task_data.update(dict(instruct_text_row))
+                tasks.append(InstructTextTask(**task_data))
 
             elif task_type == TaskType.IMAGETASK.value:
                 image_text_pairs = await get_image_text_pairs(task_data[cst.TASK_ID], psql_db)
                 tasks.append(ImageTask(**task_data, image_text_pairs=image_text_pairs))
+
+            elif task_type == TaskType.DPOTASK.value:
+                dpo_query = f"""
+                    SELECT field_prompt, field_system, field_chosen, field_rejected,
+                           prompt_format, chosen_format, rejected_format, synthetic_data, file_format
+                    FROM {cst.DPO_TASKS_TABLE}
+                    WHERE {cst.TASK_ID} = $1
+                """
+                dpo_row = await connection.fetchrow(dpo_query, task_data[cst.TASK_ID])
+                if dpo_row:
+                    task_data.update(dict(dpo_row))
+                tasks.append(DpoTask(**task_data))
 
         return tasks
 
@@ -634,7 +677,7 @@ async def get_completed_organic_tasks(
     search_model_name: str | None = None,
     limit: int = 100,
     offset: int = 0,
-) -> List[TextTask | ImageTask]:
+) -> List[InstructTextTask | ImageTask | DpoTask]:
     """Get completed organic tasks with optional filters
 
     Args:
@@ -827,7 +870,7 @@ async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_looku
 
 async def get_successful_matching_tasks(
     model_repo: str, ds_repo: str, field_instruction: str, field_input: str, field_output: str, psql_db: PSQLDB
-) -> List[TextTask]:
+) -> List[InstructTextTask]:
     """Get most recent successful task with matching model_id and dataset within last 7 days"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -851,7 +894,7 @@ async def get_successful_matching_tasks(
                    tt.format, tt.no_input_format, tt.synthetic_data,
                    COALESCE(t.training_repo_backup, vr.{cst.REPO}) as trained_model_repository
             FROM {cst.TASKS_TABLE} t
-            LEFT JOIN {cst.TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
+            LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
             LEFT JOIN victorious_repo vr ON t.{cst.TASK_ID} = vr.{cst.TASK_ID} AND vr.rn = 1
             WHERE t.{cst.MODEL_ID} = $1
             AND t.{cst.DS} = $2
@@ -879,6 +922,6 @@ async def get_successful_matching_tasks(
         tasks = []
         for row in rows:
             task_data = dict(row)
-            task = TextTask(**task_data)
+            task = InstructTextTask(**task_data)
             tasks.append(task)
         return tasks

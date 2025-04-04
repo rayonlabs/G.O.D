@@ -17,6 +17,7 @@ from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.models import ImageRawTask
+from validator.core.models import InstructTextRawTask
 from validator.core.models import MinerResults
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
@@ -26,7 +27,6 @@ from validator.core.models import PeriodScore
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
-from validator.core.models import TextRawTask
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
@@ -314,7 +314,7 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
     return miner_results
 
 
-def _get_dataset_type(task: TextRawTask) -> InstructDatasetType:
+def _get_dataset_type(task: InstructTextRawTask) -> InstructDatasetType:
     return InstructDatasetType(
         field_system=task.field_system,
         field_instruction=task.field_instruction,
@@ -370,7 +370,7 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str
 
 
 async def _evaluate_submissions(
-    task: TextRawTask | ImageRawTask,
+    task: InstructTextRawTask | ImageRawTask,
     submission_repos: list[str],
     gpu_ids: list[int],
     dataset_type: InstructDatasetType | None = None,
@@ -381,7 +381,7 @@ async def _evaluate_submissions(
     if len(unique_repos) != len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
 
-    if isinstance(task, TextRawTask):
+    if isinstance(task, InstructTextRawTask):
         results: dict[str, tuple[EvaluationResultText, EvaluationResultText] | Exception] = {}
         repos_to_evaluate = []
         for repo in unique_repos:
@@ -513,7 +513,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
 
 
 async def _update_scores(
-    task: TextRawTask | ImageRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
+    task: InstructTextRawTask | ImageRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
 ) -> None:
     assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
@@ -620,7 +620,7 @@ def zero_duplicate_scores(
 
 async def process_miners_pool(
     miners: list[Node],
-    task: ImageRawTask | TextRawTask,
+    task: ImageRawTask | InstructTextRawTask,
     config: Config,
     gpu_ids: list[int],
     dataset_type: InstructDatasetType | None = None,
@@ -674,7 +674,7 @@ async def process_miners_pool(
                             _create_failed_miner_result(miner.hotkey, reason="Evaluation failed", task_type=task.task_type)
                         )
                         continue
-                    elif isinstance(task, TextRawTask):
+                    elif isinstance(task, InstructTextRawTask):
                         synth_result, test_result = eval_result
                     else:
                         test_result = eval_result
@@ -689,7 +689,7 @@ async def process_miners_pool(
                         updated_on=datetime.now(),
                     )
 
-                if isinstance(task, TextRawTask):
+                if isinstance(task, InstructTextRawTask):
                     results.append(
                         MinerResultsText(
                             hotkey=miner.hotkey,
@@ -723,13 +723,15 @@ async def process_miners_pool(
     return results
 
 
-async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int], config: Config) -> TextRawTask | ImageRawTask:
+async def evaluate_and_score(
+    task: InstructTextRawTask | ImageRawTask, gpu_ids: list[int], config: Config
+) -> InstructTextRawTask | ImageRawTask:
     """Main function to evaluate and score task submissions."""
     assert task.task_id is not None, "Task ID must be present"
     assert task.test_data is not None, "Test data must be present"
 
     miner_pool = await get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
-    if isinstance(task, TextRawTask):
+    if isinstance(task, InstructTextRawTask):
         dataset_type = _get_dataset_type(task)
     else:
         dataset_type = None

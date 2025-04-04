@@ -120,7 +120,7 @@ class NewTaskRequest(BaseModel):
     result_model_name: str | None = Field(None, description="The name to give to a model that is created by this task")
 
 
-class NewTaskRequestText(NewTaskRequest):
+class NewTaskRequestInstructText(NewTaskRequest):
     field_instruction: str = Field(..., description="The column name for the instruction", examples=["instruction"])
     field_input: str | None = Field(None, description="The column name for the input", examples=["input"])
     field_output: str | None = Field(None, description="The column name for the output", examples=["output"])
@@ -189,7 +189,7 @@ class NewTaskRequestImage(NewTaskRequest):
     )
 
 
-class NewTaskWithFixedDatasetsRequest(NewTaskRequestText):
+class NewTaskWithFixedDatasetsRequest(NewTaskRequestInstructText):
     ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
     training_data: str = Field(..., description="The prepared training dataset")
     synthetic_data: str = Field(..., description="The prepared synthetic dataset")
@@ -227,7 +227,7 @@ class TaskDetails(BaseModel):
     result_model_name: str | None = None
 
 
-class TextTaskDetails(TaskDetails):
+class InstructTextTaskDetails(TaskDetails):
     task_type: TaskType = TaskType.INSTRUCTTEXTTASK
     base_model_repository: str
     ds_repo: str

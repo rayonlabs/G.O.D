@@ -12,14 +12,14 @@ from fastapi import Response
 from core.models.payload_models import AllOfNodeResults
 from core.models.payload_models import DpoTaskDetails
 from core.models.payload_models import ImageTaskDetails
+from core.models.payload_models import InstructTextTaskDetails
 from core.models.payload_models import LeaderboardRow
 from core.models.payload_models import NewTaskRequestDPO
 from core.models.payload_models import NewTaskRequestImage
-from core.models.payload_models import NewTaskRequestText
+from core.models.payload_models import NewTaskRequestInstructText
 from core.models.payload_models import NewTaskResponse
 from core.models.payload_models import NewTaskWithFixedDatasetsRequest
 from core.models.payload_models import TaskResultResponse
-from core.models.payload_models import TextTaskDetails
 from core.models.utility_models import FileFormat
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
@@ -31,8 +31,8 @@ from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.core.models import DpoRawTask
 from validator.core.models import ImageRawTask
+from validator.core.models import InstructTextRawTask
 from validator.core.models import NetworkStats
-from validator.core.models import TextRawTask
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
@@ -43,10 +43,10 @@ from validator.utils.util import convert_task_to_task_details
 logger = get_logger(__name__)
 
 
-TASKS_CREATE_ENDPOINT_TEXT = "/v1/tasks/create"  # TODO: change to create_text after FE changes
+TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT = "/v1/tasks/create"  # TODO: change to create_text after FE changes
 TASKS_CREATE_ENDPOINT_IMAGE = "/v1/tasks/create_image"
 TASKS_CREATE_ENDPOINT_DPO = "/v1/tasks/create_dpo"
-TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"  # TODO: this is just for text tasks
+TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"  # TODO: this is just for instruct text tasks
 GET_TASKS_BY_ACCOUNT_ENDPOINT = "/v1/tasks/account/{account_id}"
 GET_TASK_DETAILS_ENDPOINT = "/v1/tasks/{task_id}"
 GET_TASKS_RESULTS_ENDPOINT = "/v1/tasks/breakdown/{task_id}"
@@ -100,14 +100,14 @@ async def create_task_dpo(
         result_model_name=request.result_model_name,
     )
 
-    task = await task_sql.add_task(task, config.psql_db)  # samoline refactor
+    task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
-async def create_task_text(
-    request: NewTaskRequestText,
+async def create_task_instruct_text(
+    request: NewTaskRequestInstructText,
     config: Config = Depends(get_config),
 ) -> NewTaskResponse:
     existing_tasks = await task_sql.get_successful_matching_tasks(
@@ -133,7 +133,7 @@ async def create_task_text(
         if not result_repo:
             raise HTTPException(status_code=400, detail="Found matching task but no result repo found")
 
-        new_task = TextRawTask(
+        new_task = InstructTextRawTask(
             account_id=request.account_id,
             model_id=request.model_repo,
             ds=request.ds_repo,
@@ -173,7 +173,7 @@ async def create_task_text(
     #        logger.info("We already have some queued organic jobs, we can't a accept any more")
     #        return NewTaskResponse(success=False, task_id=None)
 
-    task = TextRawTask(
+    task = InstructTextRawTask(
         model_id=request.model_repo,
         ds=request.ds_repo,
         file_format=request.file_format,
@@ -239,7 +239,7 @@ async def create_task_with_fixed_datasets(
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
 
-    task = TextRawTask(
+    task = InstructTextRawTask(
         model_id=request.model_repo,
         ds=request.ds_repo or request.training_data,
         file_format=request.file_format if request.ds_repo else FileFormat.S3,
@@ -290,16 +290,16 @@ async def get_task_details_by_account(
     limit: int = 100,
     page: int = 1,
     config: Config = Depends(get_config),
-) -> list[TextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
+) -> list[InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
     offset = (page - 1) * limit
-    tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)  # samoline refactor
+    tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
     return [convert_task_to_task_details(task) for task in tasks]
 
 
 async def get_task_details(
     task_id: UUID,
     config: Config = Depends(get_config),
-) -> Union[TextTaskDetails, ImageTaskDetails, DpoTaskDetails]:
+) -> Union[InstructTextTaskDetails, ImageTaskDetails, DpoTaskDetails]:
     task = await task_sql.get_task_by_id(task_id, config.psql_db)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found.")
@@ -361,7 +361,7 @@ async def get_completed_organic_tasks(
     limit: int = Query(default=100, description="Number of tasks per page", ge=1),
     page: int = Query(default=1, description="Page number", ge=1),
     config: Config = Depends(get_config),
-) -> list[TextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
+) -> list[InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
     """Get completed organic tasks with optional time filter and task type filter"""
     tasks = await task_sql.get_completed_organic_tasks(
         config.psql_db,
@@ -406,7 +406,7 @@ async def update_result_model_name(
 
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Gradients On Demand"], dependencies=[Depends(get_api_key)])
-    router.add_api_route(TASKS_CREATE_ENDPOINT_TEXT, create_task_text, methods=["POST"])
+    router.add_api_route(TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT, create_task_instruct_text, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_IMAGE, create_task_image, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_DPO, create_task_dpo, methods=["POST"])
     router.add_api_route(TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT, create_task_with_fixed_datasets, methods=["POST"])
