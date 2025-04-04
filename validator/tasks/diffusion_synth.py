@@ -266,9 +266,8 @@ async def pick_style_combination(config: Config) -> tuple[str, str]:
 
 async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[list[ImageTextPair], str]:
     first_style, second_style = await pick_style_combination(config)
-    few_shot_prompts = random.sample(EXAMPLE_PROMPTS, min(cst.NUM_FEW_SHOT_PROMPTS, len(EXAMPLE_PROMPTS)))
     try:
-        prompts = await generate_diffusion_prompts(first_style, second_style, few_shot_prompts, config.keypair, num_prompts)
+        prompts = await generate_diffusion_prompts(first_style, second_style, config.keypair, num_prompts)
     except Exception as e:
         logger.error(f"Failed to generate prompts for {first_style} and {second_style}: {e}")
         raise e
