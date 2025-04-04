@@ -3,6 +3,7 @@ import os
 import uvicorn
 from dotenv import load_dotenv
 
+from validator.utils.metrics import metrics_middleware
 from validator.utils.util import try_db_connections
 
 
@@ -45,6 +46,8 @@ async def lifespan(app: FastAPI):
 def factory() -> FastAPI:
     logger.debug("Entering factory function")
     app = FastAPI(lifespan=lifespan)
+
+    app.middleware("http")(metrics_middleware)
 
     app.add_api_route(
         "/scalar",
