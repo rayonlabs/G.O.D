@@ -150,14 +150,14 @@ def create_combined_diffusion_messages(first_style: str, second_style: str, num_
 
 
 def create_single_style_diffusion_messages(style: str, num_prompts: int) -> List[Message]:
-    prompt_examples = ",\n    ".join([f'"{prompt}"' for prompt in FULL_PROMPTS[style]])
+    prompt_examples = ",\n    ".join([f'"{prompt}"' for prompt in random.sample(FULL_PROMPTS[style], 5)])
     
     system_content = f"""You are an expert in creating diverse and descriptive prompts for image generation models.
     Your task is to generate prompts that strongly embody a combination of an artistic style.
     Each prompt should be detailed and consistent with the given style. 
     You will return the prompts in a JSON format with no additional text.
 
-    Example Output:
+    Here are some examples of prompts in the {style} style, you need to follow the same format and generate more in the same style:
     {{
     "prompts": [
         {prompt_examples}
