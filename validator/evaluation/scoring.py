@@ -342,6 +342,15 @@ def _get_dataset_type(task: InstructTextRawTask | DpoRawTask) -> InstructDataset
         raise ValueError(f"Invalid task type: {task.task_type}")
 
 
+def _convert_dataset_type_from_dpo_to_instruct(dataset_type: DPODatasetType) -> InstructDatasetType:
+    return InstructDatasetType(
+        field_system=dataset_type.field_system,
+        field_instruction=dataset_type.field_prompt,
+        field_output=dataset_type.field_chosen,
+        no_input_format=dataset_type.prompt_format.replace("{prompt}", "{instruction}"),
+    )
+
+
 def _create_failed_miner_result(hotkey: str, reason: str, task_type: TaskType) -> MinerResults:
     """Create a failed miner result with zero score."""
     if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
@@ -396,7 +405,7 @@ async def _evaluate_submissions(
     task: InstructTextRawTask | ImageRawTask,
     submission_repos: list[str],
     gpu_ids: list[int],
-    dataset_type: InstructDatasetType | None = None,
+    dataset_type: InstructDatasetType | DPODatasetType | None = None,
 ) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
     """Evaluate same task submissions within same docker container.
     Docker evaluations with an exception will return the Exception for the repo."""
@@ -404,7 +413,7 @@ async def _evaluate_submissions(
     if len(unique_repos) != len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
 
-    if task.task_type == TaskType.INSTRUCTTEXTTASK:
+    if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
         results: dict[str, tuple[EvaluationResultText, EvaluationResultText] | Exception] = {}
         repos_to_evaluate = []
         for repo in unique_repos:
@@ -419,6 +428,9 @@ async def _evaluate_submissions(
 
         if not repos_to_evaluate:
             return results
+
+        if task.task_type == TaskType.DPOTASK:
+            dataset_type = _convert_dataset_type_from_dpo_to_instruct(dataset_type)
 
         evaluation_params = {
             "file_format": FileFormat.JSON,
