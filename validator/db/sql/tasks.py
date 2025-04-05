@@ -151,7 +151,7 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node
 
 async def get_tasks_with_status(
     status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False
-) -> List[InstructTextRawTask | ImageRawTask]:
+) -> List[InstructTextRawTask | DpoRawTask | ImageRawTask]:
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
     )
@@ -184,6 +184,13 @@ async def get_tasks_with_status(
                     LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
                 """
+            elif task_type == TaskType.DPOTASK.value:
+                specific_query = f"""
+                    SELECT t.*, dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
+                           dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format
+                    FROM {cst.TASKS_TABLE} t
+                    LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
+                """
             else:
                 logger.warning(f"Unknown task type {task_type} for task_id {row[cst.TASK_ID]}")
                 continue
@@ -196,6 +203,8 @@ async def get_tasks_with_status(
                 elif task_type == TaskType.IMAGETASK.value:
                     image_text_pairs = await get_image_text_pairs(row[cst.TASK_ID], psql_db)
                     tasks.append(ImageRawTask(**task_data, image_text_pairs=image_text_pairs))
+                elif task_type == TaskType.DPOTASK.value:
+                    tasks.append(DpoRawTask(**task_data))
 
         logger.info(f"Retrieved {len(tasks)} tasks with status {status.value}")
         return tasks
@@ -237,7 +246,9 @@ async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
     return {row["column_name"] for row in rows}
 
 
-async def update_task(updated_task: InstructTextRawTask | ImageRawTask, psql_db: PSQLDB) -> InstructTextRawTask | ImageRawTask:
+async def update_task(
+    updated_task: InstructTextRawTask | DpoRawTask | ImageRawTask, psql_db: PSQLDB
+    ) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)
 
     if not existing_task:
@@ -253,9 +264,6 @@ async def update_task(updated_task: InstructTextRawTask | ImageRawTask, psql_db:
         connection: Connection
         async with connection.transaction():
             base_task_fields = await get_table_fields(cst.TASKS_TABLE, connection)
-            instruct_text_fields = await get_table_fields(cst.INSTRUCT_TEXT_TASKS_TABLE, connection)
-            instruct_text_specific_fields = [f for f in instruct_text_fields if f != cst.TASK_ID]
-
             base_updates = {k: v for k, v in updates.items() if k in base_task_fields}
             if base_updates:
                 set_clause = ", ".join([f"{column} = ${i + 2}" for i, column in enumerate(base_updates.keys())])
@@ -275,6 +283,8 @@ async def update_task(updated_task: InstructTextRawTask | ImageRawTask, psql_db:
                 await connection.execute(query, updated_task.task_id)
 
             if updated_task.task_type == TaskType.INSTRUCTTEXTTASK:
+                instruct_text_fields = await get_table_fields(cst.INSTRUCT_TEXT_TASKS_TABLE, connection)
+                instruct_text_specific_fields = [f for f in instruct_text_fields if f != cst.TASK_ID]
                 specific_updates = {k: v for k, v in updates.items() if k in instruct_text_specific_fields}
                 if specific_updates:
                     specific_clause = ", ".join([f"{column} = ${i + 2}" for i, column in enumerate(specific_updates.keys())])
@@ -290,6 +300,19 @@ async def update_task(updated_task: InstructTextRawTask | ImageRawTask, psql_db:
                     await delete_image_text_pairs(updated_task.task_id, psql_db)
                     pairs = [ImageTextPair(**pair) for pair in updates["image_text_pairs"]]
                     await add_image_text_pairs(updated_task.task_id, pairs, psql_db)
+            elif updated_task.task_type == TaskType.DPOTASK:
+                dpo_fields = await get_table_fields(cst.DPO_TASKS_TABLE, connection)
+                dpo_specific_fields = [f for f in dpo_fields if f != cst.TASK_ID]
+                specific_updates = {k: v for k, v in updates.items() if k in dpo_specific_fields}
+                if specific_updates:
+                    specific_clause = ", ".join([f"{column} = ${i + 2}" for i, column in enumerate(specific_updates.keys())])
+                    specific_values = list(specific_updates.values())
+                    query = f"""
+                        UPDATE {cst.DPO_TASKS_TABLE}
+                        SET {specific_clause}
+                        WHERE {cst.TASK_ID} = $1
+                    """
+                    await connection.execute(query, updated_task.task_id, *specific_values)
 
             if updated_task.assigned_miners is not None:
                 await connection.execute(

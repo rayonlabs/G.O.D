@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageTextPair
@@ -245,7 +246,12 @@ class MinerResults(BaseModel):
 
 
 class MinerResultsText(MinerResults):
-    task_type: TaskType = TaskType.INSTRUCTTEXTTASK
+    task_type: TaskType
+    @field_validator("task_type")
+    def validate_task_type(cls, v):
+        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK}:
+            raise ValueError("Must be INSTRUCTTEXTTASK or DPOTASK")
+        return v
 
 
 class MinerResultsImage(MinerResults):

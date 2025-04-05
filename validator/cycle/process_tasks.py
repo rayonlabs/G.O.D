@@ -15,6 +15,7 @@ from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
+from validator.core.models import DpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.task_config_models import get_task_config
@@ -290,7 +291,7 @@ async def _process_ready_to_train_tasks(config: Config):
         await asyncio.sleep(30)
 
 
-async def _evaluate_task(task: InstructTextRawTask | ImageRawTask, gpu_ids: list[int], config: Config):
+async def _evaluate_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, gpu_ids: list[int], config: Config):
     gpu_ids_str = "," + ",".join(str(gpu_id) for gpu_id in gpu_ids) + ","
     with LogContext(task_id=str(task.task_id), gpu_ids=gpu_ids_str):
         try:
@@ -306,7 +307,7 @@ async def _evaluate_task(task: InstructTextRawTask | ImageRawTask, gpu_ids: list
             await tasks_sql.update_task(task, config.psql_db)
 
 
-async def _move_back_to_looking_for_nodes(task: InstructTextRawTask | ImageRawTask, config: Config):
+async def _move_back_to_looking_for_nodes(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
     logger.info("Moving back from delay to looking for nodes")
     task.status = TaskStatus.LOOKING_FOR_NODES
     add_context_tag("status", task.status.value)
@@ -343,7 +344,7 @@ async def _move_any_prep_data_to_pending(config):
     await asyncio.gather(*[_move_back_to_pending_status(task, config) for task in stopped_in_prep])
 
 
-async def _move_to_preevaluation(tasks: list[InstructTextRawTask | ImageRawTask], config: Config):
+async def _move_to_preevaluation(tasks: list[InstructTextRawTask | DpoRawTask | ImageRawTask], config: Config):
     await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
 
 
