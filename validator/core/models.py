@@ -367,6 +367,10 @@ class ImageTaskWithHotkeyDetails(ImageTask):
     hotkey_details: list[HotkeyDetails]
 
 
+class DpoTaskWithHotkeyDetails(DpoTask):
+    hotkey_details: list[HotkeyDetails]
+
+
 class Dataset(BaseModel):
     dataset_id: str
     num_rows: int

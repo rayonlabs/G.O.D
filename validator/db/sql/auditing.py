@@ -10,6 +10,8 @@ from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.dependencies import get_config
+from validator.core.models import DpoTask
+from validator.core.models import DpoTaskWithHotkeyDetails
 from validator.core.models import HotkeyDetails
 from validator.core.models import ImageTask
 from validator.core.models import ImageTaskWithHotkeyDetails
@@ -19,7 +21,7 @@ from validator.db import constants as cst
 from validator.db.sql import tasks as tasks_sql
 
 
-def _check_if_task_has_finished(task: InstructTextTask | ImageTask) -> InstructTextTask | ImageTask:
+def _check_if_task_has_finished(task: InstructTextTask | DpoTask | ImageTask) -> InstructTextTask | DpoTask | ImageTask:
     if task.status not in [
         TaskStatus.SUCCESS,
         TaskStatus.FAILURE,
@@ -27,7 +29,7 @@ def _check_if_task_has_finished(task: InstructTextTask | ImageTask) -> InstructT
         TaskStatus.PREP_TASK_FAILURE,
         TaskStatus.NODE_TRAINING_FAILURE,
     ]:
-        if task.task_type == TaskType.INSTRUCTTEXTTASK:
+        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
             task.synthetic_data = None
         task.test_data = None
         task.training_data = None
@@ -91,7 +93,7 @@ async def get_recent_tasks(
 
 async def get_recent_tasks_for_hotkey(
     hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails]:
+) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
     async with await config.psql_db.connection() as connection:
         connection: Connection
 
@@ -169,13 +171,18 @@ async def get_recent_tasks_for_hotkey(
                     task = ImageTask(**task_fields)
                     task = _check_if_task_has_finished(task)
                     tasks_with_details.append(ImageTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
+                elif result_dict[cst.TASK_TYPE] == TaskType.DPOTASK.value:
+                    task_fields = {k: v for k, v in result_dict.items() if k in DpoTask.model_fields}
+                    task = DpoTask(**task_fields)
+                    task = _check_if_task_has_finished(task)
+                    tasks_with_details.append(DpoTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
 
     return tasks_with_details
 
 
 async def get_task_with_hotkey_details(
     task_id: str, config: Config = Depends(get_config)
-) -> InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails:
+) -> InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails:
     # First get all the task details like normal
     async with await config.psql_db.connection() as connection:
         connection: Connection
@@ -229,6 +236,8 @@ async def get_task_with_hotkey_details(
             return InstructTextTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
         elif task.task_type == TaskType.IMAGETASK:
             return ImageTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
+        elif task.task_type == TaskType.DPOTASK:
+            return DpoTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
 
 
 async def store_latest_scores_url(url: str, config: Config = Depends(get_config)) -> None:
