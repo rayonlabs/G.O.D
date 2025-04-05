@@ -445,7 +445,7 @@ async def get_miners_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Node]:
         return [Node(**dict(row)) for row in rows]
 
 
-async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[InstructTextRawTask | ImageRawTask]:
+async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[InstructTextRawTask | DpoRawTask | ImageRawTask]:
     """Get a full task by ID"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -476,6 +476,14 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[InstructTextRawTa
                 LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
             """
+        elif task_type == TaskType.DPOTASK.value:
+            specific_query = f"""
+                SELECT t.*, dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
+                       dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format
+                FROM {cst.TASKS_TABLE} t
+                LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
+                WHERE t.{cst.TASK_ID} = $1
+            """
         else:
             raise ValueError(f"Unsupported task type: {task_type}")
 
@@ -490,6 +498,8 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[InstructTextRawTa
         elif task_type == TaskType.IMAGETASK.value:
             image_text_pairs = await get_image_text_pairs(task_id, psql_db)
             return ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs)
+        elif task_type == TaskType.DPOTASK.value:
+            return DpoRawTask(**full_task_data)
 
 
 async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Dict]:
