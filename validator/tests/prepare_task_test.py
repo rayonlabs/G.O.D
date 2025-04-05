@@ -2,7 +2,7 @@ import asyncio
 
 from core.models.utility_models import FileFormat
 from validator.core.config import load_config
-from validator.tasks.task_prep import prepare_text_task
+from validator.tasks.task_prep import prepare_instruct_text_task
 from validator.utils.logging import get_logger
 
 
@@ -16,7 +16,7 @@ async def main():
     config = load_config()
 
     try:
-        test_data, synth_data, train_data = await prepare_text_task(
+        test_data, synth_data, train_data = await prepare_instruct_text_task(
             dataset_name=dataset_name, file_format=FileFormat.HF, columns_to_sample=columns_to_sample, keypair=config.keypair
         )
 

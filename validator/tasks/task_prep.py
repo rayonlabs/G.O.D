@@ -18,7 +18,7 @@ import validator.core.constants as cst
 from core.models.payload_models import ImageTextPair
 from core.models.utility_models import FileFormat
 from core.utils import download_s3_file
-from validator.augmentation.augmentation import generate_augmented_text_dataset
+from validator.augmentation.augmentation import generate_augmented_instruct_text_dataset
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
@@ -159,7 +159,6 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
 
     sampled_data = sampled_data.remove_columns([col for col in sampled_data.column_names if col not in columns_to_sample])
-    column_to_reformulate = columns_to_sample[-1] if len(columns_to_sample) > 1 else None  # output column
     # NOTE: Need to do something if errors, without trying to then generate synthetic data
     try:
         sampled_data_list = list(sampled_data)
@@ -167,7 +166,7 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
         logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
         return None
 
-    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair)
+    synthetic_data = await generate_augmented_instruct_text_dataset(sampled_data_list, keypair=keypair)
 
     return synthetic_data
 
@@ -212,7 +211,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     return remaining_train_dataset, synthetic_dataset
 
 
-async def prepare_text_task(
+async def prepare_instruct_text_task(
     dataset_name: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair
 ) -> tuple[str, str, str]:
     logger.info(f"Preparing {dataset_name}")

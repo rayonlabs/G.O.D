@@ -12,8 +12,8 @@ from core.models.payload_models import DatasetColumnsResponse
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.core.models import Dataset
+from validator.core.models import InstructTextRawTask
 from validator.core.models import RawTask
-from validator.core.models import TextRawTask
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
 from validator.tasks.diffusion_synth import create_synthetic_image_task
@@ -68,7 +68,7 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair) 
             await asyncio.sleep(5)
 
 
-async def _get_text_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
+async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
     bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
@@ -106,16 +106,16 @@ async def _get_columns_for_dataset(
 def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
     """Randomly select training hours for a given dataset size in bytes based on range bins."""
     min_hours, max_hours = 0, 0
-    for min_rows, max_rows in cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys():
+    for min_rows, max_rows in cst.INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys():
         if min_rows <= num_rows <= max_rows:
-            min_hours, max_hours = cst.TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE[(min_rows, max_rows)]
+            min_hours, max_hours = cst.INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE[(min_rows, max_rows)]
             break
     if min_hours == 0 and max_hours == 0:
         raise ValueError(f"No training hours range found for {num_rows} rows")
     return random.randint(min_hours, max_hours)
 
 
-async def create_synthetic_text_task(
+async def create_synthetic_instruct_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[str, None],
@@ -127,7 +127,7 @@ async def create_synthetic_text_task(
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
-    task = TextRawTask(
+    task = InstructTextRawTask(
         model_id=model_id,
         ds=dataset.dataset_id,
         field_system=None,
@@ -170,15 +170,15 @@ async def _add_new_task_to_network_if_not_enough(
             "Current number of training tasks is less than the maximum amount of concurrent synthetic"
             " jobs we can have. New task incoming..."
         )
-        if random.random() < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT:
-            await create_synthetic_text_task(config, models, datasets)
+        if random.random() < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT:
+            await create_synthetic_instruct_text_task(config, models, datasets)
         else:
             await create_synthetic_image_task(config, image_models)
 
 
 async def schedule_synthetics_periodically(config: Config):
     logger.info("Starting the synthetic schedule loop...")
-    datasets = _get_text_datasets(config.keypair)
+    datasets = _get_instruct_text_datasets(config.keypair)
     models = _get_text_models(config.keypair)
 
     image_models = _get_image_models(config.keypair)
