@@ -103,13 +103,16 @@ if __name__ == "__main__":
         os.makedirs(save_dir)
 
     for prompt in prompts:
-        workflow = deepcopy(avatar_template)
-        workflow["Prompt"]["inputs"]["text"] += prompt
-        image = api_gate.generate(workflow)[0]
-        if not nsfw_check(image):
-            image_id = uuid.uuid4()
-            image.save(f"{save_dir}{image_id}.png")
-            with open(f"{save_dir}{image_id}.txt", "w") as file:
-                file.write(prompt)
+        while True:
+            workflow = deepcopy(avatar_template)
+            workflow["Prompt"]["inputs"]["text"] += prompt
+            image = api_gate.generate(workflow)[0]
+
+            if not nsfw_check(image):
+                image_id = uuid.uuid4()
+                image.save(f"{save_dir}{image_id}.png")
+                with open(f"{save_dir}{image_id}.txt", "w") as file:
+                    file.write(prompt)
+                break
 
 

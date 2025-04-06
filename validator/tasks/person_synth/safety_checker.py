@@ -32,7 +32,7 @@ def forward_inspect(self, clip_input, images):
             "bad_concepts": [],
         }
 
-        adjustment = 0.00
+        adjustment = -0.01
 
         for concet_idx in range(len(special_cos_dist[0])):
             concept_cos = special_cos_dist[i][concet_idx]
