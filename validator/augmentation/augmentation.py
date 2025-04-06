@@ -109,7 +109,7 @@ async def process_row(row, prompts, keypair):
         raise ValueError(error_message)
 
 
-async def generate_augmented_instruct_text_dataset(sampled_data: List[dict], keypair: Keypair) -> List[dict]:
+async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Keypair) -> List[dict]:
     prompts = load_prompts()
     logger.info(f"Creating an augmented dataset with {len(sampled_data)} samples...")
     synthetic_dataset = []

@@ -113,8 +113,8 @@ async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> Mi
 
 
 async def _select_miner_pool_and_add_to_task(
-    task: InstructTextRawTask | ImageRawTask, nodes: list[Node], config: Config
-) -> InstructTextRawTask | ImageRawTask:
+    task: InstructTextRawTask | DpoRawTask | ImageRawTask, nodes: list[Node], config: Config
+) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
     if len(nodes) < cst.MINIMUM_MINER_POOL:
         logger.warning(f"Not enough nodes available. Need at least {cst.MINIMUM_MINER_POOL}, but only have {len(nodes)}.")
         task = _attempt_delay_task(task)
@@ -182,7 +182,9 @@ async def _select_miner_pool_and_add_to_task(
         return task
 
 
-async def _let_miners_know_to_start_training(task: ImageRawTask | InstructTextRawTask, nodes: list[Node], config: Config):
+async def _let_miners_know_to_start_training(
+    task: ImageRawTask | DpoRawTask | InstructTextRawTask, nodes: list[Node], config: Config
+    ):
     task_request_body = get_task_config(task).task_request_prepare_function(task)
     miner_endpoint = get_task_config(task).start_training_endpoint
 
@@ -198,7 +200,9 @@ async def _let_miners_know_to_start_training(task: ImageRawTask | InstructTextRa
             logger.info(f"The response we got from {node.node_id} was {response}")
 
 
-async def _find_and_select_miners_for_task(task: InstructTextRawTask | ImageRawTask, config: Config):
+async def _find_and_select_miners_for_task(
+    task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config
+):
     with LogContext(task_id=str(task.task_id)):
         try:
             nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
@@ -212,7 +216,7 @@ async def _find_and_select_miners_for_task(task: InstructTextRawTask | ImageRawT
             await tasks_sql.update_task(task, config.psql_db)
 
 
-def _attempt_delay_task(task: InstructTextRawTask | ImageRawTask):
+def _attempt_delay_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask):
     assert task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None, (
         "We wanted to check delay vs created timestamps but they are missing"
     )
@@ -241,7 +245,7 @@ async def _find_miners_for_task(config: Config):
     )
 
 
-async def _prep_task(task: InstructTextRawTask | ImageRawTask, config: Config):
+async def _prep_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
             task.status = TaskStatus.PREPARING_DATA
@@ -266,7 +270,9 @@ async def _processing_pending_tasks(config: Config):
     clean_all_hf_datasets_cache()
 
 
-async def _start_training_task(task: InstructTextRawTask | ImageRawTask, config: Config) -> None:
+async def _start_training_task(
+    task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config
+) -> None:
     with LogContext(task_id=str(task.task_id)):
         task.started_at = datetime.datetime.now(datetime.timezone.utc)
         task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
