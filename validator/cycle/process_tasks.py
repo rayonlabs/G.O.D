@@ -16,8 +16,10 @@ from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.models import ImageRawTask
+from validator.core.models import RawTask
 from validator.core.models import TextRawTask
 from validator.core.task_config_models import get_task_config
+from validator.cycle.util_functions import get_model_num_params
 from validator.db.database import PSQLDB
 from validator.evaluation.scoring import evaluate_and_score
 from validator.utils.cache_clear import clean_all_hf_datasets_cache
@@ -412,6 +414,8 @@ async def evaluate_tasks_loop(config: Config):
     task_queue = asyncio.Queue()
     gpu_queue = asyncio.Queue()
     processing_task_ids = set()
+    # Lock to prevent race conditions (thus potential deadlocks) during GPU acquisition
+    gpu_acquisition_lock = asyncio.Lock()
 
     for gpu_id in cst.GPU_IDS:
         await gpu_queue.put(gpu_id)
@@ -420,12 +424,19 @@ async def evaluate_tasks_loop(config: Config):
         while True:
             try:
                 task = await asyncio.wait_for(task_queue.get(), timeout=1)
-                gpu_id = await gpu_queue.get()
+                required_gpus = compute_required_gpus(task)
+                gpu_ids = []
+
+                # Acquire lock to prevent other tasks from taking GPUs until we get all we need
+                async with gpu_acquisition_lock:
+                    for _ in range(required_gpus):
+                        gpu_ids.append(await gpu_queue.get())
 
                 try:
-                    await _evaluate_task(task, [gpu_id], config)
+                    await _evaluate_task(task, gpu_ids, config)
                 finally:
-                    await gpu_queue.put(gpu_id)
+                    for gpu_id in gpu_ids:
+                        await gpu_queue.put(gpu_id)
                     processing_task_ids.remove(task.task_id)
                     task_queue.task_done()
             except asyncio.TimeoutError:
@@ -453,6 +464,16 @@ async def evaluate_tasks_loop(config: Config):
         else:
             logger.info("Evaluation queue is full - waiting for 30 seconds")
         await asyncio.sleep(30)
+
+
+def compute_required_gpus(task: RawTask) -> int:
+    model = task.model_id
+    num_params = task.model_params_count
+    if not num_params:
+        num_params = get_model_num_params(model)
+    if num_params and num_params > cst.MODEL_SIZE_REQUIRING_2_GPUS:
+        return 2
+    return 1
 
 
 async def process_completed_tasks(config: Config) -> None:
