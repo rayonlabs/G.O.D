@@ -8,10 +8,10 @@ from typing import AsyncGenerator
 from substrateinterface import Keypair
 
 import validator.core.constants as cst
-from core.models.payload_models import DatasetColumnsResponse
+from core.models.payload_models import DpoDatasetColumnsResponse, InstructDatasetColumnsResponse
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
-from validator.core.models import Dataset
+from validator.core.models import Dataset, DpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
@@ -84,11 +84,10 @@ async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Datase
                 logger.warning(f"Error getting next dataset from bin: {e}")
                 continue
 
-
-async def _get_columns_for_dataset(
+async def _get_columns_for_dpo_dataset(
     dataset_id: str,
     keypair: Keypair,
-) -> DatasetColumnsResponse:
+) -> DpoDatasetColumnsResponse:
     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
     logger.info(f"Getting columns for dataset {dataset_id}")
 
@@ -96,7 +95,25 @@ async def _get_columns_for_dataset(
     if not isinstance(response, dict):
         raise TypeError(f"Expected dictionary response, got {type(response)}")
     try:
-        columns = DatasetColumnsResponse.model_validate(response)
+        columns = DpoDatasetColumnsResponse.model_validate(response)
+    except Exception as exc:
+        logger.error(f"The get columns for dataset endpoint should return a DatasetColumnsResponse type: {exc}")
+        raise TypeError(f"The get columns for dataset endpoint should return a DatasetColumnsResponse type: {exc}")
+    return columns
+
+
+async def _get_columns_for_instruct_dataset(
+    dataset_id: str,
+    keypair: Keypair,
+) -> InstructDatasetColumnsResponse:
+    url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
+    logger.info(f"Getting columns for dataset {dataset_id}")
+
+    response = await call_content_service(url, keypair)
+    if not isinstance(response, dict):
+        raise TypeError(f"Expected dictionary response, got {type(response)}")
+    try:
+        columns = InstructDatasetColumnsResponse.model_validate(response)
     except Exception as exc:
         logger.error(f"The get columns for dataset endpoint should return a DatasetColumnsResponse type: {exc}")
         raise TypeError(f"The get columns for dataset endpoint should return a DatasetColumnsResponse type: {exc}")
@@ -114,7 +131,37 @@ def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
         raise ValueError(f"No training hours range found for {num_rows} rows")
     return random.randint(min_hours, max_hours)
 
+async def create_synthetic_dpo_task(
+    config: Config,
+    models: AsyncGenerator[str, None],
+    datasets: AsyncGenerator[str, None],
+) -> RawTask:
+    model_id = await anext(models)
+    dataset = await anext(datasets)
+    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
+    columns = await _get_columns_for_dpo_dataset(dataset.dataset_id, config.keypair)
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=number_of_hours)
 
+    task = DpoRawTask(
+        model_id=model_id,
+        ds=dataset.dataset_id,
+        field_system=None,
+        field_prompt=columns.field_prompt,
+        field_chosen=columns.field_chosen,
+        field_rejected=columns.field_rejected,
+        status=TaskStatus.PENDING,
+        is_organic=False,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=number_of_hours,
+        account_id=cst.NULL_ACCOUNT_ID,
+    )
+    logger.info(f"New task created and added to the queue {task}")
+
+    task = await add_task(task, config.psql_db)
+
+    return task
 async def create_synthetic_instruct_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
@@ -123,7 +170,7 @@ async def create_synthetic_instruct_text_task(
     model_id = await anext(models)
     dataset = await anext(datasets)
     number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
-    columns = await _get_columns_for_dataset(dataset.dataset_id, config.keypair)
+    columns = await _get_columns_for_instruct_dataset(dataset.dataset_id, config.keypair)
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
@@ -170,8 +217,12 @@ async def _add_new_task_to_network_if_not_enough(
             "Current number of training tasks is less than the maximum amount of concurrent synthetic"
             " jobs we can have. New task incoming..."
         )
-        if random.random() < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT:
+
+        selected_val = random.random()
+        if selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT:
             await create_synthetic_instruct_text_task(config, models, datasets)
+        elif selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO:
+            await create_synthetic_dpo_task(config, models, datasets)
         else:
             await create_synthetic_image_task(config, image_models)
 

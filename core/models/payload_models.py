@@ -107,8 +107,13 @@ class MinerTaskResponse(BaseModel):
     message: str
     accepted: bool
 
+class DpoDatasetColumnsResponse(BaseModel):
+    field_prompt: str
+    field_chosen: str | None = None
+    field_rejected: str | None = None
 
-class DatasetColumnsResponse(BaseModel):
+
+class InstructDatasetColumnsResponse(BaseModel):
     field_instruction: str
     field_input: str | None = None
     field_output: str | None = None

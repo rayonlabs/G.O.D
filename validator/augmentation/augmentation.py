@@ -2,14 +2,19 @@ import asyncio
 import json
 from typing import List
 
+from PIL.Image import new
+from attr import field
+from click import prompt
 import yaml
+from core.constants import DPO_DEFAULT_DATASET_TYPE
+from core.models.payload_models import DpoDatasetColumnsResponse
 from datasets import load_dataset
 from fiber import Keypair
 
 from core.models.utility_models import Message
 from core.models.utility_models import Prompts
 from core.models.utility_models import Role
-from validator.core.constants import END_OF_REASONING_TAG
+from validator.core.constants import END_OF_REASONING_TAG, TEXT_SYNTH_WEAKER_MODEL
 from validator.core.constants import MAX_SYNTH_DATA_POINTS
 from validator.core.constants import PROMPT_PATH
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
@@ -17,6 +22,7 @@ from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
 from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
 from validator.evaluation.utils import get_default_dataset_config
+from validator.utils.call_endpoint import post_to_nineteen_chat
 from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import extract_json_from_response
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
@@ -81,6 +87,17 @@ def create_messages_for_input_output_reformulation(row: dict, prompts: Prompts) 
     messages.append(user_message)
     return messages
 
+def create_messages_for_input_reformulation(ds_prompt: str, prompts: Prompts) -> list[Message]:
+    messages = []
+    system_message = Message(role=Role.SYSTEM, content=prompts.input_refomulation_sys)
+    messages.append(system_message)
+    user_message = Message(
+        role=Role.USER,
+        content=prompts.input_refomulation_user.format(prompt=ds_prompt))
+    messages.append(user_message)
+    return messages
+
+
 
 def check_the_synthetic_data(synthetic_data_point: dict, original_data_columns: List[str]) -> bool:
     return set(synthetic_data_point.keys()) == set(original_data_columns)
@@ -91,8 +108,24 @@ async def generate_paraphrased_version(row: dict, prompts: Prompts, keypair: Key
     payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
     result = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
     paraphrased_data = extract_json_from_response(result) if isinstance(result, str) else result
-
     return paraphrased_data
+
+async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Keypair) -> DpoDatasetColumnsResponse:
+    messages = create_messages_for_input_reformulation(prompt, prompts)
+    payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
+    new_prompt = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
+    assert new_prompt, "new prompt should not be None"
+    prompt_message = [Message(
+        role=Role.USER,
+        content=new_prompt)]
+    weak_model_payload = convert_to_nineteen_payload(prompt_message, TEXT_SYNTH_WEAKER_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
+    weak_model_result = await post_to_nineteen_chat(weak_model_payload, keypair)
+    strong_model_payload = convert_to_nineteen_payload(prompt_message, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
+    strong_model_result = await post_to_nineteen_chat_with_reasoning(strong_model_payload, keypair, END_OF_REASONING_TAG)
+
+    return DpoDatasetColumnsResponse(field_prompt = new_prompt, field_chosen=strong_model_result, field_rejected=weak_model_result)
+
+
 
 
 async def process_row(row, prompts, keypair):

@@ -118,6 +118,8 @@ class Message(BaseModel):
 class Prompts(BaseModel):
     input_output_reformulation_sys: str
     input_output_reformulation_user: str
+    input_refomulation_sys: str
+    input_refomulation_user: str
 
 
 class TaskType(str, Enum):
