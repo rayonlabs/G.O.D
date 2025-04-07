@@ -32,7 +32,7 @@ async def get_total_text_dataset_size(task: TextRawTask) -> int:
     return int(size)
 
 
-async def get_model_num_params(model_id: str) -> int:
+def get_model_num_params(model_id: str) -> int:
     try:
         api = HfApi()
         model_info = api.model_info(model_id)
