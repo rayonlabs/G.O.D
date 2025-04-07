@@ -21,9 +21,17 @@ logger = get_logger(__name__)
 
 async def get_total_text_dataset_size(task: TextRawTask) -> int:
     if task.file_format == FileFormat.S3:
-        bucket_name, object_name = async_minio_client.parse_s3_url(task.ds)
-        stats = await async_minio_client.get_stats(bucket_name, object_name)
-        size = stats.size
+        train_bucket_name, train_object_name = async_minio_client.parse_s3_url(task.training_data)
+        train_stats = await async_minio_client.get_stats(train_bucket_name, train_object_name)
+        train_ds_size = train_stats.size
+        if task.test_data:
+            test_bucket_name, test_object_name = async_minio_client.parse_s3_url(task.test_data)
+            test_stats = await async_minio_client.get_stats(test_bucket_name, test_object_name)
+            test_ds_size = test_stats.size
+            return train_ds_size + test_ds_size
+        else:
+            return train_ds_size
+
     else:
         loop = asyncio.get_running_loop()
         dataset_infos = await loop.run_in_executor(None, get_dataset_infos, task.ds)

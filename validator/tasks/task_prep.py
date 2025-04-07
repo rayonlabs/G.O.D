@@ -62,6 +62,7 @@ def unzip_to_temp_path(zip_file_path: str) -> str:
 async def load_dataset_from_s3(dataset_url: str, max_file_size_bytes: int = None) -> Dataset | DatasetDict:
     """Load a dataset from S3 storage."""
     try:
+        # TODO: check what is going on here
         with tempfile.TemporaryDirectory() as temp_dir:
             local_file_path = await download_s3_file(dataset_url)
             if max_file_size_bytes:
@@ -327,7 +328,7 @@ async def prepare_text_task(
 
     if file_format == FileFormat.HF:
         delete_dataset_from_cache(train_dataset)
-        delete_dataset_from_cache(test_dataset)
+        delete_dataset_from_cache(test_dataset) if test_dataset else None
 
     return (
         test_json_url.strip('"'),
