@@ -15,6 +15,7 @@ from core.models.payload_models import LeaderboardRow
 from core.models.payload_models import NewTaskRequestImage
 from core.models.payload_models import NewTaskRequestText
 from core.models.payload_models import NewTaskResponse
+from core.models.payload_models import NewTaskWithCustomDatasetRequest
 from core.models.payload_models import NewTaskWithFixedDatasetsRequest
 from core.models.payload_models import TaskResultResponse
 from core.models.payload_models import TextTaskDetails
@@ -189,6 +190,40 @@ async def create_task_image(
 
     task = await task_sql.add_task(task, config.psql_db)
 
+    logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
+
+
+async def create_task_with_custom_dataset(
+    request: NewTaskWithCustomDatasetRequest,
+    config: Config = Depends(get_config),
+) -> NewTaskResponse:
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
+
+    task = TextRawTask(
+        model_id=request.model_repo,
+        ds=request.ds_repo or "custom",
+        file_format=request.file_format if request.ds_repo else FileFormat.S3,
+        field_system=request.field_system,
+        field_instruction=request.field_instruction,
+        field_input=request.field_input,
+        field_output=request.field_output,
+        format=request.format,
+        is_organic=True,
+        no_input_format=request.no_input_format,
+        status=TaskStatus.PENDING,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=request.hours_to_complete,
+        account_id=request.account_id,
+        task_type=TaskType.TEXTTASK,
+        result_model_name=request.result_model_name,
+        training_data=request.training_data,
+        test_data=request.test_data,
+    )
+
+    task = await task_sql.add_task(task, config.psql_db)
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 

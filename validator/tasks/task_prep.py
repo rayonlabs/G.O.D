@@ -59,16 +59,20 @@ def unzip_to_temp_path(zip_file_path: str) -> str:
     return tmp_dir
 
 
-async def load_dataset_from_s3(dataset_url: str) -> Dataset | DatasetDict:
+async def load_dataset_from_s3(dataset_url: str, max_file_size_bytes: int = None) -> Dataset | DatasetDict:
     """Load a dataset from S3 storage."""
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
             local_file_path = await download_s3_file(dataset_url)
+            if max_file_size_bytes:
+                file_size = os.path.getsize(local_file_path)
+                if file_size > max_file_size_bytes:
+                    raise ValueError(f"File size {file_size} exceeds max file size {max_file_size_bytes}")
             filename = os.path.basename(local_file_path)
             new_path = os.path.join(temp_dir, filename)
 
             os.rename(local_file_path, new_path)
-            dataset = load_dataset(temp_dir)
+            dataset = load_dataset("json", data_files=new_path, split="train", trust_remote_code=False)
 
             return dataset
     except Exception as e:
@@ -76,33 +80,31 @@ async def load_dataset_from_s3(dataset_url: str) -> Dataset | DatasetDict:
         raise e
 
 
-async def train_test_split(dataset_name: str, file_format: FileFormat, test_size: float = None) -> DatasetDict:
-    if test_size is None:
-        test_size = cst.TRAIN_TEST_SPLIT_PERCENTAGE
-    logger.info(f"Loading dataset '{dataset_name}'")
-    try:
-        if file_format == FileFormat.S3:
-            dataset = await load_dataset_from_s3(dataset_name)
-        else:
-            config_name = get_default_dataset_config(dataset_name)
-            dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
-    except Exception as e:
-        logger.exception(f"Failed to load dataset {dataset_name}: {e}")
-        raise e
+async def download_and_load_dataset(
+    dataset_name: str, file_format: FileFormat, max_file_size_bytes: int = cst.MAX_FILE_SIZE_BYTES
+) -> Dataset:
+    if file_format == FileFormat.S3:
+        dataset = await load_dataset_from_s3(dataset_name, max_file_size_bytes)
+    else:
+        config_name = get_default_dataset_config(dataset_name)
+        dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
 
     if isinstance(dataset, DatasetDict):
         combined_dataset = concatenate_datasets([split for split in dataset.values()])
     else:
         combined_dataset = dataset
 
-    logger.info(f"Combined dataset size: {len(combined_dataset)}")
-    logger.info(f"Splitting combined dataset into train and test with test size {test_size}")
+    return combined_dataset
+
+
+async def train_test_split(dataset: Dataset, test_size: float = cst.TRAIN_TEST_SPLIT_PERCENTAGE) -> DatasetDict:
+    logger.info(f"Splitting dataset into train and test with test size {test_size}")
 
     test_size = min(
-        int(len(combined_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE),
+        int(len(dataset) * test_size),
         cst.MAX_TEST_DATA_POINTS,
     )
-    split_dataset = combined_dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
+    split_dataset = dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
     logger.info(f"Train set size: {len(split_dataset['train'])}")
     logger.info(f"Test set size: {len(split_dataset['test'])}")
 
@@ -159,7 +161,6 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
 
     sampled_data = sampled_data.remove_columns([col for col in sampled_data.column_names if col not in columns_to_sample])
-    column_to_reformulate = columns_to_sample[-1] if len(columns_to_sample) > 1 else None  # output column
     # NOTE: Need to do something if errors, without trying to then generate synthetic data
     try:
         sampled_data_list = list(sampled_data)
@@ -212,76 +213,105 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     return remaining_train_dataset, synthetic_dataset
 
 
-async def prepare_text_task(
-    dataset_name: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair
-) -> tuple[str, str, str]:
-    logger.info(f"Preparing {dataset_name}")
-    dataset_dict = await train_test_split(dataset_name, file_format)
-
-    total_size = len(dataset_dict["train"]) + len(dataset_dict["test"])
-    if total_size < cst.MINIMUM_DATASET_ROWS:
-        error_msg = f"Dataset {dataset_name} has only {total_size} rows, minimum required is {cst.MINIMUM_DATASET_ROWS}"
+def check_ds_num_rows(num_rows: int) -> int:
+    if num_rows < cst.MINIMUM_DATASET_ROWS:
+        error_msg = f"Dataset has only {num_rows} rows, minimum required is {cst.MINIMUM_DATASET_ROWS}"
         logger.error(error_msg)
         raise ValueError(error_msg)
+    return num_rows
 
-    train_dataset = dataset_dict["train"]
-    test_dataset = dataset_dict["test"]
 
-    if any(col not in train_dataset.column_names for col in columns_to_sample):
-        raise ValueError(f"Column {columns_to_sample} not found in train dataset")
-
-    synthetic_data = []
+async def generate_synth_data(test_dataset: Dataset, columns_to_sample: List[str], keypair: Keypair) -> List[dict]:
     try:
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
-
             synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair)
-
-            # synthetic_dataset = Dataset.from_list(synthetic_data)
-            # logger.info("First 2 examples from original test dataset:")
-            # for i, example in enumerate(test_dataset.select(range(2))):
-            #     logger.info(f"Example {i + 1}: {example}")
-
-            # logger.info("First 2 examples from synthetic dataset:")
-            # for i, example in enumerate(synthetic_dataset.select(range(2))):
-            #     logger.info(f"Example {i + 1}: {example}")
+            return synthetic_data
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:
-        # if for some reason the api is down, we move some of the train over to be synth
+        logger.info(f"Error generating synthetic data: {e}")
 
-        logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
-        train_dataset, synthetic_data = assign_some_of_the_train_to_synth(train_dataset)
+    return None
 
-    if synthetic_data is None:
-        logger.info("There was not enough synthetic data created we are instead grabbing from train ")
-        train_dataset, synthetic_data = assign_some_of_the_train_to_synth(train_dataset)
+
+async def prepare_text_task(
+    train_dataset: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair, test_dataset: str | None = None
+) -> tuple[str, str, str]:
+    should_reupload_train = FileFormat.S3 == file_format
+    should_reupload_test = test_dataset is None or FileFormat.S3 != file_format
+    tmp_files_to_delete = []
+
+    if not test_dataset:
+        logger.info(f"Preparing {train_dataset}")
+        try:
+            dataset = await download_and_load_dataset(train_dataset, file_format)
+        except Exception as e:
+            logger.info(f"There was an issue loading the dataset: {e}")
+            raise e
+        dataset_dict = await train_test_split(dataset)
+
+        train_ds = dataset_dict["train"]
+        test_ds = dataset_dict["test"]
+        should_reupload_train = True
+        should_reupload_test = True
+    else:
+        logger.info(f"Preparing train and test datasets. Train: {train_dataset}, Test: {test_dataset}")
+        try:
+            train_ds = await download_and_load_dataset(train_dataset, file_format)
+            test_ds = await download_and_load_dataset(test_dataset, file_format)
+        except Exception as e:
+            logger.info(f"There was an issue loading the dataset: {e}")
+            raise e
+
+    total_size = len(train_ds) + len(test_ds)
+    check_ds_num_rows(total_size)
+
+    if any(col not in train_ds.column_names for col in columns_to_sample):
+        raise ValueError(f"Column {columns_to_sample} not found in train dataset")
+
+    synthetic_data = []
+
+    synthetic_data = await generate_synth_data(test_ds, columns_to_sample, keypair)
+
+    if synthetic_data is None or len(synthetic_data) == 0:
+        logger.info("Synthetic dataset gen is down, moving part of the train over")
+        train_ds, synthetic_data = assign_some_of_the_train_to_synth(train_ds)
+        should_reupload_train = True
 
     try:
-        train_data_json = change_to_json_format(train_dataset, columns_to_sample)
-        test_data_json = change_to_json_format(test_dataset, columns_to_sample)
-        synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample) if synthetic_data else []
+        if should_reupload_train:
+            train_data_json = change_to_json_format(train_ds, columns_to_sample)
+            train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
+            tmp_files_to_delete.append(train_json_path)
+            await _check_file_size(train_json_size, "train_data")
+            train_json_url = await upload_file_to_minio(
+                train_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_train_data.json"
+            )
+        else:
+            train_json_url = train_dataset
+        if should_reupload_test:
+            test_data_json = change_to_json_format(test_ds, columns_to_sample)
+            test_json_path, test_json_size = await save_json_to_temp_file(test_data_json, prefix="test_data_")
+            tmp_files_to_delete.append(test_json_path)
+            await _check_file_size(test_json_size, "test_data")
+            test_json_url = await upload_file_to_minio(test_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_test_data.json")
+        else:
+            test_json_url = test_dataset
+        if synthetic_data:
+            synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample)
+            synth_json_path, synth_json_size = await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_")
+            tmp_files_to_delete.append(synth_json_path)
+            await _check_file_size(synth_json_size, "synth_data")
+            synth_json_url = await upload_file_to_minio(
+                synth_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_synth_data.json"
+            )
+        else:
+            synth_json_url = None
     except Exception as e:
-        logger.info(f"There was a problem going to json {e}")
+        logger.error(f"There was a problem going to json {e}")
+        raise e
 
-    train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
-    test_json_path, test_json_size = await save_json_to_temp_file(test_data_json, prefix="test_data_")
-    synth_json_path, synth_json_size = (
-        await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_") if synthetic_data else None
-    )
-
-    await _check_file_size(train_json_size, "train_data")
-    await _check_file_size(test_json_size, "test_data")
-    if synth_json_size:
-        await _check_file_size(synth_json_size, "synth_data")
-
-    train_json_url = await upload_file_to_minio(train_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_train_data.json")
-    test_json_url = await upload_file_to_minio(test_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_test_data.json")
-    synth_json_url = (
-        await upload_file_to_minio(synth_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_synth_data.json")
-        if synthetic_data
-        else None
-    )
     logger.info(f"Train json url: {train_json_url}\nTest json url: {test_json_url}\nSynth json url: {synth_json_url}")
 
     if not train_json_url:
@@ -291,11 +321,13 @@ async def prepare_text_task(
     if not synth_json_url and synthetic_data:
         raise Exception("Failed to upload synthetic data to MinIO storage")
 
-    os.remove(train_json_path)
-    os.remove(test_json_path)
-    if synth_json_path:
-        os.remove(synth_json_path)
-    delete_dataset_from_cache(dataset_name)
+    for file_path in tmp_files_to_delete:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    if file_format == FileFormat.HF:
+        delete_dataset_from_cache(train_dataset)
+        delete_dataset_from_cache(test_dataset)
 
     return (
         test_json_url.strip('"'),
