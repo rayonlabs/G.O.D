@@ -55,7 +55,7 @@ async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask
     dataset = task.training_data if task.training_data else task.ds
     test_dataset = task.test_data if task.test_data else None
     test_data, synth_data, train_data = await prepare_text_task(
-        dataset_name=dataset,
+        train_dataset=dataset,
         test_dataset=test_dataset,
         file_format=task.file_format,
         columns_to_sample=columns_to_sample,
