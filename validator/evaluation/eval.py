@@ -42,9 +42,10 @@ logger = get_logger(__name__)
 def log_memory_stats():
     """GPU/CPU memory monitoring"""
     if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated() / 1024**2
-        reserved = torch.cuda.memory_reserved() / 1024**2
-        logger.info(f"GPU Memory: Allocated: {allocated:.2f} MB, Reserved: {reserved:.2f} MB")
+        for i in range(torch.cuda.device_count()):
+            allocated = torch.cuda.memory_allocated(i) / 1024**2
+            reserved = torch.cuda.memory_reserved(i) / 1024**2
+            logger.info(f"GPU {i} Memory: Allocated: {allocated:.2f} MB, Reserved: {reserved:.2f} MB")
 
     ram = psutil.Process().memory_info()
     logger.info(f"RAM Usage: RSS (Resident Set Size): {ram.rss / 1024**2:.2f} MB")
@@ -218,7 +219,6 @@ def create_finetuned_cache_dir():
 
 @retry_on_5xx()
 def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoModelForCausalLM:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
         # Only use default cache for the base model
         cache_dir = None if is_base_model else create_finetuned_cache_dir()
@@ -226,8 +226,8 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
         return AutoModelForCausalLM.from_pretrained(
             model_name_or_path,
             token=os.environ.get("HUGGINGFACE_TOKEN"),
-            device_map=device,
-            cache_dir=cache_dir
+            device_map="auto",
+            cache_dir=cache_dir,
         )
     except RuntimeError as e:
         error_msg = str(e)
@@ -239,7 +239,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
                     model_name_or_path,
                     token=os.environ.get("HUGGINGFACE_TOKEN"),
                     ignore_mismatched_sizes=True,
-                    device_map=device,
+                    device_map="auto",
                     cache_dir=cache_dir
                 )
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
@@ -260,14 +260,13 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
 
 @retry_on_5xx()
 def load_finetuned_model(base_model, repo: str) -> PeftModel:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
         cache_dir = create_finetuned_cache_dir()
         return PeftModel.from_pretrained(
             base_model,
             repo,
             is_trainable=False,
-            device_map=device,
+            device_map="auto",
             cache_dir=cache_dir
         )
     except RuntimeError as e:
@@ -281,7 +280,7 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
                     repo,
                     is_trainable=False,
                     ignore_mismatched_sizes=True,
-                    device_map=device,
+                    device_map="auto",
                     cache_dir=cache_dir
                 )
 
