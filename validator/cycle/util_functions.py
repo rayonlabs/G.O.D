@@ -21,6 +21,9 @@ logger = get_logger(__name__)
 
 async def get_total_text_dataset_size(task: TextRawTask) -> int:
     if task.file_format == FileFormat.S3:
+        if not task.training_data:
+            logger.error(f"Training data is missing from task: {task.task_id}")
+            raise ValueError(f"Training data is missing from task: {task.task_id}")
         train_bucket_name, train_object_name = async_minio_client.parse_s3_url(task.training_data)
         train_stats = await async_minio_client.get_stats(train_bucket_name, train_object_name)
         train_ds_size = train_stats.size
