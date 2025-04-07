@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import time
 from datetime import datetime
 
 import numpy as np
@@ -39,6 +40,7 @@ from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
+from validator.utils.task_metrics import record_task_stage_duration
 
 
 logger = get_logger(__name__)
@@ -106,7 +108,7 @@ def calculate_node_quality_scores(
         assert node_agg.task_raw_scores, f"No raw scores available for node {hotkey}"
 
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
-        std_score=float(np.std(node_agg.task_raw_scores))
+        std_score = float(np.std(node_agg.task_raw_scores))
         score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
         node_agg.quality_score = score
 
@@ -188,11 +190,11 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
         return False
 
     # Only consider miners with real synthetic loss values (not placeholders)
-    real_synth_miners = [result for result in valid_results
-                        if result.is_finetune
-                        and not np.isnan(result.test_loss)
-                        and not np.isnan(result.synth_loss)
-                        and result.synth_loss < 999.0]  # Exclude placeholder values
+    real_synth_miners = [
+        result
+        for result in valid_results
+        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss) and result.synth_loss < 999.0
+    ]  # Exclude placeholder values
 
     if not real_synth_miners:
         logger.info("No miners with real synthetic loss values")
@@ -229,11 +231,7 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
                 result.score_reason = "Outside of top-4 test doesn't get scored."
                 logger.info(f"Miner {result.hotkey}: Outside of top-4")
 
-    valid_results = [
-        result
-        for result in miner_results
-        if result.is_finetune and not np.isnan(result.test_loss)
-    ]
+    valid_results = [result for result in miner_results if result.is_finetune and not np.isnan(result.test_loss)]
     if not valid_results:
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
@@ -243,15 +241,13 @@ def calculate_miner_ranking_and_scores(miner_results: list[MinerResults]) -> lis
     if use_weighted_loss:
         logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
         ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss)) for result in valid_results]
-        ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
+        ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
         ranking_type = "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
-        ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
+        ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
         ranking_type = "test_loss_only"
-
-
 
     if ranked_results:  # Need one result at least bro
         top_result, top_metric = ranked_results[0]
@@ -433,7 +429,7 @@ async def _evaluate_submissions(
             else:
                 test_losses.append((repo, test_result.eval_loss))
 
-        test_losses.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
+        test_losses.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
         top_4_repos = [repo for repo, _ in test_losses[:4]]
 
         for repo, _ in test_losses[4:]:
@@ -724,7 +720,8 @@ async def process_miners_pool(
 
 
 async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int], config: Config) -> TextRawTask | ImageRawTask:
-    """Main function to evaluate and score task submissions."""
+    start_time = time.time()
+
     assert task.task_id is not None, "Task ID must be present"
     assert task.test_data is not None, "Test data must be present"
 
@@ -770,4 +767,7 @@ async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int
         add_context_tag("status", task.status.value)
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
     task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
+
+    if task.status == TaskStatus.SUCCESS:
+        record_task_stage_duration(str(task.task_id), "evaluation", time.time() - start_time)
     return task

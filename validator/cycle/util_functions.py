@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from datasets import get_dataset_infos
 from fiber import Keypair
@@ -14,6 +15,7 @@ from validator.tasks.task_prep import prepare_image_task
 from validator.tasks.task_prep import prepare_text_task
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
+from validator.utils.task_metrics import record_task_stage_duration
 
 
 logger = get_logger(__name__)
@@ -49,6 +51,8 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawT
 
 
 async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask:
+    start_time = time.time()
+
     columns_to_sample = [
         i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
     ]
@@ -59,6 +63,10 @@ async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask
     task.status = TaskStatus.LOOKING_FOR_NODES
     task.synthetic_data = synth_data
     task.test_data = test_data
+
+    duration = time.time() - start_time
+    record_task_stage_duration(str(task.task_id), "text_prep", duration)
+
     logger.info("Data creation is complete - now time to find some miners")
     return task
 
