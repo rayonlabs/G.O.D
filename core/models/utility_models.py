@@ -125,7 +125,7 @@ class Prompts(BaseModel):
 class TaskType(str, Enum):
     INSTRUCTTEXTTASK = "InstructTextTask"
     IMAGETASK = "ImageTask"
-    DPOTASK = "DpoTask"
+    DPO = "dpo"
 
     # Temporary for backwards compatibility, otherwise auditing will fail
     TEXTTASK = "TextTask"

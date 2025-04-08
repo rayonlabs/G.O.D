@@ -48,7 +48,7 @@ class InstructTextTaskConfig(TaskConfig):
 
 
 class DpoTaskConfig(TaskConfig):
-    task_type: TaskType = TaskType.DPO
+    task_type: TaskType = TaskType.DPOTASK
     data_size_function: Callable = get_total_text_dataset_size
     task_prep_function: Callable = run_text_task_prep
     task_request_prepare_function: Callable = prepare_text_task_request
