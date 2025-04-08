@@ -32,6 +32,7 @@ from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
 from validator.core import constants as cst
+from validator.evaluation.utils import check_for_lora
 from validator.evaluation.utils import model_is_a_finetune
 from validator.utils.logging import get_logger
 
@@ -331,17 +332,15 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
     try:
-        try:
+        if check_for_lora(repo):
+            logger.info("LoRA adapter detected. Loading as with Peft")
             base_model = load_model(original_model, is_base_model=True)
             if "model_params_count" not in results_dict:
                 results_dict["model_params_count"] = _count_model_parameters(base_model)
             finetuned_model = load_finetuned_model(base_model, repo)
             is_finetune = True
-        except Exception as lora_error:
-            logger.info(f"Loading full model... failed to load as LoRA: {lora_error}")
-            base_model.to('cpu')
-            del base_model
-            torch.cuda.empty_cache()
+        else:
+            logger.info("No LoRA adapter detected. Loading full model")
             finetuned_model = load_model(repo, is_base_model=False)
             try:
                 is_finetune = model_is_a_finetune(original_model, finetuned_model)
@@ -370,6 +369,25 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
         logger.info(f"Saved evaluation results for {repo}")
         logger.info(json.dumps(results_dict, indent=2))
         log_memory_stats()
+
+
+def check_and_log_base_model_size(original_model: str) -> None:
+    """Check if base model size is logged in results, if not load and log it."""
+    results_dict = {}
+    if os.path.exists(cst.CONTAINER_EVAL_RESULTS_PATH):
+        with open(cst.CONTAINER_EVAL_RESULTS_PATH, "r") as f:
+            results_dict = json.load(f)
+
+    if "model_params_count" not in results_dict:
+        logger.info("Base model size not logged, loading base model to calculate size")
+        base_model = load_model(original_model, is_base_model=True)
+        results_dict["model_params_count"] = _count_model_parameters(base_model)
+
+        with open(cst.CONTAINER_EVAL_RESULTS_PATH, "w") as f:
+            json.dump(results_dict, f, indent=2)
+        logger.info(f"Logged base model size: {results_dict['model_params_count']} parameters")
+    else:
+        logger.info(f"Base model size already logged: {results_dict['model_params_count']} parameters")
 
 
 def main():
@@ -401,7 +419,10 @@ def main():
             log_memory_stats()
         except subprocess.CalledProcessError as e:
             logger.error(f"Error running subprocess for {repo}: {e}")
-
+    try:
+        check_and_log_base_model_size(original_model)
+    except Exception as e:
+        logger.error(f"Error checking and logging base model size: {e}")
     logger.info("All evaluations completed")
 
 

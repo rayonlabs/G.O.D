@@ -18,6 +18,7 @@ from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
+hf_api = HfApi()
 
 
 async def get_total_text_dataset_size(task: TextRawTask) -> int:
@@ -34,8 +35,7 @@ async def get_total_text_dataset_size(task: TextRawTask) -> int:
 
 def get_model_num_params(model_id: str) -> int:
     try:
-        api = HfApi()
-        model_info = api.model_info(model_id)
+        model_info = hf_api.model_info(model_id)
         size = model_info.safetensors.total
         return size
     except Exception as e:
