@@ -8,6 +8,8 @@ from math import ceil
 from pathlib import Path
 from typing import List
 
+from torch.fx import symbolic_trace
+
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import concatenate_datasets
@@ -15,7 +17,7 @@ from datasets import load_dataset
 from fiber import Keypair
 
 import validator.core.constants as cst
-from core.models.payload_models import ImageTextPair
+from core.models.payload_models import DpoDatasetColumnsResponse, ImageTextPair
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
@@ -153,7 +155,7 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     return test_zip_path, train_zip_path
 
 
-async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[str], keypair: Keypair, is_dpo: bool = False) -> List[dict]:
+async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[str], keypair: Keypair, is_dpo: bool = False) -> List[dict] | List[DpoDatasetColumnsResponse]:
     num_samples = min(
         cst.MAX_SYNTH_DATA_POINTS,
         int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
@@ -276,6 +278,14 @@ def pick_columns_to_sample(task: InstructTextRawTask | DpoRawTask) -> list[str]:
     return columns_to_sample
 
 
+def validate_and_transform_dpo(data, task: DpoRawTask):
+    assert isinstance(data, DpoDatasetColumnsResponse)
+    return {
+        task.field_prompt: data.field_prompt,
+        task.field_chosen: data.field_chosen,
+        task.field_rejected: data.field_rejected
+    }
+
 async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Keypair) -> tuple[str, str, str]:
     dataset_name=task.ds
     if isinstance(task, InstructTextRawTask):
@@ -303,7 +313,9 @@ async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Key
             logger.info("Generating additional synthetic data")
             if isinstance(task, DpoRawTask):
                 # we only need the field prompt to generate new data here
-                synthetic_data = await get_additional_synth_data(test_dataset, [DpoRawTask.field_prompt], keypair, is_dpo=True)
+                synthetic_data = await get_additional_synth_data(test_dataset, [task.field_prompt], keypair, is_dpo=True)
+                synthetic_data = [validate_and_transform_dpo(data, task) for data in synthetic_data]
+
             else:
                 synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair, is_dpo=False)
 
