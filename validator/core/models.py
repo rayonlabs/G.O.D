@@ -375,3 +375,8 @@ class Dataset(BaseModel):
     dataset_id: str
     num_rows: int
     num_bytes_parquet_files: int
+    dpo_available: bool = False
+    dpo_prompt_column: str | None = None
+    dpo_accepted_column:str | None = None
+    dpo_rejected_column:str | None = None
+

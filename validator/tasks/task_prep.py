@@ -153,7 +153,7 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     return test_zip_path, train_zip_path
 
 
-async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[str], keypair: Keypair) -> List[dict]:
+async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[str], keypair: Keypair, is_dpo: bool = False) -> List[dict]:
     num_samples = min(
         cst.MAX_SYNTH_DATA_POINTS,
         int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
@@ -169,7 +169,7 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
         logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
         return None
 
-    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair)
+    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair, is_dpo = is_dpo)
 
     return synthetic_data
 
@@ -278,7 +278,10 @@ def pick_columns_to_sample(task: InstructTextRawTask | DpoRawTask) -> list[str]:
 
 async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Keypair) -> tuple[str, str, str]:
     dataset_name=task.ds
-    columns_to_sample = pick_columns_to_sample(task)
+    if isinstance(task, InstructTextRawTask):
+        columns_to_sample = pick_columns_to_sample(task)
+    else:
+        columns_to_sample = [DpoRawTask.field_prompt, DpoRawTask.field_chosen, DpoRawTask.field_rejected]
     logger.info(f"Preparing {dataset_name}")
     dataset_dict = await train_test_split(dataset_name, task.file_format)
 
@@ -298,8 +301,11 @@ async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Key
     try:
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
-
-            synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair)
+            if isinstance(task, DpoRawTask):
+                # we only need the field prompt to generate new data here
+                synthetic_data = await get_additional_synth_data(test_dataset, [DpoRawTask.field_prompt], keypair, is_dpo=True)
+            else:
+                synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair, is_dpo=False)
 
             # synthetic_dataset = Dataset.from_list(synthetic_data)
             # logger.info("First 2 examples from original test dataset:")

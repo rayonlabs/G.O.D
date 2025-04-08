@@ -126,8 +126,6 @@ async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Key
     return DpoDatasetColumnsResponse(field_prompt = new_prompt, field_chosen=strong_model_result, field_rejected=weak_model_result)
 
 
-
-
 async def process_row(row, prompts, keypair):
     json_synthetic_data_point = await generate_paraphrased_version(row, prompts, keypair)
 
@@ -157,7 +155,7 @@ async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Key
         current_batch = (batch_idx // SYNTH_GEN_BATCH_SIZE) + 1
         logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
 
-        tasks = [process_row(row, prompts, keypair) for row in batch]
+        tasks = [process_row(row, prompts, keypair, is_dpo) for row in batch]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         batch_results = []

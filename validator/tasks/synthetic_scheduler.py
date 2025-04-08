@@ -47,10 +47,10 @@ async def _get_image_models(keypair: Keypair) -> AsyncGenerator[str, None]:
             yield model
 
 
-async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair) -> AsyncGenerator[Dataset, None]:
+async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, dpo: bool) -> AsyncGenerator[Dataset, None]:
     """Get datasets for a specific size bin."""
     while True:
-        params = {"min_rows": min_rows, "max_rows": max_rows}
+        params = {"min_rows": min_rows, "max_rows": max_rows, "dpo_suitable": dpo}
         try:
             response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair, params)
             if not isinstance(response, list):
@@ -71,7 +71,7 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair) 
 async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
-    bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
+    bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair, False) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
 
     while True:
         for generator in bin_generators:
@@ -84,22 +84,21 @@ async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Datase
                 logger.warning(f"Error getting next dataset from bin: {e}")
                 continue
 
-async def _get_columns_for_dpo_dataset(
-    dataset_id: str,
-    keypair: Keypair,
-) -> DpoDatasetColumnsResponse:
-    url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
-    logger.info(f"Getting columns for dataset {dataset_id}")
+async def _get_dpo_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
+    """Round-robin generator that cycles through all dataset size bins."""
 
-    response = await call_content_service(url, keypair)
-    if not isinstance(response, dict):
-        raise TypeError(f"Expected dictionary response, got {type(response)}")
-    try:
-        columns = DpoDatasetColumnsResponse.model_validate(response)
-    except Exception as exc:
-        logger.error(f"The get columns for dataset endpoint should return a DatasetColumnsResponse type: {exc}")
-        raise TypeError(f"The get columns for dataset endpoint should return a DatasetColumnsResponse type: {exc}")
-    return columns
+    bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair, True) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
+
+    while True:
+        for generator in bin_generators:
+            try:
+                dataset = await anext(generator)
+                yield dataset
+            except StopAsyncIteration:
+                continue
+            except Exception as e:
+                logger.warning(f"Error getting next dataset from bin: {e}")
+                continue
 
 
 async def _get_columns_for_instruct_dataset(
@@ -134,12 +133,15 @@ def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
 async def create_synthetic_dpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
-    datasets: AsyncGenerator[str, None],
+    datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
     dataset = await anext(datasets)
     number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
-    columns = await _get_columns_for_dpo_dataset(dataset.dataset_id, config.keypair)
+    assert dataset.dpo_rejected_column, "we should have a reject column"
+    assert dataset.dpo_accepted_column, "we should have a accepted column"
+    assert dataset.dpo_prompt_column, "we should have a prompt column"
+
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
@@ -147,9 +149,9 @@ async def create_synthetic_dpo_task(
         model_id=model_id,
         ds=dataset.dataset_id,
         field_system=None,
-        field_prompt=columns.field_prompt,
-        field_chosen=columns.field_chosen,
-        field_rejected=columns.field_rejected,
+        field_prompt=dataset.dpo_prompt_column,
+        field_chosen=dataset.dpo_accepted_column,
+        field_rejected=dataset.dpo_rejected_column,
         status=TaskStatus.PENDING,
         is_organic=False,
         created_at=current_time,
@@ -162,10 +164,11 @@ async def create_synthetic_dpo_task(
     task = await add_task(task, config.psql_db)
 
     return task
+
 async def create_synthetic_instruct_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
-    datasets: AsyncGenerator[str, None],
+    datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
     dataset = await anext(datasets)
@@ -198,7 +201,8 @@ async def create_synthetic_instruct_text_task(
 async def _add_new_task_to_network_if_not_enough(
     config: Config,
     models: AsyncGenerator[str, None],
-    datasets: AsyncGenerator[Dataset, None],
+    instruct_datasets: AsyncGenerator[Dataset, None],
+    dpo_datasets: AsyncGenerator[Dataset, None],
     image_models: AsyncGenerator[str, None],
 ):
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
@@ -220,16 +224,17 @@ async def _add_new_task_to_network_if_not_enough(
 
         selected_val = random.random()
         if selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT:
-            await create_synthetic_instruct_text_task(config, models, datasets)
+            await create_synthetic_instruct_text_task(config, models, instruct_datasets)
         elif selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO:
-            await create_synthetic_dpo_task(config, models, datasets)
+            await create_synthetic_dpo_task(config, models, dpo_datasets)
         else:
             await create_synthetic_image_task(config, image_models)
 
 
 async def schedule_synthetics_periodically(config: Config):
     logger.info("Starting the synthetic schedule loop...")
-    datasets = _get_instruct_text_datasets(config.keypair)
+    instruct_datasets = _get_instruct_text_datasets(config.keypair)
+    dpo_datasets = _get_dpo_datasets(config.keypair)
     models = _get_text_models(config.keypair)
 
     image_models = _get_image_models(config.keypair)
@@ -238,7 +243,7 @@ async def schedule_synthetics_periodically(config: Config):
     while True:
         try:
             logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
-            await _add_new_task_to_network_if_not_enough(config, models, datasets, image_models)
+            await _add_new_task_to_network_if_not_enough(config, models, instruct_datasets, dpo_datasets, image_models)
             current_try = 0
             await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
         except Exception as e:
