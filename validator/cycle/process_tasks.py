@@ -30,8 +30,6 @@ from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-_cache_cleanup_lock = asyncio.Lock()
-
 
 async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[Node]:
     """
@@ -371,12 +369,9 @@ async def move_tasks_to_preevaluation_loop(config: Config):
         await asyncio.sleep(60)
 
 
-async def cleanup_model_cache(psql_db: PSQLDB):
+async def cleanup_model_cache_loop(psql_db: PSQLDB):
     """Clean up model cache when it exceeds size limit."""
-    if _cache_cleanup_lock.locked():
-        return
-
-    async with _cache_cleanup_lock:
+    while True:
         try:
             logger.info("Cleaning up model cache")
             training_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.TRAINING, psql_db=psql_db)
@@ -459,5 +454,5 @@ async def process_completed_tasks(config: Config) -> None:
     await asyncio.gather(
         move_tasks_to_preevaluation_loop(config),
         evaluate_tasks_loop(config),
-        cleanup_model_cache(config.psql_db)
+        cleanup_model_cache_loop(config.psql_db)
     )

@@ -207,8 +207,8 @@ ONE_DAY_SCORE_WEIGHT = 0.35
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
 CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
-MAX_CACHE_SIZE_BYTES = 600 * 1024**3  # in bytes
-CACHE_CLEANUP_INTERVAL = 60 * 60  # in seconds
+MAX_CACHE_SIZE_BYTES = 1000 * 1024**3  # in bytes
+CACHE_CLEANUP_INTERVAL = 8 * 60 * 60  # in seconds
 
 # Docker evaluation
 DOCKER_EVAL_HF_CACHE_DIR = "/root/.cache/huggingface"
