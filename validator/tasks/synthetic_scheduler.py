@@ -138,6 +138,7 @@ async def create_synthetic_dpo_task(
     model_id = await anext(models)
     dataset = await anext(datasets)
     number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
+    logger.info(dataset)
     assert dataset.dpo_rejected_column, "we should have a reject column"
     assert dataset.dpo_accepted_column, "we should have a accepted column"
     assert dataset.dpo_prompt_column, "we should have a prompt column"
