@@ -177,7 +177,6 @@ def evaluate_language_model_loss(
         "eval_loss": eval_results["eval_loss"],
         "perplexity": torch.exp(torch.tensor(eval_results["eval_loss"])).item(),
     }
-    log_memory_stats()
     return evaluation_results
 
 
@@ -348,7 +347,7 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
                 logger.info(f"Problem with detection of finetune for {repo}: {e}")
                 logger.info("Assuming False")
                 is_finetune = False
-
+        log_memory_stats()
         finetuned_model.eval()
 
         results = evaluate_finetuned_model(
