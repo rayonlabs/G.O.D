@@ -138,7 +138,9 @@ async def create_synthetic_dpo_task(
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
+    logger.info("DPO task")
     model_id = await anext(models)
+    logger.info(f"We picked {model_id}")
     dataset = await anext(datasets)
     number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
     logger.info(dataset)
