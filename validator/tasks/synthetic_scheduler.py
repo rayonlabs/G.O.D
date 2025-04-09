@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 from substrateinterface import Keypair
 
 import validator.core.constants as cst
-from core.models.payload_models import DpoDatasetColumnsResponse, InstructDatasetColumnsResponse
+from core.models.payload_models import InstructDatasetColumnsResponse
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.core.models import Dataset, DpoRawTask

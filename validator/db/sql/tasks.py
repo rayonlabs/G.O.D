@@ -148,7 +148,6 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node
         )
         return [Node(**dict(row)) for row in rows]
 
-
 async def get_tasks_with_status(
     status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False
 ) -> List[InstructTextRawTask | DpoRawTask | ImageRawTask]:
@@ -190,6 +189,7 @@ async def get_tasks_with_status(
                            dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
+                    WHERE t.{cst.TASK_ID} = $1
                 """
             else:
                 logger.warning(f"Unknown task type {task_type} for task_id {row[cst.TASK_ID]}")
@@ -208,7 +208,6 @@ async def get_tasks_with_status(
 
         logger.info(f"Retrieved {len(tasks)} tasks with status {status.value}")
         return tasks
-
 
 async def assign_node_to_task(task_id: str, node: Node, psql_db: PSQLDB) -> None:
     """Assign a node to a task"""
