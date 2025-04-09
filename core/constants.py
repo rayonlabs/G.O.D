@@ -26,7 +26,7 @@ OUTPUT_DIR = "core/outputs/"
 CACHE_DIR = "~/.cache/huggingface"
 CACHE_DIR_HUB = os.path.expanduser("~/.cache/huggingface/hub")
 DIFFUSION_DATASET_DIR = "core/dataset/images"
-CONTAINER_FLUX_PATH = "/app/flux"
+CONTAINER_FLUX_PATH = "/app/flux/unet"
 
 DIFFUSION_REPEATS = 10
 DIFFUSION_DEFAULT_INSTANCE_PROMPT = "lora"
