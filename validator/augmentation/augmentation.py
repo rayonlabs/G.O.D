@@ -88,6 +88,8 @@ def create_messages_for_input_output_reformulation(row: dict, prompts: Prompts) 
     return messages
 
 def create_messages_for_input_reformulation(ds_prompt: str, prompts: Prompts) -> list[Message]:
+    logger.info(f"This is the ds {ds_prompt}")
+    logger.info(f"This is the input reform  {prompts.input_reformulation_user}")
     messages = []
     system_message = Message(role=Role.SYSTEM, content=prompts.input_reformulation_sys)
     messages.append(system_message)
