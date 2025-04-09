@@ -18,6 +18,7 @@ from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from core.models.utility_models import ImageModelType
 from validator.core.models import AllNodeStats
 
 
@@ -55,6 +56,7 @@ class TrainRequestImage(TrainRequest):
         description="Link to dataset zip file",
         min_length=1,
     )
+    model_type: ImageModelType = ImageModelType.SDXL
 
 
 class TrainResponse(BaseModel):
