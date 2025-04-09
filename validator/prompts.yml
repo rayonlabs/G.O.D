@@ -41,5 +41,6 @@ input_reformulation_user: >
   1. Preserve the core intent and meaning of the original input
   2. Vary vocabulary, sentence structure, and phrasing
   3. Keep the same level of formality and specificity
+  4. Give just the reformulated version as your output, and only one please.
 
   Return your response as a single reformulated input text.
