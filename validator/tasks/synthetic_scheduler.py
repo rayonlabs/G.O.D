@@ -51,6 +51,8 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
     """Get datasets for a specific size bin."""
     while True:
         params = {"min_rows": min_rows, "max_rows": max_rows, "dpo_suitable": dpo}
+        logger.info('GETTING DATASETS FOR BINS')
+        logger.info(params)
         try:
             response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair, params)
             if not isinstance(response, list):
@@ -87,7 +89,9 @@ async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Datase
 async def _get_dpo_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
+    logger.info("I AM GETTIG THE DPO DATASETS")
     bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair, True) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
+    logger.info(bin_generators)
 
     while True:
         for generator in bin_generators:
