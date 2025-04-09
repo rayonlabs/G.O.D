@@ -51,8 +51,6 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
     """Get datasets for a specific size bin."""
     while True:
         params = {"min_rows": min_rows, "max_rows": max_rows, "dpo": dpo}
-        logger.info('GETTING DATASETS FOR BINS')
-        logger.info(params)
         try:
             response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair, params)
             if not isinstance(response, list):
