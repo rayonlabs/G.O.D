@@ -61,6 +61,7 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
             random.shuffle(datasets)
 
             for dataset in datasets:
+                logger.info(dataset)
                 yield dataset
 
         except Exception as e:
