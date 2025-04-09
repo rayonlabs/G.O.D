@@ -331,6 +331,7 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
     try:
+        log_memory_stats()
         if check_for_lora(repo):
             logger.info("LoRA adapter detected. Loading as with Peft")
             base_model = load_model(original_model, is_base_model=True)
