@@ -111,7 +111,9 @@ async def generate_paraphrased_version(row: dict, prompts: Prompts, keypair: Key
     return paraphrased_data
 
 async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Keypair) -> DpoDatasetColumnsResponse:
+    logger.info('in generate dpo reformulated')
     messages = create_messages_for_input_reformulation(prompt, prompts)
+    logger.info(messages)
     payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
     logger.info(f"Here is the payload {payload}")
     new_prompt = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
@@ -132,6 +134,7 @@ async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Key
 
 async def process_row(row, prompts, keypair, is_dpo=False):
     if is_dpo:
+        logger.info('REFORMAULATION')
         return await generate_dpo_reformulation(row, prompts, keypair)
     json_synthetic_data_point = await generate_paraphrased_version(row, prompts, keypair)
 
