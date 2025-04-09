@@ -128,7 +128,7 @@ async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Key
 
 async def process_row(row, prompts, keypair, is_dpo=False):
     if is_dpo:
-        return generate_dpo_reformulation(row, prompts, keypair)
+        return await generate_dpo_reformulation(row, prompts, keypair)
     json_synthetic_data_point = await generate_paraphrased_version(row, prompts, keypair)
 
     if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
