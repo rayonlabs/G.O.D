@@ -291,7 +291,7 @@ async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Key
     if isinstance(task, InstructTextRawTask):
         columns_to_sample = pick_columns_to_sample(task)
     else:
-        columns_to_sample = [DpoRawTask.field_prompt, DpoRawTask.field_chosen, DpoRawTask.field_rejected]
+        columns_to_sample = [task.field_prompt, task.field_chosen, task.field_rejected]
     logger.info(f"Preparing {dataset_name}")
     dataset_dict = await train_test_split(dataset_name, task.file_format)
 
