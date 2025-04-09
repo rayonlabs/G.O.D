@@ -169,7 +169,7 @@ async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Key
                     generic_errors += 1
                 consecutive_errors += 1
                 if consecutive_errors >= max_consecutive_errors:
-                    logger.error("Maximum consecutive errors reached when generating the augmented dataset.")
+                    logger.error(f"Maximum consecutive errors reached when generating the augmented dataset. Here is one result {result}")
                     return None
             else:
                 consecutive_errors = 0  # Reset on success
