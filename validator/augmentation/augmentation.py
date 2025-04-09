@@ -89,11 +89,11 @@ def create_messages_for_input_output_reformulation(row: dict, prompts: Prompts) 
 
 def create_messages_for_input_reformulation(ds_prompt: str, prompts: Prompts) -> list[Message]:
     messages = []
-    system_message = Message(role=Role.SYSTEM, content=prompts.input_refomulation_sys)
+    system_message = Message(role=Role.SYSTEM, content=prompts.input_reformulation_sys)
     messages.append(system_message)
     user_message = Message(
         role=Role.USER,
-        content=prompts.input_refomulation_user.format(prompt=ds_prompt))
+        content=prompts.input_reformulation_user.format(prompt=ds_prompt))
     messages.append(user_message)
     return messages
 
