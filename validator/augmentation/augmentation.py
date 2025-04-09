@@ -126,7 +126,9 @@ async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Key
     return DpoDatasetColumnsResponse(field_prompt = new_prompt, field_chosen=strong_model_result, field_rejected=weak_model_result)
 
 
-async def process_row(row, prompts, keypair):
+async def process_row(row, prompts, keypair, is_dpo=False):
+    if is_dpo:
+        return generate_dpo_reformulation(row, prompts, keypair)
     json_synthetic_data_point = await generate_paraphrased_version(row, prompts, keypair)
 
     if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
@@ -140,7 +142,7 @@ async def process_row(row, prompts, keypair):
         raise ValueError(error_message)
 
 
-async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Keypair) -> List[dict]:
+async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Keypair, is_dpo: bool = False) -> List[dict]:
     prompts = load_prompts()
     logger.info(f"Creating an augmented dataset with {len(sampled_data)} samples...")
     synthetic_dataset = []
