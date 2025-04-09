@@ -50,7 +50,7 @@ async def _get_image_models(keypair: Keypair) -> AsyncGenerator[str, None]:
 async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, dpo: bool) -> AsyncGenerator[Dataset, None]:
     """Get datasets for a specific size bin."""
     while True:
-        params = {"min_rows": min_rows, "max_rows": max_rows, "dpo_suitable": dpo}
+        params = {"min_rows": min_rows, "max_rows": max_rows, "dpo": dpo}
         logger.info('GETTING DATASETS FOR BINS')
         logger.info(params)
         try:
