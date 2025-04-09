@@ -90,11 +90,11 @@ async def _get_dpo_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
 
     logger.info("I AM GETTIG THE DPO DATASETS")
     bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair, True) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
-    logger.info(bin_generators)
 
     while True:
         for generator in bin_generators:
             try:
+                logger.info(f"We have picked {generator}")
                 dataset = await anext(generator)
                 yield dataset
             except StopAsyncIteration:
@@ -142,8 +142,8 @@ async def create_synthetic_dpo_task(
     model_id = await anext(models)
     logger.info(f"We picked {model_id}")
     dataset = await anext(datasets)
+    logger.info(f"And the dataset is  {dataset}")
     number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
-    logger.info(dataset)
     assert dataset.dpo_rejected_column, "we should have a reject column"
     assert dataset.dpo_accepted_column, "we should have a accepted column"
     assert dataset.dpo_prompt_column, "we should have a prompt column"
