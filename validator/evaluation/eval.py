@@ -228,6 +228,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
             token=os.environ.get("HUGGINGFACE_TOKEN"),
             device_map="auto",
             cache_dir=cache_dir,
+            torch_dtype=torch.bfloat16,
         )
     except RuntimeError as e:
         error_msg = str(e)
@@ -240,7 +241,8 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
                     token=os.environ.get("HUGGINGFACE_TOKEN"),
                     ignore_mismatched_sizes=True,
                     device_map="auto",
-                    cache_dir=cache_dir
+                    cache_dir=cache_dir,
+                    torch_dtype=torch.bfloat16,
                 )
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise
@@ -267,7 +269,8 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
             repo,
             is_trainable=False,
             device_map="auto",
-            cache_dir=cache_dir
+            cache_dir=cache_dir,
+            torch_dtype=torch.bfloat16,
         )
     except RuntimeError as e:
         error_msg = str(e)
@@ -281,7 +284,8 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
                     is_trainable=False,
                     ignore_mismatched_sizes=True,
                     device_map="auto",
-                    cache_dir=cache_dir
+                    cache_dir=cache_dir,
+                    torch_dtype=torch.bfloat16,
                 )
 
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
