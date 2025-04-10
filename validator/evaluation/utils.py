@@ -55,7 +55,6 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     )
     return architecture_same and architecture_classes_match
 
-
 def check_for_lora(model_id: str) -> bool:
     """
     Check if a Hugging Face model has LoRA adapters by looking for adapter_config.json.
@@ -71,6 +70,7 @@ def check_for_lora(model_id: str) -> bool:
     except Exception as e:
         logger.error(f"Error checking for LoRA adapters: {e}")
         return False
+
 
 
 def get_default_dataset_config(dataset_name: str) -> str | None:
