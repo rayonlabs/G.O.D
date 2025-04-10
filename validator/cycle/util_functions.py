@@ -2,6 +2,7 @@ import asyncio
 
 from datasets import get_dataset_infos
 from fiber import Keypair
+from huggingface_hub import HfApi
 
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
@@ -17,6 +18,7 @@ from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
+hf_api = HfApi()
 
 
 async def get_total_text_dataset_size(task: TextRawTask) -> int:
@@ -29,6 +31,15 @@ async def get_total_text_dataset_size(task: TextRawTask) -> int:
         dataset_infos = await loop.run_in_executor(None, get_dataset_infos, task.ds)
         size = sum(info.dataset_size for info in dataset_infos.values() if info.dataset_size)
     return int(size)
+
+
+def get_model_num_params(model_id: str) -> int:
+    try:
+        model_info = hf_api.model_info(model_id)
+        size = model_info.safetensors.total
+        return size
+    except Exception as e:
+        logger.error(f"Error getting model size for {model_id}: {e}")
 
 
 async def get_total_image_dataset_size(task: ImageRawTask) -> int:

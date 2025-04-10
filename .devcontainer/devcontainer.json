@@ -19,5 +19,7 @@
                 "eamodio.gitlens"
             ]
         }
-    }
+    },
+    "overrideCommand": true,
+    "postCreateCommand": "sleep infinity"
 }

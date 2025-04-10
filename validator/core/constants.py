@@ -127,6 +127,7 @@ TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
+MODEL_SIZE_REQUIRING_2_GPUS = 35*10**9  # 35B params
 
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
