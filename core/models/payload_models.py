@@ -9,10 +9,10 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
-from core.models.utility_models import CustomDatasetType
-from core.models.utility_models import DatasetType
+from core.models.utility_models import DPODatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageTextPair
+from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
@@ -45,7 +45,7 @@ class TrainRequestText(TrainRequest):
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    dataset_type: DatasetType | CustomDatasetType
+    dataset_type: InstructDatasetType | DPODatasetType
     file_format: FileFormat
 
 
@@ -107,8 +107,13 @@ class MinerTaskResponse(BaseModel):
     message: str
     accepted: bool
 
+class DpoDatasetColumnsResponse(BaseModel):
+    field_prompt: str
+    field_chosen: str | None = None
+    field_rejected: str | None = None
 
-class DatasetColumnsResponse(BaseModel):
+
+class InstructDatasetColumnsResponse(BaseModel):
     field_instruction: str
     field_input: str | None = None
     field_output: str | None = None
@@ -120,7 +125,7 @@ class NewTaskRequest(BaseModel):
     result_model_name: str | None = Field(None, description="The name to give to a model that is created by this task")
 
 
-class NewTaskRequestText(NewTaskRequest):
+class NewTaskRequestInstructText(NewTaskRequest):
     field_instruction: str = Field(..., description="The column name for the instruction", examples=["instruction"])
     field_input: str | None = Field(None, description="The column name for the input", examples=["input"])
     field_output: str | None = Field(None, description="The column name for the output", examples=["output"])
@@ -146,6 +151,36 @@ class NewTaskRequestText(NewTaskRequest):
         return values
 
 
+class NewTaskRequestDPO(NewTaskRequest):
+    field_prompt: str = Field(..., description="The column name for the prompt", examples=["prompt"])
+    field_system: str | None = Field(None, description="The column name for the system (prompt)", examples=["system"])
+    field_chosen: str = Field(..., description="The column name for the chosen response", examples=["chosen"])
+    field_rejected: str = Field(..., description="The column name for the rejected response", examples=["rejected"])
+
+    prompt_format: str | None = Field(None, description="The format of the prompt", examples=["{system} {prompt}"])
+    chosen_format: str | None = Field(None, description="The format of the chosen response", examples=["{chosen} <|endoftext|>"])
+    rejected_format: str | None = Field(
+        None, description="The format of the rejected response", examples=["{rejected} <|endoftext|>"]
+    )
+
+    ds_repo: str = Field(..., description="The repository for the dataset", examples=["Intel/orca_dpo_pairs"])
+    file_format: FileFormat = Field(
+        FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
+    model_repo: str = Field(..., description="The repository for the model", examples=["Qwen/Qwen2.5-Coder-32B-Instruct"])
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
+    @model_validator(mode="before")
+    def convert_empty_strings(cls, values: dict) -> dict:
+        string_fields = ["field_prompt", "field_system", "field_chosen", "field_rejected"]
+        for field in string_fields:
+            if field in values and isinstance(values[field], str):
+                values[field] = values[field].strip() or None
+        return values
+
+
 class NewTaskRequestImage(NewTaskRequest):
     model_repo: str = Field(..., description="The model repository to use")
     image_text_pairs: list[ImageTextPair] = Field(
@@ -159,7 +194,7 @@ class NewTaskRequestImage(NewTaskRequest):
     )
 
 
-class NewTaskWithFixedDatasetsRequest(NewTaskRequestText):
+class NewTaskWithFixedDatasetsRequest(NewTaskRequestInstructText):
     ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
     training_data: str = Field(..., description="The prepared training dataset")
     synthetic_data: str = Field(..., description="The prepared synthetic dataset")
@@ -197,8 +232,8 @@ class TaskDetails(BaseModel):
     result_model_name: str | None = None
 
 
-class TextTaskDetails(TaskDetails):
-    task_type: TaskType = TaskType.TEXTTASK
+class InstructTextTaskDetails(TaskDetails):
+    task_type: TaskType = TaskType.INSTRUCTTEXTTASK
     base_model_repository: str
     ds_repo: str
 
@@ -220,6 +255,26 @@ class TextTaskDetails(TaskDetails):
     model_config = ConfigDict(protected_namespaces=())
 
 
+class DpoTaskDetails(TaskDetails):
+    task_type: TaskType = TaskType.DPOTASK
+    base_model_repository: str
+    ds_repo: str
+
+    field_prompt: str = Field(..., description="The column name for the prompt", examples=["prompt"])
+    field_system: str | None = Field(None, description="The column name for the `system (prompt)`", examples=["system"])
+    field_chosen: str = Field(..., description="The column name for the chosen response", examples=["chosen"])
+    field_rejected: str = Field(..., description="The column name for the rejected response", examples=["rejected"])
+
+    prompt_format: str | None = Field(None, description="The format of the prompt", examples=["{system} {prompt}"])
+    chosen_format: str | None = Field(None, description="The format of the chosen response", examples=["{chosen} <|endoftext|>"])
+    rejected_format: str | None = Field(
+        None, description="The format of the rejected response", examples=["{rejected} <|endoftext|>"]
+    )
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
+
 class ImageTaskDetails(TaskDetails):
     task_type: TaskType = TaskType.IMAGETASK
     image_text_pairs: list[ImageTextPair]
@@ -235,5 +290,3 @@ class TaskListResponse(BaseModel):
 class LeaderboardRow(BaseModel):
     hotkey: str
     stats: AllNodeStats
-
-

@@ -6,11 +6,14 @@ from huggingface_hub import HfApi
 
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
-from core.models.utility_models import CustomDatasetType
+from core.models.utility_models import DPODatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
+from validator.core.models import DpoRawTask
 from validator.core.models import ImageRawTask
-from validator.core.models import TextRawTask
+from validator.core.models import InstructTextRawTask
 from validator.tasks.task_prep import prepare_image_task
 from validator.tasks.task_prep import prepare_text_task
 from validator.utils.logging import get_logger
@@ -21,7 +24,7 @@ logger = get_logger(__name__)
 hf_api = HfApi()
 
 
-async def get_total_text_dataset_size(task: TextRawTask) -> int:
+async def get_total_text_dataset_size(task: InstructTextRawTask | DpoRawTask) -> int:
     if task.file_format == FileFormat.S3:
         bucket_name, object_name = async_minio_client.parse_s3_url(task.ds)
         stats = await async_minio_client.get_stats(bucket_name, object_name)
@@ -59,13 +62,10 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawT
     return task
 
 
-async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask:
-    columns_to_sample = [
-        i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
-    ]
-    test_data, synth_data, train_data = await prepare_text_task(
-        dataset_name=task.ds, file_format=task.file_format, columns_to_sample=columns_to_sample, keypair=keypair
-    )
+async def run_text_task_prep(
+    task: InstructTextRawTask | DpoRawTask, keypair: Keypair
+    ) -> InstructTextRawTask | DpoRawTask:
+    test_data, synth_data, train_data = await prepare_text_task(task, keypair=keypair)
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
     task.synthetic_data = synth_data
@@ -74,15 +74,26 @@ async def run_text_task_prep(task: TextRawTask, keypair: Keypair) -> TextRawTask
     return task
 
 
-def prepare_text_task_request(task: TextRawTask) -> TrainRequestText:
-    dataset_type = CustomDatasetType(
-        field_system=task.field_system,
-        field_input=task.field_input,
-        field_output=task.field_output,
-        field_instruction=task.field_instruction,
-        format=task.format,
-        no_input_format=task.no_input_format,
+def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRequestText:
+    if task.task_type == TaskType.INSTRUCTTEXTTASK:
+        dataset_type = InstructDatasetType(
+            field_system=task.field_system,
+            field_input=task.field_input,
+            field_output=task.field_output,
+            field_instruction=task.field_instruction,
+            format=task.format,
+            no_input_format=task.no_input_format,
     )
+    elif task.task_type == TaskType.DPOTASK:
+        dataset_type = DPODatasetType(
+            field_prompt=task.field_prompt,
+            field_system=task.field_system,
+            field_chosen=task.field_chosen,
+            field_rejected=task.field_rejected,
+            prompt_format=task.prompt_format,
+            chosen_format=task.chosen_format,
+            rejected_format=task.rejected_format,
+        )
 
     dataset = task.training_data if task.training_data else "dataset error"
     task_request_body = TrainRequestText(

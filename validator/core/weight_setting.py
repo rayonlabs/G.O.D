@@ -49,23 +49,23 @@ TIME_PER_BLOCK: int = 500
 
 def get_organic_proportion(task_results: list[TaskResults], task_type: TaskType, days: int) -> float:
     """
-    Calculate the proportion of organic vs non-organic text tasks over a specified time period.
+    Calculate the proportion of organic vs non-organic tasks of a specific type over a specified time period.
 
     Args:
         task_results: List of task results to analyze
         days: Number of days to look back (default 7)
 
     Returns:
-        tuple[float, float]: (organic_proportion, synth_proportion)
+        float: organic_proportion
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
-    text_tasks = [
+    specific_type_tasks = [
         i for i in task_results
         if i.task.created_at > cutoff_date and i.task.task_type == task_type
     ]
 
-    organic_count = sum(1 for task in text_tasks if task.task.is_organic)
-    total_count = len(text_tasks)
+    organic_count = sum(1 for task in specific_type_tasks if task.task.is_organic)
+    total_count = len(specific_type_tasks)
 
     logger.info(f'The total count is {total_count} with organic_count {organic_count}')
     organic_proportion = organic_count / total_count if total_count > 0 else 0.0
@@ -80,32 +80,32 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         logger.info("There were no results to be scored")
         return []
 
-    organic_text_proportion = get_organic_proportion(task_results, TaskType.TEXTTASK, days=7)
-    synth_text_proportion = 1 - organic_text_proportion
+    organic_instruct_text_proportion = get_organic_proportion(task_results, TaskType.INSTRUCTTEXTTASK, days=7)
+    synth_instruct_text_proportion = 1 - organic_instruct_text_proportion
 
     seven_day_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 
-    seven_day_text_tasks_organic = [
+    seven_day_instruct_text_tasks_organic = [
         task for task in task_results
-        if task.task.task_type == TaskType.TEXTTASK
+        if task.task.task_type == TaskType.INSTRUCTTEXTTASK
         and task.task.is_organic
         and task.task.created_at > seven_day_cutoff
     ]
 
-    seven_day_text_tasks_synth = [
+    seven_day_instruct_text_tasks_synth = [
         task for task in task_results
-        if task.task.task_type == TaskType.TEXTTASK
+        if task.task.task_type == TaskType.INSTRUCTTEXTTASK
         and not task.task.is_organic
         and task.task.created_at > seven_day_cutoff
     ]
 
     seven_day_organic_scores = get_period_scores_from_results(
-        seven_day_text_tasks_organic,
+        seven_day_instruct_text_tasks_organic,
         weight_multiplier=1.0  # Temporary multiplier just for comparison
     )
 
     seven_day_synth_scores = get_period_scores_from_results(
-        seven_day_text_tasks_synth,
+        seven_day_instruct_text_tasks_synth,
         weight_multiplier=1.0  # Temporary multiplier just for comparison
     )
 
@@ -116,11 +116,14 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         if organic_score.hotkey in synth_by_hotkey:
             synth_score = synth_by_hotkey[organic_score.hotkey]
             if organic_score.average_score > (synth_score.average_score + 0.5 * synth_score.std_score):
-                logger.info(f"Node {organic_score.hotkey} has a much higher organic vs synth score in 7-day period - flagging as suspicious")
+                logger.info(
+                    f"Node {organic_score.hotkey} has a much higher organic vs synth score "
+                    "in 7-day period - flagging as suspicious"
+                )
                 suspicious_hotkeys.add(organic_score.hotkey)
 
-    text_tasks_organic = filter_tasks_by_type(task_results, TaskType.TEXTTASK, is_organic=True)
-    text_tasks_synth = filter_tasks_by_type(task_results, TaskType.TEXTTASK, is_organic=False)
+    instruct_text_tasks_organic = filter_tasks_by_type(task_results, TaskType.INSTRUCTTEXTTASK, is_organic=True)
+    instruct_text_tasks_synth = filter_tasks_by_type(task_results, TaskType.INSTRUCTTEXTTASK, is_organic=False)
     image_tasks = filter_tasks_by_type(task_results, TaskType.IMAGETASK)
 
     periods = {
@@ -144,26 +147,26 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         cutoff = period_config["cutoff"]
         weight = period_config["weight"]
 
-        period_text_organic = filter_tasks_by_period(text_tasks_organic, cutoff)
-        period_text_synth = filter_tasks_by_period(text_tasks_synth, cutoff)
+        period_instruct_text_organic = filter_tasks_by_period(instruct_text_tasks_organic, cutoff)
+        period_instruct_text_synth = filter_tasks_by_period(instruct_text_tasks_synth, cutoff)
         period_image = filter_tasks_by_period(image_tasks, cutoff)
 
         # Calculate organic scores
-        text_scores_organic = get_period_scores_from_results(
-            period_text_organic,
-            weight_multiplier=weight * cts.TEXT_TASK_SCORE_WEIGHT * organic_text_proportion
+        instruct_text_scores_organic = get_period_scores_from_results(
+            period_instruct_text_organic,
+            weight_multiplier=weight * cts.INSTRUCT_TEXT_TASK_SCORE_WEIGHT * organic_instruct_text_proportion
         )
 
         # Zero out organic scores for suspicious nodes
-        for organic_score in text_scores_organic:
+        for organic_score in instruct_text_scores_organic:
             if organic_score.hotkey in suspicious_hotkeys:
                 logger.info(f"Setting organic score to zero for suspicious node {organic_score.hotkey} in {period_name} period")
                 organic_score.weight_multiplier = 0.0
 
         # Calculate synthetic and image scores normally
-        text_scores_synth = get_period_scores_from_results(
-            period_text_synth,
-            weight_multiplier=weight * cts.TEXT_TASK_SCORE_WEIGHT * synth_text_proportion
+        instruct_text_scores_synth = get_period_scores_from_results(
+            period_instruct_text_synth,
+            weight_multiplier=weight * cts.INSTRUCT_TEXT_TASK_SCORE_WEIGHT * synth_instruct_text_proportion
         )
 
         image_scores = get_period_scores_from_results(
@@ -171,8 +174,8 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
             weight_multiplier=weight * cts.IMAGE_TASK_SCORE_WEIGHT
         )
 
-        all_period_scores.extend(text_scores_organic)
-        all_period_scores.extend(text_scores_synth)
+        all_period_scores.extend(instruct_text_scores_organic)
+        all_period_scores.extend(instruct_text_scores_synth)
         all_period_scores.extend(image_scores)
 
     return all_period_scores

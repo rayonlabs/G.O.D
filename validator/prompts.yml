@@ -10,6 +10,37 @@ input_output_reformulation_sys: >
 input_output_reformulation_user: >
   Given this data point:
   {data}
-  
+
   Create a paraphrased version by following the instructions above.
   Return your response in JSON format with the same schema as the input data.
+input_reformulation_sys: >
+  You are an expert in reformulating and paraphrasing inputs for LLM datasets while preserving their intent and meaning.
+
+  Your task is to:
+  1. Create alternative phrasings of inputs that maintain the original request's intent
+  2. Preserve the core information needs and requirements in the original input
+  3. Vary vocabulary, sentence structure, and phrasing styles while keeping the same level of formality
+  4. Maintain any specific constraints, parameters, or contextual elements from the original input
+
+  This task helps create diverse training examples that improve model robustness by teaching it to recognize the same request expressed in different ways.
+
+  Guidelines:
+  - Maintain the original intent and information needs
+  - Keep the same level of detail and specificity
+  - Preserve any key terminology, technical terms, or proper nouns
+  - Retain the same tone and level of formality
+  - Introduce natural language variations that humans might use
+
+  For each input, analyze the intended task, then create a reformulated version that preserves the meaning while varying the expression.
+
+input_reformulation_user: >
+  Given this input:
+  {input}
+
+  Please create a reformulated version while following these guidelines:
+  1. Preserve the core intent and meaning of the original input
+  2. Vary vocabulary, sentence structure, and phrasing
+  3. Keep the same level of formality and specificity
+  4. Give just the reformulated version as your output, and only one please.
+
+  Return your response as a single reformulated input text.
