@@ -66,6 +66,7 @@ TEMP_PATH_FOR_IMAGES = "/tmp/validator/temp_images"
 SUPPORTED_IMAGE_FILE_EXTENSIONS = (".png", ".jpg", ".jpeg")
 MAX_FILE_SIZE_BYTES = 2147483646  # pyarrow max json load size
 MINIMUM_DATASET_ROWS = 2000  # Minimum number of rows required in a dataset
+EXAMPLE_PROMPTS_PATH = "validator/tasks/example_prompts.json"
 
 # synth stuff
 NUM_SYNTH_RETRIES = 3
@@ -125,6 +126,7 @@ TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
+MODEL_SIZE_REQUIRING_2_GPUS = 35*10**9  # 35B params
 
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
@@ -154,6 +156,7 @@ PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.3
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE = 1 - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
 
 PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = 0.5  # person synth chance is 1 minus this
+PROBABILITY_STYLE_COMBINATION = 0.5
 PERSON_SYNTH_DS_PREFIX = "person"
 PERSON_SYNTH_DOCKER_IMAGE = "diagonalge/person_synth:latest"
 PERSON_SYNTH_CONTAINER_SAVE_PATH = "/app/avatars/"

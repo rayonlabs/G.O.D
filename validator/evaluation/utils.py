@@ -5,6 +5,7 @@ import tempfile
 from io import BytesIO
 
 from datasets import get_dataset_config_names
+from huggingface_hub import HfApi
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from transformers import AutoConfig
@@ -14,6 +15,7 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+hf_api = HfApi()
 
 
 def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalLM) -> bool:
@@ -21,28 +23,18 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     finetuned_config = finetuned_model.config
 
     try:
-        if hasattr(finetuned_model, "name_or_path"):
-            finetuned_model_path = finetuned_model.name_or_path
-        else:
-            finetuned_model_path = finetuned_model.config._name_or_path
-
-        adapter_config = os.path.join(finetuned_model_path, "adapter_config.json")
-        if os.path.exists(adapter_config):
-            has_lora_modules = True
-            logger.info(f"Adapter config found: {adapter_config}")
-        else:
-            logger.info(f"Adapter config not found at {adapter_config}")
-            has_lora_modules = False
-        base_model_match = finetuned_config._name_or_path == original_repo
+        architecture_classes_match = finetuned_config.architectures == original_config.architectures
     except Exception as e:
-        logger.debug(f"There is an issue with checking the finetune path {e}")
-        base_model_match = True
-        has_lora_modules = False
+        logger.debug(f"There is an issue with checking the architecture classes {e}")
+        architecture_classes_match = False
 
     attrs_to_compare = [
         "architectures",
         "hidden_size",
         "n_layer",
+        "intermediate_size",
+        "head_dim",
+        "hidden_act",
         "model_type",
         "num_hidden_layers",
         "num_attention_heads",
@@ -59,9 +51,26 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
                 break
 
     logger.info(
-        f"Architecture same: {architecture_same}, Base model match: {base_model_match}, Has lora modules: {has_lora_modules}"
+        f"Architecture same: {architecture_same}, Architecture classes match: {architecture_classes_match}"
     )
-    return architecture_same and (base_model_match or has_lora_modules)
+    return architecture_same and architecture_classes_match
+
+
+def check_for_lora(model_id: str) -> bool:
+    """
+    Check if a Hugging Face model has LoRA adapters by looking for adapter_config.json.
+
+    Args:
+        model_id (str): The Hugging Face model ID (e.g., 'username/model-name') or path
+
+    Returns:
+        bool: True if it's a LoRA adapter, False otherwise
+    """
+    try:
+        return 'adapter_config.json' in hf_api.list_repo_files(model_id)
+    except Exception as e:
+        logger.error(f"Error checking for LoRA adapters: {e}")
+        return False
 
 
 def get_default_dataset_config(dataset_name: str) -> str | None:
@@ -80,19 +89,19 @@ def get_default_dataset_config(dataset_name: str) -> str | None:
 
 def adjust_image_size(image: Image.Image) -> Image.Image:
     width, height = image.size
-    
+
     if width > height:
         new_width = 1024
         new_height = int((height / width) * 1024)
     else:
         new_height = 1024
         new_width = int((width / height) * 1024)
-    
+
     image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
+
     new_width = (new_width // 8) * 8
     new_height = (new_height // 8) * 8
-    
+
     width, height = image.size
     crop_width = min(width, new_width)
     crop_height = min(height, new_height)
@@ -101,7 +110,7 @@ def adjust_image_size(image: Image.Image) -> Image.Image:
     right = left + crop_width
     bottom = top + crop_height
     image = image.crop((left, top, right, bottom))
-    
+
     return image
 
 

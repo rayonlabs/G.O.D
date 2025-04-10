@@ -110,6 +110,8 @@ IMAGE_STYLES = [
     "Fantasy Realism",
 ]
 
+with open(cst.EXAMPLE_PROMPTS_PATH, 'r') as f:
+    FULL_PROMPTS = json.load(f)
 
 def create_image_style_compatibility_messages(first_style: str, second_style: str) -> List[Message]:
     system_content = """You are an expert in spotting incompatible artistic styles for image generation.
@@ -126,39 +128,70 @@ Example Output:
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
 
 
-def create_diffusion_messages(first_style: str, second_style: str, num_prompts: int) -> List[Message]:
-    system_content = """You are an expert in creating diverse and descriptive prompts for image generation models.
-Your task is to generate prompts that strongly embody a combination of two artistic styles.
-Each prompt should be detailed and consistent with both of the given styles. 
-You will return the prompts in a JSON format with no additional text.
-
-Example Output:
-{
-  "prompts": [
-    "A pixel art scene of a medieval castle with knights guarding the entrance, surrounded by a moat",
-    "A depiction of a bustling futuristic city with flying cars zooming past neon-lit skyscrapers - pixel art style"
-  ]
-}"""
+def create_combined_diffusion_messages(first_style: str, second_style: str, num_prompts: int) -> List[Message]:
+    system_content = f"""You are an expert in creating diverse and descriptive prompts for image generation models.
+    Your task is to generate prompts that strongly embody a combination of two artistic styles.
+    Each prompt should be detailed and consistent with both of the given styles. 
+    You will return the prompts in a JSON format with no additional text.
+    """
 
     user_content = f"""Generate {num_prompts} prompts in {first_style} and {second_style} style.
 
-Requirements:
-- Each prompt must clearly communicate the {first_style} and {second_style}'s distinctive visual characteristics
-- Include specific visual elements that define this style (textures, colors, techniques)
-- You MUST mention both of the chosen styles in the prompt
-- Vary subject matter while maintaining style consistency
-- Get super creative and do not repeat similar prompts!
-- The generated images should have a coherent style
-- Return JSON only"""
+    Requirements:
+    - Each prompt must clearly communicate the {first_style} and {second_style}'s distinctive visual characteristics
+    - Include specific visual elements that define this style (textures, colors, techniques)
+    - You MUST mention both of the chosen styles in the prompt
+    - Vary subject matter while maintaining style consistency
+    - Get super creative and do not repeat similar prompts!
+    - The generated images should have a coherent style
+    - Return JSON only"""
+
+    return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
+
+
+def create_single_style_diffusion_messages(style: str, num_prompts: int) -> List[Message]:
+    prompt_examples = ",\n    ".join([f'"{prompt}"' for prompt in random.sample(FULL_PROMPTS[style], 5)])
+    
+    system_content = f"""You are an expert in creating diverse and descriptive prompts for image generation models.
+    Your task is to generate prompts that strongly embody a combination of an artistic style.
+    Each prompt should be detailed and consistent with the given style. 
+    You will return the prompts in a JSON format with no additional text.
+
+    Here are some examples of prompts in the {style} style, you need to follow the same format and generate more in the same style:
+    {{
+    "prompts": [
+        {prompt_examples}
+    ]
+    }}"""
+
+    user_content = f"""Generate {num_prompts} prompts in {style} style.
+
+    Requirements:
+    - Each prompt must clearly communicate the {style}'s distinctive visual characteristics
+    - Include specific visual elements that define this style (textures, colors, techniques)
+    - You MUST mention the style in the prompt
+    - Vary subject matter while maintaining style consistency
+    - Get super creative and do not repeat similar prompts!
+    - The generated images should have a coherent style
+    - Return JSON only"""
 
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
 
 
 @retry_with_backoff
-async def generate_diffusion_prompts(first_style: str, second_style: str, keypair: Keypair, num_prompts: int) -> List[str]:
-    messages = create_diffusion_messages(first_style, second_style, num_prompts)
+async def generate_diffusion_prompts(first_style: str, second_style: str, keypair: Keypair, num_prompts: int, combined: bool) -> List[str]:
+    if combined:
+        messages = create_combined_diffusion_messages(first_style, second_style, num_prompts)
+        style_description = f"{first_style} and {second_style}"
+    else:
+        messages = create_single_style_diffusion_messages(first_style, num_prompts)
+        style_description = first_style
+
     payload = convert_to_nineteen_payload(
-        messages, cst.IMAGE_PROMPT_GEN_MODEL, cst.IMAGE_PROMPT_GEN_MODEL_TEMPERATURE, cst.IMAGE_PROMPT_GEN_MODEL_MAX_TOKENS
+        messages,
+        cst.IMAGE_PROMPT_GEN_MODEL,
+        cst.IMAGE_PROMPT_GEN_MODEL_TEMPERATURE,
+        cst.IMAGE_PROMPT_GEN_MODEL_MAX_TOKENS
     )
 
     result = await post_to_nineteen_chat_with_reasoning(payload, keypair, cst.END_OF_REASONING_TAG)
@@ -167,7 +200,7 @@ async def generate_diffusion_prompts(first_style: str, second_style: str, keypai
         if isinstance(result, str):
             json_match = re.search(r"\{[\s\S]*\}", result)
             if json_match:
-                logger.info(f"Full result from prompt generation for {first_style} and {second_style}: {result}")
+                logger.info(f"Full result from prompt generation for {style_description}: {result}")
                 result = json_match.group(0)
             else:
                 raise ValueError("Failed to generate a valid json")
@@ -240,7 +273,9 @@ async def pick_style_combination(config: Config) -> tuple[str, str]:
 async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[list[ImageTextPair], str]:
     first_style, second_style = await pick_style_combination(config)
     try:
-        prompts = await generate_diffusion_prompts(first_style, second_style, config.keypair, num_prompts)
+        use_combined_styles = random.random() < cst.PROBABILITY_STYLE_COMBINATION
+        ds_prefix = f"{first_style}_and_{second_style}" if use_combined_styles else first_style
+        prompts = await generate_diffusion_prompts(first_style, second_style, config.keypair, num_prompts, use_combined_styles)
     except Exception as e:
         logger.error(f"Failed to generate prompts for {first_style} and {second_style}: {e}")
         raise e
@@ -262,9 +297,9 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
 
         image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
 
-    return image_text_pairs, f"{first_style}_and_{second_style}"
+    return image_text_pairs, ds_prefix
 
-
+  
 async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
     client = docker.from_env()
     image_text_pairs = []
@@ -277,6 +312,7 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
             device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=["0"])],
             detach=True,
         )
+
         result = await asyncio.to_thread(container.wait)
         images_dir = Path(tmp_dir_path)
         for file in images_dir.iterdir():
@@ -309,6 +345,8 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str
         image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
     else:
         image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+
+
 
     task = ImageRawTask(
         model_id=model_id,
