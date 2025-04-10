@@ -17,6 +17,7 @@ from validator.core.models import TextRawTask
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
 from validator.tasks.diffusion_synth import create_synthetic_image_task
+from validator.utils import task_metrics
 from validator.utils.call_endpoint import call_content_service
 from validator.utils.logging import get_logger
 
@@ -118,32 +119,48 @@ def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
 async def create_synthetic_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
-    datasets: AsyncGenerator[str, None],
+    datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
     dataset = await anext(datasets)
-    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
-    columns = await _get_columns_for_dataset(dataset.dataset_id, config.keypair)
-    current_time = datetime.utcnow()
-    end_timestamp = current_time + timedelta(hours=number_of_hours)
 
-    task = TextRawTask(
-        model_id=model_id,
-        ds=dataset.dataset_id,
-        field_system=None,
-        field_instruction=columns.field_instruction,
-        field_input=columns.field_input,
-        field_output=columns.field_output,
-        status=TaskStatus.PENDING,
-        is_organic=False,
-        created_at=current_time,
-        termination_at=end_timestamp,
-        hours_to_complete=number_of_hours,
-        account_id=cst.NULL_ACCOUNT_ID,
-    )
-    logger.info(f"New task created and added to the queue {task}")
+    task_metrics.record_text_synth_task_started(model_id, dataset.dataset_id, dataset.num_rows)
 
-    task = await add_task(task, config.psql_db)
+    labels = {
+        "model_id": model_id,
+        "dataset_id": dataset.dataset_id,
+        "num_rows": dataset.num_rows,
+    }
+
+    with task_metrics.measure_duration(task_metrics.text_synth_task_creation_duration, labels=labels):
+        number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
+        columns = await _get_columns_for_dataset(dataset.dataset_id, config.keypair)
+        current_time = datetime.utcnow()
+        end_timestamp = current_time + timedelta(hours=number_of_hours)
+
+        task = TextRawTask(
+            model_id=model_id,
+            ds=dataset.dataset_id,
+            field_system=None,
+            field_instruction=columns.field_instruction,
+            field_input=columns.field_input,
+            field_output=columns.field_output,
+            status=TaskStatus.PENDING,
+            is_organic=False,
+            created_at=current_time,
+            termination_at=end_timestamp,
+            hours_to_complete=number_of_hours,
+            account_id=cst.NULL_ACCOUNT_ID,
+        )
+        logger.info(f"New task created and added to the queue {task}")
+
+        task = await add_task(task, config.psql_db)
+
+        task_metrics.record_text_synth_task_finished(
+            model_id=model_id,
+            dataset_id=dataset.dataset_id,
+            num_rows=dataset.num_rows,
+        )
 
     return task
 

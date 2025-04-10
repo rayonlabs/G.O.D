@@ -1,7 +1,5 @@
 import math
 import os
-import re
-import time
 from datetime import datetime
 
 import numpy as np
@@ -34,13 +32,12 @@ from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
+from validator.utils import task_metrics
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
 from validator.utils.logging import LogContext
-from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
-from validator.utils.task_metrics import record_task_stage_duration
 
 
 logger = get_logger(__name__)
@@ -48,20 +45,8 @@ logger = get_logger(__name__)
 
 def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     """Calculate work score for a task based on hours and model size."""
-    assert task.hours_to_complete > 0, "Hours to complete must be positive"
-    assert task.model_id, "Model ID must be present"
-
-    hours = task.hours_to_complete
-
-    if getattr(task, "model_params_count", 0) > 0:
-        model_size_billions = min(14, max(1, task.model_params_count // 1_000_000_000))
-    else:
-        # Fallback to parsing from model id
-        model = task.model_id
-        model_size = re.search(r"(\d+)(?=[bB])", model)
-        model_size_billions = min(8, int(model_size.group(1)) if model_size else 1)
-
-    if hours * model_size_billions == 0:
+    assert task.hours_to_complete > 0, "Hours to complete must be greater than 0"
+    if task.hours_to_complete * task.model_size_billions == 0:
         logger.error(
             f"Hours to complete: {hours} and model size in billions: {model_size_billions} for task {task.task_id} "
             f"and model id: {task.model_id}\nReturning 1 regardless as a failsafe, but please look into this"
@@ -720,8 +705,6 @@ async def process_miners_pool(
 
 
 async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int], config: Config) -> TextRawTask | ImageRawTask:
-    start_time = time.time()
-
     assert task.task_id is not None, "Task ID must be present"
     assert task.test_data is not None, "Test data must be present"
 
@@ -732,42 +715,47 @@ async def evaluate_and_score(task: TextRawTask | ImageRawTask, gpu_ids: list[int
         dataset_type = None
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
-    task_results = await process_miners_pool(miner_pool, task, config, gpu_ids, dataset_type)
 
-    logger.info("Checking for duplicates ...")
-    keep_submission = await handle_duplicate_submissions(task_results)
-    task_results = zero_duplicate_scores(task_results, keep_submission)
+    with task_metrics.measure_duration(
+        task_metrics.evaluation_duration,
+        labels={
+            "task_id": str(task.task_id),
+            "num_miners": len(miner_pool),
+            "model_id": task.model_id,
+            "dataset_id": task.dataset_id,
+            "task_type": task.task_type.value,
+        },
+    ):
+        task_results = await process_miners_pool(miner_pool, task, config, gpu_ids, dataset_type)
 
-    logger.info("Calculating final scores...")
-    task_results = calculate_miner_ranking_and_scores(task_results)
-    await _update_scores(task, task_results, config.psql_db)
-    all_scores_zero = all(result.score == 0.0 for result in task_results)
+        logger.info("Checking for duplicates ...")
+        keep_submission = await handle_duplicate_submissions(task_results)
+        task_results = zero_duplicate_scores(task_results, keep_submission)
 
-    if cts.DELETE_S3_AFTER_COMPLETE:
-        if task.task_type == TaskType.TEXTTASK:
-            files_to_delete = [task.training_data, task.test_data, task.synthetic_data]
-        elif task.task_type == TaskType.IMAGETASK:
-            files_to_delete = [task.training_data, task.test_data]
+        logger.info("Calculating final scores...")
+        task_results = calculate_miner_ranking_and_scores(task_results)
+        await _update_scores(task, task_results, config.psql_db)
+        all_scores_zero = all(result.score == 0.0 for result in task_results)
+
+        if cts.DELETE_S3_AFTER_COMPLETE:
+            if task.task_type == TaskType.TEXTTASK:
+                files_to_delete = [task.training_data, task.test_data, task.synthetic_data]
+            elif task.task_type == TaskType.IMAGETASK:
+                files_to_delete = [task.training_data, task.test_data]
+            else:
+                raise ValueError(f"Unknown task type: {task.task_type}")
+
+        if all_scores_zero:
+            if task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS - 1:
+                task.status = TaskStatus.PREEVALUATION
+                logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")
+            else:
+                task.status = TaskStatus.FAILURE
+                logger.info(f"Task {task.task_id} marked as failure")
         else:
-            raise ValueError(f"Unknown task type: {task.task_type}")
+            task.status = TaskStatus.SUCCESS
+            logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
 
-    if all_scores_zero:
-        if task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS - 1:
-            task.status = TaskStatus.PREEVALUATION
-            add_context_tag("status", task.status.value)
-            logger.info(f"All scores are zero for task {task.task_id}, setting status to PREEVALUATION to re-evaluate")
-        else:
-            task.status = TaskStatus.FAILURE
-            add_context_tag("status", task.status.value)
-            logger.info(f"Task {task.task_id} marked as failure")
-            await _clear_up_s3(files_to_delete)
-    else:
-        await _clear_up_s3(files_to_delete)
-        task.status = TaskStatus.SUCCESS
-        add_context_tag("status", task.status.value)
-        logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
-    task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
+        task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
 
-    if task.status == TaskStatus.SUCCESS:
-        record_task_stage_duration(str(task.task_id), "evaluation", time.time() - start_time)
-    return task
+        return task

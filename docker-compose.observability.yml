@@ -70,6 +70,8 @@ services:
       - --storage.tsdb.retention.time=7d
       - --web.console.libraries=/usr/share/prometheus/console_libraries
       - --web.console.templates=/usr/share/prometheus/console
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - prometheus:/prometheus
       - ./config/prometheus-config.yaml:/etc/prometheus/prometheus.yml

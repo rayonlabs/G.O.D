@@ -26,6 +26,7 @@ from validator.core.models import ImageRawTask
 from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
 from validator.tasks.task_prep import upload_file_to_minio
+from validator.utils import task_metrics
 from validator.utils.call_endpoint import post_to_nineteen_image
 from validator.utils.call_endpoint import retry_with_backoff
 from validator.utils.llm import convert_to_nineteen_payload
@@ -264,7 +265,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
 
     return image_text_pairs, f"{first_style}_and_{second_style}"
 
-  
+
 async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
     client = docker.from_env()
     image_text_pairs = []
@@ -306,25 +307,41 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str
     num_prompts = random.randint(cst.MIN_IMAGE_SYNTH_PAIRS, cst.MAX_IMAGE_SYNTH_PAIRS)
     model_id = await anext(models)
     Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
-    if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE:
-        image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
-    else:
-        image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+    synth_type = "style" if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE else "person"
 
+    task_metrics.record_image_synth_task_started(model_id=model_id, type=synth_type, num_pairs=num_prompts)
 
+    labels = {
+        "model_id": model_id,
+        "type": synth_type,
+        "num_pairs": num_prompts,
+    }
 
-    task = ImageRawTask(
-        model_id=model_id,
-        ds=ds_prefix.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
-        image_text_pairs=image_text_pairs,
-        status=TaskStatus.PENDING,
-        is_organic=False,
-        created_at=datetime.utcnow(),
-        termination_at=datetime.utcnow() + timedelta(hours=number_of_hours),
-        hours_to_complete=number_of_hours,
-        account_id=cst.NULL_ACCOUNT_ID,
-    )
+    with task_metrics.measure_duration(task_metrics.image_synth_task_creation_duration, labels=labels):
+        if synth_type == "style":
+            image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
+        else:
+            image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
 
-    logger.info(f"New task created and added to the queue {task}")
-    task = await add_task(task, config.psql_db)
+        task = ImageRawTask(
+            model_id=model_id,
+            ds=ds_prefix.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
+            image_text_pairs=image_text_pairs,
+            status=TaskStatus.PENDING,
+            is_organic=False,
+            created_at=datetime.utcnow(),
+            termination_at=datetime.utcnow() + timedelta(hours=number_of_hours),
+            hours_to_complete=number_of_hours,
+            account_id=cst.NULL_ACCOUNT_ID,
+        )
+
+        logger.info(f"New task created and added to the queue {task}")
+        task = await add_task(task, config.psql_db)
+
+        task_metrics.record_image_synth_task_finished(
+            model_id=model_id,
+            type=synth_type,
+            num_pairs=len(image_text_pairs),
+        )
+
     return task
