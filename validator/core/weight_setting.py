@@ -123,14 +123,12 @@ def detect_suspicious_nodes(task_results: list[TaskResults], task_type: TaskType
 
     return suspicious_hotkeys
 
-
 def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list[PeriodScore]:
     """Process task results into period scores with appropriate filtering and weighting."""
     if not task_results:
         logger.info("There were no results to be scored")
         return []
 
-    # Define task types to process with their weights - should we put this in the enum definiton?
     task_types = [
         {"type": TaskType.INSTRUCTTEXTTASK, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
         {"type": TaskType.DPOTASK, "weight_key": "DPO_TASK_SCORE_WEIGHT"},
@@ -142,21 +140,20 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
 
     for task_config in task_types:
         task_type = task_config["type"]
-        # Calculate organic proportion for this task type
-        organic_proportions[task_type] = get_organic_proportion(task_results, task_type, days=7)
+        task_type_str = str(task_type)
+        organic_proportions[task_type_str] = get_organic_proportion(task_results, task_type, days=7)
 
         # Detect suspicious nodes for this task type
-        suspicious_hotkeys[task_type] = detect_suspicious_nodes(task_results, task_type, days=7)
-        logger.info(f"Found {len(suspicious_hotkeys[task_type])} suspicious nodes for {task_type}")
+        suspicious_hotkeys[task_type_str] = detect_suspicious_nodes(task_results, task_type, days=7)
+        logger.info(f"Found {len(suspicious_hotkeys[task_type_str])} suspicious nodes for {task_type}")
 
-    # Pre-filter tasks by type and organic status
     filtered_tasks = {}
     for task_config in task_types:
         task_type = task_config["type"]
-        filtered_tasks[f"{task_type}_organic"] = filter_tasks_by_type(task_results, task_type, is_organic=True)
-        filtered_tasks[f"{task_type}_synth"] = filter_tasks_by_type(task_results, task_type, is_organic=False)
+        task_type_str = str(task_type)
+        filtered_tasks[f"{task_type_str}_organic"] = filter_tasks_by_type(task_results, task_type, is_organic=True)
+        filtered_tasks[f"{task_type_str}_synth"] = filter_tasks_by_type(task_results, task_type, is_organic=False)
 
-    # Define time periods
     periods = {
         "one_day": {
             "cutoff": datetime.now(timezone.utc) - timedelta(days=1),
@@ -178,17 +175,17 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         cutoff = period_config["cutoff"]
         period_weight = period_config["weight"]
 
-        # Calculate scores for each task type
         for task_config in task_types:
             task_type = task_config["type"]
+            task_type_str = str(task_type)
             weight_key = task_config["weight_key"]
             task_weight = getattr(cts, weight_key)
 
-            organic_proportion = organic_proportions[task_type]
+            organic_proportion = organic_proportions[task_type_str]
             synth_proportion = 1 - organic_proportion
 
             # Process organic tasks
-            period_tasks_organic = filter_tasks_by_period(filtered_tasks[f"{task_type}_organic"], cutoff)
+            period_tasks_organic = filter_tasks_by_period(filtered_tasks[f"{task_type_str}_organic"], cutoff)
             scores_organic = get_period_scores_from_results(
                     period_tasks_organic,
                     weight_multiplier=period_weight * task_weight * organic_proportion
@@ -196,12 +193,12 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
 
             # Zero out organic scores for suspicious nodes for this task type
             for organic_score in scores_organic:
-                    if organic_score.hotkey in suspicious_hotkeys[task_type]:
+                    if organic_score.hotkey in suspicious_hotkeys[task_type_str]:
                         logger.info(f"Setting {task_type} organic score to zero for suspicious node {organic_score.hotkey} in {period_name} period")
                         organic_score.weight_multiplier = 0.0
 
             # Process synthetic tasks
-            period_tasks_synth = filter_tasks_by_period(filtered_tasks[f"{task_type}_synth"], cutoff)
+            period_tasks_synth = filter_tasks_by_period(filtered_tasks[f"{task_type_str}_synth"], cutoff)
             scores_synth = get_period_scores_from_results(
                     period_tasks_synth,
                     weight_multiplier=period_weight * task_weight * synth_proportion
@@ -211,7 +208,6 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
             all_period_scores.extend(scores_synth)
 
     return all_period_scores
-
 
 def filter_tasks_by_period(tasks: list[TaskResults], cutoff_time: datetime) -> list[TaskResults]:
     return [task for task in tasks if task.task.created_at > cutoff_time]
