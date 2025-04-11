@@ -138,6 +138,8 @@ class TaskType(str, Enum):
             return self_str == other_str
         return NotImplemented
 
+    def __hash__(self):
+        return hash(str(self))
 
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")
