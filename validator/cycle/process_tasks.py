@@ -15,9 +15,12 @@ from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
+from validator.core.models import DpoRawTask
 from validator.core.models import ImageRawTask
-from validator.core.models import TextRawTask
+from validator.core.models import InstructTextRawTask
+from validator.core.models import RawTask
 from validator.core.task_config_models import get_task_config
+from validator.cycle.util_functions import get_model_num_params
 from validator.db.database import PSQLDB
 from validator.evaluation.scoring import evaluate_and_score
 from validator.utils.cache_clear import clean_all_hf_datasets_cache
@@ -66,8 +69,9 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
 
     # Now we be calcin position-based weights
     top_node_chance_multiplier = 3  # Top node is 3x more likely than bottom node
-    weights = [top_node_chance_multiplier - i * (top_node_chance_multiplier - 1) / len(sorted_nodes)
-               for i in range(len(sorted_nodes))]
+    weights = [
+        top_node_chance_multiplier - i * (top_node_chance_multiplier - 1) / len(sorted_nodes) for i in range(len(sorted_nodes))
+    ]
 
     shuffled_nodes = []
     nodes_to_shuffle = sorted_nodes.copy()
@@ -82,6 +86,7 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
         weights_copy.pop(index)
 
     return shuffled_nodes
+
 
 async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> MinerTaskResponse:
     endpoint = cst.TASK_OFFER_IMAGE_ENDPOINT if request.task_type == TaskType.IMAGETASK else cst.TASK_OFFER_ENDPOINT
@@ -110,12 +115,25 @@ async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> Mi
 
 
 async def _select_miner_pool_and_add_to_task(
-    task: TextRawTask | ImageRawTask, nodes: list[Node], config: Config
-) -> TextRawTask | ImageRawTask:
+    task: InstructTextRawTask | DpoRawTask | ImageRawTask, nodes: list[Node], config: Config
+) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
     if len(nodes) < cst.MINIMUM_MINER_POOL:
         logger.warning(f"Not enough nodes available. Need at least {cst.MINIMUM_MINER_POOL}, but only have {len(nodes)}.")
         task = _attempt_delay_task(task)
         return task
+
+    params_count = None
+    if task.model_params_count:
+        params_count = task.model_params_count
+    else:
+        try:
+            params_count = get_model_num_params(task.model_id)
+        except Exception as e:
+            logger.error(f"Error getting model size for {task.model_id}: {e}")
+            if "70b" in task.model_id.lower():
+                params_count = 70_000_000_000
+            else:
+                params_count = None
 
     selected_miners: list[str] = []
     ds_size = await get_task_config(task).data_size_function(task)
@@ -125,6 +143,7 @@ async def _select_miner_pool_and_add_to_task(
         hours_to_complete=task.hours_to_complete,
         task_id=str(task.task_id),
         task_type=task.task_type,
+        model_params_count=params_count,
     )
     logger.info(f"We are offering the following task to the miners: {task_request.model_dump()}")
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
@@ -179,7 +198,9 @@ async def _select_miner_pool_and_add_to_task(
         return task
 
 
-async def _let_miners_know_to_start_training(task: ImageRawTask | TextRawTask, nodes: list[Node], config: Config):
+async def _let_miners_know_to_start_training(
+    task: ImageRawTask | DpoRawTask | InstructTextRawTask, nodes: list[Node], config: Config
+):
     task_request_body = get_task_config(task).task_request_prepare_function(task)
     miner_endpoint = get_task_config(task).start_training_endpoint
 
@@ -195,7 +216,7 @@ async def _let_miners_know_to_start_training(task: ImageRawTask | TextRawTask, n
             logger.info(f"The response we got from {node.node_id} was {response}")
 
 
-async def _find_and_select_miners_for_task(task: TextRawTask | ImageRawTask, config: Config):
+async def _find_and_select_miners_for_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
             nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
@@ -209,7 +230,7 @@ async def _find_and_select_miners_for_task(task: TextRawTask | ImageRawTask, con
             await tasks_sql.update_task(task, config.psql_db)
 
 
-def _attempt_delay_task(task: TextRawTask | ImageRawTask):
+def _attempt_delay_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask):
     assert task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None, (
         "We wanted to check delay vs created timestamps but they are missing"
     )
@@ -238,7 +259,7 @@ async def _find_miners_for_task(config: Config):
     )
 
 
-async def _prep_task(task: TextRawTask | ImageRawTask, config: Config):
+async def _prep_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
             task.status = TaskStatus.PREPARING_DATA
@@ -263,7 +284,7 @@ async def _processing_pending_tasks(config: Config):
     clean_all_hf_datasets_cache()
 
 
-async def _start_training_task(task: TextRawTask | ImageRawTask, config: Config) -> None:
+async def _start_training_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config) -> None:
     with LogContext(task_id=str(task.task_id)):
         task.started_at = datetime.datetime.now(datetime.timezone.utc)
         task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
@@ -288,7 +309,7 @@ async def _process_ready_to_train_tasks(config: Config):
         await asyncio.sleep(30)
 
 
-async def _evaluate_task(task: TextRawTask | ImageRawTask, gpu_ids: list[int], config: Config):
+async def _evaluate_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, gpu_ids: list[int], config: Config):
     gpu_ids_str = "," + ",".join(str(gpu_id) for gpu_id in gpu_ids) + ","
     with LogContext(task_id=str(task.task_id), gpu_ids=gpu_ids_str):
         try:
@@ -304,7 +325,7 @@ async def _evaluate_task(task: TextRawTask | ImageRawTask, gpu_ids: list[int], c
             await tasks_sql.update_task(task, config.psql_db)
 
 
-async def _move_back_to_looking_for_nodes(task: TextRawTask | ImageRawTask, config: Config):
+async def _move_back_to_looking_for_nodes(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
     logger.info("Moving back from delay to looking for nodes")
     task.status = TaskStatus.LOOKING_FOR_NODES
     add_context_tag("status", task.status.value)
@@ -341,7 +362,7 @@ async def _move_any_prep_data_to_pending(config):
     await asyncio.gather(*[_move_back_to_pending_status(task, config) for task in stopped_in_prep])
 
 
-async def _move_to_preevaluation(tasks: list[TextRawTask | ImageRawTask], config: Config):
+async def _move_to_preevaluation(tasks: list[InstructTextRawTask | DpoRawTask | ImageRawTask], config: Config):
     await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
 
 
@@ -383,18 +404,16 @@ async def cleanup_model_cache_loop(psql_db: PSQLDB):
                     protected_models.add(str(task.model_id))
 
             cache_stats = await tasks_sql.get_model_cache_stats(
-                psql_db,
-                tau_days=cst.CACHE_TAU_DAYS,
-                max_lookup_days=cst.CACHE_MAX_LOOKUP_DAYS
+                psql_db, tau_days=cst.CACHE_TAU_DAYS, max_lookup_days=cst.CACHE_MAX_LOOKUP_DAYS
             )
 
             # Set cache score to infinity for protected models to prevent deletion
             logger.info(f"Protected models: {protected_models}")
             for model_id in protected_models:
                 if model_id not in cache_stats:
-                    cache_stats[model_id] = {'cache_score': float('inf')}
+                    cache_stats[model_id] = {"cache_score": float("inf")}
                 else:
-                    cache_stats[model_id]['cache_score'] = float('inf')
+                    cache_stats[model_id]["cache_score"] = float("inf")
 
             manage_models_cache(cache_stats, cst.MAX_CACHE_SIZE_BYTES)
         except Exception as e:
@@ -407,6 +426,8 @@ async def evaluate_tasks_loop(config: Config):
     task_queue = asyncio.Queue()
     gpu_queue = asyncio.Queue()
     processing_task_ids = set()
+    # Lock to prevent race conditions (thus potential deadlocks) during GPU acquisition
+    gpu_acquisition_lock = asyncio.Lock()
 
     for gpu_id in cst.GPU_IDS:
         await gpu_queue.put(gpu_id)
@@ -415,12 +436,19 @@ async def evaluate_tasks_loop(config: Config):
         while True:
             try:
                 task = await asyncio.wait_for(task_queue.get(), timeout=1)
-                gpu_id = await gpu_queue.get()
+                required_gpus = compute_required_gpus(task)
+                gpu_ids = []
+
+                # Acquire lock to prevent other tasks from taking GPUs until we get all we need
+                async with gpu_acquisition_lock:
+                    for _ in range(required_gpus):
+                        gpu_ids.append(await gpu_queue.get())
 
                 try:
-                    await _evaluate_task(task, [gpu_id], config)
+                    await _evaluate_task(task, gpu_ids, config)
                 finally:
-                    await gpu_queue.put(gpu_id)
+                    for gpu_id in gpu_ids:
+                        await gpu_queue.put(gpu_id)
                     processing_task_ids.remove(task.task_id)
                     task_queue.task_done()
             except asyncio.TimeoutError:
@@ -450,9 +478,17 @@ async def evaluate_tasks_loop(config: Config):
         await asyncio.sleep(30)
 
 
+def compute_required_gpus(task: RawTask) -> int:
+    model = task.model_id
+    num_params = task.model_params_count
+    if not num_params:
+        num_params = get_model_num_params(model)
+    if num_params and num_params > cst.MODEL_SIZE_REQUIRING_2_GPUS:
+        return 2
+    return 1
+
+
 async def process_completed_tasks(config: Config) -> None:
     await asyncio.gather(
-        move_tasks_to_preevaluation_loop(config),
-        evaluate_tasks_loop(config),
-        cleanup_model_cache_loop(config.psql_db)
+        move_tasks_to_preevaluation_loop(config), evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db)
     )

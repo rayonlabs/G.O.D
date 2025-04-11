@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageTextPair
@@ -98,9 +99,25 @@ class RawTask(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
-class TextRawTask(RawTask):
+class DpoRawTask(RawTask):
     """
-    Text task data as stored in the database. It expand the RawTask with fields from the TextTask table.
+    DPO task data as stored in the database. It expand the RawTask with fields from the DpoTask table.
+    """
+    field_prompt: str
+    field_system: str | None = None
+    field_chosen: str
+    field_rejected: str
+    prompt_format: str | None = None
+    chosen_format: str | None = None
+    rejected_format: str | None = None
+    synthetic_data: str | None = None
+    file_format: FileFormat = FileFormat.HF
+    task_type: TaskType = TaskType.DPOTASK
+
+
+class InstructTextRawTask(RawTask):
+    """
+    Instruct Text task data as stored in the database. It expand the RawTask with fields from the instruct_text_tasks table.
     """
 
     field_system: str | None = None
@@ -112,7 +129,7 @@ class TextRawTask(RawTask):
     system_format: None = None  # NOTE: Needs updating to be optional once we accept it
     synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
-    task_type: TaskType = TaskType.TEXTTASK
+    task_type: TaskType = TaskType.INSTRUCTTEXTTASK
 
 
 class ImageRawTask(RawTask):
@@ -130,9 +147,9 @@ class Task(RawTask):
     trained_model_repository: str | None = None
 
 
-class TextTask(TextRawTask):
+class InstructTextTask(InstructTextRawTask):
     """
-    Expands on the TextRawTask with the trained_model_repository field.
+    Expands on the InstructTextRawTask with the trained_model_repository field.
     This field is not stored in the db directly, but is computed from the submissions table.
 
     """
@@ -141,6 +158,10 @@ class TextTask(TextRawTask):
 
 
 class ImageTask(ImageRawTask):
+    trained_model_repository: str | None = None
+
+
+class DpoTask(DpoRawTask):
     trained_model_repository: str | None = None
 
 
@@ -225,7 +246,12 @@ class MinerResults(BaseModel):
 
 
 class MinerResultsText(MinerResults):
-    task_type: TaskType = TaskType.TEXTTASK
+    task_type: TaskType
+    @field_validator("task_type")
+    def validate_task_type(cls, v):
+        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK}:
+            raise ValueError("Must be INSTRUCTTEXTTASK or DPOTASK")
+        return v
 
 
 class MinerResultsImage(MinerResults):
@@ -333,7 +359,7 @@ class HotkeyDetails(BaseModel):
     offer_response: dict | None = None
 
 
-class TextTaskWithHotkeyDetails(TextTask):
+class InstructTextTaskWithHotkeyDetails(InstructTextTask):
     hotkey_details: list[HotkeyDetails]
 
 
@@ -341,7 +367,16 @@ class ImageTaskWithHotkeyDetails(ImageTask):
     hotkey_details: list[HotkeyDetails]
 
 
+class DpoTaskWithHotkeyDetails(DpoTask):
+    hotkey_details: list[HotkeyDetails]
+
+
 class Dataset(BaseModel):
     dataset_id: str
     num_rows: int
     num_bytes_parquet_files: int
+    dpo_available: bool = False
+    dpo_prompt_column: str | None = None
+    dpo_accepted_column:str | None = None
+    dpo_rejected_column:str | None = None
+

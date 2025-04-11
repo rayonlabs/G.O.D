@@ -1,5 +1,5 @@
-from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
 from validator.evaluation.docker_evaluation import run_evaluation_docker
 from validator.utils.logging import get_logger
 
@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 
 
 def test():
-    custom_dataset_type = CustomDatasetType(
+    custom_dataset_type = InstructDatasetType(
         system_prompt="you are helpful",
         system_format="{system}",
         field_system="text",

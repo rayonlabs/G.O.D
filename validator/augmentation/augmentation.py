@@ -2,14 +2,19 @@ import asyncio
 import json
 from typing import List
 
+from PIL.Image import new
+from attr import field
+from click import prompt
 import yaml
+from core.constants import DPO_DEFAULT_DATASET_TYPE
+from core.models.payload_models import DpoDatasetColumnsResponse
 from datasets import load_dataset
 from fiber import Keypair
 
 from core.models.utility_models import Message
 from core.models.utility_models import Prompts
 from core.models.utility_models import Role
-from validator.core.constants import END_OF_REASONING_TAG
+from validator.core.constants import END_OF_REASONING_TAG, TEXT_SYNTH_WEAKER_MODEL
 from validator.core.constants import MAX_SYNTH_DATA_POINTS
 from validator.core.constants import PROMPT_PATH
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
@@ -17,6 +22,7 @@ from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
 from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
 from validator.evaluation.utils import get_default_dataset_config
+from validator.utils.call_endpoint import post_to_nineteen_chat
 from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import extract_json_from_response
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
@@ -82,6 +88,23 @@ def create_messages_for_input_output_reformulation(row: dict, prompts: Prompts) 
     return messages
 
 
+def create_messages_for_input_reformulation(ds_prompt: dict, prompts: Prompts) -> list[Message]:
+    logger.info(f"This is the ds {ds_prompt}")
+    logger.info(f"This is the input reform  {prompts.input_reformulation_user}")
+
+    prompt_text = next(iter(ds_prompt.values()))
+
+    messages = []
+    system_message = Message(role=Role.SYSTEM, content=prompts.input_reformulation_sys)
+    messages.append(system_message)
+    user_message = Message(
+        role=Role.USER,
+        content=prompts.input_reformulation_user.format(input=prompt_text))
+    messages.append(user_message)
+    return messages
+
+
+
 def check_the_synthetic_data(synthetic_data_point: dict, original_data_columns: List[str]) -> bool:
     return set(synthetic_data_point.keys()) == set(original_data_columns)
 
@@ -91,11 +114,34 @@ async def generate_paraphrased_version(row: dict, prompts: Prompts, keypair: Key
     payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
     result = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
     paraphrased_data = extract_json_from_response(result) if isinstance(result, str) else result
-
     return paraphrased_data
 
+async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Keypair) -> DpoDatasetColumnsResponse:
+    logger.info('in generate dpo reformulated')
+    messages = create_messages_for_input_reformulation(prompt, prompts)
+    logger.info(messages)
+    payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
+    logger.info(f"Here is the payload {payload}")
+    new_prompt = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
+    logger.info(f"Here is the new prompt {new_prompt}")
+    assert new_prompt, "new prompt should not be None"
+    prompt_message = [Message(
+        role=Role.USER,
+        content=new_prompt)]
+    weak_model_payload = convert_to_nineteen_payload(prompt_message, TEXT_SYNTH_WEAKER_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
+    weak_model_result = await post_to_nineteen_chat(weak_model_payload, keypair)
+    logger.info(f"Weak model result {weak_model_result}")
+    strong_model_payload = convert_to_nineteen_payload(prompt_message, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
+    strong_model_result = await post_to_nineteen_chat_with_reasoning(strong_model_payload, keypair, END_OF_REASONING_TAG)
 
-async def process_row(row, prompts, keypair):
+    logger.info(f"Strong model result {strong_model_result}")
+    return DpoDatasetColumnsResponse(field_prompt = new_prompt, field_chosen=strong_model_result, field_rejected=weak_model_result)
+
+
+async def process_row(row, prompts, keypair, is_dpo=False):
+    if is_dpo:
+        logger.info('REFORMAULATION')
+        return await generate_dpo_reformulation(row, prompts, keypair)
     json_synthetic_data_point = await generate_paraphrased_version(row, prompts, keypair)
 
     if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
@@ -109,7 +155,7 @@ async def process_row(row, prompts, keypair):
         raise ValueError(error_message)
 
 
-async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Keypair) -> List[dict]:
+async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Keypair, is_dpo: bool = False) -> List[dict]:
     prompts = load_prompts()
     logger.info(f"Creating an augmented dataset with {len(sampled_data)} samples...")
     synthetic_dataset = []
@@ -124,7 +170,7 @@ async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Key
         current_batch = (batch_idx // SYNTH_GEN_BATCH_SIZE) + 1
         logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
 
-        tasks = [process_row(row, prompts, keypair) for row in batch]
+        tasks = [process_row(row, prompts, keypair, is_dpo) for row in batch]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         batch_results = []
@@ -136,7 +182,7 @@ async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Key
                     generic_errors += 1
                 consecutive_errors += 1
                 if consecutive_errors >= max_consecutive_errors:
-                    logger.error("Maximum consecutive errors reached when generating the augmented dataset.")
+                    logger.error(f"Maximum consecutive errors reached when generating the augmented dataset. Here is one result {result}")
                     return None
             else:
                 consecutive_errors = 0  # Reset on success

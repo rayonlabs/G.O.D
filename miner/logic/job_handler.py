@@ -1,9 +1,11 @@
+import json
 import os
 import shutil
 import uuid
 from dataclasses import dataclass
 
 import docker
+import pandas as pd
 import toml
 import yaml
 from docker.errors import DockerException
@@ -18,10 +20,10 @@ from core.config.config_handler import update_flash_attention
 from core.config.config_handler import update_model_info
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.docker_utils import stream_logs
-from core.models.utility_models import CustomDatasetType
-from core.models.utility_models import DatasetType
 from core.models.utility_models import DiffusionJob
+from core.models.utility_models import DPODatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import TextJob
 
 
@@ -59,7 +61,7 @@ class DockerEnvironment:
 def _load_and_modify_config(
     dataset: str,
     model: str,
-    dataset_type: DatasetType | CustomDatasetType,
+    dataset_type: InstructDatasetType | DPODatasetType,
     file_format: FileFormat,
     task_id: str,
     expected_repo_name: str | None,
@@ -75,6 +77,9 @@ def _load_and_modify_config(
 
     dataset_entry = create_dataset_entry(dataset, dataset_type, file_format)
     config["datasets"].append(dataset_entry)
+
+    if isinstance(dataset_type, DPODatasetType):
+        config["rl"] = "dpo"
 
     config = update_flash_attention(config, model)
     config = update_model_info(config, model, task_id, expected_repo_name)
@@ -111,7 +116,7 @@ def create_job_text(
     job_id: str,
     dataset: str,
     model: str,
-    dataset_type: DatasetType | CustomDatasetType,
+    dataset_type: InstructDatasetType,
     file_format: FileFormat,
     expected_repo_name: str | None,
 ):
@@ -200,6 +205,74 @@ def start_tuning_container_diffusion(job: DiffusionJob):
             shutil.rmtree(train_data_path)
 
 
+def _dpo_format_prompt(row, format_str):
+    result = format_str
+    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
+        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
+    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
+        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+    return result
+
+
+def _dpo_format_chosen(row, format_str):
+    result = format_str
+    if "{chosen}" in format_str and cst.DPO_DEFAULT_FIELD_CHOSEN in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_CHOSEN]):
+        result = result.replace("{chosen}", str(row[cst.DPO_DEFAULT_FIELD_CHOSEN]))
+    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
+        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
+    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
+        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+    return result
+
+
+def _dpo_format_rejected(row, format_str):
+    result = format_str
+    if "{rejected}" in format_str and cst.DPO_DEFAULT_FIELD_REJECTED in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_REJECTED]):
+        result = result.replace("{rejected}", str(row[cst.DPO_DEFAULT_FIELD_REJECTED]))
+    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
+        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
+    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
+        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+    return result
+
+
+def _adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DPODatasetType, apply_formatting: bool = False):
+    """
+    Transform a DPO JSON dataset file to match axolotl's `chatml.argilla` expected column names.
+
+    Args:
+        dataset_path: Path to the JSON dataset file
+        dataset_type: DPODatasetType with field mappings
+        apply_formatting: If True, apply formatting templates to the content
+    """
+    with open(dataset_path, 'r') as f:
+        data = json.load(f)
+    df = pd.DataFrame(data)
+
+    column_mapping = {
+        dataset_type.field_prompt: cst.DPO_DEFAULT_FIELD_PROMPT,
+        dataset_type.field_system: cst.DPO_DEFAULT_FIELD_SYSTEM,
+        dataset_type.field_chosen: cst.DPO_DEFAULT_FIELD_CHOSEN,
+        dataset_type.field_rejected: cst.DPO_DEFAULT_FIELD_REJECTED
+    }
+    df = df.rename(columns=column_mapping)
+
+    if apply_formatting:
+        if dataset_type.prompt_format and dataset_type.prompt_format != "{prompt}":
+            format_str = dataset_type.prompt_format
+            df[cst.DPO_DEFAULT_FIELD_PROMPT] = df.apply(lambda row: _dpo_format_prompt(row, format_str), axis=1)
+        if dataset_type.chosen_format and dataset_type.chosen_format != "{chosen}":
+            format_str = dataset_type.chosen_format
+            df[cst.DPO_DEFAULT_FIELD_CHOSEN] = df.apply(lambda row: _dpo_format_chosen(row, format_str), axis=1)
+        if dataset_type.rejected_format and dataset_type.rejected_format != "{rejected}":
+            format_str = dataset_type.rejected_format
+            df[cst.DPO_DEFAULT_FIELD_REJECTED] = df.apply(lambda row: _dpo_format_rejected(row, format_str), axis=1)
+
+    output_data = df.to_dict(orient='records')
+    with open(dataset_path, 'w') as f:
+        json.dump(output_data, f, indent=2)
+
+
 def start_tuning_container(job: TextJob):
     logger.info("=" * 80)
     logger.info("STARTING THE TUNING CONTAINER")
@@ -226,7 +299,7 @@ def start_tuning_container(job: TextJob):
         huggingface_token=cst.HUGGINGFACE_TOKEN,
         wandb_token=cst.WANDB_TOKEN,
         job_id=job.job_id,
-        dataset_type=job.dataset_type.value if isinstance(job.dataset_type, DatasetType) else cst.CUSTOM_DATASET_TYPE,
+        dataset_type=cst.CUSTOM_DATASET_TYPE,
         dataset_filename=os.path.basename(job.dataset) if job.file_format != FileFormat.HF else "",
     ).to_dict()
     logger.info(f"Docker environment: {docker_env}")
@@ -252,6 +325,11 @@ def start_tuning_container(job: TextJob):
                 "bind": "/workspace/input_data",
                 "mode": "ro",
             }
+
+        if isinstance(job.dataset_type, DPODatasetType):
+            if job.file_format == FileFormat.JSON:
+                _adapt_columns_for_dpo_dataset(job.dataset, job.dataset_type, True)
+
 
         container = docker_client.containers.run(
             image=cst.MINER_DOCKER_IMAGE,

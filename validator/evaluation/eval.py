@@ -5,7 +5,6 @@ import subprocess
 import time
 from math import ceil
 from pathlib import Path
-from typing import Union
 
 import psutil
 import torch
@@ -28,10 +27,10 @@ from transformers import TrainerCallback
 from transformers import TrainingArguments
 
 from core.config.config_handler import create_dataset_entry
-from core.models.utility_models import CustomDatasetType
-from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
 from validator.core import constants as cst
+from validator.evaluation.utils import check_for_lora
 from validator.evaluation.utils import model_is_a_finetune
 from validator.utils.logging import get_logger
 
@@ -42,9 +41,10 @@ logger = get_logger(__name__)
 def log_memory_stats():
     """GPU/CPU memory monitoring"""
     if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated() / 1024**2
-        reserved = torch.cuda.memory_reserved() / 1024**2
-        logger.info(f"GPU Memory: Allocated: {allocated:.2f} MB, Reserved: {reserved:.2f} MB")
+        for i in range(torch.cuda.device_count()):
+            allocated = torch.cuda.memory_allocated(i) / 1024**2
+            reserved = torch.cuda.memory_reserved(i) / 1024**2
+            logger.info(f"GPU {i} Memory: Allocated: {allocated:.2f} MB, Reserved: {reserved:.2f} MB")
 
     ram = psutil.Process().memory_info()
     logger.info(f"RAM Usage: RSS (Resident Set Size): {ram.rss / 1024**2:.2f} MB")
@@ -73,7 +73,7 @@ class ProgressLoggerCallback(TrainerCallback):
 
 def _load_and_update_evaluation_config(
     dataset_name: str,
-    dataset_type: Union[DatasetType, CustomDatasetType],
+    dataset_type: InstructDatasetType,
     file_format: FileFormat,
     finetuned_model: AutoModelForCausalLM,
     config_path: str,
@@ -175,14 +175,13 @@ def evaluate_language_model_loss(
         "eval_loss": eval_results["eval_loss"],
         "perplexity": torch.exp(torch.tensor(eval_results["eval_loss"])).item(),
     }
-    log_memory_stats()
     return evaluation_results
 
 
 def evaluate_finetuned_model(
     dataset_name: str,
     finetuned_model: AutoModelForCausalLM,
-    dataset_type: Union[DatasetType, CustomDatasetType],
+    dataset_type: InstructDatasetType,
     file_format: FileFormat,
     tokenizer: AutoTokenizer,
 ) -> dict[str, float]:
@@ -218,7 +217,6 @@ def create_finetuned_cache_dir():
 
 @retry_on_5xx()
 def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoModelForCausalLM:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
         # Only use default cache for the base model
         cache_dir = None if is_base_model else create_finetuned_cache_dir()
@@ -226,8 +224,9 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
         return AutoModelForCausalLM.from_pretrained(
             model_name_or_path,
             token=os.environ.get("HUGGINGFACE_TOKEN"),
-            device_map=device,
-            cache_dir=cache_dir
+            device_map="auto",
+            cache_dir=cache_dir,
+            torch_dtype=torch.bfloat16,
         )
     except RuntimeError as e:
         error_msg = str(e)
@@ -239,8 +238,9 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
                     model_name_or_path,
                     token=os.environ.get("HUGGINGFACE_TOKEN"),
                     ignore_mismatched_sizes=True,
-                    device_map=device,
-                    cache_dir=cache_dir
+                    device_map="auto",
+                    cache_dir=cache_dir,
+                    torch_dtype=torch.bfloat16,
                 )
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise
@@ -260,15 +260,15 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
 
 @retry_on_5xx()
 def load_finetuned_model(base_model, repo: str) -> PeftModel:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
         cache_dir = create_finetuned_cache_dir()
         return PeftModel.from_pretrained(
             base_model,
             repo,
             is_trainable=False,
-            device_map=device,
-            cache_dir=cache_dir
+            device_map="auto",
+            cache_dir=cache_dir,
+            torch_dtype=torch.bfloat16,
         )
     except RuntimeError as e:
         error_msg = str(e)
@@ -281,8 +281,9 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
                     repo,
                     is_trainable=False,
                     ignore_mismatched_sizes=True,
-                    device_map=device,
-                    cache_dir=cache_dir
+                    device_map="auto",
+                    cache_dir=cache_dir,
+                    torch_dtype=torch.bfloat16,
                 )
 
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
@@ -322,9 +323,9 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
 
     file_format = FileFormat(file_format_str)
     try:
-        dataset_type = DatasetType(dataset_type_str)
+        dataset_type = InstructDatasetType.model_validate_json(dataset_type_str)
     except ValueError:
-        dataset_type = CustomDatasetType.model_validate_json(dataset_type_str)
+        logger.error(f"Invalid dataset type: {dataset_type_str}")
 
     tokenizer = load_tokenizer(original_model)
     if tokenizer.pad_token_id is None:
@@ -332,17 +333,16 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
     try:
-        try:
+        log_memory_stats()
+        if check_for_lora(repo):
+            logger.info("LoRA adapter detected. Loading as with Peft")
             base_model = load_model(original_model, is_base_model=True)
             if "model_params_count" not in results_dict:
                 results_dict["model_params_count"] = _count_model_parameters(base_model)
             finetuned_model = load_finetuned_model(base_model, repo)
             is_finetune = True
-        except Exception as lora_error:
-            logger.info(f"Loading full model... failed to load as LoRA: {lora_error}")
-            base_model.to('cpu')
-            del base_model
-            torch.cuda.empty_cache()
+        else:
+            logger.info("No LoRA adapter detected. Loading full model")
             finetuned_model = load_model(repo, is_base_model=False)
             try:
                 is_finetune = model_is_a_finetune(original_model, finetuned_model)
@@ -350,7 +350,7 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
                 logger.info(f"Problem with detection of finetune for {repo}: {e}")
                 logger.info("Assuming False")
                 is_finetune = False
-
+        log_memory_stats()
         finetuned_model.eval()
 
         results = evaluate_finetuned_model(
@@ -371,6 +371,25 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
         logger.info(f"Saved evaluation results for {repo}")
         logger.info(json.dumps(results_dict, indent=2))
         log_memory_stats()
+
+
+def check_and_log_base_model_size(original_model: str) -> None:
+    """Check if base model size is logged in results, if not load and log it."""
+    results_dict = {}
+    if os.path.exists(cst.CONTAINER_EVAL_RESULTS_PATH):
+        with open(cst.CONTAINER_EVAL_RESULTS_PATH, "r") as f:
+            results_dict = json.load(f)
+
+    if "model_params_count" not in results_dict:
+        logger.info("Base model size not logged, loading base model to calculate size")
+        base_model = load_model(original_model, is_base_model=True)
+        results_dict["model_params_count"] = _count_model_parameters(base_model)
+
+        with open(cst.CONTAINER_EVAL_RESULTS_PATH, "w") as f:
+            json.dump(results_dict, f, indent=2)
+        logger.info(f"Logged base model size: {results_dict['model_params_count']} parameters")
+    else:
+        logger.info(f"Base model size already logged: {results_dict['model_params_count']} parameters")
 
 
 def main():
@@ -402,7 +421,10 @@ def main():
             log_memory_stats()
         except subprocess.CalledProcessError as e:
             logger.error(f"Error running subprocess for {repo}: {e}")
-
+    try:
+        check_and_log_base_model_size(original_model)
+    except Exception as e:
+        logger.error(f"Error checking and logging base model size: {e}")
     logger.info("All evaluations completed")
 
 

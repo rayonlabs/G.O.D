@@ -105,7 +105,7 @@ ORDER BY created_at DESC;
 -- Get full task details
 SELECT t.*, tt.*, it.*
 FROM tasks t
-LEFT JOIN text_tasks tt ON t.task_id = tt.task_id
+LEFT JOIN instruct_text_tasks tt ON t.task_id = tt.task_id
 LEFT JOIN image_tasks it ON t.task_id = it.task_id
 WHERE t.task_id IN (
     'TASK_UUID'
@@ -124,7 +124,7 @@ ORDER BY tn.quality_score DESC;
 WITH merged_tasks AS (
     SELECT t.*, tt.field_system, tt.field_instruction, tt.field_input, tt.field_output, tt.synthetic_data, tt.format, tt.no_input_format, tt.system_format, tt.file_format
     FROM tasks t
-    LEFT JOIN text_tasks tt ON t.task_id = tt.task_id
+    LEFT JOIN instruct_text_tasks tt ON t.task_id = tt.task_id
     LEFT JOIN image_tasks it ON t.task_id = it.task_id
 )
 SELECT DISTINCT mt.task_id, s.repo, tn.test_loss,tn.synth_loss, mt.model_id, mt.ds, mt.field_instruction, mt.field_input, mt.field_output, mt.test_data, mt.synthetic_data, mt.training_data, mt.status, mt.termination_at, mt.n_eval_attempts, mt.is_organic, tn.quality_score, tn.hotkey
