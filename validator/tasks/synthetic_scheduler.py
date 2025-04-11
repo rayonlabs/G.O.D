@@ -5,6 +5,8 @@ from datetime import timedelta
 from typing import Any
 from typing import AsyncGenerator
 
+from netaddr.ip import smallest_matching_cidr
+
 from substrateinterface import Keypair
 
 import validator.core.constants as cst
@@ -24,7 +26,7 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def _get_text_models(keypair: Keypair) -> AsyncGenerator[str, None]:
+async def _get_text_models(keypair: Keypair, smallest_size_b: float = 0.1, largest_size_b: float = 12.0) -> AsyncGenerator[str, None]:
     while True:
         response = await call_content_service(cst.GET_RANDOM_MODELS_ENDPOINT, keypair)
         if not isinstance(response, list):
@@ -244,7 +246,8 @@ async def schedule_synthetics_periodically(config: Config):
     logger.info("Starting the synthetic schedule loop...")
     instruct_datasets = _get_instruct_text_datasets(config.keypair)
     dpo_datasets = _get_dpo_datasets(config.keypair)
-    models = _get_text_models(config.keypair)
+    standard_models = _get_text_models(config.keypair)
+    big_models = _get_text_models(config.keypair, smallest_size_b=12.0, largest_size_b=70.0)
 
     image_models = _get_image_models(config.keypair)
 
@@ -252,7 +255,10 @@ async def schedule_synthetics_periodically(config: Config):
     while True:
         try:
             logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
-            await _add_new_task_to_network_if_not_enough(config, models, instruct_datasets, dpo_datasets, image_models)
+            if random.random() < cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
+                await _add_new_task_to_network_if_not_enough(config, standard_models, instruct_datasets, dpo_datasets, image_models)
+            else:
+                await _add_new_task_to_network_if_not_enough(config, big_models, instruct_datasets, dpo_datasets, image_models)
             current_try = 0
             await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
         except Exception as e:
