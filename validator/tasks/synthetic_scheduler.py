@@ -11,7 +11,8 @@ import validator.core.constants as cst
 from core.models.payload_models import InstructDatasetColumnsResponse
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
-from validator.core.models import Dataset, DpoRawTask
+from validator.core.models import Dataset
+from validator.core.models import DpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
@@ -75,7 +76,10 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
 async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
-    bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair, False) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
+    bin_generators = [
+        _get_datasets_for_bin(min_rows, max_rows, keypair, False)
+        for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE
+    ]
 
     while True:
         for generator in bin_generators:
@@ -92,7 +96,10 @@ async def _get_dpo_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
     logger.info("I AM GETTIG THE DPO DATASETS")
-    bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair, True) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
+    bin_generators = [
+        _get_datasets_for_bin(min_rows, max_rows, keypair, True)
+        for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE
+        ]
 
     while True:
         for generator in bin_generators:
