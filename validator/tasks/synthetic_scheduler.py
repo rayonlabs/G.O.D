@@ -5,15 +5,14 @@ from datetime import timedelta
 from typing import Any
 from typing import AsyncGenerator
 
-from netaddr.ip import smallest_matching_cidr
-
 from substrateinterface import Keypair
 
 import validator.core.constants as cst
 from core.models.payload_models import InstructDatasetColumnsResponse
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
-from validator.core.models import Dataset, DpoRawTask
+from validator.core.models import Dataset
+from validator.core.models import DpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
@@ -26,9 +25,19 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def _get_text_models(keypair: Keypair, smallest_size_b: float = 0.1, largest_size_b: float = 12.0) -> AsyncGenerator[str, None]:
+async def _get_text_models(
+    keypair: Keypair, smallest_size_b: float = 0.1, largest_size_b: float = 12.0
+) -> AsyncGenerator[str, None]:
+    min_params = int(smallest_size_b * 1_000_000_000)
+    max_params = int(largest_size_b * 1_000_000_000)
+    params = {"min_params": min_params, "max_params": max_params}
+
     while True:
-        response = await call_content_service(cst.GET_RANDOM_MODELS_ENDPOINT, keypair)
+        response = await call_content_service(
+            cst.GET_RANDOM_MODELS_ENDPOINT,
+            keypair,
+            params=params,
+        )
         if not isinstance(response, list):
             raise TypeError("Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
         models: list[dict[str, Any]] = response
@@ -52,7 +61,7 @@ async def _get_image_models(keypair: Keypair) -> AsyncGenerator[str, None]:
 async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, dpo: bool) -> AsyncGenerator[Dataset, None]:
     """Get datasets for a specific size bin."""
     while True:
-        #params = {"min_rows": min_rows, "max_rows": max_rows, "dpo": dpo}
+        # params = {"min_rows": min_rows, "max_rows": max_rows, "dpo": dpo}
         params = {"dpo": dpo}
         try:
             response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair, params)
@@ -77,7 +86,9 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
 async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
-    bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair, False) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
+    bin_generators = [
+        _get_datasets_for_bin(min_rows, max_rows, keypair, False) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE
+    ]
 
     while True:
         for generator in bin_generators:
@@ -90,11 +101,14 @@ async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Datase
                 logger.warning(f"Error getting next dataset from bin: {e}")
                 continue
 
+
 async def _get_dpo_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
     """Round-robin generator that cycles through all dataset size bins."""
 
     logger.info("I AM GETTIG THE DPO DATASETS")
-    bin_generators = [_get_datasets_for_bin(min_rows, max_rows, keypair, True) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE]
+    bin_generators = [
+        _get_datasets_for_bin(min_rows, max_rows, keypair, True) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE
+    ]
 
     while True:
         for generator in bin_generators:
@@ -138,6 +152,7 @@ def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
         raise ValueError(f"No training hours range found for {num_rows} rows")
     return random.randint(min_hours, max_hours)
 
+
 async def create_synthetic_dpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
@@ -175,6 +190,7 @@ async def create_synthetic_dpo_task(
     task = await add_task(task, config.psql_db)
 
     return task
+
 
 async def create_synthetic_instruct_text_task(
     config: Config,
@@ -247,8 +263,7 @@ async def schedule_synthetics_periodically(config: Config):
     instruct_datasets = _get_instruct_text_datasets(config.keypair)
     dpo_datasets = _get_dpo_datasets(config.keypair)
     standard_models = _get_text_models(config.keypair)
-    big_models = _get_text_models(config.keypair, smallest_size_b=12.0, largest_size_b=70.0)
-
+    big_models = _get_text_models(config.keypair, smallest_size_b=12.0, largest_size_b=71.0)
     image_models = _get_image_models(config.keypair)
 
     current_try = 0
@@ -256,9 +271,11 @@ async def schedule_synthetics_periodically(config: Config):
         try:
             logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
             if random.random() < cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
-                await _add_new_task_to_network_if_not_enough(config, standard_models, instruct_datasets, dpo_datasets, image_models)
-            else:
                 await _add_new_task_to_network_if_not_enough(config, big_models, instruct_datasets, dpo_datasets, image_models)
+            else:
+                await _add_new_task_to_network_if_not_enough(
+                    config, standard_models, instruct_datasets, dpo_datasets, image_models
+                )
             current_try = 0
             await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
         except Exception as e:
