@@ -122,6 +122,7 @@ class ImageRawTask(RawTask):
 
     image_text_pairs: list[ImageTextPair] | None = None
     task_type: TaskType = TaskType.IMAGETASK
+    is_flux_model: bool = False
 
 
 # NOTE: As time goes on we will expand this class to be more of a 'submitted task'?
