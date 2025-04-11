@@ -131,7 +131,7 @@ Example Output:
 def create_combined_diffusion_messages(first_style: str, second_style: str, num_prompts: int) -> List[Message]:
     system_content = f"""You are an expert in creating diverse and descriptive prompts for image generation models.
     Your task is to generate prompts that strongly embody a combination of two artistic styles.
-    Each prompt should be detailed and consistent with both of the given styles. 
+    Each prompt should be detailed and consistent with both of the given styles.
     You will return the prompts in a JSON format with no additional text.
     """
 
@@ -151,10 +151,10 @@ def create_combined_diffusion_messages(first_style: str, second_style: str, num_
 
 def create_single_style_diffusion_messages(style: str, num_prompts: int) -> List[Message]:
     prompt_examples = ",\n    ".join([f'"{prompt}"' for prompt in random.sample(FULL_PROMPTS[style], 5)])
-    
+
     system_content = f"""You are an expert in creating diverse and descriptive prompts for image generation models.
     Your task is to generate prompts that strongly embody a combination of an artistic style.
-    Each prompt should be detailed and consistent with the given style. 
+    Each prompt should be detailed and consistent with the given style.
     You will return the prompts in a JSON format with no additional text.
 
     Here are some examples of prompts in the {style} style, you need to follow the same format and generate more in the same style:
@@ -299,7 +299,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
 
     return image_text_pairs, ds_prefix
 
-  
+
 async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPair], str]:
     client = docker.from_env()
     image_text_pairs = []
@@ -341,7 +341,8 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str
     num_prompts = random.randint(cst.MIN_IMAGE_SYNTH_PAIRS, cst.MAX_IMAGE_SYNTH_PAIRS)
     model_id = await anext(models)
     Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
-    if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE:
+    is_flux_model = 'flux' not in model_id.lower()
+    if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE and not is_flux_model:
         image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
     else:
         image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
@@ -358,6 +359,7 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[str
         termination_at=datetime.utcnow() + timedelta(hours=number_of_hours),
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
+        is_flux_model=is_flux_model
     )
 
     logger.info(f"New task created and added to the queue {task}")

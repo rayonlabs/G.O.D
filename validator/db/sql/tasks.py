@@ -89,10 +89,10 @@ async def add_task(task: TextRawTask | ImageRawTask, psql_db: PSQLDB) -> TextRaw
             elif isinstance(task, ImageRawTask):
                 query_image_tasks = f"""
                     INSERT INTO {cst.IMAGE_TASKS_TABLE}
-                    ({cst.TASK_ID})
-                    VALUES ($1)
+                    ({cst.TASK_ID}, {cst.MODEL_TYPE})
+                    VALUES ($1, $2)
                 """
-                await connection.execute(query_image_tasks, task_record[cst.TASK_ID])
+                await connection.execute(query_image_tasks, task_record[cst.TASK_ID], task.model_type.value)
 
                 if task.image_text_pairs:
                     query_pairs = f"""
@@ -155,7 +155,7 @@ async def get_tasks_with_status(
                 """
             elif task_type == TaskType.IMAGETASK.value:
                 specific_query = f"""
-                    SELECT t.*
+                    SELECT t.*, it.model_type
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
@@ -424,7 +424,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[TextRawTask | Ima
             """
         elif task_type == TaskType.IMAGETASK.value:
             specific_query = f"""
-                SELECT t.*
+                SELECT t.*, it.model_type
                 FROM {cst.TASKS_TABLE} t
                 LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
@@ -519,6 +519,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> TextTask | ImageTask
                 )
                 SELECT
                     tasks.*,
+                    it.model_type,
                     victorious_repo.repo as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
                 LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON tasks.{cst.TASK_ID} = it.{cst.TASK_ID}
@@ -621,6 +622,14 @@ async def get_tasks_by_account_id(
                 tasks.append(TextTask(**task_data))
 
             elif task_type == TaskType.IMAGETASK.value:
+                image_query = f"""
+                    SELECT {cst.MODEL_TYPE}
+                    FROM {cst.IMAGE_TASKS_TABLE}
+                    WHERE {cst.TASK_ID} = $1
+                """
+                text_row = await connection.fetchrow(text_query, task_data[cst.TASK_ID])
+                if text_row:
+                    task_data.update(dict(text_row))
                 image_text_pairs = await get_image_text_pairs(task_data[cst.TASK_ID], psql_db)
                 tasks.append(ImageTask(**task_data, image_text_pairs=image_text_pairs))
 
