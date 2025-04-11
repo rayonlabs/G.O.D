@@ -74,7 +74,7 @@
           0
         ],
         "sigmas": [
-          "17",
+          "Sampler",
           0
         ],
         "latent_image": [
@@ -118,7 +118,7 @@
           0
         ],
         "conditioning": [
-          "60",
+          "CFG",
           0
         ]
       },
@@ -140,7 +140,7 @@
       "inputs": {
         "guidance": 100,
         "conditioning": [
-          "6",
+          "Prompt",
           0
         ]
       },
@@ -156,7 +156,7 @@
         "width": 1024,
         "height": 1024,
         "model": [
-          "72",
+          "Lora_loader",
           0
         ]
       },
@@ -170,7 +170,7 @@
         "lora_name": "{{lora_name}}",
         "strength_model": 1,
         "model": [
-          "12",
+          "Checkpoint_loader",
           0
         ]
       },
@@ -182,7 +182,7 @@
     "91": {
       "inputs": {
         "pixels": [
-          "93",
+          "Image_loader",
           0
         ],
         "vae": [

@@ -17,6 +17,7 @@ from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import CustomDatasetType
 from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import ImageModelType
 from core.utils import download_s3_file
 from validator.tasks.task_prep import unzip_to_temp_path
 from validator.utils.logging import get_all_context_tags
@@ -156,7 +157,7 @@ async def run_evaluation_docker_text(
 
 
 async def run_evaluation_docker_image(
-    test_split_url: str, original_model_repo: str, models: list[str], gpu_ids: list[int]
+    test_split_url: str, original_model_repo: str, models: list[str], model_type: ImageModelType, gpu_ids: list[int]
 ) -> dict[str, Union[EvaluationResultImage, Exception]]:
     raw_data = await download_s3_file(test_split_url)
     test_split_path = unzip_to_temp_path(raw_data)
@@ -191,6 +192,7 @@ async def run_evaluation_docker_image(
         "DATASET": container_dataset_path,
         "MODELS": ",".join(models),
         "ORIGINAL_MODEL_REPO": original_model_repo,
+        "MODEL_TYPE": model_type.value,
     }
 
     async def cleanup_resources():
