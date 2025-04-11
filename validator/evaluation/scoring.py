@@ -347,7 +347,7 @@ def _convert_dataset_type_from_dpo_to_instruct(dataset_type: DPODatasetType) -> 
         field_system=dataset_type.field_system,
         field_instruction=dataset_type.field_prompt,
         field_output=dataset_type.field_chosen,
-        no_input_format=dataset_type.prompt_format.replace("{prompt}", "{instruction}"),
+        no_input_format=dataset_type.prompt_format.replace("{prompt}", "{instruction}") if dataset_type.prompt_format else None,
     )
 
 
