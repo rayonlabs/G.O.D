@@ -17,7 +17,7 @@ async def main():
 
     try:
         test_data, synth_data, train_data = await prepare_text_task(
-            dataset_name=dataset_name, file_format=FileFormat.HF, columns_to_sample=columns_to_sample, keypair=config.keypair
+            train_dataset=dataset_name, file_format=FileFormat.HF, columns_to_sample=columns_to_sample, keypair=config.keypair
         )
 
         logger.info(f"Test data URL: {test_data}")
