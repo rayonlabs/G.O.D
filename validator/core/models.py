@@ -11,6 +11,7 @@ from pydantic import Field
 from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import TaskType
+from core.models.utility_models import ImageModelType
 
 
 class TokenizerConfig(BaseModel):
@@ -122,7 +123,7 @@ class ImageRawTask(RawTask):
 
     image_text_pairs: list[ImageTextPair] | None = None
     task_type: TaskType = TaskType.IMAGETASK
-    is_flux_model: bool = False
+    model_type: ImageModelType = ImageModelType.SDXL
 
 
 # NOTE: As time goes on we will expand this class to be more of a 'submitted task'?

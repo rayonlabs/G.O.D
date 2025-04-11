@@ -185,6 +185,7 @@ async def create_task_image(
         account_id=request.account_id,
         task_type=TaskType.IMAGETASK,
         result_model_name=request.result_model_name,
+        model_type=request.model_type
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -296,6 +297,7 @@ async def get_task_details_by_account(
                     trained_model_repository=task.trained_model_repository,
                     task_type=task.task_type,
                     result_model_name=task.result_model_name,
+                    model_type=task.model_type
                 )
             )
 
@@ -346,6 +348,7 @@ async def get_task_details(
             trained_model_repository=task.trained_model_repository,
             task_type=task.task_type,
             result_model_name=task.result_model_name,
+            model_type=task.model_type
         )
 
 
@@ -456,6 +459,7 @@ async def get_completed_organic_tasks(
                     trained_model_repository=task.trained_model_repository,
                     task_type=task.task_type,
                     result_model_name=task.result_model_name,
+                    model_type=task.model_type
                 )
             )
 
