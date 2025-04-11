@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from datasets import get_dataset_infos
 from fiber import Keypair
@@ -42,7 +43,11 @@ def get_model_num_params(model_id: str) -> int:
         size = model_info.safetensors.total
         return size
     except Exception as e:
-        logger.error(f"Error getting model size for {model_id}: {e}")
+        logger.warning(f"Error getting model size from safetensors: {e}")
+        model_size = re.search(r"(\d+)(?=[bB])", model_id)
+        model_size = int(model_size.group(1)) * 1_000_000_000 if model_size else None
+        logger.info(f"Model size from regex: {model_size}")
+        return model_size
 
 
 async def get_total_image_dataset_size(task: ImageRawTask) -> int:
