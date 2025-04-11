@@ -17,8 +17,8 @@ from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.models import DpoRawTask
 from validator.core.models import ImageRawTask
-from validator.core.models import RawTask
 from validator.core.models import InstructTextRawTask
+from validator.core.models import RawTask
 from validator.core.task_config_models import get_task_config
 from validator.cycle.util_functions import get_model_num_params
 from validator.db.database import PSQLDB
@@ -69,8 +69,9 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
 
     # Now we be calcin position-based weights
     top_node_chance_multiplier = 3  # Top node is 3x more likely than bottom node
-    weights = [top_node_chance_multiplier - i * (top_node_chance_multiplier - 1) / len(sorted_nodes)
-               for i in range(len(sorted_nodes))]
+    weights = [
+        top_node_chance_multiplier - i * (top_node_chance_multiplier - 1) / len(sorted_nodes) for i in range(len(sorted_nodes))
+    ]
 
     shuffled_nodes = []
     nodes_to_shuffle = sorted_nodes.copy()
@@ -85,6 +86,7 @@ async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[N
         weights_copy.pop(index)
 
     return shuffled_nodes
+
 
 async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> MinerTaskResponse:
     endpoint = cst.TASK_OFFER_IMAGE_ENDPOINT if request.task_type == TaskType.IMAGETASK else cst.TASK_OFFER_ENDPOINT
@@ -120,6 +122,19 @@ async def _select_miner_pool_and_add_to_task(
         task = _attempt_delay_task(task)
         return task
 
+    params_count = None
+    if task.model_params_count:
+        params_count = task.model_params_count
+    else:
+        try:
+            params_count = get_model_num_params(task.model_id)
+        except Exception as e:
+            logger.error(f"Error getting model size for {task.model_id}: {e}")
+            if "70b" in task.model_id.lower():
+                params_count = 70_000_000_000
+            else:
+                params_count = None
+
     selected_miners: list[str] = []
     ds_size = await get_task_config(task).data_size_function(task)
     task_request = MinerTaskOffer(
@@ -128,6 +143,7 @@ async def _select_miner_pool_and_add_to_task(
         hours_to_complete=task.hours_to_complete,
         task_id=str(task.task_id),
         task_type=task.task_type,
+        model_params_count=params_count,
     )
     logger.info(f"We are offering the following task to the miners: {task_request.model_dump()}")
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
@@ -184,7 +200,7 @@ async def _select_miner_pool_and_add_to_task(
 
 async def _let_miners_know_to_start_training(
     task: ImageRawTask | DpoRawTask | InstructTextRawTask, nodes: list[Node], config: Config
-    ):
+):
     task_request_body = get_task_config(task).task_request_prepare_function(task)
     miner_endpoint = get_task_config(task).start_training_endpoint
 
@@ -200,9 +216,7 @@ async def _let_miners_know_to_start_training(
             logger.info(f"The response we got from {node.node_id} was {response}")
 
 
-async def _find_and_select_miners_for_task(
-    task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config
-):
+async def _find_and_select_miners_for_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
             nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
@@ -270,9 +284,7 @@ async def _processing_pending_tasks(config: Config):
     clean_all_hf_datasets_cache()
 
 
-async def _start_training_task(
-    task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config
-) -> None:
+async def _start_training_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config) -> None:
     with LogContext(task_id=str(task.task_id)):
         task.started_at = datetime.datetime.now(datetime.timezone.utc)
         task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
@@ -392,18 +404,16 @@ async def cleanup_model_cache_loop(psql_db: PSQLDB):
                     protected_models.add(str(task.model_id))
 
             cache_stats = await tasks_sql.get_model_cache_stats(
-                psql_db,
-                tau_days=cst.CACHE_TAU_DAYS,
-                max_lookup_days=cst.CACHE_MAX_LOOKUP_DAYS
+                psql_db, tau_days=cst.CACHE_TAU_DAYS, max_lookup_days=cst.CACHE_MAX_LOOKUP_DAYS
             )
 
             # Set cache score to infinity for protected models to prevent deletion
             logger.info(f"Protected models: {protected_models}")
             for model_id in protected_models:
                 if model_id not in cache_stats:
-                    cache_stats[model_id] = {'cache_score': float('inf')}
+                    cache_stats[model_id] = {"cache_score": float("inf")}
                 else:
-                    cache_stats[model_id]['cache_score'] = float('inf')
+                    cache_stats[model_id]["cache_score"] = float("inf")
 
             manage_models_cache(cache_stats, cst.MAX_CACHE_SIZE_BYTES)
         except Exception as e:
@@ -480,7 +490,5 @@ def compute_required_gpus(task: RawTask) -> int:
 
 async def process_completed_tasks(config: Config) -> None:
     await asyncio.gather(
-        move_tasks_to_preevaluation_loop(config),
-        evaluate_tasks_loop(config),
-        cleanup_model_cache_loop(config.psql_db)
+        move_tasks_to_preevaluation_loop(config), evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db)
     )

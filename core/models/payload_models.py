@@ -30,6 +30,7 @@ class MinerTaskOffer(BaseModel):
     hours_to_complete: int
     task_id: str
     task_type: TaskType
+    model_params_count: int | None = None
 
 
 class TrainRequest(BaseModel):
@@ -106,6 +107,7 @@ class DockerEvaluationResults(BaseModel):
 class MinerTaskResponse(BaseModel):
     message: str
     accepted: bool
+
 
 class DpoDatasetColumnsResponse(BaseModel):
     field_prompt: str
