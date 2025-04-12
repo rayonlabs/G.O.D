@@ -232,6 +232,7 @@ async def _add_new_task_to_network_if_not_enough(
     dpo_datasets: AsyncGenerator[Dataset, None],
     image_models: AsyncGenerator[str, None],
 ):
+    logger.info('In adding new task if not enough')
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
     current_preeval_tasks = await get_tasks_with_status(TaskStatus.PREEVALUATION, config.psql_db)
     current_delayed_tasks = await get_tasks_with_status(TaskStatus.DELAYED, config.psql_db, include_not_ready_tasks=True)
@@ -271,8 +272,10 @@ async def schedule_synthetics_periodically(config: Config):
         try:
             logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
             if random.random() < cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
+                logger.info('Big boi selected')
                 await _add_new_task_to_network_if_not_enough(config, big_models, instruct_datasets, dpo_datasets, image_models)
             else:
+                logger.info('Standard selected')
                 await _add_new_task_to_network_if_not_enough(
                     config, standard_models, instruct_datasets, dpo_datasets, image_models
                 )
