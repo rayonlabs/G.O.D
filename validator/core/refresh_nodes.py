@@ -38,6 +38,9 @@ async def _is_recent_update(config: Config) -> bool:
 
 
 async def _get_and_store_nodes(config: Config) -> list[Node]:
+    if not config.psql_db.pool or config.psql_db.pool.is_closed():
+        logger.info("Reconnecting to PostgreSQL...")
+        await config.psql_db.connect()
     if await _is_recent_update(config):
         nodes = await get_all_nodes(config.psql_db)
 
@@ -56,6 +59,7 @@ async def _get_and_store_nodes(config: Config) -> list[Node]:
 
     logger.info(f"Stored {len(nodes)} nodes.")
     return nodes
+
 
 
 async def refresh_nodes_periodically(config: Config) -> None:
