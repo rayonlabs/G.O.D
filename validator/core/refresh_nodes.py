@@ -41,7 +41,9 @@ async def _get_and_store_nodes(config: Config) -> list[Node]:
     if await _is_recent_update(config):
         nodes = await get_all_nodes(config.psql_db)
 
+    logger.info('At fetch')
     raw_nodes = await _fetch_nodes_from_substrate(config)
+    logger.info('afer  fetch')
     nodes = [Node(**node.model_dump(mode="json")) for node in raw_nodes]
 
     async with await config.psql_db.connection() as connection:
