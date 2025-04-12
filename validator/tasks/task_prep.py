@@ -85,33 +85,14 @@ async def load_dataset_from_s3(dataset_url: str, max_file_size_bytes: int = None
         raise e
 
 
-async def train_test_split(dataset_name: str, file_format: FileFormat, test_size: float = None) -> DatasetDict:
-    if test_size is None:
-        test_size = cst.TRAIN_TEST_SPLIT_PERCENTAGE
-    logger.info(f"Loading dataset '{dataset_name}'")
-    try:
-        if file_format == FileFormat.S3:
-            dataset = await load_dataset_from_s3(dataset_name)
-        else:
-            config_name = get_default_dataset_config(dataset_name)
-            dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
-    except Exception as e:
-        logger.exception(f"Failed to load dataset {dataset_name}: {e}")
-        raise e
-
-    if isinstance(dataset, DatasetDict):
-        combined_dataset = concatenate_datasets([split for split in dataset.values()])
-    else:
-        combined_dataset = dataset
-
-    logger.info(f"Combined dataset size: {len(combined_dataset)}")
-    logger.info(f"Splitting combined dataset into train and test with test size {test_size}")
+async def train_test_split(dataset: Dataset, test_size: float = cst.TRAIN_TEST_SPLIT_PERCENTAGE) -> DatasetDict:
+    logger.info(f"Splitting dataset into train and test with test size {test_size}")
 
     test_size = min(
-        int(len(combined_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE),
+        int(len(dataset) * test_size),
         cst.MAX_TEST_DATA_POINTS,
     )
-    split_dataset = combined_dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
+    split_dataset = dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
     logger.info(f"Train set size: {len(split_dataset['train'])}")
     logger.info(f"Test set size: {len(split_dataset['test'])}")
 

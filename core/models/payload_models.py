@@ -206,7 +206,7 @@ class NewTaskWithFixedDatasetsRequest(NewTaskRequestInstructText):
     test_data: str = Field(..., description="The prepared test dataset")
 
 
-class NewTaskWithCustomDatasetRequest(NewTaskRequestText):
+class NewTaskWithCustomDatasetRequest(NewTaskRequestInstructText):
     ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
     training_data: str = Field(..., description="The prepared training dataset")
     test_data: str | None = Field(None, description="The prepared test dataset")
