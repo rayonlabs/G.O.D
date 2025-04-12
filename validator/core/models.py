@@ -12,6 +12,7 @@ from pydantic import field_validator
 from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import TaskType
+from core.models.utility_models import ImageModelType
 
 
 class TokenizerConfig(BaseModel):
@@ -139,6 +140,7 @@ class ImageRawTask(RawTask):
 
     image_text_pairs: list[ImageTextPair] | None = None
     task_type: TaskType = TaskType.IMAGETASK
+    model_type: ImageModelType = ImageModelType.SDXL
 
 
 # NOTE: As time goes on we will expand this class to be more of a 'submitted task'?
@@ -333,6 +335,7 @@ class Img2ImgPayload(BaseModel):
     comfy_template: dict
     height: int = 1024
     width: int = 1024
+    model_type: str = "sdxl"
     is_safetensors: bool = True
     prompt: str | None = None
     base_image: str | None = None

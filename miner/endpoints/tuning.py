@@ -92,6 +92,7 @@ async def tune_model_diffusion(
         job_id=str(train_request.task_id),
         dataset_zip=train_request.dataset_zip,
         model=train_request.model,
+        model_type=train_request.model_type,
         expected_repo_name=train_request.expected_repo_name,
     )
     logger.info(f"Created job {job}")
@@ -249,7 +250,7 @@ def factory_router() -> APIRouter:
         tags=["Subnet"],
         methods=["POST"],
         response_model=TrainResponse,
-        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+        # dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
 
     return router

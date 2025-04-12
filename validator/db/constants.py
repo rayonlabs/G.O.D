@@ -82,6 +82,7 @@ IMAGE_TEXT_PAIRS = "image_text_pairs"
 IMAGE_URL = "image_url"
 TEXT_URL = "text_url"
 ID = "id"
+MODEL_TYPE = "model_type"
 
 # DPO Tasks Table Columns
 FIELD_PROMPT = "field_prompt"

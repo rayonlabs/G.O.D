@@ -25,6 +25,8 @@ from core.models.utility_models import DPODatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import TextJob
+from core.models.utility_models import ImageModelType
+from miner.utils import download_flux_unet
 
 
 logger = get_logger(__name__)
@@ -35,9 +37,10 @@ class DockerEnvironmentDiffusion:
     huggingface_token: str
     wandb_token: str
     job_id: str
+    base_model: str
 
     def to_dict(self) -> dict[str, str]:
-        return {"HUGGINGFACE_TOKEN": self.huggingface_token, "WANDB_TOKEN": self.wandb_token, "JOB_ID": self.job_id}
+        return {"HUGGINGFACE_TOKEN": self.huggingface_token, "WANDB_TOKEN": self.wandb_token, "JOB_ID": self.job_id, "BASE_MODEL": self.base_model}
 
 
 @dataclass
@@ -88,18 +91,27 @@ def _load_and_modify_config(
     return config
 
 
-def _load_and_modify_config_diffusion(model: str, task_id: str, expected_repo_name: str | None = None) -> dict:
+def _load_and_modify_config_diffusion(job: DiffusionJob) -> dict:
     """
     Loads the config template and modifies it to create a new job config.
     """
     logger.info("Loading config template")
-    logger.info(cst.CONFIG_TEMPLATE_PATH_DIFFUSION)
-    with open(cst.CONFIG_TEMPLATE_PATH_DIFFUSION, "r") as file:
-        config = toml.load(file)
-    config["pretrained_model_name_or_path"] = model
-    config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
-    config["huggingface_token"] = cst.HUGGINGFACE_TOKEN
-    config["huggingface_repo_id"] = f"{cst.HUGGINGFACE_USERNAME}/{expected_repo_name or str(uuid.uuid4())}"
+    if job.model_type == ImageModelType.SDXL:
+        with open(cst.CONFIG_TEMPLATE_PATH_DIFFUSION_SDXL, "r") as file:
+            config = toml.load(file)
+        config["pretrained_model_name_or_path"] = job.model
+        config["train_data_dir"] = f"/dataset/images/{job.job_id}/img/"
+        config["huggingface_token"] = cst.HUGGINGFACE_TOKEN
+        config["huggingface_repo_id"] = f"{cst.HUGGINGFACE_USERNAME}/{job.expected_repo_name or str(uuid.uuid4())}"
+    elif job.model_type == ImageModelType.FLUX:
+        with open(cst.CONFIG_TEMPLATE_PATH_DIFFUSION_FLUX, "r") as file:
+            config = toml.load(file)
+        config["pretrained_model_name_or_path"] = f"{cst.CONTAINER_FLUX_PATH}/flux_unet_{job.model.replace('/', '_')}.safetensors"
+        config["train_data_dir"] = f"/dataset/images/{job.job_id}/img/"
+        config["huggingface_token"] = cst.HUGGINGFACE_TOKEN
+        config["huggingface_repo_id"] = f"{cst.HUGGINGFACE_USERNAME}/{job.expected_repo_name or str(uuid.uuid4())}"
+    else:
+        logger.error(f"Unknown model type: {job.model_type}")
     return config
 
 
@@ -107,9 +119,10 @@ def create_job_diffusion(
     job_id: str,
     model: str,
     dataset_zip: str,
-    expected_repo_name: str | None,
+    model_type: ImageModelType,
+    expected_repo_name: str | None
 ):
-    return DiffusionJob(job_id=job_id, model=model, dataset_zip=dataset_zip, expected_repo_name=expected_repo_name)
+    return DiffusionJob(job_id=job_id, model=model, dataset_zip=dataset_zip, model_type=model_type, expected_repo_name=expected_repo_name)
 
 
 def create_job_text(
@@ -137,21 +150,24 @@ def start_tuning_container_diffusion(job: DiffusionJob):
 
     config_path = os.path.join(cst.CONFIG_DIR, f"{job.job_id}.toml")
 
-    config = _load_and_modify_config_diffusion(job.model, job.job_id, job.expected_repo_name)
+    config = _load_and_modify_config_diffusion(job)
     save_config_toml(config, config_path)
 
     logger.info(config)
+    if job.model_type == ImageModelType.FLUX:
+        logger.info(f"Downloading flux unet from {job.model}")
+        flux_unet_path = download_flux_unet(job.model)
 
     prepare_dataset(
         training_images_zip_path=job.dataset_zip,
-        training_images_repeat=cst.DIFFUSION_REPEATS,
+        training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if job.model_type == ImageModelType.SDXL else cst.DIFFUSION_FLUX_REPEATS,
         instance_prompt=cst.DIFFUSION_DEFAULT_INSTANCE_PROMPT,
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,
         job_id=job.job_id,
     )
 
     docker_env = DockerEnvironmentDiffusion(
-        huggingface_token=cst.HUGGINGFACE_TOKEN, wandb_token=cst.WANDB_TOKEN, job_id=job.job_id
+        huggingface_token=cst.HUGGINGFACE_TOKEN, wandb_token=cst.WANDB_TOKEN, job_id=job.job_id, base_model=job.model_type.value
     ).to_dict()
     logger.info(f"Docker environment: {docker_env}")
 
@@ -172,6 +188,12 @@ def start_tuning_container_diffusion(job: DiffusionJob):
                 "mode": "rw",
             },
         }
+
+        if job.model_type == ImageModelType.FLUX:
+            volume_bindings[os.path.dirname(flux_unet_path)] =  {
+                "bind": cst.CONTAINER_FLUX_PATH,
+                "mode": "rw",
+            }
 
         container = docker_client.containers.run(
             image=cst.MINER_DOCKER_IMAGE_DIFFUSION,

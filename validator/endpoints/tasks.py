@@ -228,6 +228,7 @@ async def create_task_image(
         account_id=request.account_id,
         task_type=TaskType.IMAGETASK,
         result_model_name=request.result_model_name,
+        model_type=request.model_type
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -331,6 +332,7 @@ async def get_task_details_by_account(
 ) -> list[InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
     offset = (page - 1) * limit
     tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
+    
     return [convert_task_to_task_details(task) for task in tasks]
 
 
@@ -341,6 +343,7 @@ async def get_task_details(
     task = await task_sql.get_task_by_id(task_id, config.psql_db)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found.")
+
     return convert_task_to_task_details(task)
 
 
@@ -409,6 +412,7 @@ async def get_completed_organic_tasks(
         limit=limit,
         offset=(page - 1) * limit,
     )
+
     return [convert_task_to_task_details(task) for task in tasks]
 
 

@@ -18,6 +18,7 @@ from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from core.models.utility_models import ImageModelType
 from validator.core.models import AllNodeStats
 
 
@@ -56,6 +57,7 @@ class TrainRequestImage(TrainRequest):
         description="Link to dataset zip file",
         min_length=1,
     )
+    model_type: ImageModelType = ImageModelType.SDXL
 
 
 class TrainResponse(BaseModel):
@@ -194,6 +196,7 @@ class NewTaskRequestImage(NewTaskRequest):
     ds_id: str = Field(
         default_factory=lambda: str(uuid4()), description="A ds name. The actual dataset is provided via the image_text_pairs"
     )
+    model_type: ImageModelType = ImageModelType.SDXL
 
 
 class NewTaskWithFixedDatasetsRequest(NewTaskRequestInstructText):
@@ -293,6 +296,7 @@ class ImageTaskDetails(TaskDetails):
     task_type: TaskType = TaskType.IMAGETASK
     image_text_pairs: list[ImageTextPair]
     base_model_repository: str = Field(..., description="The repository for the model")
+    model_type: ImageModelType = ImageModelType.SDXL
 
 
 class TaskListResponse(BaseModel):

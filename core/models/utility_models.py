@@ -81,6 +81,11 @@ class DPODatasetType(BaseModel):
     chosen_format: str | None = "{chosen}"
     rejected_format: str | None = "{rejected}"
 
+      
+class ImageModelType(str, Enum):
+    FLUX = "flux"
+    SDXL = "sdxl"
+    
 
 class Job(BaseModel):
     job_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -102,6 +107,7 @@ class DiffusionJob(Job):
         description="Link to dataset zip file",
         min_length=1,
     )
+    model_type: ImageModelType = ImageModelType.SDXL
 
 
 class Role(str, Enum):

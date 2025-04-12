@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git wget && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /aplp
 
@@ -17,6 +17,13 @@ RUN pip install -r ComfyUI/requirements.txt
 RUN cd ComfyUI/custom_nodes && \
     git clone --depth 1 https://github.com/Acly/comfyui-tooling-nodes && \
     cd ..
+
+RUN wget -O /app/validator/evaluation/ComfyUI/models/text_encoders/clip_l.safetensors \
+    https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors && \
+    wget -O /app/validator/evaluation/ComfyUI/models/text_encoders/t5xxl_fp16.safetensors \
+    https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors && \
+    wget -O /app/validator/evaluation/ComfyUI/models/vae/ae.safetensors \
+    https://huggingface.co/Albert-zp/flux-vaesft/resolve/main/fluxVaeSft_aeSft.sft
 
 RUN pip install docker diffusers
 

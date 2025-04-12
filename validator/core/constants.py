@@ -165,17 +165,28 @@ PERSON_SYNTH_CONTAINER_SAVE_PATH = "/app/avatars/"
 
 
 # diffusion eval stuff
-LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
-LORA_WORKFLOW_PATH_DIFFUSERS = "validator/evaluation/comfy_workflows/lora_diffusers.json"
+LORA_SDXL_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora_sdxl.json"
+LORA_SDXL_WORKFLOW_PATH_DIFFUSERS = "validator/evaluation/comfy_workflows/lora_sdxl_diffusers.json"
+LORA_FLUX_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora_flux.json"
 CHECKPOINTS_SAVE_PATH = "validator/evaluation/ComfyUI/models/checkpoints"
+UNET_SAVE_PATH = "validator/evaluation/ComfyUI/models/unet"
 DIFFUSERS_PATH = "validator/evaluation/ComfyUI/models/diffusers"
 LORAS_SAVE_PATH = "validator/evaluation/ComfyUI/models/loras"
-DEFAULT_STEPS = 20
-DEFAULT_CFG = 8
-DEFAULT_DENOISE = 0.9
 DIFFUSION_HF_DEFAULT_FOLDER = "checkpoint"
 DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
 DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.5
+EVAL_DEFAULTS = {
+    "sdxl": {
+        "steps": 20,
+        "cfg": 8,
+        "denoise": 0.9
+    },
+    "flux": {
+        "steps": 35,
+        "cfg": 100,
+        "denoise": 0.75
+    }
+}
 
 
 # Max jobs
