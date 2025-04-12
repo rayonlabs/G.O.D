@@ -15,10 +15,14 @@ from datasets import load_dataset
 from fiber import Keypair
 
 import validator.core.constants as cst
+from core.models.payload_models import DpoDatasetColumnsResponse
 from core.models.payload_models import ImageTextPair
 from core.models.utility_models import FileFormat
+from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from validator.augmentation.augmentation import generate_augmented_text_dataset
+from validator.core.models import DpoRawTask
+from validator.core.models import InstructTextRawTask
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
@@ -81,31 +85,33 @@ async def load_dataset_from_s3(dataset_url: str, max_file_size_bytes: int = None
         raise e
 
 
-async def download_and_load_dataset(
-    dataset_name: str, file_format: FileFormat, max_file_size_bytes: int = cst.MAX_FILE_SIZE_BYTES
-) -> Dataset:
-    if file_format == FileFormat.S3:
-        dataset = await load_dataset_from_s3(dataset_name, max_file_size_bytes)
-    else:
-        config_name = get_default_dataset_config(dataset_name)
-        dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
+async def train_test_split(dataset_name: str, file_format: FileFormat, test_size: float = None) -> DatasetDict:
+    if test_size is None:
+        test_size = cst.TRAIN_TEST_SPLIT_PERCENTAGE
+    logger.info(f"Loading dataset '{dataset_name}'")
+    try:
+        if file_format == FileFormat.S3:
+            dataset = await load_dataset_from_s3(dataset_name)
+        else:
+            config_name = get_default_dataset_config(dataset_name)
+            dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
+    except Exception as e:
+        logger.exception(f"Failed to load dataset {dataset_name}: {e}")
+        raise e
 
     if isinstance(dataset, DatasetDict):
         combined_dataset = concatenate_datasets([split for split in dataset.values()])
     else:
         combined_dataset = dataset
 
-    return combined_dataset
-
-
-async def train_test_split(dataset: Dataset, test_size: float = cst.TRAIN_TEST_SPLIT_PERCENTAGE) -> DatasetDict:
-    logger.info(f"Splitting dataset into train and test with test size {test_size}")
+    logger.info(f"Combined dataset size: {len(combined_dataset)}")
+    logger.info(f"Splitting combined dataset into train and test with test size {test_size}")
 
     test_size = min(
-        int(len(dataset) * test_size),
+        int(len(combined_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE),
         cst.MAX_TEST_DATA_POINTS,
     )
-    split_dataset = dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
+    split_dataset = combined_dataset.train_test_split(test_size=test_size, shuffle=True, seed=42)
     logger.info(f"Train set size: {len(split_dataset['train'])}")
     logger.info(f"Test set size: {len(split_dataset['test'])}")
 
@@ -153,7 +159,9 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     return test_zip_path, train_zip_path
 
 
-async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[str], keypair: Keypair) -> List[dict]:
+async def get_additional_synth_data(
+    dataset: Dataset, columns_to_sample: List[str], keypair: Keypair, is_dpo: bool = False
+) -> List[dict] | List[DpoDatasetColumnsResponse]:
     num_samples = min(
         cst.MAX_SYNTH_DATA_POINTS,
         int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
@@ -169,9 +177,26 @@ async def get_additional_synth_data(dataset: Dataset, columns_to_sample: List[st
         logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
         return None
 
-    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair)
+    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair, is_dpo=is_dpo)
 
     return synthetic_data
+
+
+async def download_and_load_dataset(
+    dataset_name: str, file_format: FileFormat, max_file_size_bytes: int = cst.MAX_FILE_SIZE_BYTES
+) -> Dataset:
+    if file_format == FileFormat.S3:
+        dataset = await load_dataset_from_s3(dataset_name, max_file_size_bytes)
+    else:
+        config_name = get_default_dataset_config(dataset_name)
+        dataset = load_dataset(dataset_name, config_name, trust_remote_code=True)
+
+    if isinstance(dataset, DatasetDict):
+        combined_dataset = concatenate_datasets([split for split in dataset.values()])
+    else:
+        combined_dataset = dataset
+
+    return combined_dataset
 
 
 def change_to_json_format(dataset: Dataset, columns: List[str]):
@@ -214,77 +239,15 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset):
     return remaining_train_dataset, synthetic_dataset
 
 
-def check_ds_num_rows(num_rows: int) -> int:
-    if num_rows < cst.MINIMUM_DATASET_ROWS:
-        error_msg = f"Dataset has only {num_rows} rows, minimum required is {cst.MINIMUM_DATASET_ROWS}"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-    return num_rows
-
-
-async def generate_synth_data(test_dataset: Dataset, columns_to_sample: List[str], keypair: Keypair) -> List[dict]:
-    try:
-        if cst.GET_SYNTH_DATA:
-            logger.info("Generating additional synthetic data")
-            synthetic_data = await get_additional_synth_data(test_dataset, columns_to_sample, keypair)
-            return synthetic_data
-        else:
-            logger.info("Skipping synthetic data generation")
-    except Exception as e:
-        logger.info(f"Error generating synthetic data: {e}")
-
-    return None
-
-
-async def prepare_text_task(
-    train_dataset: str, file_format: FileFormat, columns_to_sample: List[str], keypair: Keypair, test_dataset: str | None = None
-) -> tuple[str, str, str]:
-    should_reupload_train = FileFormat.S3 == file_format
-    should_reupload_test = test_dataset is None or FileFormat.S3 != file_format
-    tmp_files_to_delete = []
-
-    if not test_dataset:
-        logger.info(f"Preparing {train_dataset}")
-        try:
-            dataset = await download_and_load_dataset(train_dataset, file_format)
-        except Exception as e:
-            logger.info(f"There was an issue loading the dataset: {e}")
-            raise e
-        dataset_dict = await train_test_split(dataset)
-
-        train_ds = dataset_dict["train"]
-        test_ds = dataset_dict["test"]
-        should_reupload_train = True
-        should_reupload_test = True
-    else:
-        logger.info(f"Preparing train and test datasets. Train: {train_dataset}, Test: {test_dataset}")
-        try:
-            train_ds = await download_and_load_dataset(train_dataset, file_format)
-            test_ds = await download_and_load_dataset(test_dataset, file_format)
-        except Exception as e:
-            logger.info(f"There was an issue loading the dataset: {e}")
-            raise e
-
-    total_size = len(train_ds) + len(test_ds)
-    check_ds_num_rows(total_size)
-
-    if any(col not in train_ds.column_names for col in columns_to_sample):
-        raise ValueError(f"Column {columns_to_sample} not found in train dataset")
-
-    synthetic_data = []
-
-    synthetic_data = await generate_synth_data(test_ds, columns_to_sample, keypair)
-
-    if synthetic_data is None or len(synthetic_data) == 0:
-        logger.info("Synthetic dataset gen is down, moving part of the train over")
-        train_ds, synthetic_data = assign_some_of_the_train_to_synth(train_ds)
-        should_reupload_train = True
-
+async def _process_and_upload_datasets(
+    train_dataset, test_dataset, synthetic_data, columns_to_sample, should_reupload_train, should_reupload_test, ds_hf_name=None
+):
+    files_to_delete = []
     try:
         if should_reupload_train:
-            train_data_json = change_to_json_format(train_ds, columns_to_sample)
+            train_data_json = change_to_json_format(train_dataset, columns_to_sample)
             train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
-            tmp_files_to_delete.append(train_json_path)
+            files_to_delete.append(train_json_path)
             await _check_file_size(train_json_size, "train_data")
             train_json_url = await upload_file_to_minio(
                 train_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_train_data.json"
@@ -292,9 +255,9 @@ async def prepare_text_task(
         else:
             train_json_url = train_dataset
         if should_reupload_test:
-            test_data_json = change_to_json_format(test_ds, columns_to_sample)
+            test_data_json = change_to_json_format(test_dataset, columns_to_sample)
             test_json_path, test_json_size = await save_json_to_temp_file(test_data_json, prefix="test_data_")
-            tmp_files_to_delete.append(test_json_path)
+            files_to_delete.append(test_json_path)
             await _check_file_size(test_json_size, "test_data")
             test_json_url = await upload_file_to_minio(test_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_test_data.json")
         else:
@@ -302,7 +265,7 @@ async def prepare_text_task(
         if synthetic_data:
             synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample)
             synth_json_path, synth_json_size = await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_")
-            tmp_files_to_delete.append(synth_json_path)
+            files_to_delete.append(synth_json_path)
             await _check_file_size(synth_json_size, "synth_data")
             synth_json_url = await upload_file_to_minio(
                 synth_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_synth_data.json"
@@ -322,18 +285,107 @@ async def prepare_text_task(
     if not synth_json_url and synthetic_data:
         raise Exception("Failed to upload synthetic data to MinIO storage")
 
-    for file_path in tmp_files_to_delete:
+    for file_path in files_to_delete:
         if os.path.exists(file_path):
             os.remove(file_path)
 
-    if file_format == FileFormat.HF:
-        delete_dataset_from_cache(train_dataset)
-        delete_dataset_from_cache(test_dataset) if test_dataset else None
+    if ds_hf_name:
+        delete_dataset_from_cache(ds_hf_name)
 
     return (
         test_json_url.strip('"'),
-        synth_json_url.strip('"'),
+        synth_json_url.strip('"') if synth_json_url else None,
         train_json_url.strip('"'),
+    )
+
+
+def pick_columns_to_sample(task: InstructTextRawTask | DpoRawTask) -> list[str]:
+    if task.task_type == TaskType.INSTRUCTTEXTTASK:
+        columns_to_sample = [
+            i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
+        ]
+    elif task.task_type == TaskType.DPOTASK:
+        columns_to_sample = [task.field_system, task.field_prompt, task.field_chosen, task.field_rejected]
+    else:
+        raise ValueError(f"Unsupported task type: {task.task_type}")
+    return columns_to_sample
+
+
+def validate_and_transform_dpo(data, task: DpoRawTask):
+    assert isinstance(data, DpoDatasetColumnsResponse)
+    return {task.field_prompt: data.field_prompt, task.field_chosen: data.field_chosen, task.field_rejected: data.field_rejected}
+
+
+async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Keypair) -> tuple[str, str, str]:
+    should_reupload_train = FileFormat.S3 == task.file_format
+    should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
+
+    train_dataset_name = task.training_data if task.training_data else task.ds
+
+    if not task.test_data:
+        logger.info(f"Preparing {train_dataset_name}")
+        try:
+            dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
+        except Exception as e:
+            logger.info(f"There was an issue loading the dataset: {e}")
+            raise e
+        dataset_dict = await train_test_split(dataset)
+
+        train_ds = dataset_dict["train"]
+        test_ds = dataset_dict["test"]
+        should_reupload_train = True
+        should_reupload_test = True
+    else:
+        logger.info(f"Preparing train and test datasets. Train: {task.training_data}, Test: {task.test_data}")
+        try:
+            train_ds = await download_and_load_dataset(task.training_data, task.file_format)
+            test_ds = await download_and_load_dataset(task.test_data, task.file_format)
+        except Exception as e:
+            logger.info(f"There was an issue loading the dataset: {e}")
+            raise e
+
+    total_size = len(train_ds) + len(test_ds)
+    check_ds_num_rows(total_size)
+
+    if isinstance(task, InstructTextRawTask):
+        columns_to_sample = pick_columns_to_sample(task)
+    else:
+        columns_to_sample = [task.field_prompt, task.field_chosen, task.field_rejected]
+
+    if any(col not in train_ds.column_names for col in columns_to_sample):
+        raise ValueError(f"Column {columns_to_sample} not found in train dataset")
+
+    synthetic_data = []
+    try:
+        if cst.GET_SYNTH_DATA:
+            logger.info("Generating additional synthetic data")
+            if isinstance(task, DpoRawTask):
+                # we only need the field prompt to generate new data here
+                synthetic_data = await get_additional_synth_data(test_ds, [task.field_prompt], keypair, is_dpo=True)
+                synthetic_data = [validate_and_transform_dpo(data, task) for data in synthetic_data]
+
+            else:
+                synthetic_data = await get_additional_synth_data(test_ds, columns_to_sample, keypair, is_dpo=False)
+        else:
+            logger.info("Skipping synthetic data generation")
+    except Exception as e:
+        # if for some reason the api is down, we move some of the train over to be synth
+
+        logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
+        train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds)
+
+    if synthetic_data is None:
+        logger.info("There was not enough synthetic data created we are instead grabbing from train ")
+        train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds)
+
+    return await _process_and_upload_datasets(
+        train_ds,
+        test_ds,
+        synthetic_ds,
+        columns_to_sample,
+        should_reupload_train,
+        should_reupload_test,
+        train_dataset_name if task.file_format == FileFormat.HF else None,
     )
 
 
@@ -366,3 +418,11 @@ async def _check_file_size(file_size: int, file_type: str) -> None:
         raise ValueError(
             f"{file_type} data size ({file_size} bytes) exceeds maximum allowed size of {cst.MAX_FILE_SIZE_BYTES} bytes"
         )
+
+
+def check_ds_num_rows(num_rows: int) -> int:
+    if num_rows < cst.MINIMUM_DATASET_ROWS:
+        error_msg = f"Dataset has only {num_rows} rows, minimum required is {cst.MINIMUM_DATASET_ROWS}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    return num_rows

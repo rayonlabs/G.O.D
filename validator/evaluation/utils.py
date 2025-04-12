@@ -5,6 +5,7 @@ import tempfile
 from io import BytesIO
 
 from datasets import get_dataset_config_names
+from huggingface_hub import HfApi
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from transformers import AutoConfig
@@ -14,6 +15,7 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+hf_api = HfApi()
 
 
 def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalLM) -> bool:
@@ -53,6 +55,23 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     )
     return architecture_same and architecture_classes_match
 
+def check_for_lora(model_id: str) -> bool:
+    """
+    Check if a Hugging Face model has LoRA adapters by looking for adapter_config.json.
+
+    Args:
+        model_id (str): The Hugging Face model ID (e.g., 'username/model-name') or path
+
+    Returns:
+        bool: True if it's a LoRA adapter, False otherwise
+    """
+    try:
+        return 'adapter_config.json' in hf_api.list_repo_files(model_id)
+    except Exception as e:
+        logger.error(f"Error checking for LoRA adapters: {e}")
+        return False
+
+
 
 def get_default_dataset_config(dataset_name: str) -> str | None:
     try:
@@ -70,19 +89,19 @@ def get_default_dataset_config(dataset_name: str) -> str | None:
 
 def adjust_image_size(image: Image.Image) -> Image.Image:
     width, height = image.size
-    
+
     if width > height:
         new_width = 1024
         new_height = int((height / width) * 1024)
     else:
         new_height = 1024
         new_width = int((width / height) * 1024)
-    
+
     image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
+
     new_width = (new_width // 8) * 8
     new_height = (new_height // 8) * 8
-    
+
     width, height = image.size
     crop_width = min(width, new_width)
     crop_height = min(height, new_height)
@@ -91,7 +110,7 @@ def adjust_image_size(image: Image.Image) -> Image.Image:
     right = left + crop_width
     bottom = top + crop_height
     image = image.crop((left, top, right, bottom))
-    
+
     return image
 
 
