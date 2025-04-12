@@ -198,9 +198,21 @@ class NewTaskRequestImage(NewTaskRequest):
 
 class NewTaskWithFixedDatasetsRequest(NewTaskRequestInstructText):
     ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
+    file_format: FileFormat = Field(
+        FileFormat.S3, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
     training_data: str = Field(..., description="The prepared training dataset")
     synthetic_data: str = Field(..., description="The prepared synthetic dataset")
     test_data: str = Field(..., description="The prepared test dataset")
+
+
+class NewTaskWithCustomDatasetRequest(NewTaskRequestInstructText):
+    ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
+    training_data: str = Field(..., description="The prepared training dataset")
+    test_data: str | None = Field(None, description="The prepared test dataset")
+    file_format: FileFormat = Field(
+        FileFormat.S3, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
 
 
 class NewTaskResponse(BaseModel):

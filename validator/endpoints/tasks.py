@@ -18,6 +18,7 @@ from core.models.payload_models import NewTaskRequestDPO
 from core.models.payload_models import NewTaskRequestImage
 from core.models.payload_models import NewTaskRequestInstructText
 from core.models.payload_models import NewTaskResponse
+from core.models.payload_models import NewTaskWithCustomDatasetRequest
 from core.models.payload_models import NewTaskWithFixedDatasetsRequest
 from core.models.payload_models import TaskResultResponse
 from core.models.utility_models import FileFormat
@@ -45,6 +46,9 @@ logger = get_logger(__name__)
 
 TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT = "/v1/tasks/create"  # TODO: change to create_text after FE changes
 TASKS_CREATE_ENDPOINT_IMAGE = "/v1/tasks/create_image"
+CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT = (
+    "/v1/tasks/create_custom_dataset_text"  # TODO: this is just for instruct text tasks
+)
 TASKS_CREATE_ENDPOINT_DPO = "/v1/tasks/create_dpo"
 TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"  # TODO: this is just for instruct text tasks
 GET_TASKS_BY_ACCOUNT_ENDPOINT = "/v1/tasks/account/{account_id}"
@@ -232,6 +236,40 @@ async def create_task_image(
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
+async def create_text_task_with_custom_dataset(
+    request: NewTaskWithCustomDatasetRequest,
+    config: Config = Depends(get_config),
+) -> NewTaskResponse:
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
+
+    task = InstructTextRawTask(
+        model_id=request.model_repo,
+        ds=request.ds_repo or "custom",
+        file_format=request.file_format if request.ds_repo else FileFormat.S3,
+        field_system=request.field_system,
+        field_instruction=request.field_instruction,
+        field_input=request.field_input,
+        field_output=request.field_output,
+        format=request.format,
+        is_organic=True,
+        no_input_format=request.no_input_format,
+        status=TaskStatus.PENDING,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=request.hours_to_complete,
+        account_id=request.account_id,
+        task_type=TaskType.TEXTTASK,
+        result_model_name=request.result_model_name,
+        training_data=request.training_data,
+        test_data=request.test_data,
+    )
+
+    task = await task_sql.add_task(task, config.psql_db)
+    logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
+
+
 async def create_task_with_fixed_datasets(
     request: NewTaskWithFixedDatasetsRequest,
     config: Config = Depends(get_config),
@@ -410,6 +448,7 @@ def factory_router() -> APIRouter:
     router.add_api_route(TASKS_CREATE_ENDPOINT_IMAGE, create_task_image, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_DPO, create_task_dpo, methods=["POST"])
     router.add_api_route(TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT, create_task_with_fixed_datasets, methods=["POST"])
+    router.add_api_route(CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT, create_text_task_with_custom_dataset, methods=["POST"])
     router.add_api_route(GET_TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])
     router.add_api_route(DELETE_TASK_ENDPOINT, delete_task, methods=["DELETE"])
     router.add_api_route(GET_TASKS_RESULTS_ENDPOINT, get_miner_breakdown, methods=["GET"])

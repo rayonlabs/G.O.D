@@ -27,9 +27,20 @@ hf_api = HfApi()
 
 async def get_total_text_dataset_size(task: InstructTextRawTask | DpoRawTask) -> int:
     if task.file_format == FileFormat.S3:
-        bucket_name, object_name = async_minio_client.parse_s3_url(task.ds)
-        stats = await async_minio_client.get_stats(bucket_name, object_name)
-        size = stats.size
+        if not task.training_data:
+            logger.error(f"Training data is missing from task: {task.task_id}")
+            raise ValueError(f"Training data is missing from task: {task.task_id}")
+        train_bucket_name, train_object_name = async_minio_client.parse_s3_url(task.training_data)
+        train_stats = await async_minio_client.get_stats(train_bucket_name, train_object_name)
+        train_ds_size = train_stats.size
+        if task.test_data:
+            test_bucket_name, test_object_name = async_minio_client.parse_s3_url(task.test_data)
+            test_stats = await async_minio_client.get_stats(test_bucket_name, test_object_name)
+            test_ds_size = test_stats.size
+            return train_ds_size + test_ds_size
+        else:
+            return train_ds_size
+
     else:
         loop = asyncio.get_running_loop()
         dataset_infos = await loop.run_in_executor(None, get_dataset_infos, task.ds)
@@ -67,9 +78,7 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawT
     return task
 
 
-async def run_text_task_prep(
-    task: InstructTextRawTask | DpoRawTask, keypair: Keypair
-    ) -> InstructTextRawTask | DpoRawTask:
+async def run_text_task_prep(task: InstructTextRawTask | DpoRawTask, keypair: Keypair) -> InstructTextRawTask | DpoRawTask:
     test_data, synth_data, train_data = await prepare_text_task(task, keypair=keypair)
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
@@ -88,7 +97,7 @@ def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRe
             field_instruction=task.field_instruction,
             format=task.format,
             no_input_format=task.no_input_format,
-    )
+        )
     elif task.task_type == TaskType.DPOTASK:
         dataset_type = DPODatasetType(
             field_prompt=task.field_prompt,
