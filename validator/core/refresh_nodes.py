@@ -45,10 +45,14 @@ async def _get_and_store_nodes(config: Config) -> list[Node]:
     raw_nodes = await _fetch_nodes_from_substrate(config)
     logger.info('afer  fetch')
     nodes = [Node(**node.model_dump(mode="json")) for node in raw_nodes]
+    logger.info('afer  nodes')
 
     async with await config.psql_db.connection() as connection:
+        logger.info('connection made')
         await migrate_nodes_to_history(connection)
+        logger.info('after migrate')
         await insert_nodes(connection, nodes)
+        logger.info('after insret')
 
     logger.info(f"Stored {len(nodes)} nodes.")
     return nodes
