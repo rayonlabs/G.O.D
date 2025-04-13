@@ -8,6 +8,8 @@ from typing import AsyncGenerator
 from substrateinterface import Keypair
 
 import validator.core.constants as cst
+from core.models.payload_models import ImageModelInfo
+from core.models.payload_models import ImageModelsResponse
 from core.models.payload_models import InstructDatasetColumnsResponse
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
@@ -47,15 +49,20 @@ async def _get_text_models(
             yield model_id
 
 
-async def _get_image_models(keypair: Keypair) -> AsyncGenerator[str, None]:
+async def _get_image_models(keypair: Keypair) -> AsyncGenerator[ImageModelInfo, None]:
     while True:
-        response = await call_content_service(cst.GET_IMAGE_MODELS_ENDPOINT, keypair)
-        if not isinstance(response, dict) or "models" not in response:
-            raise TypeError(f"Expected a dict with 'models' key from {cst.GET_IMAGE_MODELS_ENDPOINT}")
-        models: list[str] = response["models"]
+        response_data = await call_content_service(cst.GET_IMAGE_MODELS_ENDPOINT, keypair)
+        try:
+            response = ImageModelsResponse.model_validate(response_data)
+        except Exception as e:
+            logger.error(f"Invalid response format from {cst.GET_IMAGE_MODELS_ENDPOINT}: {response_data}. Error: {e}")
+            await asyncio.sleep(5)
+            continue
+
+        models = response.models
         random.shuffle(models)
-        for model in models:
-            yield model
+        for model_info in models:
+            yield model_info
 
 
 async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, dpo: bool) -> AsyncGenerator[Dataset, None]:
@@ -230,7 +237,7 @@ async def _add_new_task_to_network_if_not_enough(
     models: AsyncGenerator[str, None],
     instruct_datasets: AsyncGenerator[Dataset, None],
     dpo_datasets: AsyncGenerator[Dataset, None],
-    image_models: AsyncGenerator[str, None],
+    image_models: AsyncGenerator[ImageModelInfo, None],
 ):
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
     current_preeval_tasks = await get_tasks_with_status(TaskStatus.PREEVALUATION, config.psql_db)
@@ -270,10 +277,10 @@ async def schedule_synthetics_periodically(config: Config):
         try:
             logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
             if random.random() < cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
-                logger.info('Big Boy Model in Da House')
+                logger.info("Big Boy Model in Da House")
                 await _add_new_task_to_network_if_not_enough(config, big_models, instruct_datasets, dpo_datasets, image_models)
             else:
-                logger.info('Basic Model Selected')
+                logger.info("Basic Model Selected")
                 await _add_new_task_to_network_if_not_enough(
                     config, standard_models, instruct_datasets, dpo_datasets, image_models
                 )

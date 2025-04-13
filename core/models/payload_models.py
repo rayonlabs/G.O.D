@@ -11,6 +11,7 @@ from pydantic import model_validator
 from core import constants as cst
 from core.models.utility_models import DPODatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import JobStatus
@@ -18,7 +19,6 @@ from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
-from core.models.utility_models import ImageModelType
 from validator.core.models import AllNodeStats
 
 
@@ -308,3 +308,12 @@ class TaskListResponse(BaseModel):
 class LeaderboardRow(BaseModel):
     hotkey: str
     stats: AllNodeStats
+
+
+class ImageModelInfo(BaseModel):
+    model_id: str
+    model_type: ImageModelType
+
+
+class ImageModelsResponse(BaseModel):
+    models: list[ImageModelInfo]
