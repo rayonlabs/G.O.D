@@ -74,7 +74,7 @@ SYNTH_GEN_BATCH_SIZE = 30
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
-PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.05
+PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.02
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
@@ -217,9 +217,9 @@ INSTRUCT_TEXT_TASK_SCORE_WEIGHT = 0.65
 IMAGE_TASK_SCORE_WEIGHT = 0.3
 DPO_TASK_SCORE_WEIGHT = 1 - INSTRUCT_TEXT_TASK_SCORE_WEIGHT - IMAGE_TASK_SCORE_WEIGHT
 
-SEVEN_DAY_SCORE_WEIGHT = 0.25
+SEVEN_DAY_SCORE_WEIGHT = 0.3
 THREE_DAY_SCORE_WEIGHT = 0.4
-ONE_DAY_SCORE_WEIGHT = 0.35
+ONE_DAY_SCORE_WEIGHT = 0.3
 
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
