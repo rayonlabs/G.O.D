@@ -517,6 +517,7 @@ async def _evaluate_submissions(
             "test_split_url": task.test_data,
             "original_model_repo": task.model_id,
             "models": repos_to_evaluate,
+            "model_type": task.model_type,  
             "gpu_ids": gpu_ids,
         }
 

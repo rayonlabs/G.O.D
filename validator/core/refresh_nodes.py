@@ -38,9 +38,11 @@ async def _is_recent_update(config: Config) -> bool:
 
 
 async def _get_and_store_nodes(config: Config) -> list[Node]:
-    if not config.psql_db.pool or config.psql_db.pool.is_closed():
-        logger.info("Reconnecting to PostgreSQL...")
-        await config.psql_db.connect()
+    try:
+        async with config.psql_db.pool.acquire() as conn:
+            await conn.execute("SELECT 1")
+    except Exception as e:
+        logger.warning(f"DB pool not ready, reconnecting... {e}")
     if await _is_recent_update(config):
         nodes = await get_all_nodes(config.psql_db)
 
