@@ -74,13 +74,13 @@ SYNTH_GEN_BATCH_SIZE = 30
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
-PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.02
+PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.05
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
     (20_000, 50_000),
     (50_000, 100_000),
-    (100_000, 250_000),
+    (100_000, 500_000),
 ]
 
 # dataset row bins to training hours range
@@ -213,13 +213,13 @@ MAX_IMAGE_HEIGHT = 1024
 IMAGE_RESOLUTION_STEP = 64  # Ensures we get resolutions divisible by 64
 
 # scoring stuff
-INSTRUCT_TEXT_TASK_SCORE_WEIGHT = 0.65
-IMAGE_TASK_SCORE_WEIGHT = 0.3
+INSTRUCT_TEXT_TASK_SCORE_WEIGHT = 0.55
+IMAGE_TASK_SCORE_WEIGHT = 0.4
 DPO_TASK_SCORE_WEIGHT = 1 - INSTRUCT_TEXT_TASK_SCORE_WEIGHT - IMAGE_TASK_SCORE_WEIGHT
 
-SEVEN_DAY_SCORE_WEIGHT = 0.3
-THREE_DAY_SCORE_WEIGHT = 0.4
-ONE_DAY_SCORE_WEIGHT = 0.3
+SEVEN_DAY_SCORE_WEIGHT = 0.45
+THREE_DAY_SCORE_WEIGHT = 0.3
+ONE_DAY_SCORE_WEIGHT = 0.25
 
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
