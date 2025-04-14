@@ -54,7 +54,7 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     hours = task.hours_to_complete
 
     if getattr(task, "model_params_count", 0) > 0:
-        model_size_billions = min(14, max(1, task.model_params_count // 1_000_000_000))
+        model_size_billions = min(40, max(1, task.model_params_count // 1_000_000_000))
     else:
         # Fallback to parsing from model id
         model = task.model_id
@@ -108,7 +108,7 @@ def calculate_node_quality_scores(
         assert node_agg.task_raw_scores, f"No raw scores available for node {hotkey}"
 
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
-        std_score=float(np.std(node_agg.task_raw_scores))
+        std_score = float(np.std(node_agg.task_raw_scores))
         score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
         node_agg.quality_score = score
 
@@ -177,7 +177,7 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
-def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 1.5, threshold: float = 0.75) -> bool:
+def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
     If all synth losses are NaN, return False to use test_loss only.
@@ -190,11 +190,11 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
         return False
 
     # Only consider miners with real synthetic loss values (not placeholders)
-    real_synth_miners = [result for result in valid_results
-                        if result.is_finetune
-                        and not np.isnan(result.test_loss)
-                        and not np.isnan(result.synth_loss)
-                        and result.synth_loss < 999.0]  # Exclude placeholder values
+    real_synth_miners = [
+        result
+        for result in valid_results
+        if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss) and result.synth_loss < 999.0
+    ]  # Exclude placeholder values
 
     if not real_synth_miners:
         logger.info("No miners with real synthetic loss values")
@@ -214,8 +214,8 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
 
 
 def calculate_miner_ranking_and_scores(
-    miner_results: list[MinerResultsText | MinerResultsImage]
-    ) -> list[MinerResultsText | MinerResultsImage]:
+    miner_results: list[MinerResultsText | MinerResultsImage],
+) -> list[MinerResultsText | MinerResultsImage]:
     """Calculate scores based on either test_loss or weighted_loss.
     Top ranked gets score=3, others get 0.
     Bottom 25% get a penalty (cts.SCORE_PENALTY) if there are more than cts.MIN_IDEAL_NUM_MINERS_IN_POOL miners."""
@@ -233,11 +233,7 @@ def calculate_miner_ranking_and_scores(
                 result.score_reason = "Outside of top-4 test doesn't get scored."
                 logger.info(f"Miner {result.hotkey}: Outside of top-4")
 
-    valid_results = [
-        result
-        for result in miner_results
-        if result.is_finetune and not np.isnan(result.test_loss)
-    ]
+    valid_results = [result for result in miner_results if result.is_finetune and not np.isnan(result.test_loss)]
     if not valid_results:
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
@@ -247,15 +243,13 @@ def calculate_miner_ranking_and_scores(
     if use_weighted_loss:
         logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
         ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss)) for result in valid_results]
-        ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
+        ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
         ranking_type = "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
-        ranked_results.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
+        ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
         ranking_type = "test_loss_only"
-
-
 
     if ranked_results:  # Need one result at least bro
         top_result, top_metric = ranked_results[0]
@@ -327,7 +321,7 @@ def _get_dataset_type(task: InstructTextRawTask | DpoRawTask) -> InstructDataset
             field_output=task.field_output,
             format=task.format,
             no_input_format=task.no_input_format,
-    )
+        )
     elif task.task_type == TaskType.DPOTASK:
         return DPODatasetType(
             field_prompt=task.field_prompt,
@@ -468,7 +462,7 @@ async def _evaluate_submissions(
             else:
                 test_losses.append((repo, test_result.eval_loss))
 
-        test_losses.sort(key=lambda x: float('inf') if math.isnan(x[1]) else x[1])
+        test_losses.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
         top_4_repos = [repo for repo, _ in test_losses[:4]]
 
         for repo, _ in test_losses[4:]:
@@ -517,7 +511,7 @@ async def _evaluate_submissions(
             "test_split_url": task.test_data,
             "original_model_repo": task.model_id,
             "models": repos_to_evaluate,
-            "model_type": task.model_type,  
+            "model_type": task.model_type,
             "gpu_ids": gpu_ids,
         }
 
