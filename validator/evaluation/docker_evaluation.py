@@ -14,9 +14,9 @@ from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
-from core.models.utility_models import CustomDatasetType
-from core.models.utility_models import DatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import ImageModelType
 from core.utils import download_s3_file
 from validator.tasks.task_prep import unzip_to_temp_path
 from validator.utils.logging import get_all_context_tags
@@ -76,15 +76,13 @@ async def run_evaluation_docker_text(
     dataset: str,
     models: list[str],
     original_model: str,
-    dataset_type: Union[DatasetType, CustomDatasetType],
+    dataset_type: InstructDatasetType,
     file_format: FileFormat,
     gpu_ids: list[int],
 ) -> DockerEvaluationResults:
     client = docker.from_env()
 
-    if isinstance(dataset_type, DatasetType):
-        dataset_type_str = dataset_type.value
-    elif isinstance(dataset_type, CustomDatasetType):
+    if isinstance(dataset_type, InstructDatasetType):
         dataset_type_str = dataset_type.model_dump_json()
     else:
         raise ValueError("Invalid dataset_type provided.")
@@ -156,11 +154,11 @@ async def run_evaluation_docker_text(
 
 
 async def run_evaluation_docker_image(
-    test_split_url: str, original_model_repo: str, models: list[str], gpu_ids: list[int]
+    test_split_url: str, original_model_repo: str, models: list[str], model_type: ImageModelType, gpu_ids: list[int]
 ) -> dict[str, Union[EvaluationResultImage, Exception]]:
     raw_data = await download_s3_file(test_split_url)
     test_split_path = unzip_to_temp_path(raw_data)
-    dataset_dir = os.path.abspath(test_split_path) 
+    dataset_dir = os.path.abspath(test_split_path)
     container_dataset_path = "/workspace/input_data"
 
     client = docker.from_env()
@@ -191,6 +189,7 @@ async def run_evaluation_docker_image(
         "DATASET": container_dataset_path,
         "MODELS": ",".join(models),
         "ORIGINAL_MODEL_REPO": original_model_repo,
+        "MODEL_TYPE": model_type.value,
     }
 
     async def cleanup_resources():

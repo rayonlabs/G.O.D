@@ -9,8 +9,9 @@ MAX_QUERIES = 1000  # Maximum number of queries to execute before closing a conn
 NODES_TABLE = "nodes"
 NODES_HISTORY_TABLE = "nodes_history"
 TASKS_TABLE = "tasks"
-TEXT_TASKS_TABLE = "text_tasks"
+INSTRUCT_TEXT_TASKS_TABLE = "instruct_text_tasks"
 IMAGE_TASKS_TABLE = "image_tasks"
+DPO_TASKS_TABLE = "dpo_tasks"
 TASK_NODES_TABLE = "task_nodes"
 SUBMISSIONS_TABLE = "submissions"
 OFFER_RESPONSES_TABLE = "offer_responses"
@@ -66,7 +67,7 @@ N_EVAL_ATTEMPTS = "n_eval_attempts"
 RESULT_MODEL_NAME = "result_model_name"
 MODEL_PARAMS_COUNT = "model_params_count"
 
-# Text Tasks Table Columns
+# Instruct Text Tasks Table Columns
 FIELD_SYSTEM = "field_system"
 FIELD_INSTRUCTION = "field_instruction"
 FIELD_INPUT = "field_input"
@@ -81,6 +82,15 @@ IMAGE_TEXT_PAIRS = "image_text_pairs"
 IMAGE_URL = "image_url"
 TEXT_URL = "text_url"
 ID = "id"
+MODEL_TYPE = "model_type"
+
+# DPO Tasks Table Columns
+FIELD_PROMPT = "field_prompt"
+FIELD_CHOSEN = "field_chosen"
+FIELD_REJECTED = "field_rejected"
+PROMPT_FORMAT = "prompt_format"
+CHOSEN_FORMAT = "chosen_format"
+REJECTED_FORMAT = "rejected_format"
 
 
 # Submissions Table Columns

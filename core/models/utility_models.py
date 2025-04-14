@@ -6,12 +6,6 @@ from pydantic import BaseModel
 from pydantic import Field
 
 
-class DatasetType(str, Enum):
-    INSTRUCT = "instruct"
-    PRETRAIN = "pretrain"
-    ALPACA = "alpaca"
-
-
 class FileFormat(str, Enum):
     CSV = "csv"  # needs to be local file
     JSON = "json"  # needs to be local file
@@ -66,7 +60,7 @@ class TaskMinerResult(BaseModel):
     quality_score: float
 
 
-class CustomDatasetType(BaseModel):
+class InstructDatasetType(BaseModel):
     system_prompt: str | None = ""
     system_format: str | None = "{system}"
     field_system: str | None = None
@@ -78,6 +72,21 @@ class CustomDatasetType(BaseModel):
     field: str | None = None
 
 
+class DPODatasetType(BaseModel):
+    field_prompt: str | None = None
+    field_system: str | None = None
+    field_chosen: str | None = None
+    field_rejected: str | None = None
+    prompt_format: str | None = "{prompt}"
+    chosen_format: str | None = "{chosen}"
+    rejected_format: str | None = "{rejected}"
+
+      
+class ImageModelType(str, Enum):
+    FLUX = "flux"
+    SDXL = "sdxl"
+    
+
 class Job(BaseModel):
     job_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     model: str
@@ -88,7 +97,7 @@ class Job(BaseModel):
 
 class TextJob(Job):
     dataset: str
-    dataset_type: DatasetType | CustomDatasetType
+    dataset_type: InstructDatasetType | DPODatasetType
     file_format: FileFormat
 
 
@@ -98,6 +107,7 @@ class DiffusionJob(Job):
         description="Link to dataset zip file",
         min_length=1,
     )
+    model_type: ImageModelType = ImageModelType.SDXL
 
 
 class Role(str, Enum):
@@ -114,12 +124,28 @@ class Message(BaseModel):
 class Prompts(BaseModel):
     input_output_reformulation_sys: str
     input_output_reformulation_user: str
+    input_reformulation_sys: str
+    input_reformulation_user: str
 
 
 class TaskType(str, Enum):
-    TEXTTASK = "TextTask"
+    INSTRUCTTEXTTASK = "InstructTextTask"
     IMAGETASK = "ImageTask"
+    DPOTASK = "DpoTask"
 
+    # Temporary for backwards compatibility, otherwise auditing will fail
+    TEXTTASK = "TextTask"
+    def __eq__(self, other):
+        if isinstance(other, (str, TaskType)):
+            self_str = str(self)
+            other_str = str(other)
+            if self_str in ("InstructTextTask", "TextTask") and other_str in ("InstructTextTask", "TextTask"):
+                return True
+            return self_str == other_str
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(str(self))
 
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")

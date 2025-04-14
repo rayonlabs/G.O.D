@@ -64,8 +64,8 @@ IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
 TEMP_PATH_FOR_IMAGES = "/tmp/validator/temp_images"
 SUPPORTED_IMAGE_FILE_EXTENSIONS = (".png", ".jpg", ".jpeg")
-MAX_FILE_SIZE_BYTES = 2147483646  # pyarrow max json load size
-MINIMUM_DATASET_ROWS = 2000  # Minimum number of rows required in a dataset
+MAX_FILE_SIZE_BYTES = 2_147_483_646  # pyarrow max json load size
+MINIMUM_DATASET_ROWS = 2_000  # Minimum number of rows required in a dataset
 EXAMPLE_PROMPTS_PATH = "validator/tasks/example_prompts.json"
 
 # synth stuff
@@ -74,7 +74,7 @@ SYNTH_GEN_BATCH_SIZE = 30
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
-
+PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.02
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
@@ -84,7 +84,7 @@ DATASET_BINS_TO_SAMPLE = [
 ]
 
 # dataset row bins to training hours range
-TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
+INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     #   (5_000, 10_000): (3, 5),  # 5k-10k rows needs 1-2 hours
     (10_000, 25_000): (3, 6),  # 10k-25k rows needs 2-4 hours
     (25_000, 50_000): (4, 8),  # 25k-50k rows needs 3-6 hours
@@ -94,6 +94,7 @@ TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
 
 # text augmentation synth
 TEXT_SYNTH_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
+TEXT_SYNTH_WEAKER_MODEL = "llama-3-2-3b"
 TEXT_SYNTH_MODEL_TEMPERATURE = 0.4
 TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
 END_OF_REASONING_TAG = "</think>"
@@ -118,8 +119,6 @@ MINIMUM_MINER_POOL = 1
 
 MIN_IDEAL_NUM_MINERS_IN_POOL = 5
 MAX_IDEAL_NUM_MINERS_IN_POOL = 9
-MIN_TEXT_COMPETITION_HOURS = 2
-MAX_TEXT_COMPETITION_HOURS = 12
 MIN_IMAGE_COMPETITION_HOURS = 1
 MAX_IMAGE_COMPETITION_HOURS = 2
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
@@ -127,6 +126,7 @@ TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
+MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
 
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
@@ -151,7 +151,12 @@ MAX_CONCURRENT_TASK_PREPS = 3
 MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_TEXT = 0.5  # image is currently 1 minus this
+
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT = 0.45  # image is currently 1 minus DPO minus this
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.05
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE = (
+    1 - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
+)
 PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = 0.5  # person synth chance is 1 minus this
 PROBABILITY_STYLE_COMBINATION = 0.5
 PERSON_SYNTH_DS_PREFIX = "person"
@@ -160,17 +165,28 @@ PERSON_SYNTH_CONTAINER_SAVE_PATH = "/app/avatars/"
 
 
 # diffusion eval stuff
-LORA_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora.json"
-LORA_WORKFLOW_PATH_DIFFUSERS = "validator/evaluation/comfy_workflows/lora_diffusers.json"
+LORA_SDXL_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora_sdxl.json"
+LORA_SDXL_WORKFLOW_PATH_DIFFUSERS = "validator/evaluation/comfy_workflows/lora_sdxl_diffusers.json"
+LORA_FLUX_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora_flux.json"
 CHECKPOINTS_SAVE_PATH = "validator/evaluation/ComfyUI/models/checkpoints"
+UNET_SAVE_PATH = "validator/evaluation/ComfyUI/models/unet"
 DIFFUSERS_PATH = "validator/evaluation/ComfyUI/models/diffusers"
 LORAS_SAVE_PATH = "validator/evaluation/ComfyUI/models/loras"
-DEFAULT_STEPS = 20
-DEFAULT_CFG = 8
-DEFAULT_DENOISE = 0.9
 DIFFUSION_HF_DEFAULT_FOLDER = "checkpoint"
 DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
 DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.5
+EVAL_DEFAULTS = {
+    "sdxl": {
+        "steps": 20,
+        "cfg": 8,
+        "denoise": 0.9
+    },
+    "flux": {
+        "steps": 35,
+        "cfg": 100,
+        "denoise": 0.75
+    }
+}
 
 
 # Max jobs
@@ -197,12 +213,13 @@ MAX_IMAGE_HEIGHT = 1024
 IMAGE_RESOLUTION_STEP = 64  # Ensures we get resolutions divisible by 64
 
 # scoring stuff
-TEXT_TASK_SCORE_WEIGHT = 0.7
-IMAGE_TASK_SCORE_WEIGHT = 1 - TEXT_TASK_SCORE_WEIGHT
+INSTRUCT_TEXT_TASK_SCORE_WEIGHT = 0.65
+IMAGE_TASK_SCORE_WEIGHT = 0.3
+DPO_TASK_SCORE_WEIGHT = 1 - INSTRUCT_TEXT_TASK_SCORE_WEIGHT - IMAGE_TASK_SCORE_WEIGHT
 
-SEVEN_DAY_SCORE_WEIGHT = 0.25
+SEVEN_DAY_SCORE_WEIGHT = 0.3
 THREE_DAY_SCORE_WEIGHT = 0.4
-ONE_DAY_SCORE_WEIGHT = 0.35
+ONE_DAY_SCORE_WEIGHT = 0.3
 
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days

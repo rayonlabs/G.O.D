@@ -92,6 +92,7 @@ async def tune_model_diffusion(
         job_id=str(train_request.task_id),
         dataset_zip=train_request.dataset_zip,
         model=train_request.model,
+        model_type=train_request.model_type,
         expected_repo_name=train_request.expected_repo_name,
     )
     logger.info(f"Created job {job}")
@@ -138,8 +139,12 @@ async def task_offer(
         # You will want to optimise this as a miner
         global current_job_finish_time
         current_time = datetime.now()
-        if request.task_type != TaskType.TEXTTASK:
-            return MinerTaskResponse(message="This endpoint only accepts text tasks", accepted=False)
+        if request.task_type not in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+            return MinerTaskResponse(
+                message=f"This endpoint only accepts text tasks: "
+                        f"{TaskType.INSTRUCTTEXTTASK} and {TaskType.DPOTASK}",
+                accepted=False
+            )
 
         if "llama" not in request.model.lower():
             return MinerTaskResponse(message="I'm not yet optimised and only accept llama-type jobs", accepted=False)
@@ -245,7 +250,7 @@ def factory_router() -> APIRouter:
         tags=["Subnet"],
         methods=["POST"],
         response_model=TrainResponse,
-        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+        # dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
 
     return router

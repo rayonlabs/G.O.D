@@ -49,23 +49,23 @@ TIME_PER_BLOCK: int = 500
 
 def get_organic_proportion(task_results: list[TaskResults], task_type: TaskType, days: int) -> float:
     """
-    Calculate the proportion of organic vs non-organic text tasks over a specified time period.
+    Calculate the proportion of organic vs non-organic tasks of a specific type over a specified time period.
 
     Args:
         task_results: List of task results to analyze
         days: Number of days to look back (default 7)
 
     Returns:
-        tuple[float, float]: (organic_proportion, synth_proportion)
+        float: organic_proportion
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
-    text_tasks = [
+    specific_type_tasks = [
         i for i in task_results
         if i.task.created_at > cutoff_date and i.task.task_type == task_type
     ]
 
-    organic_count = sum(1 for task in text_tasks if task.task.is_organic)
-    total_count = len(text_tasks)
+    organic_count = sum(1 for task in specific_type_tasks if task.task.is_organic)
+    total_count = len(specific_type_tasks)
 
     logger.info(f'The total count is {total_count} with organic_count {organic_count}')
     organic_proportion = organic_count / total_count if total_count > 0 else 0.0
@@ -73,6 +73,55 @@ def get_organic_proportion(task_results: list[TaskResults], task_type: TaskType,
     return organic_proportion
 
 
+def detect_suspicious_nodes(task_results: list[TaskResults], task_type: TaskType, days: int = 7) -> set[str]:
+    """
+    Detect nodes that show suspicious behavior by having significantly higher scores on organic tasks
+    compared to synthetic tasks for a specific task type.
+    Returns:
+        set of hotkeys flagged as suspicious
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # Filter tasks by type and period
+    period_tasks_organic = [
+        task for task in task_results
+        if task.task.task_type == task_type
+        and task.task.is_organic
+        and task.task.created_at > cutoff
+    ]
+
+    period_tasks_synth = [
+        task for task in task_results
+        if task.task.task_type == task_type
+        and not task.task.is_organic
+        and task.task.created_at > cutoff
+    ]
+
+    # Get scores for comparison
+    organic_scores = get_period_scores_from_results(
+        period_tasks_organic,
+        weight_multiplier=1.0  # Temporary multiplier just for comparison
+    )
+
+    synth_scores = get_period_scores_from_results(
+        period_tasks_synth,
+        weight_multiplier=1.0  # Temporary multiplier just for comparison
+    )
+
+    suspicious_hotkeys = set()
+    synth_by_hotkey = {score.hotkey: score for score in synth_scores}
+
+    for organic_score in organic_scores:
+        if organic_score.hotkey in synth_by_hotkey:
+            synth_score = synth_by_hotkey[organic_score.hotkey]
+            if organic_score.average_score > (synth_score.average_score + 0.5 * synth_score.std_score):
+                logger.info(
+                    f"Node {organic_score.hotkey} has a much higher organic vs synth score "
+                    f"for {task_type} in {days}-day period - flagging as suspicious"
+                )
+                suspicious_hotkeys.add(organic_score.hotkey)
+
+    return suspicious_hotkeys
 
 def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list[PeriodScore]:
     """Process task results into period scores with appropriate filtering and weighting."""
@@ -80,48 +129,30 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         logger.info("There were no results to be scored")
         return []
 
-    organic_text_proportion = get_organic_proportion(task_results, TaskType.TEXTTASK, days=7)
-    synth_text_proportion = 1 - organic_text_proportion
-
-    seven_day_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
-    seven_day_text_tasks_organic = [
-        task for task in task_results
-        if task.task.task_type == TaskType.TEXTTASK
-        and task.task.is_organic
-        and task.task.created_at > seven_day_cutoff
+    task_types = [
+        {"type": TaskType.INSTRUCTTEXTTASK, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
+        {"type": TaskType.DPOTASK, "weight_key": "DPO_TASK_SCORE_WEIGHT"},
+        {"type": TaskType.IMAGETASK, "weight_key": "IMAGE_TASK_SCORE_WEIGHT"},
     ]
 
-    seven_day_text_tasks_synth = [
-        task for task in task_results
-        if task.task.task_type == TaskType.TEXTTASK
-        and not task.task.is_organic
-        and task.task.created_at > seven_day_cutoff
-    ]
+    organic_proportions = {}
+    suspicious_hotkeys = {}
 
-    seven_day_organic_scores = get_period_scores_from_results(
-        seven_day_text_tasks_organic,
-        weight_multiplier=1.0  # Temporary multiplier just for comparison
-    )
+    for task_config in task_types:
+        task_type = task_config["type"]
+        task_type_str = str(task_type)
+        organic_proportions[task_type_str] = get_organic_proportion(task_results, task_type, days=7)
 
-    seven_day_synth_scores = get_period_scores_from_results(
-        seven_day_text_tasks_synth,
-        weight_multiplier=1.0  # Temporary multiplier just for comparison
-    )
+        # Detect suspicious nodes for this task type
+        suspicious_hotkeys[task_type_str] = detect_suspicious_nodes(task_results, task_type, days=7)
+        logger.info(f"Found {len(suspicious_hotkeys[task_type_str])} suspicious nodes for {task_type}")
 
-    suspicious_hotkeys = set()
-    synth_by_hotkey = {score.hotkey: score for score in seven_day_synth_scores}
-
-    for organic_score in seven_day_organic_scores:
-        if organic_score.hotkey in synth_by_hotkey:
-            synth_score = synth_by_hotkey[organic_score.hotkey]
-            if organic_score.average_score > (synth_score.average_score + 0.5 * synth_score.std_score):
-                logger.info(f"Node {organic_score.hotkey} has a much higher organic vs synth score in 7-day period - flagging as suspicious")
-                suspicious_hotkeys.add(organic_score.hotkey)
-
-    text_tasks_organic = filter_tasks_by_type(task_results, TaskType.TEXTTASK, is_organic=True)
-    text_tasks_synth = filter_tasks_by_type(task_results, TaskType.TEXTTASK, is_organic=False)
-    image_tasks = filter_tasks_by_type(task_results, TaskType.IMAGETASK)
+    filtered_tasks = {}
+    for task_config in task_types:
+        task_type = task_config["type"]
+        task_type_str = str(task_type)
+        filtered_tasks[f"{task_type_str}_organic"] = filter_tasks_by_type(task_results, task_type, is_organic=True)
+        filtered_tasks[f"{task_type_str}_synth"] = filter_tasks_by_type(task_results, task_type, is_organic=False)
 
     periods = {
         "one_day": {
@@ -142,41 +173,41 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
 
     for period_name, period_config in periods.items():
         cutoff = period_config["cutoff"]
-        weight = period_config["weight"]
+        period_weight = period_config["weight"]
 
-        period_text_organic = filter_tasks_by_period(text_tasks_organic, cutoff)
-        period_text_synth = filter_tasks_by_period(text_tasks_synth, cutoff)
-        period_image = filter_tasks_by_period(image_tasks, cutoff)
+        for task_config in task_types:
+            task_type = task_config["type"]
+            task_type_str = str(task_type)
+            weight_key = task_config["weight_key"]
+            task_weight = getattr(cts, weight_key)
 
-        # Calculate organic scores
-        text_scores_organic = get_period_scores_from_results(
-            period_text_organic,
-            weight_multiplier=weight * cts.TEXT_TASK_SCORE_WEIGHT * organic_text_proportion
-        )
+            organic_proportion = organic_proportions[task_type_str]
+            synth_proportion = 1 - organic_proportion
 
-        # Zero out organic scores for suspicious nodes
-        for organic_score in text_scores_organic:
-            if organic_score.hotkey in suspicious_hotkeys:
-                logger.info(f"Setting organic score to zero for suspicious node {organic_score.hotkey} in {period_name} period")
-                organic_score.weight_multiplier = 0.0
+            # Process organic tasks
+            period_tasks_organic = filter_tasks_by_period(filtered_tasks[f"{task_type_str}_organic"], cutoff)
+            scores_organic = get_period_scores_from_results(
+                    period_tasks_organic,
+                    weight_multiplier=period_weight * task_weight * organic_proportion
+                )
 
-        # Calculate synthetic and image scores normally
-        text_scores_synth = get_period_scores_from_results(
-            period_text_synth,
-            weight_multiplier=weight * cts.TEXT_TASK_SCORE_WEIGHT * synth_text_proportion
-        )
+            # Zero out organic scores for suspicious nodes for this task type
+            for organic_score in scores_organic:
+                    if organic_score.hotkey in suspicious_hotkeys[task_type_str]:
+                        logger.info(f"Setting {task_type} organic score to zero for suspicious node {organic_score.hotkey} in {period_name} period")
+                        organic_score.weight_multiplier = 0.0
 
-        image_scores = get_period_scores_from_results(
-            period_image,
-            weight_multiplier=weight * cts.IMAGE_TASK_SCORE_WEIGHT
-        )
+            # Process synthetic tasks
+            period_tasks_synth = filter_tasks_by_period(filtered_tasks[f"{task_type_str}_synth"], cutoff)
+            scores_synth = get_period_scores_from_results(
+                    period_tasks_synth,
+                    weight_multiplier=period_weight * task_weight * synth_proportion
+                )
 
-        all_period_scores.extend(text_scores_organic)
-        all_period_scores.extend(text_scores_synth)
-        all_period_scores.extend(image_scores)
+            all_period_scores.extend(scores_organic)
+            all_period_scores.extend(scores_synth)
 
     return all_period_scores
-
 
 def filter_tasks_by_period(tasks: list[TaskResults], cutoff_time: datetime) -> list[TaskResults]:
     return [task for task in tasks if task.task.created_at > cutoff_time]
