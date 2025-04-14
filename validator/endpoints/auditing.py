@@ -6,6 +6,8 @@ from pydantic import BaseModel  # noqa
 
 from validator.core.config import Config
 from validator.core.dependencies import get_config
+from validator.core.models import DpoTask
+from validator.core.models import DpoTaskWithHotkeyDetails
 from validator.core.models import ImageTask
 from validator.core.models import ImageTaskWithHotkeyDetails
 from validator.core.models import InstructTextTask
@@ -22,21 +24,21 @@ router = APIRouter(tags=["auditing"])
 @router.get("/auditing/tasks")
 async def audit_recent_tasks_endpoint(
     limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTask | ImageTask]:
+) -> list[InstructTextTask | ImageTask | DpoTask]:
     return await get_recent_tasks(None, limit=limit, page=page, config=config)
 
 
 @router.get("/auditing/tasks/hotkey/{hotkey}")
 async def audit_recent_tasks_for_hotkey_endpoint(
     hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails]:
+) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
     return await get_recent_tasks_for_hotkey(hotkey, limit=limit, page=page, config=config)
 
 
 @router.get("/auditing/tasks/{task_id}")
 async def audit_task_details_endpoint(
     task_id: str, config: Config = Depends(get_config)
-) -> InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails:
+) -> InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails:
     logger.info(f"Getting task details for task {task_id}")
     return await get_task_with_hotkey_details(task_id, config)
 
