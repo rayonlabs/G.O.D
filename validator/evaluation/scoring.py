@@ -54,12 +54,12 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     hours = task.hours_to_complete
 
     if getattr(task, "model_params_count", 0) > 0:
-        model_size_billions = min(14, max(1, task.model_params_count // 1_000_000_000))
+        model_size_billions = min(40, max(1, task.model_params_count // 1_000_000_000))
     else:
         # Fallback to parsing from model id
         model = task.model_id
         model_size = re.search(r"(\d+)(?=[bB])", model)
-        model_size_billions = min(8, int(model_size.group(1)) if model_size else 1)
+        model_size_billions = min(14, int(model_size.group(1)) if model_size else 1)
 
     if hours * model_size_billions == 0:
         logger.error(
@@ -177,7 +177,7 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
-def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 1.5, threshold: float = 0.75) -> bool:
+def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
     """
     Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
     If all synth losses are NaN, return False to use test_loss only.
