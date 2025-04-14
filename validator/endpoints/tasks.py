@@ -260,7 +260,7 @@ async def create_text_task_with_custom_dataset(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        task_type=TaskType.TEXTTASK,
+        task_type=TaskType.INSTRUCTTEXTTASK,
         result_model_name=request.result_model_name,
         training_data=request.training_data,
         test_data=request.test_data,
