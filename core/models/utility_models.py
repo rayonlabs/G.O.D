@@ -81,11 +81,11 @@ class DPODatasetType(BaseModel):
     chosen_format: str | None = "{chosen}"
     rejected_format: str | None = "{rejected}"
 
-      
+
 class ImageModelType(str, Enum):
     FLUX = "flux"
     SDXL = "sdxl"
-    
+
 
 class Job(BaseModel):
     job_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -133,19 +133,9 @@ class TaskType(str, Enum):
     IMAGETASK = "ImageTask"
     DPOTASK = "DpoTask"
 
-    # Temporary for backwards compatibility, otherwise auditing will fail
-    TEXTTASK = "TextTask"
-    def __eq__(self, other):
-        if isinstance(other, (str, TaskType)):
-            self_str = str(self)
-            other_str = str(other)
-            if self_str in ("InstructTextTask", "TextTask") and other_str in ("InstructTextTask", "TextTask"):
-                return True
-            return self_str == other_str
-        return NotImplemented
-
     def __hash__(self):
         return hash(str(self))
+
 
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")
