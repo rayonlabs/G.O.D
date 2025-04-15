@@ -690,9 +690,9 @@ async def get_tasks_by_account_id(
                     FROM {cst.IMAGE_TASKS_TABLE}
                     WHERE {cst.TASK_ID} = $1
                 """
-                text_row = await connection.fetchrow(text_query, task_data[cst.TASK_ID])
-                if text_row:
-                    task_data.update(dict(text_row))
+                image_row = await connection.fetchrow(image_query, task_data[cst.TASK_ID])
+                if image_row:
+                    task_data.update(dict(image_row))
                 image_text_pairs = await get_image_text_pairs(task_data[cst.TASK_ID], psql_db)
                 tasks.append(ImageTask(**task_data, image_text_pairs=image_text_pairs))
 

@@ -336,17 +336,17 @@ async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Key
     if any(col not in train_ds.column_names for col in columns_to_sample):
         raise ValueError(f"Column {columns_to_sample} not found in train dataset")
 
-    synthetic_data = []
+    synthetic_ds = []
     try:
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
             if isinstance(task, DpoRawTask):
                 # we only need the field prompt to generate new data here
-                synthetic_data = await get_additional_synth_data(test_ds, [task.field_prompt], keypair, is_dpo=True)
-                synthetic_data = [validate_and_transform_dpo(data, task) for data in synthetic_data]
+                synthetic_ds = await get_additional_synth_data(test_ds, [task.field_prompt], keypair, is_dpo=True)
+                synthetic_ds = [validate_and_transform_dpo(data, task) for data in synthetic_ds]
 
             else:
-                synthetic_data = await get_additional_synth_data(test_ds, columns_to_sample, keypair, is_dpo=False)
+                synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, is_dpo=False)
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:
@@ -355,7 +355,7 @@ async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Key
         logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
         train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds)
 
-    if synthetic_data is None:
+    if synthetic_ds is None:
         logger.info("There was not enough synthetic data created we are instead grabbing from train ")
         train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds)
 

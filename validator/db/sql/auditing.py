@@ -51,7 +51,7 @@ def normalise_float(float: float | None) -> float | None:
 
 async def get_recent_tasks(
     hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTask | ImageTask]:
+) -> list[InstructTextTask | ImageTask | DpoTask]:
     async with await config.psql_db.connection() as connection:
         connection: Connection
 

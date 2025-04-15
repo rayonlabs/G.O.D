@@ -6,7 +6,9 @@ from pydantic import BaseModel  # noqa
 
 from validator.core.config import Config
 from validator.core.dependencies import get_config
-from validator.core.models import DpoTaskWithHotkeyDetails, ImageTask
+from validator.core.models import DpoTask
+from validator.core.models import DpoTaskWithHotkeyDetails
+from validator.core.models import ImageTask
 from validator.core.models import ImageTaskWithHotkeyDetails
 from validator.core.models import InstructTextTask
 from validator.core.models import InstructTextTaskWithHotkeyDetails
@@ -22,7 +24,7 @@ router = APIRouter(tags=["auditing"])
 @router.get("/auditing/tasks")
 async def audit_recent_tasks_endpoint(
     limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTask | ImageTask]:
+) -> list[InstructTextTask | ImageTask | DpoTask]:
     return await get_recent_tasks(None, limit=limit, page=page, config=config)
 
 
