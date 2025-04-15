@@ -345,10 +345,13 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[Ima
     model_info = await anext(models)
     Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
     is_flux_model = model_info.model_type == ImageModelType.FLUX
-    if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE and not is_flux_model:
-        image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
-    else:
+    if is_flux_model:
         image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+    else:
+        if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE and not is_flux_model:
+            image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
+        else:
+            image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
 
     task = ImageRawTask(
         model_id=model_info.model_id,

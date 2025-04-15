@@ -174,7 +174,7 @@ DIFFUSERS_PATH = "validator/evaluation/ComfyUI/models/diffusers"
 LORAS_SAVE_PATH = "validator/evaluation/ComfyUI/models/loras"
 DIFFUSION_HF_DEFAULT_FOLDER = "checkpoint"
 DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
-DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.5
+DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.25
 EVAL_DEFAULTS = {
     "sdxl": {
         "steps": 20,
