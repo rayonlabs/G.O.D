@@ -159,19 +159,19 @@ async def get_recent_tasks_for_hotkey(
                     )
                 ]
 
-                if result_dict[cst.TASK_TYPE] == TaskType.INSTRUCTTEXTTASK:
+                if result_dict[cst.TASK_TYPE] == TaskType.INSTRUCTTEXTTASK.value:
                     task_fields = {k: v for k, v in result_dict.items() if k in InstructTextTask.model_fields}
                     task = InstructTextTask(**task_fields)
                     task = _check_if_task_has_finished(task)
                     tasks_with_details.append(
                         InstructTextTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
-                        )
-                elif result_dict[cst.TASK_TYPE] == TaskType.IMAGETASK:
+                    )
+                elif result_dict[cst.TASK_TYPE] == TaskType.IMAGETASK.value:
                     task_fields = {k: v for k, v in result_dict.items() if k in ImageTask.model_fields}
                     task = ImageTask(**task_fields)
                     task = _check_if_task_has_finished(task)
                     tasks_with_details.append(ImageTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
-                elif result_dict[cst.TASK_TYPE] == TaskType.DPOTASK:
+                elif result_dict[cst.TASK_TYPE] == TaskType.DPOTASK.value:
                     task_fields = {k: v for k, v in result_dict.items() if k in DpoTask.model_fields}
                     task = DpoTask(**task_fields)
                     task = _check_if_task_has_finished(task)
