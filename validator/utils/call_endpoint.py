@@ -134,6 +134,7 @@ async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypa
             "Authorization": f"Bearer {NINETEEN_API_KEY}",
             "Content-Type": "application/json",
         }
+    logger.info(f"Posting to Nineteen with header {headers}") 
 
     async with httpx.AsyncClient(timeout=120) as client:
         response = await client.post(url=url, json=payload, headers=headers)
