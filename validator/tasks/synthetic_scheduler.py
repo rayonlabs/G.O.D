@@ -258,7 +258,7 @@ async def _add_new_task_to_network_if_not_enough(
         selected_val = random.random()
         if selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT:
             await create_synthetic_instruct_text_task(config, models, instruct_datasets)
-        elif selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO:
+        elif selected_val < (cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT):
             await create_synthetic_dpo_task(config, models, dpo_datasets)
         else:
             await create_synthetic_image_task(config, image_models)
