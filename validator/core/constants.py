@@ -157,7 +157,9 @@ PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.1
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE = (
     1 - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
 )
-PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = 0.5  # person synth chance is 1 minus this
+PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = (
+    1  # person synth chance is 1 minus this (only for sdxl models, flux is always person)
+)
 PROBABILITY_STYLE_COMBINATION = 0.5
 PERSON_SYNTH_DS_PREFIX = "person"
 PERSON_SYNTH_DOCKER_IMAGE = "diagonalge/person_synth:latest"
@@ -175,18 +177,7 @@ LORAS_SAVE_PATH = "validator/evaluation/ComfyUI/models/loras"
 DIFFUSION_HF_DEFAULT_FOLDER = "checkpoint"
 DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
 DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.25
-EVAL_DEFAULTS = {
-    "sdxl": {
-        "steps": 20,
-        "cfg": 8,
-        "denoise": 0.9
-    },
-    "flux": {
-        "steps": 35,
-        "cfg": 100,
-        "denoise": 0.75
-    }
-}
+EVAL_DEFAULTS = {"sdxl": {"steps": 20, "cfg": 8, "denoise": 0.9}, "flux": {"steps": 35, "cfg": 100, "denoise": 0.75}}
 
 
 # Max jobs

@@ -29,10 +29,10 @@ from validator.core.models import RawTask
 from validator.db.sql.tasks import add_task
 from validator.tasks.task_prep import upload_file_to_minio
 from validator.utils.call_endpoint import post_to_nineteen_image
-from validator.utils.call_endpoint import retry_with_backoff
 from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
+from validator.utils.util import retry_with_backoff
 
 
 logger = get_logger(__name__)
@@ -182,10 +182,8 @@ def create_single_style_diffusion_messages(style: str, num_prompts: int) -> List
 
 
 @retry_with_backoff
-async def generate_diffusion_prompts(
-    first_style: str, second_style: str, keypair: Keypair, num_prompts: int, combined: bool
-) -> List[str]:
-    if combined:
+async def generate_diffusion_prompts(first_style: str, second_style: str | None, keypair: Keypair, num_prompts: int) -> List[str]:
+    if second_style:
         messages = create_combined_diffusion_messages(first_style, second_style, num_prompts)
         style_description = f"{first_style} and {second_style}"
     else:
@@ -273,11 +271,20 @@ async def pick_style_combination(config: Config) -> tuple[str, str]:
 
 
 async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[list[ImageTextPair], str]:
-    first_style, second_style = await pick_style_combination(config)
+    use_combined_styles = random.random() < cst.PROBABILITY_STYLE_COMBINATION
+
+    if use_combined_styles:
+        first_style, second_style = await pick_style_combination(config)
+        logger.info(f"Picked style combination: {first_style} and {second_style}")
+        ds_prefix = f"{first_style}_and_{second_style}"
+    else:
+        first_style = random.choice(IMAGE_STYLES)
+        second_style = None
+        logger.info(f"Picked style: {first_style}")
+        ds_prefix = first_style
+
     try:
-        use_combined_styles = random.random() < cst.PROBABILITY_STYLE_COMBINATION
-        ds_prefix = f"{first_style}_and_{second_style}" if use_combined_styles else first_style
-        prompts = await generate_diffusion_prompts(first_style, second_style, config.keypair, num_prompts, use_combined_styles)
+        prompts = await generate_diffusion_prompts(first_style, second_style, config.keypair, num_prompts)
     except Exception as e:
         logger.error(f"Failed to generate prompts for {first_style} and {second_style}: {e}")
         raise e

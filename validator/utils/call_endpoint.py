@@ -13,10 +13,6 @@ from fiber import Keypair
 from fiber.chain import chain_utils
 from fiber.chain.models import Node
 from fiber.validator import client
-from tenacity import retry
-from tenacity import retry_if_exception_type
-from tenacity import stop_after_attempt
-from tenacity import wait_exponential
 
 from validator.core.config import Config
 from validator.core.constants import GRADIENTS_ENDPOINT
@@ -25,17 +21,10 @@ from validator.core.constants import NETUID
 from validator.core.constants import NINETEEN_API_KEY
 from validator.core.constants import PROMPT_GEN_ENDPOINT
 from validator.utils.logging import get_logger
+from validator.utils.util import retry_http_with_backoff
 
 
 logger = get_logger(__name__)
-
-# Create a retry decorator with exponential backoff
-retry_with_backoff = retry(
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=4, max=10),
-    retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.RequestError)),
-    reraise=True,
-)
 
 
 def _get_headers_for_signed_https_request(keypair: Keypair):
@@ -125,7 +114,7 @@ async def post_to_nineteen_image(payload: dict[str, Any], keypair: Keypair) -> s
     return response.json()
 
 
-@retry_with_backoff
+@retry_http_with_backoff
 async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypair) -> httpx.Response:
     if NINETEEN_API_KEY is None:
         headers = _get_headers_for_signed_https_request(keypair)
@@ -147,7 +136,7 @@ async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypa
 
 # If this it to talk to the miner, its already in fiber
 # We can change to that once we add bittensor stuff (i know that's why its like this ATM)
-@retry_with_backoff
+@retry_http_with_backoff
 async def process_non_stream_get(base_url: str, token: Optional[str]) -> dict[str, Any] | list[dict[str, Any]]:
     headers = {
         "Accept": "application/json",
@@ -275,7 +264,7 @@ async def sign_up_cron_job(keypair: Keypair) -> None:
         await asyncio.sleep(60 * 60 * 24)  # 3 hours
 
 
-@retry_with_backoff
+@retry_http_with_backoff
 async def call_content_service(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any] | list[dict[str, Any]]:
     """Make a signed request to the content service."""
     headers = _get_headers_for_signed_https_request(keypair)
