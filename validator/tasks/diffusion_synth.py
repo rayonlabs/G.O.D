@@ -355,7 +355,7 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[Ima
     if is_flux_model:
         image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
     else:
-        if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE and not is_flux_model:
+        if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE:
             image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
         else:
             image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
