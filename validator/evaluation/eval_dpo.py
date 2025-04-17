@@ -662,28 +662,21 @@ def main():
 
     repos = [m.strip() for m in models_str.split(",") if m.strip()]
     logger.info(f"Models to evaluate: {repos}")
-    json_str = json.dumps(json.loads(dataset_type_str))
-    escaped_json = shlex.quote(json_str)
     for repo in repos:
         try:
-            logger.info(f"Running subprocess with escaped JSON parameter")
-            result = subprocess.run([
+            subprocess.run([
                 "python",
                 "-m",
-                "validator.evaluation.eval_dpo",
+                "validator.evaluation.eval_dpo_single",
                 repo,
                 dataset,
                 original_model,
-                escaped_json,
+                json.dumps(json.loads(dataset_type_str)),
                 file_format_str,
-            ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-            logger.info(f"Subprocess stdout: {result.stdout}")
-            logger.info(f"Subprocess stderr: {result.stderr}")
+            ], check=True)
+            logger.info(f"Subprocess completed for {repo}")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error running DPO subprocess: {e}")
-            logger.error(f"Subprocess stdout: {e.stdout}")
-            logger.error(f"Subprocess stderr: {e.stderr}")
+            logger.error(f"Error running subprocess for {repo}: {e}")
 
     logger.info("All DPO evaluations completed")
 
