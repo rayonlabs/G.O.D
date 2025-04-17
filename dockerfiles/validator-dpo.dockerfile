@@ -18,4 +18,4 @@ ENV ORIGINAL_MODEL=""
 ENV DATASET_TYPE=""
 ENV FILE_FORMAT=""
 
-CMD ["python", "-m", "validator.evaluation.dpo_eval"]
+CMD ["python", "-m", "validator.evaluation.eval_dpo"]
