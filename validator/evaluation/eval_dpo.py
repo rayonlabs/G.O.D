@@ -653,17 +653,12 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        logger.info("=== DPO EVALUATION SCRIPT STARTING ===")
-        logger.info(f"Python version: {sys.version}")
-        logger.info(f"PyTorch version: {torch.__version__}")
-        logger.info(f"Transformers version: {importlib.metadata.version('transformers')}")
-        logger.info(f"PEFT version: {importlib.metadata.version('peft')}")
+    logger.info("=== DPO EVALUATION SCRIPT STARTING ===")
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"PyTorch version: {torch.__version__}")
+    logger.info(f"Transformers version: {importlib.metadata.version('transformers')}")
+    logger.info(f"PEFT version: {importlib.metadata.version('peft')}")
 
-        main()
+    main()
 
-        logger.info("=== DPO EVALUATION SCRIPT COMPLETED SUCCESSFULLY ===")
-    except Exception as e:
-        logger.critical(f"Unhandled exception in main: {e}")
-        logger.critical(traceback.format_exc())
-        sys.exit(1)
+    logger.info("=== DPO EVALUATION SCRIPT COMPLETED SUCCESSFULLY ===")
