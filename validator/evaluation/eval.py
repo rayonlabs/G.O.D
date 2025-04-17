@@ -390,41 +390,42 @@ def check_and_log_base_model_size(original_model: str) -> None:
     else:
         logger.info(f"Base model size already logged: {results_dict['model_params_count']} parameters")
 
+
 def main():
     dataset = os.environ.get("DATASET")
     original_model = os.environ.get("ORIGINAL_MODEL")
     dataset_type_str = os.environ.get("DATASET_TYPE", "")
     file_format_str = os.environ.get("FILE_FORMAT")
-    models_str = os.environ.get("MODELS", "")
-
+    models_str = os.environ.get("MODELS", "")  # Comma-separated list of LoRA repos
     if not all([dataset, original_model, file_format_str, models_str]):
         logger.error("Missing required environment variables.")
         exit(1)
 
-    repos = [m.strip() for m in models_str.split(",") if m.strip()]
-    logger.info(f"Models to evaluate: {repos}")
+    lora_repos = [m.strip() for m in models_str.split(",") if m.strip()]
 
-    for repo in repos:
+    for repo in lora_repos:
         try:
-            logger.info(f"Starting evaluation for: {repo}")
-
+            # Launching subprocess to purge memory: https://github.com/huggingface/transformers/issues/26571
             subprocess.run([
                 "python",
                 "-m",
-                "validator.evaluation.eval_dpo_single",
+                "validator.evaluation.single_eval",
                 repo,
                 dataset,
                 original_model,
                 dataset_type_str,
-                file_format_str,
+                file_format_str
             ], check=True)
-
-            logger.info(f"DPO evaluation completed for {repo}")
+            logger.info(f"Subprocess completed for {repo}")
             log_memory_stats()
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error running DPO subprocess for {repo}: {e}")
+            logger.error(f"Error running subprocess for {repo}: {e}")
+    try:
+        check_and_log_base_model_size(original_model)
+    except Exception as e:
+        logger.error(f"Error checking and logging base model size: {e}")
+    logger.info("All evaluations completed")
 
-    logger.info("All DPO evaluations completed")
 
 if __name__ == "__main__":
     main()
