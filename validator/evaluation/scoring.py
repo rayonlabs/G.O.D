@@ -35,6 +35,7 @@ from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
+from validator.evaluation.docker_evaluation import run_evaluation_docker_dpo
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
 from validator.utils.logging import LogContext
@@ -47,7 +48,6 @@ logger = get_logger(__name__)
 
 
 def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
-    """Calculate work score for a task based on hours and model size."""
     assert task.hours_to_complete > 0, "Hours to complete must be positive"
     assert task.model_id, "Model ID must be present"
 
@@ -56,7 +56,6 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
     if getattr(task, "model_params_count", 0) > 0:
         model_size_billions = min(40, max(1, task.model_params_count // 1_000_000_000))
     else:
-        # Fallback to parsing from model id
         model = task.model_id
         model_size = re.search(r"(\d+)(?=[bB])", model)
         model_size_billions = min(8, int(model_size.group(1)) if model_size else 1)
@@ -71,7 +70,6 @@ def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
 
 
 def calculate_adjusted_task_score(quality_score: float, task_work_score: float) -> float:
-    """Calculate adjusted task score based on quality score and work score."""
     assert not np.isnan(quality_score), "Quality score cannot be NaN"
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
     return quality_score * task_work_score
@@ -80,7 +78,6 @@ def calculate_adjusted_task_score(quality_score: float, task_work_score: float) 
 def update_node_aggregation(
     node_aggregations: dict[str, NodeAggregationResult], node_score: TaskNode, task_work_score: float
 ) -> None:
-    """Update node aggregation results with new scores for a particular task."""
     assert isinstance(node_score.hotkey, str), "hotkey is string"
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
 
@@ -99,7 +96,6 @@ def calculate_node_quality_scores(
     node_aggregations: dict[str, NodeAggregationResult],
     weight_multiplier: float,
 ) -> list[PeriodScore]:
-    """Calculate quality scores for each node."""
     assert node_aggregations, "Node aggregations dictionary cannot be empty"
 
     final_scores: list[PeriodScore] = []
@@ -127,8 +123,6 @@ def calculate_node_quality_scores(
 
 
 def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
-    """Normalise scores using a combination of sigmoid and linear functions."""
-
     assert period_scores, "Period scores list cannot be empty"
     valid_scores = [ps.quality_score for ps in period_scores if ps.quality_score is not None]
     if not valid_scores:
@@ -153,7 +147,6 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
 
 
 def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
-    """Aggregate and normalise scores across all nodes."""
     if not task_results:
         return []
 
@@ -171,17 +164,12 @@ def get_period_scores_from_results(task_results: list[TaskResults], weight_multi
 
 
 def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
-    """Calculate weighted average of losses with more weight on test loss."""
     assert not np.isnan(test_loss), "Test loss cannot be NaN"
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
 def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
-    """
-    Check if the synthetic loss to test loss ratio is valid for a sufficient percentage of miners.
-    If all synth losses are NaN, return False to use test_loss only.
-    """
     if all(np.isnan(result.synth_loss) for result in valid_results):
         logger.info("All synth losses are NaN, using test_loss only for ranking")
         return False
@@ -189,12 +177,11 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
     if not valid_results:
         return False
 
-    # Only consider miners with real synthetic loss values (not placeholders)
     real_synth_miners = [
         result
         for result in valid_results
         if result.is_finetune and not np.isnan(result.test_loss) and not np.isnan(result.synth_loss) and result.synth_loss < 999.0
-    ]  # Exclude placeholder values
+    ]
 
     if not real_synth_miners:
         logger.info("No miners with real synthetic loss values")
@@ -216,9 +203,6 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
 def calculate_miner_ranking_and_scores(
     miner_results: list[MinerResultsText | MinerResultsImage],
 ) -> list[MinerResultsText | MinerResultsImage]:
-    """Calculate scores based on either test_loss or weighted_loss.
-    Top ranked gets score=3, others get 0.
-    Bottom 25% get a penalty (cts.SCORE_PENALTY) if there are more than cts.MIN_IDEAL_NUM_MINERS_IN_POOL miners."""
     logger.info("Beginning score calculation...")
     for result in miner_results:
         with LogContext(miner_hotkey=result.hotkey):
@@ -238,7 +222,6 @@ def calculate_miner_ranking_and_scores(
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
 
-    # Check if synth losses are valid across all the miners, if it isn't then we just use the test loss
     use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
         logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
@@ -251,7 +234,7 @@ def calculate_miner_ranking_and_scores(
         ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
         ranking_type = "test_loss_only"
 
-    if ranked_results:  # Need one result at least bro
+    if ranked_results:
         top_result, top_metric = ranked_results[0]
         with LogContext(miner_hotkey=top_result.hotkey):
             top_result.score = cts.FIRST_PLACE_SCORE
@@ -265,7 +248,6 @@ def calculate_miner_ranking_and_scores(
                 f" score_reason={top_result.score_reason}"
             )
 
-    # Apply penalties to bottom 25% if enough miners are in the competition
     total_valid_miners = len(valid_results)
     if total_valid_miners > cts.MIN_IDEAL_NUM_MINERS_IN_POOL:
         penalty_count = max(1, int(total_valid_miners * 0.25))
@@ -283,7 +265,6 @@ def calculate_miner_ranking_and_scores(
                     f" score_reason={result.score_reason}"
                 )
 
-        # Apply penalty to bottom 25%
         for result, metric in ranked_results[penalty_start_idx:]:
             with LogContext(miner_hotkey=result.hotkey):
                 result.score = cts.SCORE_PENALTY
@@ -336,17 +317,7 @@ def _get_dataset_type(task: InstructTextRawTask | DpoRawTask) -> InstructDataset
         raise ValueError(f"Invalid task type: {task.task_type}")
 
 
-def _convert_dataset_type_from_dpo_to_instruct(dataset_type: DPODatasetType) -> InstructDatasetType:
-    return InstructDatasetType(
-        field_system=dataset_type.field_system,
-        field_instruction=dataset_type.field_prompt,
-        field_output=dataset_type.field_chosen,
-        no_input_format=dataset_type.prompt_format.replace("{prompt}", "{instruction}") if dataset_type.prompt_format else None,
-    )
-
-
 def _create_failed_miner_result(hotkey: str, reason: str, task_type: TaskType) -> MinerResults:
-    """Create a failed miner result with zero score."""
     if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
         return MinerResultsText(
             hotkey=hotkey,
@@ -396,13 +367,11 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str
 
 
 async def _evaluate_submissions(
-    task: InstructTextRawTask | ImageRawTask,
+    task: InstructTextRawTask | ImageRawTask | DpoRawTask,
     submission_repos: list[str],
     gpu_ids: list[int],
     dataset_type: InstructDatasetType | DPODatasetType | None = None,
 ) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
-    """Evaluate same task submissions within same docker container.
-    Docker evaluations with an exception will return the Exception for the repo."""
     unique_repos = list(set(submission_repos))
     if len(unique_repos) != len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
@@ -423,8 +392,8 @@ async def _evaluate_submissions(
         if not repos_to_evaluate:
             return results
 
-        if task.task_type == TaskType.DPOTASK:
-            dataset_type = _convert_dataset_type_from_dpo_to_instruct(dataset_type)
+        assert task.synthetic_data is not None, "Synthetic data shouldn't be none for text tasks"
+        assert task.test_data is not None, "Test data shouldn't be none for text tasks"
 
         evaluation_params = {
             "file_format": FileFormat.JSON,
@@ -434,16 +403,19 @@ async def _evaluate_submissions(
             "gpu_ids": gpu_ids,
         }
 
-        assert task.synthetic_data is not None, "Synthetic data shouldn't be none for text tasks"
-        assert task.test_data is not None, "Test data shouldn't be none for text tasks"
-
         logger.info("Starting test evaluation")
         test_data_filepath = await download_s3_file(task.test_data)
-        test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
+
+        if task.task_type == TaskType.DPOTASK:
+            test_results = await run_evaluation_docker_dpo(dataset=test_data_filepath, **evaluation_params)
+        else:
+            test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
+
         try:
             os.remove(test_data_filepath)
         except Exception as e:
             logger.warning(f"Failed to remove test data file {test_data_filepath}: {e}")
+
         test_eval_results = test_results.results
         task.model_params_count = test_results.base_model_params_count
 
@@ -467,7 +439,6 @@ async def _evaluate_submissions(
 
         for repo, _ in test_losses[4:]:
             results[repo] = (
-                # setting to 1k for now
                 EvaluationResultText(is_finetune=True, eval_loss=1000.0, perplexity=1000.0),
                 test_eval_results[repo],
             )
@@ -475,15 +446,25 @@ async def _evaluate_submissions(
         if top_4_repos:
             logger.info(f"Evaluating synthetic data for top {len(top_4_repos)} models")
             synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-            synth_results = await run_evaluation_docker_text(
-                dataset=synthetic_data_filepath,
-                models=top_4_repos,
-                **{k: v for k, v in evaluation_params.items() if k != "models"},
-            )
+
+            if task.task_type == TaskType.DPOTASK:
+                synth_results = await run_evaluation_docker_dpo(
+                    dataset=synthetic_data_filepath,
+                    models=top_4_repos,
+                    **{k: v for k, v in evaluation_params.items() if k != "models"},
+                )
+            else:
+                synth_results = await run_evaluation_docker_text(
+                    dataset=synthetic_data_filepath,
+                    models=top_4_repos,
+                    **{k: v for k, v in evaluation_params.items() if k != "models"},
+                )
+
             try:
                 os.remove(synthetic_data_filepath)
             except Exception as e:
                 logger.warning(f"Failed to remove synthetic data file {synthetic_data_filepath}: {e}")
+
             synth_eval_results = synth_results.results
 
             for repo in top_4_repos:
@@ -534,7 +515,6 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
     for file_path in file_paths:
         try:
             logger.info(f"files = {file_paths} and bucket is {cts.BUCKET_NAME}")
-            #  assert cts.BUCKET_NAME is not None 'bucket name needs setting to delete'
             object_name = file_path.split(cts.BUCKET_NAME + "/")[-1]
             logger.info(f"Deleting file {object_name} from MinIO bucket {cts.BUCKET_NAME}")
             await async_minio_client.delete_file(cts.BUCKET_NAME, object_name)
@@ -567,7 +547,6 @@ async def _update_scores(
 
 
 async def get_repo_creation_time(repo_name: str) -> datetime:
-    """Get the creation timestamp of a Hugging Face repository."""
     try:
         clean_name = repo_name.replace("https://huggingface.co/", "")
         parts = clean_name.split("/")
@@ -586,7 +565,6 @@ async def get_repo_creation_time(repo_name: str) -> datetime:
 
 
 def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float], list[tuple[str, str]]]:
-    """Group submissions by their loss values."""
     loss_groups: dict[tuple[float, float], list[tuple[str, str]]] = {}
 
     for result in task_results:
@@ -600,7 +578,6 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
 
 
 async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[str, str, list[tuple[str, str]]]:
-    """Determine earliest submission and list of duplicates."""
     timestamps = []
     for hotkey, repo in submissions:
         creation_time = await get_repo_creation_time(repo)
@@ -614,7 +591,6 @@ async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[s
 
 
 async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
-    """Process submissions and identify duplicates."""
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
 
@@ -638,7 +614,6 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
 def zero_duplicate_scores(
     task_results: list[MinerResultsText | MinerResultsImage], keep_submission: dict[str, bool]
 ) -> list[MinerResultsText | MinerResultsImage]:
-    """Zero out scores for duplicate submissions."""
     for result in task_results:
         if not keep_submission[result.hotkey]:
             result.test_loss = np.nan
@@ -655,8 +630,8 @@ async def process_miners_pool(
     gpu_ids: list[int],
     dataset_type: InstructDatasetType | DPODatasetType | None = None,
 ) -> list[MinerResultsText | MinerResultsImage]:
-    """Process same task miners"""
     assert task.task_id is not None, "We should have a task id when processing miners"
+
 
     miner_repos: dict[str, str] = {}
     for miner in miners:
@@ -761,7 +736,6 @@ async def process_miners_pool(
 async def evaluate_and_score(
     task: InstructTextRawTask | DpoRawTask | ImageRawTask, gpu_ids: list[int], config: Config
 ) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
-    """Main function to evaluate and score task submissions."""
     assert task.task_id is not None, "Task ID must be present"
     assert task.test_data is not None, "Test data must be present"
 
@@ -810,3 +784,4 @@ async def evaluate_and_score(
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
     task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
     return task
+
