@@ -2,9 +2,6 @@ FROM winglian/axolotl:main-20250401
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir trl==1.3.0
-
-# Copy requirements and install dependencies
 COPY validator/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install docker toml
