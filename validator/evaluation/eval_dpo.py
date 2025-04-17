@@ -380,7 +380,7 @@ def main():
             subprocess.run([
                 "python",
                 "-m",
-                "validator.evaluation.dpo_eval",
+                "validator.evaluation.eval_dpo",
                 repo,
                 dataset,
                 original_model,
