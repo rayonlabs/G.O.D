@@ -664,8 +664,9 @@ def main():
 
     for repo in repos:
         try:
-            logger.info(f"Starting subprocess for {repo}")
-            subprocess.run([
+            logger.info(f"Running subprocess command: python -m validator.evaluation.eval_dpo {repo} {dataset} {original_model} {dataset_type_str} {file_format_str}")
+
+            result = subprocess.run([
                 "python",
                 "-m",
                 "validator.evaluation.eval_dpo",
@@ -673,17 +674,17 @@ def main():
                 dataset,
                 original_model,
                 dataset_type_str,
-                file_format_str,
-            ], check=True)
+                file_format_str], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            logger.info(f"Subprocess stdout: {result.stdout}")
+            logger.info(f"Subprocess stderr: {result.stderr}")
+
             logger.info(f"DPO subprocess completed for {repo}")
             log_memory_stats()
         except subprocess.CalledProcessError as e:
             logger.error(f"Error running DPO subprocess for {repo}: {e}")
-            logger.error(f"Return code: {e.returncode}")
-            if e.output:
-                logger.error(f"Output: {e.output}")
-            if e.stderr:
-                logger.error(f"Stderr: {e.stderr}")
+            logger.error(f"Subprocess stdout: {e.stdout}")
+            logger.error(f"Subprocess stderr: {e.stderr}")
 
     logger.info("All DPO evaluations completed")
 
