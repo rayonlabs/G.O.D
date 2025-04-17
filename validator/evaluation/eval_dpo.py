@@ -664,8 +664,7 @@ def main():
 
     for repo in repos:
         try:
-            logger.info(f"Running subprocess command: python -m validator.evaluation.eval_dpo {repo} {dataset} {original_model} {dataset_type_str} {file_format_str}")
-
+            logger.info(f"Running subprocess with escaped JSON parameter")
             result = subprocess.run([
                 "python",
                 "-m",
@@ -673,16 +672,14 @@ def main():
                 repo,
                 dataset,
                 original_model,
-                dataset_type_str,
-                file_format_str], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                escaped_json,
+                file_format_str,
+            ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
             logger.info(f"Subprocess stdout: {result.stdout}")
             logger.info(f"Subprocess stderr: {result.stderr}")
-
-            logger.info(f"DPO subprocess completed for {repo}")
-            log_memory_stats()
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error running DPO subprocess for {repo}: {e}")
+            logger.error(f"Error running DPO subprocess: {e}")
             logger.error(f"Subprocess stdout: {e.stdout}")
             logger.error(f"Subprocess stderr: {e.stderr}")
 
