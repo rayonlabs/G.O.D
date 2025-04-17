@@ -97,7 +97,6 @@ class EvaluationResultImage(BaseModel):
 class EvaluationResultText(BaseModel):
     is_finetune: bool
     eval_loss: float
-    perplexity: float
 
 
 class DockerEvaluationResults(BaseModel):

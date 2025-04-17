@@ -334,7 +334,6 @@ def evaluate_dpo_model(evaluation_config, finetuned_model, reference_model, toke
     logger.info(f"Final DPO evaluation results: {eval_results}")
     evaluation_results = {
         "eval_loss": eval_results["eval_loss"],
-        "perplexity": torch.exp(torch.tensor(eval_results["eval_loss"])).item(),
     }
     return evaluation_results
 

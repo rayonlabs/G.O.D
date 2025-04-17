@@ -173,7 +173,6 @@ def evaluate_language_model_loss(
     logger.info(f"Final evaluation results: {eval_results}")
     evaluation_results = {
         "eval_loss": eval_results["eval_loss"],
-        "perplexity": torch.exp(torch.tensor(eval_results["eval_loss"])).item(),
     }
     return evaluation_results
 

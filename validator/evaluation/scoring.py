@@ -33,9 +33,9 @@ from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
+from validator.evaluation.docker_evaluation import run_evaluation_docker_dpo
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
-from validator.evaluation.docker_evaluation import run_evaluation_docker_dpo
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
 from validator.utils.logging import LogContext
@@ -383,8 +383,8 @@ async def _evaluate_submissions(
             if repo == task.model_id:
                 logger.warning(f"Repository {repo} matches original model ID - marking as non-finetuned")
                 results[repo] = (
-                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0),
                 )
             else:
                 repos_to_evaluate.append(repo)
@@ -408,7 +408,7 @@ async def _evaluate_submissions(
 
         if task.task_type == TaskType.DPOTASK:
             test_results = await run_evaluation_docker_dpo(dataset=test_data_filepath, **evaluation_params)
-        else:
+        elif task.task_type == TaskType.INSTRUCTTEXTTASK:
             test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
 
         try:
@@ -428,8 +428,8 @@ async def _evaluate_submissions(
             test_result = test_eval_results[repo]
             if not test_result.is_finetune:
                 results[repo] = (
-                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
-                    EvaluationResultText(is_finetune=False, eval_loss=0.0, perplexity=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0),
+                    EvaluationResultText(is_finetune=False, eval_loss=0.0),
                 )
             else:
                 test_losses.append((repo, test_result.eval_loss))
@@ -439,7 +439,7 @@ async def _evaluate_submissions(
 
         for repo, _ in test_losses[4:]:
             results[repo] = (
-                EvaluationResultText(is_finetune=True, eval_loss=1000.0, perplexity=1000.0),
+                EvaluationResultText(is_finetune=True, eval_loss=1000.0),
                 test_eval_results[repo],
             )
 
@@ -453,7 +453,7 @@ async def _evaluate_submissions(
                     models=top_4_repos,
                     **{k: v for k, v in evaluation_params.items() if k != "models"},
                 )
-            else:
+            elif task.task_type == TaskType.INSTRUCTTEXTTASK:
                 synth_results = await run_evaluation_docker_text(
                     dataset=synthetic_data_filepath,
                     models=top_4_repos,
@@ -784,4 +784,3 @@ async def evaluate_and_score(
         logger.info(f"Task {task.task_id} completed successfully with non-zero scores")
     task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
     return task
-
