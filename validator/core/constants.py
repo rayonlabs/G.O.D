@@ -220,3 +220,8 @@ CACHE_CLEANUP_INTERVAL = 8 * 60 * 60  # in seconds
 
 # Docker evaluation
 DOCKER_EVAL_HF_CACHE_DIR = "/root/.cache/huggingface"
+
+# DPO evaluation
+TRL_DPO_FIELD_PROMPT = "prompt"
+TRL_DPO_FIELD_CHOSEN = "chosen"
+TRL_DPO_FIELD_REJECTED = "rejected"

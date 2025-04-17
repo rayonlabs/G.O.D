@@ -1,37 +1,69 @@
-import json
-import shlex
-import sys
-import traceback
 import importlib.metadata
+import json
 import os
 import re
 import subprocess
+import sys
 import time
 import traceback
 from math import ceil
-from pathlib import Path
 
 import psutil
 import torch
 import yaml
 from accelerate.utils import find_executable_batch_size
-from axolotl.utils.data import load_tokenized_prepared_datasets
 from axolotl.utils.dict import DictDefault
+from datasets import Dataset
+from datasets import load_dataset
 from peft import PeftModel
 from requests.exceptions import HTTPError
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import retry
+from tenacity import retry_if_exception
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
 from torch.nn.utils.rnn import pad_sequence
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback, TrainingArguments
+from transformers import AutoModelForCausalLM
+from transformers import AutoTokenizer
+from transformers import TrainerCallback
+from trl import DPOConfig
 from trl import DPOTrainer
 
 from core.config.config_handler import create_dataset_entry
-from core.models.utility_models import FileFormat, DPODatasetType
+from core.models.utility_models import DPODatasetType
+from core.models.utility_models import FileFormat
 from validator.core import constants as cst
 from validator.evaluation.utils import model_is_a_finetune
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DPODatasetType) -> Dataset:
+    """
+    Transform a DPO dataset to match trl's expected column names.
+
+    Args:
+        dataset: Hugging Face dataset object
+        dataset_type: DPODatasetType with field mappings
+    """
+    logger.info("Adapting DPO columns to standard format")
+
+    column_mapping = {
+        dataset_type.field_prompt: cst.TRL_DPO_FIELD_PROMPT,
+        dataset_type.field_chosen: cst.TRL_DPO_FIELD_CHOSEN,
+        dataset_type.field_rejected: cst.TRL_DPO_FIELD_REJECTED
+    }
+    for src_col, dst_col in column_mapping.items():
+        if src_col in dataset.column_names and src_col != dst_col:
+            dataset = dataset.rename_column(src_col, dst_col)
+
+    columns_to_keep = [cst.TRL_DPO_FIELD_PROMPT, cst.TRL_DPO_FIELD_CHOSEN, cst.TRL_DPO_FIELD_REJECTED]
+    columns_to_remove = [col for col in dataset.column_names if col not in columns_to_keep]
+    for col in columns_to_remove:
+        dataset = dataset.remove_columns(col)
+
+    return dataset
 
 
 def log_memory_stats():
@@ -42,14 +74,23 @@ def log_memory_stats():
             allocated = torch.cuda.memory_allocated(i) / 1024**2
             reserved = torch.cuda.memory_reserved(i) / 1024**2
             max_allocated = torch.cuda.max_memory_allocated(i) / 1024**2
-            logger.info(f"GPU {i} Memory: Allocated: {allocated:.2f} MB, Reserved: {reserved:.2f} MB, Max Allocated: {max_allocated:.2f} MB")
+            logger.info(
+                f"GPU {i} Memory: Allocated: {allocated:.2f} MB, "
+                f"Reserved: {reserved:.2f} MB, "
+                f"Max Allocated: {max_allocated:.2f} MB"
+            )
     else:
         logger.info("No CUDA devices available")
 
     ram = psutil.Process().memory_info()
     system_memory = psutil.virtual_memory()
     logger.info(f"RAM Usage: RSS: {ram.rss / 1024**2:.2f} MB, VMS: {ram.vms / 1024**2:.2f} MB")
-    logger.info(f"System Memory: Total: {system_memory.total / 1024**2:.2f} MB, Available: {system_memory.available / 1024**2:.2f} MB, Used: {(system_memory.total - system_memory.available) / 1024**2:.2f} MB ({system_memory.percent}%)")
+    logger.info(
+        f"System Memory: Total: {system_memory.total / 1024**2:.2f} MB, "
+        f"Available: {system_memory.available / 1024**2:.2f} MB, "
+        f"Used: {(system_memory.total - system_memory.available) / 1024**2:.2f} MB "
+        f"({system_memory.percent}%)"
+    )
     logger.info("========================")
 
 
@@ -95,7 +136,10 @@ def _load_and_update_evaluation_config(dataset_name, dataset_type, file_format, 
         config_dict["datasets"] = [dataset_entry]
 
         max_embeddings = getattr(finetuned_model.config, "max_position_embeddings", None)
-        logger.info(f"Model max position embeddings: {max_embeddings}, config sequence_len: {config_dict.get('sequence_len')}")
+        logger.info(
+            f"Model max position embeddings: {max_embeddings}, "
+            f"config sequence_len: {config_dict.get('sequence_len')}"
+        )
 
         if max_embeddings and max_embeddings < 2 * config_dict.get("sequence_len", 0):
             logger.info(f"Adjusting sequence_len from {config_dict['sequence_len']} to {ceil(max_embeddings / 2)}")
@@ -112,18 +156,20 @@ def _load_and_update_evaluation_config(dataset_name, dataset_type, file_format, 
 def _load_evaluation_dataset(evaluation_config, tokenizer):
     logger.info("Starting to load evaluation dataset")
     try:
-        prepared_path = Path(evaluation_config.output_dir) / "prepared"
-        logger.info(f"Prepared dataset path: {prepared_path}")
+        dataset_path = evaluation_config.datasets[0]["path"]
+        logger.info(f"Loading dataset directly from: {dataset_path}")
 
-        logger.info(f"Loading tokenized datasets with tokenizer: {tokenizer.__class__.__name__}")
-        eval_dataset, _ = load_tokenized_prepared_datasets(tokenizer, evaluation_config, prepared_path)
+        eval_dataset = load_dataset("json", data_files=dataset_path, split="train")
 
         logger.info(f"Dataset loaded with {len(eval_dataset)} samples")
 
         if "prompt_ids" in eval_dataset[0]:
             logger.info("Sorting dataset by prompt length")
             eval_dataset = sorted(eval_dataset, key=lambda x: len(x["prompt_ids"]))
-            logger.info(f"Dataset sorted. Shortest prompt length: {len(eval_dataset[0]['prompt_ids'])}, Longest: {len(eval_dataset[-1]['prompt_ids'])}")
+            logger.info(
+                f"Dataset sorted. Shortest prompt length: {len(eval_dataset[0]['prompt_ids'])}, "
+                f"Longest: {len(eval_dataset[-1]['prompt_ids'])}"
+            )
 
         return eval_dataset
     except Exception as e:
@@ -241,74 +287,56 @@ def _collate_dpo_batch(batch, tokenizer):
         raise
 
 
-def evaluate_dpo_model(evaluation_config, finetuned_model, reference_model, tokenizer):
-    logger.info("Starting DPO model evaluation")
-    logger.info(f"Evaluation config: {evaluation_config}")
+def evaluate_dpo_model(evaluation_config, finetuned_model, reference_model, tokenizer, dataset_type):
+    evaluation_config.tokenizer_config = tokenizer.name_or_path
+    logger.info(f"Set tokenizer config to {tokenizer.name_or_path}")
 
-    try:
-        evaluation_config.tokenizer_config = tokenizer.name_or_path
-        logger.info(f"Set tokenizer config to {tokenizer.name_or_path}")
+    logger.info("Loading evaluation dataset")
+    # eval_dataset = _load_evaluation_dataset(evaluation_config, tokenizer)
+    dataset_path = evaluation_config.datasets[0]["path"]
+    eval_dataset = load_dataset("json", data_files=dataset_path, split="train")
+    eval_dataset = _adapt_dpo_columns_to_trl(eval_dataset, dataset_type)
 
-        logger.info("Loading evaluation dataset")
-        eval_dataset = _load_evaluation_dataset(evaluation_config, tokenizer)
+    _log_dataset_and_model_info(eval_dataset, finetuned_model, tokenizer)
 
-        logger.info("Logging dataset and model information")
-        _log_dataset_and_model_info(eval_dataset, finetuned_model, tokenizer)
+    log_memory_stats()
 
-        logger.info("Logging memory statistics before evaluation")
-        log_memory_stats()
+    def custom_data_collator(features):
+        logger.debug(f"Collating {len(features)} features")
+        return _collate_dpo_batch(features, tokenizer)
 
-        def custom_data_collator(features):
-            logger.debug(f"Collating {len(features)} features")
-            return _collate_dpo_batch(features, tokenizer)
+    logger.info(f"Setting up evaluation with starting batch size: {evaluation_config.starting_batch_size}")
 
-        logger.info(f"Setting up evaluation with starting batch size: {evaluation_config.starting_batch_size}")
+    @find_executable_batch_size(starting_batch_size=evaluation_config.starting_batch_size)
+    def evaluate_dpo_with_batch_size(batch_size):
+        beta = evaluation_config.get("dpo_beta", 0.1)
+        training_args = DPOConfig(
+            output_dir=evaluation_config.output_dir,
+            per_device_eval_batch_size=batch_size,
+            report_to="none",
+            fp16=torch.cuda.is_available(),
+            beta=beta,
+        )
+        dpo_trainer = DPOTrainer(
+            model=finetuned_model,
+            ref_model=reference_model,
+            args=training_args,
+            train_dataset=Dataset.from_dict({"prompt": [], "chosen": [], "rejected": []}),
+            eval_dataset=eval_dataset,
+            processing_class=tokenizer,
+            callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)],
+        )
 
-        @find_executable_batch_size(starting_batch_size=evaluation_config.starting_batch_size)
-        def evaluate_dpo_with_batch_size(batch_size):
-            logger.info(f"Trying batch size: {batch_size}")
+        results = dpo_trainer.evaluate()
+        return results
 
-            logger.info("Creating training arguments")
-            training_args = TrainingArguments(
-                output_dir=evaluation_config.output_dir,
-                per_device_eval_batch_size=batch_size,
-                report_to="none",
-                fp16=torch.cuda.is_available(),
-            )
-            logger.info(f"Training arguments created: {training_args}")
-
-            beta = evaluation_config.get("dpo_beta", 0.1)
-            logger.info(f"Using DPO beta: {beta}")
-
-            logger.info("Creating DPO Trainer")
-            dpo_trainer = DPOTrainer(
-                model=finetuned_model,
-                ref_model=reference_model,
-                args=training_args,
-                train_dataset=None,
-                eval_dataset=eval_dataset,
-                tokenizer=tokenizer,
-                beta=beta,
-                callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)],
-            )
-            logger.info("DPO Trainer created successfully")
-
-            logger.info("Starting evaluation")
-            results = dpo_trainer.evaluate()
-            logger.info(f"Evaluation completed with results: {results}")
-            return results
-
-        logger.info("Finding executable batch size and evaluating")
-        eval_results = evaluate_dpo_with_batch_size()
-        logger.info(f"Final DPO evaluation results: {eval_results}")
-
-        return {
-            "eval_loss": eval_results["eval_loss"],
-        }
-    except Exception as e:
-        logger.error(f"Error in evaluate_dpo_model: {e}")
-        logger.error(traceback.format_exc())
-        raise
+    eval_results = evaluate_dpo_with_batch_size()
+    logger.info(f"Final DPO evaluation results: {eval_results}")
+    evaluation_results = {
+        "eval_loss": eval_results["eval_loss"],
+        "perplexity": torch.exp(torch.tensor(eval_results["eval_loss"])).item(),
+    }
+    return evaluation_results
 
 
 def evaluate_finetuned_dpo_model(dataset_name, finetuned_model, dataset_type, file_format, tokenizer, reference_model):
@@ -322,7 +350,7 @@ def evaluate_finetuned_dpo_model(dataset_name, finetuned_model, dataset_type, fi
 
         logger.info("Starting DPO model evaluation")
         return evaluate_dpo_model(
-            evaluation_config, finetuned_model, reference_model, tokenizer
+            evaluation_config, finetuned_model, reference_model, tokenizer, dataset_type
         )
     except Exception as e:
         logger.error(f"Error in evaluate_finetuned_dpo_model: {e}")
@@ -387,7 +415,6 @@ def load_model(model_name_or_path, is_base_model=False):
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name_or_path,
-                    token=hf_token,
                     ignore_mismatched_sizes=True,
                     device_map=device,
                     cache_dir=cache_dir
@@ -409,7 +436,7 @@ def load_tokenizer(original_model):
     logger.info(f"Loading tokenizer for model: {original_model}")
 
     try:
-        tokenizer = AutoTokenizer.from_pretrained(original_model, token=hf_token)
+        tokenizer = AutoTokenizer.from_pretrained(original_model)
         logger.info(f"Successfully loaded tokenizer: {tokenizer.__class__.__name__}")
         logger.info(f"Tokenizer vocabulary size: {len(tokenizer)}")
 
@@ -491,107 +518,58 @@ def _count_model_parameters(model):
 
 
 def evaluate_dpo_repo(repo, dataset, original_model, dataset_type_str, file_format_str):
-    logger.info(f"Starting evaluation for repo: {repo}")
-    logger.info(f"Dataset: {dataset}, Original model: {original_model}")
-    logger.info(f"Dataset type: {dataset_type_str}, File format: {file_format_str}")
-
+    """Evaluate a single model repository and save results directly to file."""
     output_dir = os.path.dirname(cst.CONTAINER_EVAL_RESULTS_PATH)
     if not os.path.exists(output_dir):
-        logger.info(f"Creating output directory: {output_dir}")
         os.makedirs(output_dir)
 
+    # Load existing results
     results_dict = {}
     if os.path.exists(cst.CONTAINER_EVAL_RESULTS_PATH):
         try:
-            logger.info(f"Reading existing results from {cst.CONTAINER_EVAL_RESULTS_PATH}")
             with open(cst.CONTAINER_EVAL_RESULTS_PATH, "r") as f:
                 results_dict = json.load(f)
-            logger.info(f"Loaded existing results for {len(results_dict)} repos")
         except json.JSONDecodeError:
             logger.warning(f"Could not read existing results from {cst.CONTAINER_EVAL_RESULTS_PATH}, starting fresh")
 
+    # Skip if duplicate
     if repo in results_dict:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
 
-    logger.info(f"Converting file format string: {file_format_str}")
     file_format = FileFormat(file_format_str)
-    logger.info(f"File format: {file_format}")
-
     try:
-        # Parse the DPO dataset type
-        logger.info(f"Parsing dataset type: {dataset_type_str}")
-        if isinstance(dataset_type_str, str):
-            dataset_type = DPODatasetType.model_validate_json(dataset_type_str)
-        else:
-            dataset_type = DPODatasetType(**dataset_type_str)
-        logger.info(f"Dataset type parsed: {dataset_type}")
+        dataset_type = DPODatasetType.model_validate_json(dataset_type_str)
     except Exception as e:
-        logger.error(f"Failed to parse dataset type: {e}")
-        logger.error(traceback.format_exc())
-        results_dict[repo] = f"Failed to parse dataset type: {str(e)}"
-        with open(cst.CONTAINER_EVAL_RESULTS_PATH, "w") as f:
-            json.dump(results_dict, f, indent=2)
-        return
+        logger.error(f"Invalid dataset type: {dataset_type_str}, error: {e}")
 
-    logger.info(f"Loading tokenizer for {original_model}")
     tokenizer = load_tokenizer(original_model)
     if tokenizer.pad_token_id is None:
-        logger.info("Setting pad_token to eos_token")
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
-        logger.info(f"Set pad_token_id to {tokenizer.pad_token_id}")
 
     try:
-        logger.info("Starting model evaluation workflow")
+        log_memory_stats()
+        logger.info(f"Loading reference model: {original_model}")
+        reference_model = load_model(original_model, is_base_model=True)
+        if "model_params_count" not in results_dict:
+            results_dict["model_params_count"] = _count_model_parameters(reference_model)
         try:
-            logger.info(f"Loading reference model: {original_model}")
-            reference_model = load_model(original_model, is_base_model=True)
-            logger.info(f"Reference model loaded: {reference_model.__class__.__name__}")
-
-            if "model_params_count" not in results_dict:
-                logger.info("Counting model parameters")
-                results_dict["model_params_count"] = _count_model_parameters(reference_model)
-                logger.info(f"Model has {results_dict['model_params_count']} parameters")
-
-            logger.info(f"Loading finetuned model as LoRA adapter: {repo}")
             finetuned_model = load_finetuned_model(reference_model, repo)
-            logger.info(f"Finetuned model loaded: {finetuned_model.__class__.__name__}")
             is_finetune = True
         except Exception as lora_error:
             logger.info(f"Failed to load as LoRA adapter: {lora_error}")
-            logger.info("Attempting to load as full model")
-
-            logger.info("Moving reference model to CPU and cleaning up CUDA memory")
-            reference_model.to('cpu')
-            reference_model_copy = reference_model
-            del reference_model
-            torch.cuda.empty_cache()
-            log_memory_stats()
-
             logger.info(f"Loading finetuned model as full model: {repo}")
             finetuned_model = load_model(repo, is_base_model=False)
-            logger.info(f"Finetuned model loaded: {finetuned_model.__class__.__name__}")
-
             try:
-                logger.info("Checking if model is a finetune")
                 is_finetune = model_is_a_finetune(original_model, finetuned_model)
-                logger.info(f"Model is finetune: {is_finetune}")
             except Exception as e:
-                logger.info(f"Problem with detection of finetune for {repo}: {e}")
-                logger.info("Assuming False")
+                logger.warning(f"Problem with detection of finetune for {repo}: {e}")
                 is_finetune = False
-
-            logger.info("Restoring reference model")
-            reference_model = reference_model_copy if reference_model_copy else load_model(original_model, is_base_model=True)
-            logger.info(f"Reference model restored: {reference_model.__class__.__name__}")
-
-        logger.info("Setting models to evaluation mode")
+        log_memory_stats()
         finetuned_model.eval()
         reference_model.eval()
-        logger.info("Models set to evaluation mode")
 
-        logger.info(f"Starting DPO evaluation for {repo}")
         results = evaluate_finetuned_dpo_model(
             dataset_name=dataset,
             finetuned_model=finetuned_model,
@@ -600,25 +578,37 @@ def evaluate_dpo_repo(repo, dataset, original_model, dataset_type_str, file_form
             tokenizer=tokenizer,
             reference_model=reference_model,
         )
-        logger.info(f"DPO evaluation completed with results: {results}")
-
         results["is_finetune"] = is_finetune
         results_dict[repo] = results
-        logger.info(f"Results for {repo}: {results}")
     except Exception as e:
-        logger.error(f"Error evaluating {repo}: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"Error evaluating {repo}: {e}", exc_info=True)
         results_dict[repo] = str(e)
     finally:
-        logger.info(f"Saving results to {cst.CONTAINER_EVAL_RESULTS_PATH}")
         with open(cst.CONTAINER_EVAL_RESULTS_PATH, "w") as f:
             json.dump(results_dict, f, indent=2)
         logger.info(f"Saved DPO evaluation results for {repo}")
+        logger.info(json.dumps(results_dict, indent=2))
         log_memory_stats()
 
 
 def main():
-    logger.info("Starting DPO evaluation main function")
+    dataset = os.environ.get("DATASET")
+    original_model = os.environ.get("ORIGINAL_MODEL")
+    dataset_type_str = os.environ.get("DATASET_TYPE", "")
+    file_format_str = os.environ.get("FILE_FORMAT")
+    models_str = os.environ.get("MODELS", "")
+
+    if not all([dataset, original_model, file_format_str, models_str]):
+        logger.error("Missing required environment variables.")
+        for var, value in {
+            "DATASET": dataset,
+            "ORIGINAL_MODEL": original_model,
+            "FILE_FORMAT": file_format_str,
+            "MODELS": models_str
+        }.items():
+            if not value:
+                logger.error(f"Missing {var}")
+        exit(1)
 
     # Log environment variables
     env_vars = {
@@ -641,24 +631,6 @@ def main():
             logger.info(f"CUDA device {i}: {torch.cuda.get_device_name(i)}")
     else:
         logger.info("CUDA not available")
-
-    dataset = os.environ.get("DATASET")
-    original_model = os.environ.get("ORIGINAL_MODEL")
-    dataset_type_str = os.environ.get("DATASET_TYPE", "")
-    file_format_str = os.environ.get("FILE_FORMAT")
-    models_str = os.environ.get("MODELS", "")
-
-    if not all([dataset, original_model, file_format_str, models_str]):
-        logger.error("Missing required environment variables.")
-        for var, value in {
-            "DATASET": dataset,
-            "ORIGINAL_MODEL": original_model,
-            "FILE_FORMAT": file_format_str,
-            "MODELS": models_str
-        }.items():
-            if not value:
-                logger.error(f"Missing {var}")
-        exit(1)
 
     repos = [m.strip() for m in models_str.split(",") if m.strip()]
     logger.info(f"Models to evaluate: {repos}")
@@ -696,4 +668,3 @@ if __name__ == "__main__":
         logger.critical(f"Unhandled exception in main: {e}")
         logger.critical(traceback.format_exc())
         sys.exit(1)
-
