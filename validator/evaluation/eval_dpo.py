@@ -1,4 +1,5 @@
 import json
+import shlex
 import sys
 import traceback
 import importlib.metadata
@@ -661,7 +662,8 @@ def main():
 
     repos = [m.strip() for m in models_str.split(",") if m.strip()]
     logger.info(f"Models to evaluate: {repos}")
-
+    json_str = json.dumps(json.loads(dataset_type_str))
+    escaped_json = shlex.quote(json_str)
     for repo in repos:
         try:
             logger.info(f"Running subprocess with escaped JSON parameter")
