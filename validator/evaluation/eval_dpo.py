@@ -362,9 +362,6 @@ def load_model(model_name_or_path, is_base_model=False):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
 
-    hf_token = os.environ.get("HUGGINGFACE_TOKEN")
-    logger.info(f"HuggingFace token available: {hf_token is not None}")
-
     cache_dir = None
     if not is_base_model:
         cache_dir = create_finetuned_cache_dir()
@@ -374,7 +371,6 @@ def load_model(model_name_or_path, is_base_model=False):
         logger.info(f"Calling AutoModelForCausalLM.from_pretrained for {model_name_or_path}")
         model = AutoModelForCausalLM.from_pretrained(
             model_name_or_path,
-            token=hf_token,
             device_map=device,
             cache_dir=cache_dir
         )
@@ -410,8 +406,6 @@ def load_model(model_name_or_path, is_base_model=False):
 @retry_on_5xx()
 def load_tokenizer(original_model):
     logger.info(f"Loading tokenizer for model: {original_model}")
-    hf_token = os.environ.get("HUGGINGFACE_TOKEN")
-    logger.info(f"HuggingFace token available: {hf_token is not None}")
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(original_model, token=hf_token)
@@ -439,9 +433,6 @@ def load_finetuned_model(base_model, repo):
     logger.info(f"Loading finetuned model: {repo} with base model: {base_model.__class__.__name__}")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
-
-    hf_token = os.environ.get("HUGGINGFACE_TOKEN")
-    logger.info(f"HuggingFace token available: {hf_token is not None}")
 
     try:
         cache_dir = create_finetuned_cache_dir()
