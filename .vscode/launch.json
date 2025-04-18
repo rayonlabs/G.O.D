@@ -59,10 +59,21 @@
             }
         },
         {
-            "name": "Python Debugger: eval",
+            "name": "Python Debugger: eval instruct text",
             "type": "debugpy",
             "request": "launch",
-            "module": "validator.evaluation.eval",
+            "module": "validator.evaluation.single_eval_instruct_text",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Python Debugger: eval dpo",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.evaluation.eval_dpo",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {

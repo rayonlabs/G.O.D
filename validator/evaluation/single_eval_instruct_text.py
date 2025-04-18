@@ -1,11 +1,11 @@
 import sys
 
-from validator.evaluation.eval import evaluate_repo
+from validator.evaluation.eval_instruct_text import evaluate_repo
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python single_eval.py <repo> <dataset> <original_model> <dataset_type_str> <file_format_str>")
+        print("Usage: python single_eval_instruct_text.py <repo> <dataset> <original_model> <dataset_type_str> <file_format_str>")
         sys.exit(1)
 
     evaluate_repo(

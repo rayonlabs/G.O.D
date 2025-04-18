@@ -13,10 +13,10 @@ from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
-from core.models.utility_models import FileFormat
-from core.models.utility_models import InstructDatasetType
 from core.models.utility_models import DPODatasetType
+from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageModelType
+from core.models.utility_models import InstructDatasetType
 from core.utils import download_s3_file
 from validator.tasks.task_prep import unzip_to_temp_path
 from validator.utils.logging import get_all_context_tags
@@ -76,12 +76,20 @@ async def run_evaluation_docker_text(
     dataset: str,
     models: list[str],
     original_model: str,
-    dataset_type: InstructDatasetType,
+    dataset_type: InstructDatasetType | DPODatasetType,
     file_format: FileFormat,
     gpu_ids: list[int],
 ) -> DockerEvaluationResults:
-    client = docker.from_env()
 
+    if isinstance(dataset_type, InstructDatasetType):
+        command = ["python", "-m", "validator.evaluation.eval_instruct_text"]
+    elif isinstance(dataset_type, DPODatasetType):
+        command = ["python", "-m", "validator.evaluation.eval_dpo"]
+    else:
+        raise ValueError(f"Unsupported dataset type: {type(dataset_type)}")
+    task_type = type(dataset_type).__name__
+
+    client = docker.from_env()
     dataset_type_str = dataset_type.model_dump_json()
     dataset_filename = os.path.basename(dataset)
     dataset_dir = os.path.dirname(os.path.abspath(dataset))
@@ -93,7 +101,7 @@ async def run_evaluation_docker_text(
         "DATASET_TYPE": dataset_type_str,
         "FILE_FORMAT": file_format.value,
     }
-    logger.info(f"Evaluating models: {models}")
+    logger.info(f"Running {task_type} evaluation for models: {models}")
 
     volume_bindings = {
         dataset_dir: {
@@ -119,6 +127,7 @@ async def run_evaluation_docker_text(
         container: Container = await asyncio.to_thread(
             client.containers.run,
             cst.VALIDATOR_DOCKER_IMAGE,
+            command=command,
             environment=environment,
             volumes=volume_bindings,
             runtime="nvidia",
@@ -136,85 +145,8 @@ async def run_evaluation_docker_text(
         return process_evaluation_results(eval_results, is_image=False)
 
     except Exception as e:
-        logger.error(f"Failed to retrieve evaluation results: {str(e)}", exc_info=True)
-        raise Exception(f"Failed to retrieve evaluation results: {str(e)}")
-
-    finally:
-        try:
-            await asyncio.to_thread(container.remove, force=True)
-            await cleanup_resources()
-        except Exception as e:
-            logger.info(f"A problem with cleaning up {e}")
-        client.close()
-
-async def run_evaluation_docker_dpo(
-    dataset: str,
-    models: list[str],
-    original_model: str,
-    dataset_type: DPODatasetType,
-    file_format: FileFormat,
-    gpu_ids: list[int] = None,
-) -> DockerEvaluationResults:
-    if gpu_ids is None:
-        gpu_ids = []
-
-    client = docker.from_env()
-    dataset_type_str = dataset_type.model_dump_json()
-    dataset_filename = os.path.basename(dataset)
-    dataset_dir = os.path.dirname(os.path.abspath(dataset))
-
-    environment = {
-        "DATASET": f"/workspace/input_data/{dataset_filename}",
-        "MODELS": ",".join(models),
-        "ORIGINAL_MODEL": original_model,
-        "DATASET_TYPE": dataset_type_str,
-        "FILE_FORMAT": file_format.value,
-    }
-    logger.info(f"DPO evaluation for models: {models}")
-
-    volume_bindings = {
-        dataset_dir: {
-            "bind": "/workspace/input_data",
-            "mode": "ro",
-        },
-        os.path.expanduser(cst.CACHE_DIR_HUB): {
-            "bind": "/root/.cache/huggingface/hub",
-            "mode": "rw",
-        }
-    }
-
-    async def cleanup_resources():
-        try:
-            await asyncio.to_thread(client.containers.prune)
-            await asyncio.to_thread(client.images.prune, filters={"dangling": True})
-            await asyncio.to_thread(client.volumes.prune)
-            logger.debug("Completed Docker resource cleanup")
-        except Exception as e:
-            logger.error(f"Cleanup failed: {str(e)}")
-
-    try:
-        container: Container = await asyncio.to_thread(
-            client.containers.run,
-            cst.VALIDATOR_DOCKER_IMAGE_DPO,  # Use the DPO-specific Docker image
-            environment=environment,
-            volumes=volume_bindings,
-            runtime="nvidia",
-            device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
-            detach=True,
-        )
-        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
-        result = await asyncio.to_thread(container.wait)
-        log_task.cancel()
-
-        if result["StatusCode"] != 0:
-            raise Exception(f"Container exited with status {result['StatusCode']}")
-
-        eval_results = await get_evaluation_results(container)
-        return process_evaluation_results(eval_results, is_image=False)
-
-    except Exception as e:
-        logger.error(f"Failed to retrieve DPO evaluation results: {str(e)}", exc_info=True)
-        raise Exception(f"Failed to retrieve DPO evaluation results: {str(e)}")
+        logger.error(f"Failed to retrieve {task_type} evaluation results: {str(e)}", exc_info=True)
+        raise Exception(f"Failed to retrieve {task_type} evaluation results: {str(e)}")
 
     finally:
         try:
@@ -310,4 +242,3 @@ async def run_evaluation_docker_image(
         except Exception as e:
             logger.info(f"A problem with cleaning up {e}")
         client.close()
-

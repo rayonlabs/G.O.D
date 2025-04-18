@@ -16,5 +16,3 @@ ENV DATASET_TYPE=""
 ENV FILE_FORMAT=""
 
 RUN mkdir /aplp
-
-CMD ["python", "-m", "validator.evaluation.eval"]

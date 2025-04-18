@@ -33,7 +33,6 @@ from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
-from validator.evaluation.docker_evaluation import run_evaluation_docker_dpo
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.utils.call_endpoint import process_non_stream_fiber_get
@@ -405,11 +404,7 @@ async def _evaluate_submissions(
 
         logger.info("Starting test evaluation")
         test_data_filepath = await download_s3_file(task.test_data)
-
-        if task.task_type == TaskType.DPOTASK:
-            test_results = await run_evaluation_docker_dpo(dataset=test_data_filepath, **evaluation_params)
-        elif task.task_type == TaskType.INSTRUCTTEXTTASK:
-            test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
+        test_results = await run_evaluation_docker_text(dataset=test_data_filepath, **evaluation_params)
 
         try:
             os.remove(test_data_filepath)
@@ -446,19 +441,11 @@ async def _evaluate_submissions(
         if top_4_repos:
             logger.info(f"Evaluating synthetic data for top {len(top_4_repos)} models")
             synthetic_data_filepath = await download_s3_file(task.synthetic_data)
-
-            if task.task_type == TaskType.DPOTASK:
-                synth_results = await run_evaluation_docker_dpo(
-                    dataset=synthetic_data_filepath,
-                    models=top_4_repos,
-                    **{k: v for k, v in evaluation_params.items() if k != "models"},
-                )
-            elif task.task_type == TaskType.INSTRUCTTEXTTASK:
-                synth_results = await run_evaluation_docker_text(
-                    dataset=synthetic_data_filepath,
-                    models=top_4_repos,
-                    **{k: v for k, v in evaluation_params.items() if k != "models"},
-                )
+            synth_results = await run_evaluation_docker_text(
+                dataset=synthetic_data_filepath,
+                models=top_4_repos,
+                **{k: v for k, v in evaluation_params.items() if k != "models"},
+            )
 
             try:
                 os.remove(synthetic_data_filepath)
