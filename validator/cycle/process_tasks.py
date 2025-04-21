@@ -6,6 +6,7 @@ import uuid
 
 from fiber.chain.models import Node
 
+from core.constants import IS_PROD_ENV
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
@@ -219,7 +220,10 @@ async def _let_miners_know_to_start_training(
 async def _find_and_select_miners_for_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
-            nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
+            if IS_PROD_ENV:
+                nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
+            else:
+                nodes = await nodes_sql.get_all_nodes(config.psql_db)
             task = await _select_miner_pool_and_add_to_task(task, nodes, config)
             logger.info(f"After assigning miners here is the current task info {task}")
             await tasks_sql.update_task(task, config.psql_db)

@@ -14,6 +14,8 @@ try:
 except (TypeError, ValueError):
     NETUID = DEFAULT_NETUID
 
+IS_PROD_ENV = NETUID == DEFAULT_NETUID
+
 MINER_DOCKER_IMAGE = "weightswandering/tuning_miner:latest"
 MINER_DOCKER_IMAGE_DIFFUSION = "diagonalge/miner-diffusion-flux:latest"
 VALIDATOR_DOCKER_IMAGE = "weightswandering/tuning_vali:latest"
