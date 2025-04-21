@@ -277,44 +277,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # file_path = "/aplp/evaluation_results.json"
-    # if os.path.exists(file_path):
-    #     os.remove(file_path)
-    # url = "https://gradients.s3.eu-north-1.amazonaws.com/ca0b34691aaddfd7_test_data.json?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVVZOOA7SA4UOFLPI%2F20250415%2Feu-north-1%2Fs3%2Faws4_request&X-Amz-Date=20250415T143435Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=7ce86f3d692d22f6ad5485e90921a4227d558e10453bd3713d3d23875f79c2d8"
-    # import asyncio
-
-    # from core.utils import download_s3_file
-    # tmp_dataset = asyncio.run(download_s3_file(file_url=url))
-    # # Sample 1% of the data
-    # import random
-    # with open(tmp_dataset, 'r') as f:
-    #     data = json.load(f)
-    # if isinstance(data, list):
-    #     data = random.sample(data, max(1, len(data) // 10))
-    #     # data = convert_to_chat_format(data)
-    # with open(tmp_dataset, 'w') as f:
-    #     json.dump(data, f)
-
-    # file_name = os.path.basename(tmp_dataset)
-    # dataset = f"/workspace/input_data/{file_name}"
-    # os.makedirs("/workspace/input_data", exist_ok=True)
-    # os.rename(tmp_dataset, dataset)
-    # os.environ["DATASET"] = dataset
-    # model = "Qwen/Qwen2.5-Coder-7B-Instruct"
-    # os.environ["ORIGINAL_MODEL"] = model
-    # os.environ["MODELS"] = ",".join([
-    #     model,
-    #     "TIGER-Lab/AceCodeRM-7B",
-    # ])
-    # os.environ["DATASET_TYPE"] = DPODatasetType(
-    # field_prompt="instruction",
-    # field_chosen="chosen",
-    # field_rejected="rejected",
-    # field_system=None,
-    # prompt_format="{prompt}",
-    # chosen_format="{chosen}",
-    # rejected_format="{rejected}"
-    # ).model_dump_json()
-    # os.environ["FILE_FORMAT"] = "json"
-
     main()
