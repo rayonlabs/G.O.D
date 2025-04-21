@@ -1,17 +1,13 @@
 import sys
 
+from validator.core.models import EvaluationArgs
 from validator.evaluation.eval_instruct_text import evaluate_repo
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python single_eval_instruct_text.py <repo> <dataset> <original_model> <dataset_type_str> <file_format_str>")
+    if len(sys.argv) != 2:
+        print("Usage: python single_eval_instruct_text.py <serialized_evaluation_args>")
         sys.exit(1)
 
-    evaluate_repo(
-        repo=sys.argv[1],
-        dataset=sys.argv[2],
-        original_model=sys.argv[3],
-        dataset_type_str=sys.argv[4],
-        file_format_str=sys.argv[5],
-    )
+    evaluation_args = EvaluationArgs.model_validate_json(sys.argv[1])
+    evaluate_repo(evaluation_args)

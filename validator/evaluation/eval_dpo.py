@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 import traceback
@@ -15,11 +14,12 @@ from trl import DPOConfig
 from trl import DPOTrainer
 
 from core.models.utility_models import DPODatasetType
-from core.models.utility_models import FileFormat
 from validator.core import constants as cst
+from validator.core.models import EvaluationArgs
 from validator.evaluation.common import ProgressLoggerCallback
 from validator.evaluation.common import _load_and_update_evaluation_config
 from validator.evaluation.common import _log_dataset_and_model_info
+from validator.evaluation.common import check_and_log_base_model_size
 from validator.evaluation.common import count_model_parameters
 from validator.evaluation.common import load_finetuned_model
 from validator.evaluation.common import load_model
@@ -121,14 +121,14 @@ def evaluate_dpo_model(
     finetuned_model: AutoModelForCausalLM,
     reference_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
-    dataset_type: DPODatasetType
+    evaluation_args: EvaluationArgs
 ) -> dict[str, float]:
     evaluation_config.tokenizer_config = tokenizer.name_or_path
     logger.info(f"Config: {evaluation_config}")
 
     dataset_path = evaluation_config.datasets[0]["path"]
     eval_dataset = load_dataset("json", data_files=dataset_path, split="train")
-    eval_dataset = _adapt_dpo_columns_to_trl(eval_dataset, dataset_type)
+    eval_dataset = _adapt_dpo_columns_to_trl(eval_dataset, evaluation_args.dataset_type)
 
     _log_dataset_and_model_info(eval_dataset, finetuned_model, tokenizer)
 
@@ -167,38 +167,40 @@ def evaluate_dpo_model(
     return evaluation_results
 
 
-def evaluate_finetuned_dpo_model(dataset_name, finetuned_model, dataset_type, file_format, tokenizer, reference_model):
+def evaluate_finetuned_dpo_model(
+    evaluation_args: EvaluationArgs,
+    finetuned_model: AutoModelForCausalLM,
+    tokenizer: AutoTokenizer,
+    reference_model: AutoModelForCausalLM
+) -> dict[str, float]:
     evaluation_config = _load_and_update_evaluation_config(
-        dataset_name, dataset_type, file_format, finetuned_model, cst.VALI_CONFIG_PATH
+        evaluation_args=evaluation_args,
+        finetuned_model=finetuned_model,
+        config_path=cst.VALI_CONFIG_PATH
     )
     return evaluate_dpo_model(
-        evaluation_config, finetuned_model, reference_model, tokenizer, dataset_type
+        evaluation_config, finetuned_model, reference_model, tokenizer, evaluation_args
     )
 
 
-def evaluate_dpo_repo(repo, dataset, original_model, dataset_type_str, file_format_str):
+def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
     """Evaluate a single model repository and save results directly to file."""
     results_dict = load_results_dict()
+    repo = evaluation_args.repo
 
     # Skip if duplicate
     if repo in results_dict:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
 
-    file_format = FileFormat(file_format_str)
-    try:
-        dataset_type = DPODatasetType.model_validate_json(dataset_type_str)
-    except Exception as e:
-        logger.error(f"Invalid dataset type: {dataset_type_str}, error: {e}")
-
-    tokenizer = load_tokenizer(original_model)
+    tokenizer = load_tokenizer(evaluation_args.original_model)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
     try:
-        logger.info(f"Loading reference model: {original_model}")
-        reference_model = load_model(original_model, is_base_model=True)
+        logger.info(f"Loading reference model: {evaluation_args.original_model}")
+        reference_model = load_model(evaluation_args.original_model, is_base_model=True)
         if "model_params_count" not in results_dict:
             results_dict["model_params_count"] = count_model_parameters(reference_model)
         try:
@@ -209,7 +211,7 @@ def evaluate_dpo_repo(repo, dataset, original_model, dataset_type_str, file_form
             logger.info(f"Loading finetuned model as full model: {repo}")
             finetuned_model = load_model(repo, is_base_model=False)
             try:
-                is_finetune = model_is_a_finetune(original_model, finetuned_model)
+                is_finetune = model_is_a_finetune(evaluation_args.original_model, finetuned_model)
             except Exception as e:
                 logger.warning(f"Problem with detection of finetune for {repo}: {e}")
                 is_finetune = False
@@ -219,10 +221,8 @@ def evaluate_dpo_repo(repo, dataset, original_model, dataset_type_str, file_form
         reference_model.eval()
 
         results = evaluate_finetuned_dpo_model(
-            dataset_name=dataset,
+            evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
-            dataset_type=dataset_type,
-            file_format=file_format,
             tokenizer=tokenizer,
             reference_model=reference_model,
         )
@@ -248,25 +248,73 @@ def main():
         exit(1)
 
     repos = [m.strip() for m in models_str.split(",") if m.strip()]
-
     for repo in repos:
         try:
+            evaluation_args = EvaluationArgs(
+                dataset=dataset,
+                original_model=original_model,
+                dataset_type=dataset_type_str,
+                file_format=file_format_str,
+                repo=repo
+            )
+
+            # Launching subprocess to purge memory
             subprocess.run([
                 "python",
                 "-m",
                 "validator.evaluation.single_eval_dpo",
-                repo,
-                dataset,
-                original_model,
-                json.dumps(json.loads(dataset_type_str)),
-                file_format_str,
+                evaluation_args.model_dump_json()
             ], check=True)
             logger.info(f"Subprocess completed for {repo}")
         except subprocess.CalledProcessError as e:
             logger.error(f"Error running subprocess for {repo}: {e}")
+    try:
+        check_and_log_base_model_size(original_model)
+    except Exception as e:
+        logger.error(f"Error checking and logging base model size: {e}")
 
     logger.info("=== DPO EVALUATION SCRIPT COMPLETED ===")
 
 
 if __name__ == "__main__":
+    # file_path = "/aplp/evaluation_results.json"
+    # if os.path.exists(file_path):
+    #     os.remove(file_path)
+    # url = "https://gradients.s3.eu-north-1.amazonaws.com/ca0b34691aaddfd7_test_data.json?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVVZOOA7SA4UOFLPI%2F20250415%2Feu-north-1%2Fs3%2Faws4_request&X-Amz-Date=20250415T143435Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=7ce86f3d692d22f6ad5485e90921a4227d558e10453bd3713d3d23875f79c2d8"
+    # import asyncio
+
+    # from core.utils import download_s3_file
+    # tmp_dataset = asyncio.run(download_s3_file(file_url=url))
+    # # Sample 1% of the data
+    # import random
+    # with open(tmp_dataset, 'r') as f:
+    #     data = json.load(f)
+    # if isinstance(data, list):
+    #     data = random.sample(data, max(1, len(data) // 10))
+    #     # data = convert_to_chat_format(data)
+    # with open(tmp_dataset, 'w') as f:
+    #     json.dump(data, f)
+
+    # file_name = os.path.basename(tmp_dataset)
+    # dataset = f"/workspace/input_data/{file_name}"
+    # os.makedirs("/workspace/input_data", exist_ok=True)
+    # os.rename(tmp_dataset, dataset)
+    # os.environ["DATASET"] = dataset
+    # model = "Qwen/Qwen2.5-Coder-7B-Instruct"
+    # os.environ["ORIGINAL_MODEL"] = model
+    # os.environ["MODELS"] = ",".join([
+    #     model,
+    #     "TIGER-Lab/AceCodeRM-7B",
+    # ])
+    # os.environ["DATASET_TYPE"] = DPODatasetType(
+    # field_prompt="instruction",
+    # field_chosen="chosen",
+    # field_rejected="rejected",
+    # field_system=None,
+    # prompt_format="{prompt}",
+    # chosen_format="{chosen}",
+    # rejected_format="{rejected}"
+    # ).model_dump_json()
+    # os.environ["FILE_FORMAT"] = "json"
+
     main()

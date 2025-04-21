@@ -9,10 +9,12 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
+from core.models.utility_models import DPODatasetType
 from core.models.utility_models import FileFormat
-from core.models.utility_models import ImageTextPair
-from core.models.utility_models import TaskType
 from core.models.utility_models import ImageModelType
+from core.models.utility_models import ImageTextPair
+from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import TaskType
 
 
 class TokenizerConfig(BaseModel):
@@ -383,3 +385,29 @@ class Dataset(BaseModel):
     dpo_accepted_column:str | None = None
     dpo_rejected_column:str | None = None
 
+
+class EvaluationArgs(BaseModel):
+    dataset: str
+    original_model: str
+    dataset_type: InstructDatasetType | DPODatasetType
+    file_format: FileFormat
+    repo: str
+
+    @field_validator("file_format", mode="before")
+    def parse_file_format(cls, value):
+        if isinstance(value, str):
+            return FileFormat(value)
+        return value
+
+    @field_validator("dataset_type", mode="before")
+    def parse_dataset_type(cls, value):
+        if isinstance(value, str):
+            try:
+                data = json.loads(value)
+                if "field_chosen" in data:
+                    return DPODatasetType.model_validate(data)
+                else:
+                    return InstructDatasetType.model_validate(data)
+            except Exception as e:
+                raise ValueError(f"Failed to parse dataset type: {e}")
+        return value

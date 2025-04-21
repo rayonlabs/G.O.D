@@ -20,9 +20,8 @@ from transformers import AutoTokenizer
 from transformers import TrainerCallback
 
 from core.config.config_handler import create_dataset_entry
-from core.models.utility_models import FileFormat
-from core.models.utility_models import InstructDatasetType
 from validator.core import constants as cst
+from validator.core.models import EvaluationArgs
 from validator.utils.logging import get_logger
 
 
@@ -256,9 +255,7 @@ def log_cuda_info():
 
 
 def _load_and_update_evaluation_config(
-    dataset_name: str,
-    dataset_type: InstructDatasetType,
-    file_format: FileFormat,
+    evaluation_args: EvaluationArgs,
     finetuned_model: AutoModelForCausalLM,
     config_path: str,
 ) -> DictDefault:
@@ -266,9 +263,9 @@ def _load_and_update_evaluation_config(
         config_dict = yaml.safe_load(file)
 
     dataset_entry = create_dataset_entry(
-        dataset=dataset_name,
-        dataset_type=dataset_type,
-        file_format=file_format,
+        dataset=evaluation_args.dataset,
+        dataset_type=evaluation_args.dataset_type,
+        file_format=evaluation_args.file_format,
     )
     config_dict["datasets"] = [dataset_entry]
 
@@ -278,3 +275,17 @@ def _load_and_update_evaluation_config(
         config_dict["sequence_len"] = ceil(max_embeddings / 2)
 
     return DictDefault(config_dict)
+
+
+def check_and_log_base_model_size(original_model: str) -> None:
+    """Check if base model size is logged in results, if not load and log it."""
+    results_dict = load_results_dict()
+
+    if "model_params_count" not in results_dict:
+        logger.info("Base model size not logged, loading base model to calculate size")
+        base_model = load_model(original_model, is_base_model=True)
+        results_dict["model_params_count"] = count_model_parameters(base_model)
+        save_results_dict(results_dict)
+        logger.info(f"Logged base model size: {results_dict['model_params_count']} parameters")
+    else:
+        logger.info(f"Base model size already logged: {results_dict['model_params_count']} parameters")

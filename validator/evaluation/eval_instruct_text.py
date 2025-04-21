@@ -13,12 +13,12 @@ from transformers import AutoTokenizer
 from transformers import Trainer
 from transformers import TrainingArguments
 
-from core.models.utility_models import FileFormat
-from core.models.utility_models import InstructDatasetType
 from validator.core import constants as cst
+from validator.core.models import EvaluationArgs
 from validator.evaluation.common import ProgressLoggerCallback
 from validator.evaluation.common import _load_and_update_evaluation_config
 from validator.evaluation.common import _log_dataset_and_model_info
+from validator.evaluation.common import check_and_log_base_model_size
 from validator.evaluation.common import count_model_parameters
 from validator.evaluation.common import load_finetuned_model
 from validator.evaluation.common import load_model
@@ -104,34 +104,29 @@ def evaluate_language_model_loss(
 
 
 def evaluate_finetuned_model(
-    dataset_name: str,
+    evaluation_args: EvaluationArgs,
     finetuned_model: AutoModelForCausalLM,
-    dataset_type: InstructDatasetType,
-    file_format: FileFormat,
     tokenizer: AutoTokenizer,
 ) -> dict[str, float]:
     evaluation_config = _load_and_update_evaluation_config(
-        dataset_name, dataset_type, file_format, finetuned_model, cst.VALI_CONFIG_PATH
+        evaluation_args=evaluation_args,
+        finetuned_model=finetuned_model,
+        config_path=cst.VALI_CONFIG_PATH
     )
     return evaluate_language_model_loss(evaluation_config, finetuned_model, tokenizer)
 
 
-def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str: str, file_format_str: str) -> None:
+def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
     """Evaluate a single model repository and save results directly to file."""
     results_dict = load_results_dict()
+    repo = evaluation_args.repo
 
     # Skip if duplicate
     if repo in results_dict:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
 
-    file_format = FileFormat(file_format_str)
-    try:
-        dataset_type = InstructDatasetType.model_validate_json(dataset_type_str)
-    except ValueError:
-        logger.error(f"Invalid dataset type: {dataset_type_str}")
-
-    tokenizer = load_tokenizer(original_model)
+    tokenizer = load_tokenizer(evaluation_args.original_model)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -139,7 +134,7 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
     try:
         if check_for_lora(repo):
             logger.info("LoRA adapter detected. Loading as with Peft")
-            base_model = load_model(original_model, is_base_model=True)
+            base_model = load_model(evaluation_args.original_model, is_base_model=True)
             if "model_params_count" not in results_dict:
                 results_dict["model_params_count"] = count_model_parameters(base_model)
             finetuned_model = load_finetuned_model(base_model, repo)
@@ -148,7 +143,7 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
             logger.info("No LoRA adapter detected. Loading full model")
             finetuned_model = load_model(repo, is_base_model=False)
             try:
-                is_finetune = model_is_a_finetune(original_model, finetuned_model)
+                is_finetune = model_is_a_finetune(evaluation_args.original_model, finetuned_model)
             except Exception as e:
                 logger.info(f"Problem with detection of finetune for {repo}: {e}")
                 logger.info("Assuming False")
@@ -157,10 +152,8 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
         finetuned_model.eval()
 
         results = evaluate_finetuned_model(
-            dataset_name=dataset,
+            evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
-            dataset_type=dataset_type,
-            file_format=file_format,
             tokenizer=tokenizer,
         )
         results["is_finetune"] = is_finetune
@@ -171,20 +164,6 @@ def evaluate_repo(repo: str, dataset: str, original_model: str, dataset_type_str
     finally:
         save_results_dict(results_dict, repo)
         log_memory_stats()
-
-
-def check_and_log_base_model_size(original_model: str) -> None:
-    """Check if base model size is logged in results, if not load and log it."""
-    results_dict = load_results_dict()
-
-    if "model_params_count" not in results_dict:
-        logger.info("Base model size not logged, loading base model to calculate size")
-        base_model = load_model(original_model, is_base_model=True)
-        results_dict["model_params_count"] = count_model_parameters(base_model)
-        save_results_dict(results_dict)
-        logger.info(f"Logged base model size: {results_dict['model_params_count']} parameters")
-    else:
-        logger.info(f"Base model size already logged: {results_dict['model_params_count']} parameters")
 
 
 def main():
@@ -202,16 +181,20 @@ def main():
 
     for repo in lora_repos:
         try:
+            evaluation_args = EvaluationArgs(
+                dataset=dataset,
+                original_model=original_model,
+                dataset_type=dataset_type_str,
+                file_format=file_format_str,
+                repo=repo
+            )
+
             # Launching subprocess to purge memory: https://github.com/huggingface/transformers/issues/26571
             subprocess.run([
                 "python",
                 "-m",
                 "validator.evaluation.single_eval_instruct_text",
-                repo,
-                dataset,
-                original_model,
-                dataset_type_str,
-                file_format_str
+                evaluation_args.model_dump_json()
             ], check=True)
             logger.info(f"Subprocess completed for {repo}")
         except subprocess.CalledProcessError as e:
