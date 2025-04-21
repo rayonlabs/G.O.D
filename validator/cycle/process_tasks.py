@@ -221,8 +221,10 @@ async def _find_and_select_miners_for_task(task: InstructTextRawTask | DpoRawTas
     with LogContext(task_id=str(task.task_id)):
         try:
             if IS_PROD_ENV:
+                logger.info("Filtering for only nodes that have scored on prod")
                 nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
             else:
+                logger.info("THIS IS TESTNET SO WE DONT FILTER NODES")
                 nodes = await nodes_sql.get_all_nodes(config.psql_db)
             task = await _select_miner_pool_and_add_to_task(task, nodes, config)
             logger.info(f"After assigning miners here is the current task info {task}")
