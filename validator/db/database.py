@@ -107,4 +107,4 @@ class PSQLDB:
     async def connection(self) -> PoolAcquireContext:
         if not self.pool:
             raise RuntimeError("Database connection not established. Call connect() first.")
-        return self.pool.acquire()
+        return self.pool.acquire(timeout=cst.TIMEOUT)
