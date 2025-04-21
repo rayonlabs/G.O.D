@@ -148,6 +148,7 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node
         )
         return [Node(**dict(row)) for row in rows]
 
+
 async def get_tasks_with_status(
     status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False
 ) -> List[InstructTextRawTask | DpoRawTask | ImageRawTask]:
@@ -209,6 +210,7 @@ async def get_tasks_with_status(
         logger.info(f"Retrieved {len(tasks)} tasks with status {status.value}")
         return tasks
 
+
 async def assign_node_to_task(task_id: str, node: Node, psql_db: PSQLDB) -> None:
     """Assign a node to a task"""
     async with await psql_db.connection() as connection:
@@ -247,7 +249,7 @@ async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
 
 async def update_task(
     updated_task: InstructTextRawTask | DpoRawTask | ImageRawTask, psql_db: PSQLDB
-    ) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
+) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)
 
     if not existing_task:
@@ -786,12 +788,13 @@ async def get_completed_organic_tasks(
 
         params.extend([limit, offset])
         task_ids = await connection.fetch(query, *params)
-        tasks_list = []
-        for task_row in task_ids:
-            task = await get_task_by_id(task_row[cst.TASK_ID], psql_db)
-            tasks_list.append(task)
 
-        return tasks_list
+    tasks_list = []
+    for task_row in task_ids:
+        task = await get_task_by_id(task_row[cst.TASK_ID], psql_db)
+        tasks_list.append(task)
+
+    return tasks_list
 
 
 async def get_expected_repo_name(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> str | None:
