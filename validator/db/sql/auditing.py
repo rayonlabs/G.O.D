@@ -134,7 +134,9 @@ async def get_recent_tasks_for_hotkey(
                 WHERE t.{cst.TASK_ID} = $1
                 ORDER BY t.{cst.CREATED_AT} DESC
             """
-            result = await connection.fetch(query, task_id, hotkey)
+            async with await config.psql_db.connection() as connection:
+                connection: Connection
+                result = await connection.fetch(query, task_id, hotkey)
             result_dict = task.model_dump() | dict(result[0])
 
             if result_dict.get(cst.OFFER_RESPONSE):
