@@ -58,8 +58,15 @@ tasks:
 
   postgres:
     cmds:
-      - export $(cat .vali.env | grep -v '^#' | xargs)  && PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER -d $POSTGRES_DB -h $POSTGRES_HOST
-
+      - |
+        export $(cat .vali.env | grep -v '^#' | xargs)
+        if [ -n "$DATABASE_URL" ]; then
+          echo "Connecting using DATABASE_URL"
+          psql "$DATABASE_URL"
+        else
+          echo "Connecting using individual parameters"
+          PGPASSWORD=$POSTGRES_PASSWORD psql -U $POSTGRES_USER -d $POSTGRES_DB -h $POSTGRES_HOST
+        fi
 
   install:
     cmds:
@@ -76,3 +83,15 @@ tasks:
     cmds:
       - pm2 delete auditor-autoupdates || true
       - pm2 start "python utils/run_auditor_autoupdate.py" --name auditor-autoupdates
+
+  db-dump:
+    cmds:
+      - export $(cat .vali.env | grep -v '^#' | xargs) && docker run --rm --network=host -v $(pwd):/backup postgres:17 pg_dump --dbname="${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}}" -F c -f /backup/god-db-backup.dump
+
+  db-restore:
+    cmds:
+      - echo "Restoring database. Make sure your database connection parameters are correct in .vali.env"
+      - |
+        export $(cat .vali.env | grep -v '^#' | xargs)
+        docker run --rm --network=host -v $(pwd):/backup postgres:17 bash -c "pg_restore --dbname=\"${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}}\" --clean --if-exists -x -O /backup/god-db-backup.dump || echo 'Restore completed with some errors, which may be safely ignored'"
+

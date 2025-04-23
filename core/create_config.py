@@ -93,11 +93,21 @@ def generate_validator_config(dev: bool = False) -> Dict[str, Any]:
     wallet_name = input("💼 Enter wallet name (default: default): ") or "default"
     hotkey_name = input("🔑 Enter hotkey name (default: default): ") or "default"
     netuid = 241 if subtensor_network.strip() == "test" else 56
-    postgres_user = "user"
-    postgres_password = generate_secure_password() if not postgres_password else postgres_password
-    postgres_db = "god-db"
-    postgres_host = "localhost"
-    postgres_port = "5432"
+    database_url = input("🗄️ If using a remote database, enter the full database url (default: None): ") or None
+    if database_url:
+        postgres_profile = "no-local-postgres"
+        postgres_user = None
+        postgres_password = None
+        postgres_db = None
+        postgres_host = None
+        postgres_port = None
+    else:
+        postgres_profile = "default"  # will start local postgres
+        postgres_user = "user"
+        postgres_password = generate_secure_password() if not postgres_password else postgres_password
+        postgres_db = "god_db"
+        postgres_host = "localhost"
+        postgres_port = "5432"
 
     validator_port = input("👀 Enter an exposed port to run the validator on (default: 9001): ") or "9001"
 
@@ -138,6 +148,8 @@ def generate_validator_config(dev: bool = False) -> Dict[str, Any]:
         ),
         refresh_nodes=(parse_bool_input("Refresh nodes?", default=True) if dev else True),
         localhost=parse_bool_input("Use localhost?", default=True) if dev else False,
+        database_url=database_url,
+        postgres_profile=postgres_profile,
     )
     return vars(config)
 

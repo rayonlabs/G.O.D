@@ -23,15 +23,13 @@ services:
     volumes:
       - ./validator/db:/db
     command: --wait up
-    depends_on:
-      postgresql:
-        condition: service_healthy
     env_file:
       - .vali.env
     networks:
       - postgres_network
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}?sslmode=disable}
+      DBMATE_WAIT_TIMEOUT: 60s
 
   redis:
     image: redis/redis-stack:latest

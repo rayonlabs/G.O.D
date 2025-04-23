@@ -24,7 +24,7 @@ def _get_connection_string_from_env() -> str:
     host = os.getenv("POSTGRES_HOST")
     port = os.getenv("POSTGRES_PORT")
     database = os.getenv("POSTGRES_DB")
-    postgres_url = os.getenv("POSTGRES_URL")
+    postgres_url = os.getenv("DATABASE_URL")
 
     if postgres_url:
         return postgres_url

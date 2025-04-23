@@ -24,11 +24,11 @@ class MinerConfig(BaseConfig):
 
 @dataclass
 class ValidatorConfig(BaseConfig):
-    postgres_user: str
-    postgres_password: str
-    postgres_db: str
-    postgres_host: str
-    postgres_port: str
+    postgres_user: Optional[str]
+    postgres_password: Optional[str]
+    postgres_db: Optional[str]
+    postgres_host: Optional[str]
+    postgres_port: Optional[str]
     s3_compatible_endpoint: str
     s3_compatible_access_key: str
     s3_compatible_secret_key: str
@@ -44,6 +44,8 @@ class ValidatorConfig(BaseConfig):
     hf_datasets_trust_remote_code = True
     s3_region: str = "us-east-1"
     refresh_nodes: bool = True
+    database_url: Optional[str] = None
+    postgres_profile: str = "default"
 
 
 @dataclass
