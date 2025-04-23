@@ -104,6 +104,7 @@ IMAGE_PROMPT_GEN_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
 IMAGE_PROMPT_GEN_MODEL_TEMPERATURE = 0.4
 IMAGE_PROMPT_GEN_MODEL_MAX_TOKENS = 5024
 IMAGE_STYLE_PICKING_NUM_TRIES = 10
+PERSON_GEN_RETRIES = 3
 
 # endpoints
 PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"

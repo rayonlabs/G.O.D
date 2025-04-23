@@ -32,6 +32,8 @@ from validator.utils.call_endpoint import post_to_nineteen_image
 from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
+from validator.utils.logging import stream_container_logs
+from validator.utils.logging import get_all_context_tags
 from validator.utils.util import retry_with_backoff
 
 
@@ -321,8 +323,9 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
             device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=["0"])],
             detach=True,
         )
-
+        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
         result = await asyncio.to_thread(container.wait)
+        log_task.cancel()
         images_dir = Path(tmp_dir_path)
         for file in images_dir.iterdir():
             if file.is_file():
@@ -358,7 +361,12 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[Ima
         if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE:
             image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
         else:
-            image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+            for person_synth_try in range(cst.PERSON_GEN_RETRIES):
+                image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+                if len(image_text_pairs) >= 10:
+                    break
+                else:
+                    logger.info(f"Person synth generation failed, trying again {person_synth_try + 1}/{cst.PERSON_GEN_RETRIES}")
 
     task = ImageRawTask(
         model_id=model_info.model_id,
