@@ -6,9 +6,9 @@ class BaseConfig:
     wallet_name: str
     hotkey_name: str
     subtensor_network: str
-    subtensor_address: str | None = None
     netuid: int
     env: str
+    subtensor_address: str | None = None
 
 
 @dataclass
