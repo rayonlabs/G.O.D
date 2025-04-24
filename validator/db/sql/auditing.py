@@ -97,7 +97,6 @@ async def _process_task_batch(
 ) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
     """
     Helper function to process a batch of task IDs.
-    This allows us to handle large numbers of tasks without hitting PostgreSQL parameter limits.
     """
     tasks_with_details = []
 
@@ -171,7 +170,6 @@ async def _process_task_batch(
         details_by_task_id[task_id].append(detail)
 
     # Step 5: Get type-specific data for each task type
-    # Prepare separate lists for each task type to get in bulk
     instruct_text_task_ids = []
     image_task_ids = []
     dpo_task_ids = []
@@ -274,15 +272,10 @@ async def get_recent_tasks_for_hotkey(
 ) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
     """
     Retrieves recent tasks for a specific hotkey with detailed information.
-    Uses more robust query construction and proper type handling.
-
-    PostgreSQL has a limit of 65535 parameters per query, but for practical reasons,
-    we'll use a much lower batch size to process large result sets efficiently.
     """
-    MAX_BATCH_SIZE = 500  # Reasonable limit to avoid hitting PostgreSQL parameter limit
+    MAX_BATCH_SIZE = 500
 
     async with await config.psql_db.connection() as connection:
-        # Step 1: Get task IDs for the hotkey with pagination
         task_ids_query = f"""
             SELECT
                 s.{cst.TASK_ID}::text AS task_id
@@ -298,23 +291,18 @@ async def get_recent_tasks_for_hotkey(
         task_ids_rows = await connection.fetch(task_ids_query, hotkey, limit, offset)
 
         if not task_ids_rows:
-            return []  # Early return if no tasks found
+            return []
 
-        # Extract task IDs as strings
         task_ids = [row["task_id"] for row in task_ids_rows]
 
-        # If we have more tasks than our batch size limit, process in batches
         if len(task_ids) > MAX_BATCH_SIZE:
-            # Process in batches and combine results
             all_results = []
             for i in range(0, len(task_ids), MAX_BATCH_SIZE):
                 batch_ids = task_ids[i:i+MAX_BATCH_SIZE]
-                # Call the helper function to process this batch
                 batch_results = await _process_task_batch(connection, hotkey, batch_ids)
                 all_results.extend(batch_results)
             return all_results
 
-        # If the number of tasks is within our batch limit, process them directly
         return await _process_task_batch(connection, hotkey, task_ids)
 
 async def get_task_with_hotkey_details(
