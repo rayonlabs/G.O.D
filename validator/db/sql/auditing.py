@@ -101,10 +101,8 @@ async def _process_task_batch(
     """
     tasks_with_details = []
 
-    # Step 2: Get all task base data in a single query with proper UUID handling
     tasks_by_id = {}
-    if task_ids:  # Only proceed if we have task IDs
-        # Build a query with properly indexed placeholders
+    if task_ids:
         task_placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(task_ids)))
         tasks_query = f"""
             SELECT
@@ -117,14 +115,13 @@ async def _process_task_batch(
 
         tasks_rows = await connection.fetch(tasks_query, *task_ids)
 
-        # Create a mapping of task_id to its data for quick lookups
         tasks_by_id = {str(row[cst.TASK_ID]): dict(row) for row in tasks_rows}
     else:
-        return []  # Return empty list if no task IDs
+        return []
 
     # Step 3: Get all hotkey-specific details for these tasks in a single query
     details_rows = []
-    if task_ids:  # Only proceed if we have task IDs
+    if task_ids:
         details_placeholders = ", ".join(f"$%d::uuid" % (i + 2) for i in range(len(task_ids)))
         details_query = f"""
             SELECT
@@ -161,14 +158,12 @@ async def _process_task_batch(
 
         detail = dict(row)
 
-        # Process offer_response JSON if present
         if detail.get("offer_response"):
             try:
                 detail["offer_response"] = json.loads(detail["offer_response"])
             except (json.JSONDecodeError, TypeError):
                 detail["offer_response"] = None
 
-        # Normalize float values
         for field in ["quality_score", "test_loss", "synth_loss"]:
             if detail.get(field) is not None:
                 detail[field] = normalise_float(detail[field])
@@ -225,14 +220,12 @@ async def _process_task_batch(
 
     # Step 6: Assemble final results
     for task_id in task_ids:
-        # Skip if task base data not found
         if task_id not in tasks_by_id:
             continue
 
-        task_data = tasks_by_id[task_id].copy()  # Create a copy to avoid modifying the original
+        task_data = tasks_by_id[task_id].copy()
         task_type = task_data.get(cst.TASK_TYPE)
 
-        # Get type-specific data
         if task_type == TaskType.INSTRUCTTEXTTASK.value and task_id in instruct_text_task_data:
             task_data.update(instruct_text_task_data[task_id])
         elif task_type == TaskType.IMAGETASK.value and task_id in image_task_data:
@@ -240,7 +233,6 @@ async def _process_task_batch(
         elif task_type == TaskType.DPOTASK.value and task_id in dpo_task_data:
             task_data.update(dpo_task_data[task_id])
 
-        # Create hotkey details objects
         hotkey_details = []
         if task_id in details_by_task_id:
             for detail in details_by_task_id[task_id]:
@@ -258,7 +250,6 @@ async def _process_task_batch(
                     )
                 )
 
-        # Create the appropriate task object based on type
         if task_type == TaskType.INSTRUCTTEXTTASK.value:
             task_fields = {k: v for k, v in task_data.items() if k in InstructTextTask.model_fields}
             task = InstructTextTask(**task_fields)
