@@ -92,93 +92,239 @@ async def get_recent_tasks(
     return tasks_processed
 
 
-async def get_recent_tasks_for_hotkey(
-    hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
+async def _process_task_batch(
+    connection, hotkey: str, task_ids: list[str]
 ) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
-    query = f"""
-        SELECT {cst.TASK_ID} FROM {cst.SUBMISSIONS_TABLE}
-        WHERE {cst.HOTKEY} = $1
-        ORDER BY {cst.CREATED_ON} DESC
-        LIMIT $2
-        OFFSET $3
     """
-    async with await config.psql_db.connection() as connection:
-        connection: Connection
-        task_ids = await connection.fetch(query, hotkey, limit, (page - 1) * limit)
+    Helper function to process a batch of task IDs.
+    This allows us to handle large numbers of tasks without hitting PostgreSQL parameter limits.
+    """
     tasks_with_details = []
 
-    for task_row in task_ids:
-        task_id = task_row[cst.TASK_ID]
-        task = await tasks_sql.get_task_by_id(task_id, config.psql_db)
-        if task:
-            query = f"""
-                SELECT
-                    s.{cst.SUBMISSION_ID},
-                    tn.{cst.QUALITY_SCORE},
-                    tn.{cst.TEST_LOSS},
-                    tn.{cst.SYNTH_LOSS},
-                    tn.{cst.SCORE_REASON},
-                    RANK() OVER (PARTITION BY t.{cst.TASK_ID} ORDER BY tn.{cst.QUALITY_SCORE} DESC) AS rank,
-                    s.{cst.REPO},
-                    o.{cst.OFFER_RESPONSE}
-                FROM {cst.TASKS_TABLE} t
-                LEFT JOIN {cst.TASK_NODES_TABLE} tn
-                    ON t.{cst.TASK_ID} = tn.{cst.TASK_ID}
-                    AND tn.{cst.HOTKEY} = $2
-                LEFT JOIN {cst.SUBMISSIONS_TABLE} s
-                    ON t.{cst.TASK_ID} = s.{cst.TASK_ID}
-                    AND s.{cst.HOTKEY} = $2
-                LEFT JOIN {cst.OFFER_RESPONSES_TABLE} o
-                    ON t.{cst.TASK_ID} = o.{cst.TASK_ID}
-                    AND o.{cst.HOTKEY} = $2
-                WHERE t.{cst.TASK_ID} = $1
-                ORDER BY t.{cst.CREATED_AT} DESC
-            """
-            async with await config.psql_db.connection() as connection:
-                connection: Connection
-                result = await connection.fetch(query, task_id, hotkey)
-            result_dict = task.model_dump() | dict(result[0])
+    # Step 2: Get all task base data in a single query with proper UUID handling
+    tasks_by_id = {}
+    if task_ids:  # Only proceed if we have task IDs
+        # Build a query with properly indexed placeholders
+        task_placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(task_ids)))
+        tasks_query = f"""
+            SELECT
+                t.*
+            FROM
+                {cst.TASKS_TABLE} t
+            WHERE
+                t.{cst.TASK_ID} IN ({task_placeholders})
+        """
 
-            if result_dict.get(cst.OFFER_RESPONSE):
-                result_dict[cst.OFFER_RESPONSE] = json.loads(result_dict[cst.OFFER_RESPONSE])
+        tasks_rows = await connection.fetch(tasks_query, *task_ids)
 
-            float_fields = [cst.QUALITY_SCORE, cst.TEST_LOSS, cst.SYNTH_LOSS]
-            for field in float_fields:
-                if result_dict.get(field):
-                    result_dict[field] = normalise_float(result_dict[field])
+        # Create a mapping of task_id to its data for quick lookups
+        tasks_by_id = {str(row[cst.TASK_ID]): dict(row) for row in tasks_rows}
+    else:
+        return []  # Return empty list if no task IDs
 
-            hotkey_details = [
-                HotkeyDetails(
-                    hotkey=hotkey,
-                    submission_id=result_dict.get(cst.SUBMISSION_ID),
-                    quality_score=result_dict.get(cst.QUALITY_SCORE),
-                    test_loss=result_dict.get(cst.TEST_LOSS),
-                    synth_loss=result_dict.get(cst.SYNTH_LOSS),
-                    score_reason=result_dict.get(cst.SCORE_REASON),
-                    rank=result_dict.get("rank"),
-                    repo=result_dict.get(cst.REPO),
-                    offer_response=result_dict.get(cst.OFFER_RESPONSE),
+    # Step 3: Get all hotkey-specific details for these tasks in a single query
+    details_rows = []
+    if task_ids:  # Only proceed if we have task IDs
+        details_placeholders = ", ".join(f"$%d::uuid" % (i + 2) for i in range(len(task_ids)))
+        details_query = f"""
+            SELECT
+                t.{cst.TASK_ID}::text AS task_id,
+                s.{cst.SUBMISSION_ID} AS submission_id,
+                tn.{cst.QUALITY_SCORE} AS quality_score,
+                tn.{cst.TEST_LOSS} AS test_loss,
+                tn.{cst.SYNTH_LOSS} AS synth_loss,
+                tn.{cst.SCORE_REASON} AS score_reason,
+                RANK() OVER (PARTITION BY t.{cst.TASK_ID} ORDER BY tn.{cst.QUALITY_SCORE} DESC) AS rank,
+                s.{cst.REPO} AS repo,
+                o.{cst.OFFER_RESPONSE} AS offer_response,
+                t.{cst.TASK_TYPE} AS task_type
+            FROM
+                {cst.TASKS_TABLE} t
+            LEFT JOIN
+                {cst.TASK_NODES_TABLE} tn ON t.{cst.TASK_ID} = tn.{cst.TASK_ID} AND tn.{cst.HOTKEY} = $1
+            LEFT JOIN
+                {cst.SUBMISSIONS_TABLE} s ON t.{cst.TASK_ID} = s.{cst.TASK_ID} AND s.{cst.HOTKEY} = $1
+            LEFT JOIN
+                {cst.OFFER_RESPONSES_TABLE} o ON t.{cst.TASK_ID} = o.{cst.TASK_ID} AND o.{cst.HOTKEY} = $1
+            WHERE
+                t.{cst.TASK_ID} IN ({details_placeholders})
+        """
+
+        details_rows = await connection.fetch(details_query, hotkey, *task_ids)
+
+    # Step 4: Group details by task_id
+    details_by_task_id = {}
+    for row in details_rows:
+        task_id = row["task_id"]
+        if task_id not in details_by_task_id:
+            details_by_task_id[task_id] = []
+
+        detail = dict(row)
+
+        # Process offer_response JSON if present
+        if detail.get("offer_response"):
+            try:
+                detail["offer_response"] = json.loads(detail["offer_response"])
+            except (json.JSONDecodeError, TypeError):
+                detail["offer_response"] = None
+
+        # Normalize float values
+        for field in ["quality_score", "test_loss", "synth_loss"]:
+            if detail.get(field) is not None:
+                detail[field] = normalise_float(detail[field])
+
+        details_by_task_id[task_id].append(detail)
+
+    # Step 5: Get type-specific data for each task type
+    # Prepare separate lists for each task type to get in bulk
+    instruct_text_task_ids = []
+    image_task_ids = []
+    dpo_task_ids = []
+
+    for task_id, task_data in tasks_by_id.items():
+        task_type = task_data.get(cst.TASK_TYPE)
+        if task_type == TaskType.INSTRUCTTEXTTASK.value:
+            instruct_text_task_ids.append(task_id)
+        elif task_type == TaskType.IMAGETASK.value:
+            image_task_ids.append(task_id)
+        elif task_type == TaskType.DPOTASK.value:
+            dpo_task_ids.append(task_id)
+
+    # Get all InstructTextTask specific data in one query
+    instruct_text_task_data = {}
+    if instruct_text_task_ids:
+        placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(instruct_text_task_ids)))
+        query = f"""
+            SELECT * FROM {cst.INSTRUCT_TEXT_TASKS_TABLE}
+            WHERE {cst.TASK_ID} IN ({placeholders})
+        """
+        rows = await connection.fetch(query, *instruct_text_task_ids)
+        instruct_text_task_data = {str(row[cst.TASK_ID]): dict(row) for row in rows}
+
+    # Get all ImageTask specific data in one query
+    image_task_data = {}
+    if image_task_ids:
+        placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(image_task_ids)))
+        query = f"""
+            SELECT * FROM {cst.IMAGE_TASKS_TABLE}
+            WHERE {cst.TASK_ID} IN ({placeholders})
+        """
+        rows = await connection.fetch(query, *image_task_ids)
+        image_task_data = {str(row[cst.TASK_ID]): dict(row) for row in rows}
+
+    # Get all DpoTask specific data in one query
+    dpo_task_data = {}
+    if dpo_task_ids:
+        placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(dpo_task_ids)))
+        query = f"""
+            SELECT * FROM {cst.DPO_TASKS_TABLE}
+            WHERE {cst.TASK_ID} IN ({placeholders})
+        """
+        rows = await connection.fetch(query, *dpo_task_ids)
+        dpo_task_data = {str(row[cst.TASK_ID]): dict(row) for row in rows}
+
+    # Step 6: Assemble final results
+    for task_id in task_ids:
+        # Skip if task base data not found
+        if task_id not in tasks_by_id:
+            continue
+
+        task_data = tasks_by_id[task_id].copy()  # Create a copy to avoid modifying the original
+        task_type = task_data.get(cst.TASK_TYPE)
+
+        # Get type-specific data
+        if task_type == TaskType.INSTRUCTTEXTTASK.value and task_id in instruct_text_task_data:
+            task_data.update(instruct_text_task_data[task_id])
+        elif task_type == TaskType.IMAGETASK.value and task_id in image_task_data:
+            task_data.update(image_task_data[task_id])
+        elif task_type == TaskType.DPOTASK.value and task_id in dpo_task_data:
+            task_data.update(dpo_task_data[task_id])
+
+        # Create hotkey details objects
+        hotkey_details = []
+        if task_id in details_by_task_id:
+            for detail in details_by_task_id[task_id]:
+                hotkey_details.append(
+                    HotkeyDetails(
+                        hotkey=hotkey,
+                        submission_id=detail.get("submission_id"),
+                        quality_score=detail.get("quality_score"),
+                        test_loss=detail.get("test_loss"),
+                        synth_loss=detail.get("synth_loss"),
+                        score_reason=detail.get("score_reason"),
+                        rank=detail.get("rank"),
+                        repo=detail.get("repo"),
+                        offer_response=detail.get("offer_response"),
+                    )
                 )
-            ]
 
-            if result_dict[cst.TASK_TYPE] == TaskType.INSTRUCTTEXTTASK.value:
-                task_fields = {k: v for k, v in result_dict.items() if k in InstructTextTask.model_fields}
-                task = InstructTextTask(**task_fields)
-                task = _check_if_task_has_finished(task)
-                tasks_with_details.append(InstructTextTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
-            elif result_dict[cst.TASK_TYPE] == TaskType.IMAGETASK.value:
-                task_fields = {k: v for k, v in result_dict.items() if k in ImageTask.model_fields}
-                task = ImageTask(**task_fields)
-                task = _check_if_task_has_finished(task)
-                tasks_with_details.append(ImageTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
-            elif result_dict[cst.TASK_TYPE] == TaskType.DPOTASK.value:
-                task_fields = {k: v for k, v in result_dict.items() if k in DpoTask.model_fields}
-                task = DpoTask(**task_fields)
-                task = _check_if_task_has_finished(task)
-                tasks_with_details.append(DpoTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
+        # Create the appropriate task object based on type
+        if task_type == TaskType.INSTRUCTTEXTTASK.value:
+            task_fields = {k: v for k, v in task_data.items() if k in InstructTextTask.model_fields}
+            task = InstructTextTask(**task_fields)
+            task = _check_if_task_has_finished(task)
+            tasks_with_details.append(InstructTextTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
+        elif task_type == TaskType.IMAGETASK.value:
+            task_fields = {k: v for k, v in task_data.items() if k in ImageTask.model_fields}
+            task = ImageTask(**task_fields)
+            task = _check_if_task_has_finished(task)
+            tasks_with_details.append(ImageTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
+        elif task_type == TaskType.DPOTASK.value:
+            task_fields = {k: v for k, v in task_data.items() if k in DpoTask.model_fields}
+            task = DpoTask(**task_fields)
+            task = _check_if_task_has_finished(task)
+            tasks_with_details.append(DpoTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
 
     return tasks_with_details
 
+
+async def get_recent_tasks_for_hotkey(
+    hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
+) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
+    """
+    Retrieves recent tasks for a specific hotkey with detailed information.
+    Uses more robust query construction and proper type handling.
+
+    PostgreSQL has a limit of 65535 parameters per query, but for practical reasons,
+    we'll use a much lower batch size to process large result sets efficiently.
+    """
+    MAX_BATCH_SIZE = 500  # Reasonable limit to avoid hitting PostgreSQL parameter limit
+
+    async with await config.psql_db.connection() as connection:
+        # Step 1: Get task IDs for the hotkey with pagination
+        task_ids_query = f"""
+            SELECT
+                s.{cst.TASK_ID}::text AS task_id
+            FROM
+                {cst.SUBMISSIONS_TABLE} s
+            WHERE
+                s.{cst.HOTKEY} = $1
+            ORDER BY
+                s.{cst.CREATED_ON} DESC
+            LIMIT $2 OFFSET $3
+        """
+        offset = (page - 1) * limit
+        task_ids_rows = await connection.fetch(task_ids_query, hotkey, limit, offset)
+
+        if not task_ids_rows:
+            return []  # Early return if no tasks found
+
+        # Extract task IDs as strings
+        task_ids = [row["task_id"] for row in task_ids_rows]
+
+        # If we have more tasks than our batch size limit, process in batches
+        if len(task_ids) > MAX_BATCH_SIZE:
+            # Process in batches and combine results
+            all_results = []
+            for i in range(0, len(task_ids), MAX_BATCH_SIZE):
+                batch_ids = task_ids[i:i+MAX_BATCH_SIZE]
+                # Call the helper function to process this batch
+                batch_results = await _process_task_batch(connection, hotkey, batch_ids)
+                all_results.extend(batch_results)
+            return all_results
+
+        # If the number of tasks is within our batch limit, process them directly
+        return await _process_task_batch(connection, hotkey, task_ids)
 
 async def get_task_with_hotkey_details(
     task_id: str, config: Config = Depends(get_config)
