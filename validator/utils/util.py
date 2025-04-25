@@ -8,16 +8,15 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
+from core.models.payload_models import AnyTypeTaskDetails
 from core.models.payload_models import DpoTaskDetails
 from core.models.payload_models import ImageTaskDetails
 from core.models.payload_models import InstructTextTaskDetails
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
-from validator.core.models import DpoTask
-from validator.core.models import ImageTask
+from validator.core.models import AnyTypeTask
 from validator.core.models import ImageTextPair
-from validator.core.models import InstructTextTask
 from validator.core.models import TaskType
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
@@ -73,9 +72,7 @@ async def upload_file_to_minio(file_path: str, bucket_name: str, object_name: st
         return None
 
 
-def convert_task_to_task_details(
-    task: InstructTextTask | ImageTask | DpoTask,
-) -> InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails:
+def convert_task_to_task_details(task: AnyTypeTask) -> AnyTypeTaskDetails:
     if task.task_type == TaskType.INSTRUCTTEXTTASK:
         return InstructTextTaskDetails(
             id=task.task_id,

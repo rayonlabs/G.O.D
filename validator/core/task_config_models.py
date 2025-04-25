@@ -1,11 +1,11 @@
 from typing import Callable
-from typing import Union
 
 from pydantic import BaseModel
 from pydantic import Field
 
 from core.models.utility_models import TaskType
 from validator.core import constants as cst
+from validator.core.models import AnyTypeRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
@@ -54,7 +54,7 @@ class DpoTaskConfig(TaskConfig):
     task_request_prepare_function: Callable = prepare_text_task_request
     start_training_endpoint: str = cst.START_TRAINING_ENDPOINT
 
-def get_task_config(task: Union[InstructTextRawTask, DpoRawTask, ImageRawTask]) -> TaskConfig:
+def get_task_config(task: AnyTypeRawTask) -> TaskConfig:
     if isinstance(task, InstructTextRawTask):
         return InstructTextTaskConfig()
     elif isinstance(task, ImageRawTask):

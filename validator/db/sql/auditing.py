@@ -9,6 +9,8 @@ from loguru import logger  # noqa
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.dependencies import get_config
+from validator.core.models import AnyTypeTask
+from validator.core.models import AnyTypeTaskWithHotkeyDetails
 from validator.core.models import DpoTask
 from validator.core.models import DpoTaskWithHotkeyDetails
 from validator.core.models import HotkeyDetails
@@ -35,7 +37,7 @@ def normalise_float(float: float | None) -> float | None:
 
 async def get_recent_tasks(
     hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTask | ImageTask | DpoTask]:
+) -> list[AnyTypeTask]:
     full_tasks_list = []
     if hotkeys is not None:
         query = f"""
@@ -78,7 +80,7 @@ async def get_recent_tasks(
 
 async def _process_task_batch(
     connection, hotkey: str, task_ids: list[str]
-) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
+) -> list[AnyTypeTaskWithHotkeyDetails]:
     """
     Helper function to process a batch of task IDs.
     """
@@ -253,7 +255,7 @@ async def _process_task_batch(
 
 async def get_recent_tasks_for_hotkey(
     hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
+) -> list[AnyTypeTaskWithHotkeyDetails]:
     """
     Retrieves recent tasks for a specific hotkey with detailed information.
     """
@@ -289,10 +291,7 @@ async def get_recent_tasks_for_hotkey(
 
         return await _process_task_batch(connection, hotkey, task_ids)
 
-
-async def get_task_with_hotkey_details(
-    task_id: str, config: Config = Depends(get_config)
-) -> InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails:
+async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(get_config)) -> AnyTypeTaskWithHotkeyDetails:
     # First get all the task details like normal
     task_raw = await tasks_sql.get_task_by_id(task_id, config.psql_db)
     if task_raw is None:

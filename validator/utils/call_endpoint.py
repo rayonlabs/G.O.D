@@ -3,7 +3,6 @@ import json
 import os
 import time
 from typing import Any
-from typing import Optional
 
 import httpx
 import netaddr
@@ -137,7 +136,7 @@ async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypa
 # If this it to talk to the miner, its already in fiber
 # We can change to that once we add bittensor stuff (i know that's why its like this ATM)
 @retry_http_with_backoff
-async def process_non_stream_get(base_url: str, token: Optional[str]) -> dict[str, Any] | list[dict[str, Any]]:
+async def process_non_stream_get(base_url: str, token: str | None) -> dict[str, Any] | list[dict[str, Any]]:
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {token}",

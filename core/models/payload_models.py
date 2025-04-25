@@ -327,3 +327,6 @@ class ImageModelInfo(BaseModel):
 
 class ImageModelsResponse(BaseModel):
     models: list[ImageModelInfo]
+
+# Type alias for task details types
+AnyTypeTaskDetails = InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails

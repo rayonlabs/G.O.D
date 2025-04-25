@@ -1,6 +1,5 @@
 import datetime
 from typing import List
-from typing import Optional
 
 from asyncpg.connection import Connection
 from fiber import SubstrateInterface
@@ -123,7 +122,7 @@ async def insert_nodes(connection: Connection, nodes: list[Node]) -> None:
     )
 
 
-async def get_node_by_hotkey(hotkey: str, psql_db: PSQLDB) -> Optional[Node]:
+async def get_node_by_hotkey(hotkey: str, psql_db: PSQLDB) -> Node | None:
     """Get node by hotkey for the current NETUID"""
     async with await psql_db.connection() as connection:
         connection: Connection

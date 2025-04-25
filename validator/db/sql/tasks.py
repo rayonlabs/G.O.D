@@ -1,6 +1,5 @@
 from typing import Dict
 from typing import List
-from typing import Optional
 from uuid import UUID
 
 from asyncpg.connection import Connection
@@ -11,6 +10,8 @@ from core.constants import NETUID
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from validator.core.models import AnyTypeRawTask
+from validator.core.models import AnyTypeTask
 from validator.core.models import DpoRawTask
 from validator.core.models import DpoTask
 from validator.core.models import ImageRawTask
@@ -27,9 +28,7 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def add_task(
-    task: InstructTextRawTask | ImageRawTask | DpoRawTask, psql_db: PSQLDB
-) -> InstructTextRawTask | ImageRawTask | DpoRawTask:
+async def add_task(task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
     """Add a new task"""
     async with await psql_db.connection() as connection:
         async with connection.transaction():
@@ -148,10 +147,7 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node
         )
         return [Node(**dict(row)) for row in rows]
 
-
-async def get_tasks_with_status(
-    status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False
-) -> List[InstructTextRawTask | DpoRawTask | ImageRawTask]:
+async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False) -> List[AnyTypeRawTask]:
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
     )
@@ -247,9 +243,7 @@ async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
     return {row["column_name"] for row in rows}
 
 
-async def update_task(
-    updated_task: InstructTextRawTask | DpoRawTask | ImageRawTask, psql_db: PSQLDB
-) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
+async def update_task(updated_task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)
 
     if not existing_task:
@@ -446,7 +440,7 @@ async def get_miners_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Node]:
         return [Node(**dict(row)) for row in rows]
 
 
-async def get_task(task_id: UUID, psql_db: PSQLDB) -> Optional[InstructTextRawTask | DpoRawTask | ImageRawTask]:
+async def get_task(task_id: UUID, psql_db: PSQLDB) -> AnyTypeRawTask | None:
     """Get a full task by ID"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -521,7 +515,7 @@ async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> Li
         return [dict(row) for row in rows]
 
 
-async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> InstructTextTask | ImageTask | DpoTask:
+async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
     """Get a task by ID along with its winning submissions and task-specific details"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -634,9 +628,7 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[
         return [Task(**dict(row)) for row in rows]
 
 
-async def get_tasks_by_account_id(
-    psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0
-) -> List[InstructTextTask | ImageTask | DpoTask]:
+async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0) -> List[AnyTypeTask]:
     async with await psql_db.connection() as connection:
         connection: Connection
         base_query = f"""
@@ -720,7 +712,7 @@ async def get_completed_organic_tasks(
     search_model_name: str | None = None,
     limit: int = 100,
     offset: int = 0,
-) -> List[InstructTextTask | ImageTask | DpoTask]:
+) -> List[AnyTypeTask]:
     """Get completed organic tasks with optional filters
 
     Args:

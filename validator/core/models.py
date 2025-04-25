@@ -411,3 +411,9 @@ class EvaluationArgs(BaseModel):
             except Exception as e:
                 raise ValueError(f"Failed to parse dataset type: {e}")
         return value
+
+
+# Type aliases for common task type groupings
+AnyTypeRawTask = InstructTextRawTask | DpoRawTask | ImageRawTask
+AnyTypeTask = InstructTextTask | DpoTask | ImageTask
+AnyTypeTaskWithHotkeyDetails = InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails

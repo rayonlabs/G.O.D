@@ -1,6 +1,5 @@
 from datetime import datetime
 from datetime import timedelta
-from typing import Union
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -10,9 +9,7 @@ from fastapi import Query
 from fastapi import Response
 
 from core.models.payload_models import AllOfNodeResults
-from core.models.payload_models import DpoTaskDetails
-from core.models.payload_models import ImageTaskDetails
-from core.models.payload_models import InstructTextTaskDetails
+from core.models.payload_models import AnyTypeTaskDetails
 from core.models.payload_models import LeaderboardRow
 from core.models.payload_models import NewTaskRequestDPO
 from core.models.payload_models import NewTaskRequestImage
@@ -330,7 +327,7 @@ async def get_task_details_by_account(
     limit: int = 100,
     page: int = 1,
     config: Config = Depends(get_config),
-) -> list[InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
+) -> list[AnyTypeTaskDetails]:
     offset = (page - 1) * limit
     tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
     tasks = [hide_sensitive_data_till_finished(task) for task in tasks]
@@ -341,7 +338,7 @@ async def get_task_details_by_account(
 async def get_task_details(
     task_id: UUID,
     config: Config = Depends(get_config),
-) -> Union[InstructTextTaskDetails, ImageTaskDetails, DpoTaskDetails]:
+) -> AnyTypeTaskDetails:
     task = await task_sql.get_task_by_id(task_id, config.psql_db)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found.")
@@ -405,7 +402,7 @@ async def get_completed_organic_tasks(
     limit: int = Query(default=100, description="Number of tasks per page", ge=1),
     page: int = Query(default=1, description="Page number", ge=1),
     config: Config = Depends(get_config),
-) -> list[InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
+) -> list[AnyTypeTaskDetails]:
     """Get completed organic tasks with optional time filter and task type filter"""
     tasks = await task_sql.get_completed_organic_tasks(
         config.psql_db,

@@ -17,8 +17,8 @@ from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from validator.core.config import Config
+from validator.core.models import AnyTypeRawTask
 from validator.core.models import DpoRawTask
-from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import MinerResults
 from validator.core.models import MinerResultsImage
@@ -366,7 +366,7 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str
 
 
 async def _evaluate_submissions(
-    task: InstructTextRawTask | ImageRawTask | DpoRawTask,
+    task: AnyTypeRawTask,
     submission_repos: list[str],
     gpu_ids: list[int],
     dataset_type: InstructDatasetType | DPODatasetType | None = None,
@@ -510,7 +510,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
 
 
 async def _update_scores(
-    task: InstructTextRawTask | DpoRawTask | ImageRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
+    task: AnyTypeRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
 ) -> None:
     assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
@@ -599,7 +599,7 @@ def zero_duplicate_scores(
 
 async def process_miners_pool(
     miners: list[Node],
-    task: ImageRawTask | InstructTextRawTask | DpoRawTask,
+    task: AnyTypeRawTask,
     config: Config,
     gpu_ids: list[int],
     dataset_type: InstructDatasetType | DPODatasetType | None = None,
@@ -707,9 +707,7 @@ async def process_miners_pool(
     return results
 
 
-async def evaluate_and_score(
-    task: InstructTextRawTask | DpoRawTask | ImageRawTask, gpu_ids: list[int], config: Config
-) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
+async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: Config) -> AnyTypeRawTask:
     assert task.task_id is not None, "Task ID must be present"
     assert task.test_data is not None, "Test data must be present"
 

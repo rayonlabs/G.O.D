@@ -3,7 +3,6 @@ import json
 from datetime import datetime
 from typing import Dict
 from typing import List
-from typing import Optional
 from uuid import UUID
 
 from asyncpg.connection import Connection
@@ -82,7 +81,7 @@ async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
         return await get_submission(submission_id, psql_db)
 
 
-async def get_submission(submission_id: UUID, psql_db: PSQLDB) -> Optional[Submission]:
+async def get_submission(submission_id: UUID, psql_db: PSQLDB) -> Submission | None:
     """Get a submission by its ID"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -107,7 +106,7 @@ async def get_submissions_by_task(task_id: UUID, psql_db: PSQLDB) -> List[Submis
         return [Submission(**dict(row)) for row in rows]
 
 
-async def get_node_latest_submission(task_id: str, hotkey: str, psql_db: PSQLDB) -> Optional[Submission]:
+async def get_node_latest_submission(task_id: str, hotkey: str, psql_db: PSQLDB) -> Submission | None:
     """Get the latest submission for a node on a task"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -180,7 +179,7 @@ async def set_task_node_quality_score(
         )
 
 
-async def get_task_node_quality_score(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> Optional[float]:
+async def get_task_node_quality_score(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> float | None:
     """Get quality score for a node's task submission"""
     async with await psql_db.connection() as connection:
         connection: Connection
