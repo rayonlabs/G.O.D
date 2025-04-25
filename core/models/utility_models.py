@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import model_validator
 
 
 class FileFormat(str, Enum):
@@ -76,6 +77,12 @@ class GrpoDatasetType(BaseModel):
     field_prompt: str | None = None
     reward_funcs: list[str] | None = None
     reward_weights: list[float] | None = None
+
+    @model_validator(mode='after')
+    def validate_reward_lists(self) -> 'GrpoDatasetType':
+        if self.reward_funcs and self.reward_weights and len(self.reward_funcs) != len(self.reward_weights):
+            raise ValueError("reward_funcs and reward_weights must have the same length")
+        return self
 
 
 class DPODatasetType(BaseModel):
