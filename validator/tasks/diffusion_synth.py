@@ -11,7 +11,6 @@ from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 from typing import AsyncGenerator
-from typing import List
 
 import docker
 from fiber import Keypair
@@ -118,7 +117,7 @@ with open(cst.EXAMPLE_PROMPTS_PATH, "r") as f:
     FULL_PROMPTS = json.load(f)
 
 
-def create_image_style_compatibility_messages(first_style: str, second_style: str) -> List[Message]:
+def create_image_style_compatibility_messages(first_style: str, second_style: str) -> list[Message]:
     system_content = """You are an expert in spotting incompatible artistic styles for image generation.
 Your task is to analyze two artistic styles and determine if they are not compatible to be merged into a style that has both characteristics.
 The styles are meant to be combined in a set of prompts for image generation.
@@ -133,7 +132,7 @@ Example Output:
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
 
 
-def create_combined_diffusion_messages(first_style: str, second_style: str, num_prompts: int) -> List[Message]:
+def create_combined_diffusion_messages(first_style: str, second_style: str, num_prompts: int) -> list[Message]:
     system_content = """You are an expert in creating diverse and descriptive prompts for image generation models.
     Your task is to generate prompts that strongly embody a combination of two artistic styles.
     Each prompt should be detailed and consistent with both of the given styles.
@@ -154,7 +153,7 @@ def create_combined_diffusion_messages(first_style: str, second_style: str, num_
     return [Message(role=Role.SYSTEM, content=system_content), Message(role=Role.USER, content=user_content)]
 
 
-def create_single_style_diffusion_messages(style: str, num_prompts: int) -> List[Message]:
+def create_single_style_diffusion_messages(style: str, num_prompts: int) -> list[Message]:
     prompt_examples = ",\n    ".join([f'"{prompt}"' for prompt in random.sample(FULL_PROMPTS[style], 5)])
 
     system_content = f"""You are an expert in creating diverse and descriptive prompts for image generation models.
@@ -184,7 +183,7 @@ def create_single_style_diffusion_messages(style: str, num_prompts: int) -> List
 
 
 @retry_with_backoff
-async def generate_diffusion_prompts(first_style: str, second_style: str | None, keypair: Keypair, num_prompts: int) -> List[str]:
+async def generate_diffusion_prompts(first_style: str, second_style: str | None, keypair: Keypair, num_prompts: int) -> list[str]:
     if second_style:
         messages = create_combined_diffusion_messages(first_style, second_style, num_prompts)
         style_description = f"{first_style} and {second_style}"

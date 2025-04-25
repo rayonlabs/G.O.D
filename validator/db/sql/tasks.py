@@ -1,5 +1,4 @@
 from typing import Dict
-from typing import List
 from uuid import UUID
 
 from asyncpg.connection import Connection
@@ -130,7 +129,7 @@ async def add_task(task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
             return task
 
 
-async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node]:
+async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> list[Node]:
     """Get all nodes assigned to a task for the current NETUID"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -147,7 +146,7 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> List[Node
         )
         return [Node(**dict(row)) for row in rows]
 
-async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False) -> List[AnyTypeRawTask]:
+async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False) -> list[AnyTypeRawTask]:
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
     )
@@ -379,7 +378,7 @@ async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
         )
 
 
-async def get_tasks_ready_to_evaluate(psql_db: PSQLDB) -> List[RawTask]:
+async def get_tasks_ready_to_evaluate(psql_db: PSQLDB) -> list[RawTask]:
     async with await psql_db.connection() as connection:
         connection: Connection
         query = """
@@ -427,7 +426,7 @@ async def delete_task(task_id: UUID, psql_db: PSQLDB) -> None:
             )
 
 
-async def get_miners_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Node]:
+async def get_miners_for_task(task_id: UUID, psql_db: PSQLDB) -> list[Node]:
     """Retrieve all miners assigned to a specific task."""
     async with await psql_db.connection() as connection:
         query = f"""
@@ -497,7 +496,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> AnyTypeRawTask | None:
             return DpoRawTask(**full_task_data)
 
 
-async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> List[Dict]:
+async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> list[dict]:
     """Retrieve the winning submission for a task based on the highest quality score in task_nodes."""
     async with await psql_db.connection() as connection:
         query = f"""
@@ -600,7 +599,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
             return DpoTask(**full_task_data)
 
 
-async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[Task]:
+async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> list[Task]:
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -628,7 +627,7 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> List[
         return [Task(**dict(row)) for row in rows]
 
 
-async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0) -> List[AnyTypeTask]:
+async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0) -> list[AnyTypeTask]:
     async with await psql_db.connection() as connection:
         connection: Connection
         base_query = f"""
@@ -712,7 +711,7 @@ async def get_completed_organic_tasks(
     search_model_name: str | None = None,
     limit: int = 100,
     offset: int = 0,
-) -> List[AnyTypeTask]:
+) -> list[AnyTypeTask]:
     """Get completed organic tasks with optional filters
 
     Args:
@@ -906,7 +905,7 @@ async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_looku
 
 async def get_successful_matching_tasks(
     model_repo: str, ds_repo: str, field_instruction: str, field_input: str, field_output: str, psql_db: PSQLDB
-) -> List[InstructTextTask]:
+) -> list[InstructTextTask]:
     """Get most recent successful task with matching model_id and dataset within last 7 days"""
     async with await psql_db.connection() as connection:
         connection: Connection

@@ -2,7 +2,6 @@ import asyncio
 import json
 from datetime import datetime
 from typing import Dict
-from typing import List
 from uuid import UUID
 
 from asyncpg.connection import Connection
@@ -94,7 +93,7 @@ async def get_submission(submission_id: UUID, psql_db: PSQLDB) -> Submission | N
         return None
 
 
-async def get_submissions_by_task(task_id: UUID, psql_db: PSQLDB) -> List[Submission]:
+async def get_submissions_by_task(task_id: UUID, psql_db: PSQLDB) -> list[Submission]:
     """Get all submissions for a task"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -231,7 +230,7 @@ async def get_all_scores_and_losses_for_task(task_id: UUID, psql_db: PSQLDB) -> 
         ]
 
 
-async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> List[Dict]:
+async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> list[dict]:
     """
     Get all quality scores for a specific hotkey across all completed tasks.
     """
@@ -252,7 +251,7 @@ async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> List[Dict]:
         return [dict(row) for row in rows]
 
 
-async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> List[TaskResults]:
+async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> list[TaskResults]:
     """
     Get aggregate scores for all completed tasks since the given start time.
     Only includes tasks that have at least one node with score >= 1 or < 0

@@ -6,7 +6,6 @@ import uuid
 import zipfile
 from math import ceil
 from pathlib import Path
-from typing import List
 
 from datasets import Dataset
 from datasets import DatasetDict
@@ -141,8 +140,8 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
 
 
 async def get_additional_synth_data(
-    dataset: Dataset, columns_to_sample: List[str], keypair: Keypair, is_dpo: bool = False
-) -> List[dict] | List[DpoDatasetColumnsResponse]:
+    dataset: Dataset, columns_to_sample: list[str], keypair: Keypair, is_dpo: bool = False
+) -> list[dict] | list[DpoDatasetColumnsResponse]:
     num_samples = min(
         cst.MAX_SYNTH_DATA_POINTS,
         int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
@@ -180,7 +179,7 @@ async def download_and_load_dataset(
     return combined_dataset
 
 
-def change_to_json_format(dataset: Dataset, columns: List[str]):
+def change_to_json_format(dataset: Dataset, columns: list[str]):
     try:
         result = []
         for row in dataset:

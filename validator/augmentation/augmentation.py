@@ -1,26 +1,22 @@
 import asyncio
 import json
-from typing import List
 
-from PIL.Image import new
-from attr import field
-from click import prompt
 import yaml
-from core.constants import DPO_DEFAULT_DATASET_TYPE
-from core.models.payload_models import DpoDatasetColumnsResponse
 from datasets import load_dataset
 from fiber import Keypair
 
+from core.models.payload_models import DpoDatasetColumnsResponse
 from core.models.utility_models import Message
 from core.models.utility_models import Prompts
 from core.models.utility_models import Role
-from validator.core.constants import END_OF_REASONING_TAG, TEXT_SYNTH_WEAKER_MODEL
+from validator.core.constants import END_OF_REASONING_TAG
 from validator.core.constants import MAX_SYNTH_DATA_POINTS
 from validator.core.constants import PROMPT_PATH
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
 from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
+from validator.core.constants import TEXT_SYNTH_WEAKER_MODEL
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.call_endpoint import post_to_nineteen_chat
 from validator.utils.llm import convert_to_nineteen_payload
@@ -38,7 +34,7 @@ def load_prompts() -> Prompts:
     return Prompts(**prompts_dict)
 
 
-def load_and_sample_dataset(dataset_name: str, columns_to_sample: List[str]) -> List[dict]:
+def load_and_sample_dataset(dataset_name: str, columns_to_sample: list[str]) -> list[dict]:
     try:
         config_name = get_default_dataset_config(dataset_name)
         dataset = load_dataset(dataset_name, config_name, trust_remote_code=True, streaming=True)
@@ -62,7 +58,7 @@ def load_and_sample_dataset(dataset_name: str, columns_to_sample: List[str]) -> 
 
 def create_messages_for_input_generation(
     reformulated_output: str, description: str, output_field: str, schema: dict, prompts: Prompts
-) -> List[Message]:
+) -> list[Message]:
     messages = []
     system_message = Message(role=Role.SYSTEM, content=prompts.input_field_generation_sys)
     messages.append(system_message)
@@ -76,7 +72,7 @@ def create_messages_for_input_generation(
     return messages
 
 
-def create_messages_for_input_output_reformulation(row: dict, prompts: Prompts) -> List[Message]:
+def create_messages_for_input_output_reformulation(row: dict, prompts: Prompts) -> list[Message]:
     messages = []
     system_message = Message(role=Role.SYSTEM, content=prompts.input_output_reformulation_sys)
     messages.append(system_message)
@@ -105,7 +101,7 @@ def create_messages_for_input_reformulation(ds_prompt: dict, prompts: Prompts) -
 
 
 
-def check_the_synthetic_data(synthetic_data_point: dict, original_data_columns: List[str]) -> bool:
+def check_the_synthetic_data(synthetic_data_point: dict, original_data_columns: list[str]) -> bool:
     return set(synthetic_data_point.keys()) == set(original_data_columns)
 
 
@@ -155,7 +151,7 @@ async def process_row(row, prompts, keypair, is_dpo=False):
         raise ValueError(error_message)
 
 
-async def generate_augmented_text_dataset(sampled_data: List[dict], keypair: Keypair, is_dpo: bool = False) -> List[dict]:
+async def generate_augmented_text_dataset(sampled_data: list[dict], keypair: Keypair, is_dpo: bool = False) -> list[dict]:
     prompts = load_prompts()
     logger.info(f"Creating an augmented dataset with {len(sampled_data)} samples...")
     synthetic_dataset = []

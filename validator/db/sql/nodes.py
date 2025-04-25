@@ -1,5 +1,4 @@
 import datetime
-from typing import List
 
 from asyncpg.connection import Connection
 from fiber import SubstrateInterface
@@ -14,7 +13,7 @@ from validator.utils.query_substrate import query_substrate
 
 logger = get_logger(__name__)
 
-async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
+async def get_eligible_nodes(psql_db: PSQLDB) -> list[Node]:
     """
     Get all nodes that either:
     a) Do not have any entries in the task_nodes table (new nodes with no scores)
@@ -61,7 +60,7 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
         logger.info(f"Found {len(eligible_nodes)} eligible nodes")
         return eligible_nodes
 
-async def get_all_nodes(psql_db: PSQLDB) -> List[Node]:
+async def get_all_nodes(psql_db: PSQLDB) -> list[Node]:
     """Get all nodes for the current NETUID"""
     logger.info("Attempting to get all nodes")
     async with await psql_db.connection() as connection:

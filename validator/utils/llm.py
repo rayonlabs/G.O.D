@@ -1,7 +1,6 @@
 import json
 import re
 from typing import Any
-from typing import List
 
 from fiber import Keypair
 
@@ -14,7 +13,7 @@ logger = get_logger(__name__)
 
 
 def convert_to_nineteen_payload(
-    messages: List[Message], model: str, temperature: float, max_tokens: int = 1000, stream: bool = False
+    messages: list[Message], model: str, temperature: float, max_tokens: int = 1000, stream: bool = False
 ) -> dict:
     return {
         "messages": [message.model_dump() for message in messages],
