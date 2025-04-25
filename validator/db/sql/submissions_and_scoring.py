@@ -1,7 +1,6 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Dict
 from uuid import UUID
 
 from asyncpg.connection import Connection
@@ -21,7 +20,7 @@ from validator.core.models import WorkloadMetrics
 from validator.db.database import PSQLDB
 
 
-async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> Dict[str, Dict]:
+async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> dict[str, dict]:
     """
     Get both daily participation status and average scores for nodes.
     """

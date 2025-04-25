@@ -1,4 +1,3 @@
-from typing import Dict
 from uuid import UUID
 
 from asyncpg.connection import Connection
@@ -843,7 +842,7 @@ async def delete_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> None:
         await connection.execute(query, task_id)
 
 
-async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_lookup_days: float = 30) -> Dict[str, Dict]:
+async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_lookup_days: float = 30) -> dict[str, dict]:
     """Get cache statistics for models with time-weighted frequency calculation.
 
     Args:
