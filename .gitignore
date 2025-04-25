@@ -8,6 +8,7 @@ sam_vit_l_0b3195.pth
 # C extensions
 *.so
 *.gguf
+*.session.sql
 nohup.out
 
 tvenv/*
@@ -23,7 +24,9 @@ todo.md
 core/custom_task_config.py
 
 core/config/*.yml
+core/config/rewards_*.py
 !core/config/base.yml
+!core/config/base_grpo.yml
 core/config/*.toml
 !core/config/base_diffusion_sdxl.toml
 !core/config/base_diffusion_flux.toml

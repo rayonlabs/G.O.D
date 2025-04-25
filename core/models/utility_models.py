@@ -72,6 +72,12 @@ class InstructDatasetType(BaseModel):
     field: str | None = None
 
 
+class GrpoDatasetType(BaseModel):
+    field_prompt: str | None = None
+    reward_funcs: list[str] | None = None
+    reward_weights: list[float] | None = None
+
+
 class DPODatasetType(BaseModel):
     field_prompt: str | None = None
     field_system: str | None = None
@@ -97,7 +103,7 @@ class Job(BaseModel):
 
 class TextJob(Job):
     dataset: str
-    dataset_type: InstructDatasetType | DPODatasetType
+    dataset_type: InstructDatasetType | DPODatasetType | GrpoDatasetType
     file_format: FileFormat
 
 
@@ -132,6 +138,7 @@ class TaskType(str, Enum):
     INSTRUCTTEXTTASK = "InstructTextTask"
     IMAGETASK = "ImageTask"
     DPOTASK = "DpoTask"
+    GRPO = "GrpoTask"
 
     def __hash__(self):
         return hash(str(self))

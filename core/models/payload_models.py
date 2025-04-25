@@ -11,6 +11,7 @@ from pydantic import model_validator
 from core import constants as cst
 from core.models.utility_models import DPODatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructDatasetType
@@ -48,6 +49,16 @@ class TrainRequestText(TrainRequest):
         min_length=1,
     )
     dataset_type: InstructDatasetType | DPODatasetType
+    file_format: FileFormat
+
+
+class TrainRequestGrpo(TrainRequest):
+    dataset: str = Field(
+        ...,
+        description="Path to the dataset file or Hugging Face dataset name",
+        min_length=1,
+    )
+    dataset_type: GrpoDatasetType
     file_format: FileFormat
 
 
