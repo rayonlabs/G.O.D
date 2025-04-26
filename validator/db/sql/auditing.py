@@ -6,7 +6,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from loguru import logger  # noqa
 
-from core.models.utility_models import TaskStatus
+from core.models.utility_models import ImageTextPair, TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.dependencies import get_config
@@ -32,7 +32,8 @@ def _check_if_task_has_finished(task: InstructTextTask | DpoTask | ImageTask) ->
         if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
             task.synthetic_data = None
         if task.task_type == TaskType.IMAGETASK:
-            task.image_text_pairs = None
+            assert isinstance(task, ImageTask), "This should be "
+            task.image_text_pairs = [ImageTextPair(image_url="hidden", text_url="hidden")]
         task.test_data = None
 
         task.training_data = None
