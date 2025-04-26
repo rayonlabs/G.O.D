@@ -368,19 +368,24 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[Ima
                 else:
                     logger.info(f"Person synth generation failed, trying again {person_synth_try + 1}/{cst.PERSON_GEN_RETRIES}")
 
-    task = ImageRawTask(
-        model_id=model_info.model_id,
-        ds=ds_prefix.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
-        image_text_pairs=image_text_pairs,
-        status=TaskStatus.PENDING,
-        is_organic=False,
-        created_at=datetime.utcnow(),
-        termination_at=datetime.utcnow() + timedelta(hours=number_of_hours),
-        hours_to_complete=number_of_hours,
-        account_id=cst.NULL_ACCOUNT_ID,
-        model_type=model_info.model_type,
-    )
 
-    logger.info(f"New task created and added to the queue {task}")
-    task = await add_task(task, config.psql_db)
-    return task
+    if len(image_text_pairs) >= 10:
+        task = ImageRawTask(
+            model_id=model_info.model_id,
+            ds=ds_prefix.replace(" ", "_").lower() + "_" + str(uuid.uuid4()),
+            image_text_pairs=image_text_pairs,
+            status=TaskStatus.PENDING,
+            is_organic=False,
+            created_at=datetime.utcnow(),
+            termination_at=datetime.utcnow() + timedelta(hours=number_of_hours),
+            hours_to_complete=number_of_hours,
+            account_id=cst.NULL_ACCOUNT_ID,
+            model_type=model_info.model_type,
+        )
+
+        logger.info(f"New task created and added to the queue {task}")
+        task = await add_task(task, config.psql_db)
+        return task
+    else:
+        logger.error("Failed to generate enough image-text pairs for the task.")
+        raise ValueError("Failed to generate enough image-text pairs for the task.")
