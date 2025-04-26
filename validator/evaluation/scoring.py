@@ -564,18 +564,6 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
     return loss_groups
 
 
-async def get_earliest_submission(submissions: list[tuple[str, str]]) -> tuple[str, str, list[tuple[str, str]]]:
-    timestamps = []
-    for hotkey, repo in submissions:
-        creation_time = await get_repo_creation_time(repo)
-        timestamps.append((hotkey, repo, creation_time))
-
-    timestamps.sort(key=lambda x: x[2])
-    earliest_hotkey, earliest_repo, _ = timestamps[0]
-    duplicates = [(hotkey, repo) for hotkey, repo, _ in timestamps]
-
-    return earliest_hotkey, earliest_repo, duplicates
-
 
 async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
     keep_submission = {result.hotkey: True for result in task_results}
@@ -584,7 +572,7 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
     for losses, submissions in loss_groups.items():
         if len(submissions) > 1:
             logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
-            earliest_hotkey, earliest_repo, duplicates = await get_earliest_submission(submissions)
+            duplicates = submissions
 
             for hotkey, repo in duplicates:
                 with LogContext(miner_hotkey=hotkey):
@@ -592,7 +580,6 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
                     logger.warning(
                         f"Setting score to 0 for node {hotkey} (repo: {repo}) "
                         f"as it has identical losses to earlier submission "
-                        f"from node {earliest_hotkey} (repo: {earliest_repo})"
                     )
 
     return keep_submission
