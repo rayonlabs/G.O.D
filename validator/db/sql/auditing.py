@@ -31,7 +31,10 @@ def _check_if_task_has_finished(task: InstructTextTask | DpoTask | ImageTask) ->
     ]:
         if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
             task.synthetic_data = None
+        if task.task_type == TaskType.IMAGETASK:
+            task.image_text_pairs = None
         task.test_data = None
+
         task.training_data = None
         task.ds = "Hidden"
     return task
