@@ -25,6 +25,11 @@ from validator.core.models import AllNodeStats
 logger = get_logger(__name__)
 
 
+class TaskEmissionProportionsResponse(BaseModel):
+    instruct_text: float
+    image: float
+    dpo: float
+
 class MinerTaskOffer(BaseModel):
     ds_size: int
     model: str
