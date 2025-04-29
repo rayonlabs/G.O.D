@@ -27,6 +27,7 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+
 async def add_task(
     task: InstructTextRawTask | ImageRawTask | DpoRawTask, psql_db: PSQLDB
 ) -> InstructTextRawTask | ImageRawTask | DpoRawTask:
@@ -969,3 +970,29 @@ async def get_successful_matching_tasks(
             task = InstructTextTask(**task_data)
             tasks.append(task)
         return tasks
+
+
+async def get_failure_rate(
+    psql_db: PSQLDB,
+    hours: int = 24
+) -> float:
+    """Calculate the percentage of failed tasks relative to total tasks within a specified time period
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+
+        query = f"""
+            SELECT
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $1) AS failed_count,
+                COUNT(*) AS total_count
+            FROM {cst.TASKS_TABLE}
+            WHERE {cst.UPDATED_AT} >= NOW() - $2 * INTERVAL '1 hour'
+        """
+
+        row = await connection.fetchrow(query, TaskStatus.FAILURE.value, hours)
+
+        failed_count = row['failed_count']
+        total_count = row['total_count']
+        logger.info(f"The failure rate is {failed_count / total_count}")
+
+        return (failed_count / total_count) if total_count > 0 else 0.0
