@@ -10,6 +10,7 @@ from fastapi import Query
 from fastapi import Response
 
 from core.models.payload_models import AllOfNodeResults
+from core.models.payload_models import TaskEmissionProportionsResponse
 from core.models.payload_models import DpoTaskDetails
 from core.models.payload_models import ImageTaskDetails
 from core.models.payload_models import InstructTextTaskDetails
@@ -27,7 +28,11 @@ from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
-from validator.core.constants import MAX_CONCURRENT_JOBS
+from validator.core.constants import (MAX_CONCURRENT_JOBS,
+    INSTRUCT_TEXT_TASK_SCORE_WEIGHT,
+    IMAGE_TASK_SCORE_WEIGHT,
+    DPO_TASK_SCORE_WEIGHT)
+
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.core.models import DpoRawTask
@@ -40,9 +45,7 @@ from validator.db.sql.nodes import get_all_nodes
 from validator.utils.logging import get_logger
 from validator.utils.util import convert_task_to_task_details
 
-
 logger = get_logger(__name__)
-
 
 TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT = "/v1/tasks/create"  # TODO: change to create_text after FE changes
 TASKS_CREATE_ENDPOINT_IMAGE = "/v1/tasks/create_image"
@@ -61,7 +64,7 @@ LEADERBOARD_ENDPOINT = "/v1/leaderboard"
 COMPLETED_ORGANIC_TASKS_ENDPOINT = "/v1/tasks/organic/completed"
 UPDATE_TRAINING_REPO_BACKUP_ENDPOINT = "/v1/tasks/{task_id}/training_repo_backup"
 UPDATE_RESULT_MODEL_NAME_ENDPOINT = "/v1/tasks/{task_id}/result_model_name"
-
+GET_TASK_PROPORTIONS_ENDPOINT = "/v1/network/task_emission_proportions"
 
 async def delete_task(
     task_id: UUID,
@@ -109,6 +112,19 @@ async def create_task_dpo(
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
+
+async def get_task_emission_proportions(
+    config: Config = Depends(get_config),
+) -> TaskEmissionProportionsResponse:
+    """Get the weighting proportions of different task types"""
+    instruct_score_rounded = round(INSTRUCT_TEXT_TASK_SCORE_WEIGHT, 2)
+    image_score_rounded = round(IMAGE_TASK_SCORE_WEIGHT, 2)
+    dpo_score_rounded = round(DPO_TASK_SCORE_WEIGHT, 2)
+    return TaskEmissionProportionsResponse(
+        instruct_text=instruct_score_rounded,
+        image=image_score_rounded,
+        dpo=dpo_score_rounded
+    )
 
 async def create_task_instruct_text(
     request: NewTaskRequestInstructText,
@@ -332,7 +348,7 @@ async def get_task_details_by_account(
 ) -> list[InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
     offset = (page - 1) * limit
     tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
-    
+
     return [convert_task_to_task_details(task) for task in tasks]
 
 
@@ -463,4 +479,5 @@ def factory_router() -> APIRouter:
     router.add_api_route(COMPLETED_ORGANIC_TASKS_ENDPOINT, get_completed_organic_tasks, methods=["GET"])
     router.add_api_route(UPDATE_TRAINING_REPO_BACKUP_ENDPOINT, update_training_repo_backup, methods=["PUT"])
     router.add_api_route(UPDATE_RESULT_MODEL_NAME_ENDPOINT, update_result_model_name, methods=["PUT"])
+    router.add_api_route(GET_TASK_PROPORTIONS_ENDPOINT, get_task_emission_proportions, methods=["GET"])
     return router
