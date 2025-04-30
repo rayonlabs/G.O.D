@@ -95,9 +95,11 @@ def _load_and_modify_config(
     if isinstance(dataset_type, DPODatasetType):
         config["rl"] = "dpo"
     elif isinstance(dataset_type, GrpoDatasetType):
-        filename, reward_funcs_names = create_reward_funcs_file(dataset_type.reward_funcs, task_id)
+        filename, reward_funcs_names = create_reward_funcs_file(
+            [reward_function.reward_func for reward_function in dataset_type.reward_functions], task_id
+            )
         config["trl"]["reward_funcs"] = [f"{filename}.{func_name}" for func_name in reward_funcs_names]
-        config["trl"]["reward_weights"] = dataset_type.reward_weights
+        config["trl"]["reward_weights"] = [reward_function.reward_weight for reward_function in dataset_type.reward_functions]
 
     config = update_flash_attention(config, model)
     config = update_model_info(config, model, task_id, expected_repo_name)
@@ -118,15 +120,15 @@ def create_reward_funcs_file(reward_funcs: list[str], task_id: str) -> list[str]
     filepath = os.path.join(cst.CONFIG_DIR, f"{filename}.py")
 
     func_names = []
-    for func_code in reward_funcs:
-        if "def " in func_code:
-            func_name = func_code.split("def ")[1].split("(")[0].strip()
+    for reward_func in reward_funcs:
+        if "def " in reward_func:
+            func_name = reward_func.split("def ")[1].split("(")[0].strip()
             func_names.append(func_name)
 
     with open(filepath, "w") as f:
         f.write("# Auto-generated reward functions file\n\n")
-        for func_code in reward_funcs:
-            f.write(f"{func_code}\n\n")
+        for reward_func in reward_funcs:
+            f.write(f"{reward_func}\n\n")
 
     return filename, func_names
 
