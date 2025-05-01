@@ -78,8 +78,12 @@ class ProgressLoggerCallback(TrainerCallback):
 
 def has_status_code_5xx(e):
     while e is not None:
-        if isinstance(e, HTTPError) and 500 <= e.response.status_code < 600:
-            return True
+        if isinstance(e, HTTPError):
+            if e.response is None:
+                logger.error(f"HTTPError with no response: {e}, cause: {e.__cause__}")
+                return True
+            elif 500 <= e.response.status_code < 600:
+                return True
         e = e.__cause__
     return False
 
