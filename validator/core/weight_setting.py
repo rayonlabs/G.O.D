@@ -285,6 +285,7 @@ async def get_node_weights_from_period_scores(
                 all_node_weights[node_id] = (
                     all_node_weights[node_id] + node_result.normalised_score * node_result.weight_multiplier * (1 - failure_rate)
                 )
+    all_node_weights[cts.BURN_NODE_ID] = failure_rate
 
     logger.info(f"Node ids: {all_node_ids}")
     logger.info(f"Node weights: {all_node_weights}")
