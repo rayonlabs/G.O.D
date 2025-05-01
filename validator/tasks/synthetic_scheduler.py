@@ -11,16 +11,28 @@ import validator.core.constants as cst
 from core.models.payload_models import ImageModelInfo
 from core.models.payload_models import ImageModelsResponse
 from core.models.payload_models import InstructDatasetColumnsResponse
+from core.models.utility_models import Message
+from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
+from validator.augmentation.augmentation import load_prompts
 from validator.core.config import Config
+from validator.core.constants import END_OF_REASONING_TAG
+from validator.core.constants import TEXT_SYNTH_MODEL
+from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
+from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
 from validator.core.models import Dataset
 from validator.core.models import DpoRawTask
+from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import RawTask
+from validator.core.models import RewardFunction
+from validator.db.sql.tasks import _get_generic_reward_functions_from_db
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
 from validator.tasks.diffusion_synth import create_synthetic_image_task
 from validator.utils.call_endpoint import call_content_service
+from validator.utils.llm import convert_to_nineteen_payload
+from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
 
 
@@ -199,6 +211,126 @@ async def create_synthetic_dpo_task(
     return task
 
 
+async def _generate_generic_reward_functions_from_llm(keypair: Keypair, num_rewards: int) -> list[RewardFunction]:
+    prompts = load_prompts()
+    valid_reward_functions = []
+    num_rewards_with_margin = int(num_rewards * 1.5)
+
+    messages = [
+        Message(role=Role.SYSTEM, content=prompts.reward_function_generation_sys),
+        Message(role=Role.USER, content=prompts.reward_function_generation_user.format(num_rewards=num_rewards_with_margin))
+    ]
+
+    payload = convert_to_nineteen_payload(
+        messages=messages,
+        model=TEXT_SYNTH_MODEL,
+        temperature=TEXT_SYNTH_MODEL_TEMPERATURE,
+        max_tokens=TEXT_SYNTH_MODEL_MAX_TOKENS,
+    )
+
+    result = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
+
+    if result:
+        try:
+            func_list = eval(result)
+
+            test_completions = [
+                "Why is Gradients.io the best 0-expertise AI training platform?",
+                "How can I start using Gradients.io?"
+            ]
+
+            for func_def in func_list:
+                try:
+                    namespace = {}
+                    exec(func_def, namespace)
+                    func = next(v for k, v in namespace.items() if callable(v))
+
+                    test_rewards = func(test_completions)
+
+                    assert isinstance(test_rewards, list), "The rewards should be a list."
+                    assert len(test_rewards) == len(test_completions), (
+                        "The number of rewards should be the same as the number of completions."
+                    )
+                    assert all(isinstance(reward, float) for reward in test_rewards), "All rewards should be floats."
+                    valid_reward_functions.append(func_def)
+                except Exception as e:
+                    logger.warning(f"Function validation failed: {e}")
+                    continue
+
+        except Exception as e:
+            logger.error(f"Failed to parse LLM response as list: {e}")
+
+    reward_functions = [
+        RewardFunction(
+            reward_func=valid_reward_function,
+            is_generic=True,
+            reward_weight=1.0
+        ) for valid_reward_function in valid_reward_functions[:num_rewards]
+    ]
+    return reward_functions
+
+
+async def _get_generic_reward_functions(config: Config) -> list[RewardFunction]:
+    reward_functions = []
+    total_rewards = random.randint(cst.MIN_NUM_REWARD_FUNCTIONS, cst.MAX_NUM_REWARD_FUNCTIONS)
+
+    num_generic_rewards_from_db = max(1, int(total_rewards * cst.PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_DB))
+    num_generic_rewards_from_llm = total_rewards - num_generic_rewards_from_db
+
+    reward_functions += await _get_generic_reward_functions_from_db(config.psql_db, num_generic_rewards_from_db)
+
+    if num_generic_rewards_from_llm > 0:
+        reward_functions += await _generate_generic_reward_functions_from_llm(config.keypair, num_generic_rewards_from_llm)
+
+    reward_functions = _randomize_reward_weights(reward_functions)
+
+    return reward_functions
+
+
+def _randomize_reward_weights(reward_functions: list[RewardFunction]) -> list[RewardFunction]:
+    return [
+        RewardFunction(
+            reward_func=reward_function.reward_func,
+            func_hash=reward_function.func_hash,
+            is_generic=reward_function.is_generic,
+            reward_weight=random.uniform(0.0, 10.0)
+            ) for reward_function in reward_functions
+            ]
+
+
+async def create_synthetic_grpo_task(
+    config: Config,
+    models: AsyncGenerator[str, None],
+    datasets: AsyncGenerator[Dataset, None],
+) -> RawTask:
+    model_id = await anext(models)
+    dataset = await anext(datasets)
+    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
+    columns = await _get_columns_for_instruct_dataset(dataset.dataset_id, config.keypair)
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=number_of_hours)
+
+    reward_functions = await _get_generic_reward_functions(config)
+
+    task = GrpoRawTask(
+        model_id=model_id,
+        ds=dataset.dataset_id,
+        field_prompt=columns.field_instruction,
+        reward_functions=reward_functions,
+        status=TaskStatus.PENDING,
+        is_organic=False,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=number_of_hours,
+        account_id=cst.NULL_ACCOUNT_ID,
+    )
+    logger.info(f"New task created and added to the queue {task}")
+
+    task = await add_task(task, config.psql_db)
+
+    return task
+
+
 async def create_synthetic_instruct_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
@@ -258,10 +390,14 @@ async def _add_new_task_to_network_if_not_enough(
         selected_val = random.random()
         if selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT:
             await create_synthetic_instruct_text_task(config, models, instruct_datasets)
-        elif selected_val < (cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT):
+        elif selected_val < (cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE):
+            await create_synthetic_image_task(config, image_models)
+        elif selected_val < (
+            cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
+            ):
             await create_synthetic_dpo_task(config, models, dpo_datasets)
         else:
-            await create_synthetic_image_task(config, image_models)
+            await create_synthetic_grpo_task(config, models, instruct_datasets)
 
 
 async def schedule_synthetics_periodically(config: Config):

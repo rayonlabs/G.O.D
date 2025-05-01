@@ -12,6 +12,7 @@ from core.models.payload_models import AllOfNodeResults
 from core.models.payload_models import AnyTypeTaskDetails
 from core.models.payload_models import LeaderboardRow
 from core.models.payload_models import NewTaskRequestDPO
+from core.models.payload_models import NewTaskRequestGrpo
 from core.models.payload_models import NewTaskRequestImage
 from core.models.payload_models import NewTaskRequestInstructText
 from core.models.payload_models import NewTaskResponse
@@ -28,6 +29,7 @@ from validator.core.constants import MAX_CONCURRENT_JOBS
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.core.models import DpoRawTask
+from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import NetworkStats
@@ -48,6 +50,7 @@ CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT = (
     "/v1/tasks/create_custom_dataset_text"  # TODO: this is just for instruct text tasks
 )
 TASKS_CREATE_ENDPOINT_DPO = "/v1/tasks/create_dpo"
+TASKS_CREATE_ENDPOINT_GRPO = "/v1/tasks/create_grpo"
 TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"  # TODO: this is just for instruct text tasks
 GET_TASKS_BY_ACCOUNT_ENDPOINT = "/v1/tasks/account/{account_id}"
 GET_TASK_DETAILS_ENDPOINT = "/v1/tasks/{task_id}"
@@ -99,6 +102,35 @@ async def create_task_dpo(
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
         task_type=TaskType.DPOTASK,
+        result_model_name=request.result_model_name,
+    )
+
+    task = await task_sql.add_task(task, config.psql_db)
+
+    logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
+
+
+async def create_task_grpo(
+    request: NewTaskRequestGrpo,
+    config: Config = Depends(get_config),
+) -> NewTaskResponse:
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
+
+    task = GrpoRawTask(
+        model_id=request.model_repo,
+        ds=request.ds_repo,
+        file_format=request.file_format,
+        field_prompt=request.field_prompt,
+        reward_functions=request.reward_functions,
+        is_organic=True,
+        status=TaskStatus.PENDING,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=request.hours_to_complete,
+        account_id=request.account_id,
+        task_type=TaskType.GRPOTASK,
         result_model_name=request.result_model_name,
     )
 
@@ -451,6 +483,7 @@ def factory_router() -> APIRouter:
     router.add_api_route(TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT, create_task_instruct_text, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_IMAGE, create_task_image, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_DPO, create_task_dpo, methods=["POST"])
+    router.add_api_route(TASKS_CREATE_ENDPOINT_GRPO, create_task_grpo, methods=["POST"])
     router.add_api_route(TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT, create_task_with_fixed_datasets, methods=["POST"])
     router.add_api_route(CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT, create_text_task_with_custom_dataset, methods=["POST"])
     router.add_api_route(GET_TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])

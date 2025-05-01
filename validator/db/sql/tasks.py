@@ -12,12 +12,15 @@ from validator.core.models import AnyTypeRawTask
 from validator.core.models import AnyTypeTask
 from validator.core.models import DpoRawTask
 from validator.core.models import DpoTask
+from validator.core.models import GrpoRawTask
+from validator.core.models import GrpoTask
 from validator.core.models import ImageRawTask
 from validator.core.models import ImageTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import InstructTextTask
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
+from validator.core.models import RewardFunction
 from validator.core.models import Task
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
@@ -123,6 +126,46 @@ async def add_task(task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
                     task.synthetic_data,
                     task.file_format,
                 )
+            elif isinstance(task, GrpoRawTask):
+                query_grpo_tasks = f"""
+                    INSERT INTO {cst.GRPO_TASKS_TABLE}
+                    ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FILE_FORMAT}, {cst.SYNTHETIC_DATA})
+                    VALUES ($1, $2, $3, $4)
+                """
+                await connection.execute(
+                    query_grpo_tasks,
+                    task_record[cst.TASK_ID],
+                    task.field_prompt,
+                    task.file_format,
+                    task.synthetic_data,
+                )
+
+                for reward_function in task.reward_functions:
+                    query_reward_functions = f"""
+                        INSERT INTO {cst.REWARD_FUNCTIONS_TABLE}
+                        ({cst.REWARD_FUNC}, {cst.FUNC_HASH}, {cst.IS_GENERIC})
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT ({cst.FUNC_HASH}) DO NOTHING
+                        RETURNING {cst.REWARD_ID}
+                    """
+                    reward_id = await connection.fetchval(
+                        query_reward_functions,
+                        reward_function.reward_func,
+                        reward_function.func_hash,
+                        reward_function.is_generic
+                    )
+
+                    query_grpo_task_functions = f"""
+                        INSERT INTO {cst.GRPO_TASK_FUNCTIONS_TABLE}
+                        ({cst.TASK_ID}, {cst.REWARD_ID}, {cst.REWARD_WEIGHT})
+                        VALUES ($1, $2, $3)
+                    """
+                    await connection.execute(
+                        query_grpo_task_functions,
+                        task_record[cst.TASK_ID],
+                        reward_id,
+                        reward_function.reward_weight
+                    )
 
             task.task_id = task_record[cst.TASK_ID]
             return task
@@ -144,6 +187,7 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> list[Node
             NETUID,
         )
         return [Node(**dict(row)) for row in rows]
+
 
 async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False) -> list[AnyTypeRawTask]:
     delay_timestamp_clause = (
@@ -186,6 +230,13 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
                     LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
                 """
+            elif task_type == TaskType.GRPOTASK.value:
+                specific_query = f"""
+                    SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format
+                    FROM {cst.TASKS_TABLE} t
+                    LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
+                    WHERE t.{cst.TASK_ID} = $1
+                """
             else:
                 logger.warning(f"Unknown task type {task_type} for task_id {row[cst.TASK_ID]}")
                 continue
@@ -200,6 +251,9 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
                     tasks.append(ImageRawTask(**task_data, image_text_pairs=image_text_pairs))
                 elif task_type == TaskType.DPOTASK.value:
                     tasks.append(DpoRawTask(**task_data))
+                elif task_type == TaskType.GRPOTASK.value:
+                    reward_functions = await get_reward_functions(row[cst.TASK_ID], psql_db)
+                    tasks.append(GrpoRawTask(**task_data, reward_functions=reward_functions))
 
         logger.info(f"Retrieved {len(tasks)} tasks with status {status.value}")
         return tasks
@@ -306,6 +360,23 @@ async def update_task(updated_task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeR
                         WHERE {cst.TASK_ID} = $1
                     """
                     await connection.execute(query, updated_task.task_id, *specific_values)
+            elif updated_task.task_type == TaskType.GRPOTASK:
+                grpo_fields = await get_table_fields(cst.GRPO_TASKS_TABLE, connection)
+                grpo_specific_fields = [f for f in grpo_fields if f != cst.TASK_ID]
+                specific_updates = {k: v for k, v in updates.items() if k in grpo_specific_fields}
+                if specific_updates:
+                    specific_clause = ", ".join([f"{column} = ${i + 2}" for i, column in enumerate(specific_updates.keys())])
+                    specific_values = list(specific_updates.values())
+                    query = f"""
+                        UPDATE {cst.GRPO_TASKS_TABLE}
+                        SET {specific_clause}
+                        WHERE {cst.TASK_ID} = $1
+                    """
+                    await connection.execute(query, updated_task.task_id, *specific_values)
+                if "reward_functions" in updates:
+                    await delete_reward_functions(updated_task.task_id, psql_db)
+                    reward_functions = [RewardFunction(**reward_function) for reward_function in updates["reward_functions"]]
+                    await add_reward_functions(updated_task.task_id, reward_functions, psql_db)
 
             if updated_task.assigned_miners is not None:
                 await connection.execute(
@@ -477,6 +548,13 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> AnyTypeRawTask | None:
                 LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
             """
+        elif task_type == TaskType.GRPOTASK.value:
+            specific_query = f"""
+                SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format
+                FROM {cst.TASKS_TABLE} t
+                LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
+                WHERE t.{cst.TASK_ID} = $1
+            """
         else:
             raise ValueError(f"Unsupported task type: {task_type}")
 
@@ -493,6 +571,9 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> AnyTypeRawTask | None:
             return ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs)
         elif task_type == TaskType.DPOTASK.value:
             return DpoRawTask(**full_task_data)
+        elif task_type == TaskType.GRPOTASK.value:
+            reward_functions = await get_reward_functions(task_id, psql_db)
+            return GrpoRawTask(**full_task_data, reward_functions=reward_functions)
 
 
 async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> list[dict]:
@@ -581,6 +662,18 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                 LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
                 WHERE tasks.{cst.TASK_ID} = $1
             """
+        elif task_type == TaskType.GRPOTASK.value:
+            specific_query = f"""
+                {victorious_repo_cte}
+                SELECT
+                    tasks.*,
+                    gt.field_prompt, gt.synthetic_data, gt.file_format,
+                    COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
+                FROM {cst.TASKS_TABLE} tasks
+                LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON tasks.{cst.TASK_ID} = gt.{cst.TASK_ID}
+                LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
+                WHERE tasks.{cst.TASK_ID} = $1
+            """
         else:
             raise ValueError(f"Unsupported task type: {task_type}")
 
@@ -596,7 +689,9 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
             return ImageTask(**full_task_data, image_text_pairs=image_text_pairs)
         elif task_type == TaskType.DPOTASK.value:
             return DpoTask(**full_task_data)
-
+        elif task_type == TaskType.GRPOTASK.value:
+            reward_functions = await get_reward_functions(task_id, psql_db)
+            return GrpoTask(**full_task_data, reward_functions=reward_functions)
 
 async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> list[Task]:
     async with await psql_db.connection() as connection:
@@ -699,7 +794,17 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
                 if dpo_row:
                     task_data.update(dict(dpo_row))
                 tasks.append(DpoTask(**task_data))
-
+            elif task_type == TaskType.GRPOTASK.value:
+                grpo_query = f"""
+                    SELECT field_prompt, synthetic_data, file_format
+                    FROM {cst.GRPO_TASKS_TABLE}
+                    WHERE {cst.TASK_ID} = $1
+                """
+                grpo_row = await connection.fetchrow(grpo_query, task_data[cst.TASK_ID])
+                if grpo_row:
+                    task_data.update(dict(grpo_row))
+                reward_functions = await get_reward_functions(task_data[cst.TASK_ID], psql_db)
+                tasks.append(GrpoTask(**task_data, reward_functions=reward_functions))
         return tasks
 
 
@@ -840,6 +945,67 @@ async def delete_image_text_pairs(task_id: UUID, psql_db: PSQLDB) -> None:
     async with await psql_db.connection() as connection:
         connection: Connection
         await connection.execute(query, task_id)
+
+
+async def delete_reward_functions(task_id: UUID, psql_db: PSQLDB) -> None:
+    query = f"""
+        DELETE FROM {cst.GRPO_TASK_FUNCTIONS_TABLE}
+        WHERE {cst.TASK_ID} = $1
+    """
+
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        await connection.execute(query, task_id)
+
+
+async def add_reward_functions(task_id: UUID, reward_functions: list[RewardFunction], psql_db: PSQLDB) -> None:
+    reward_functions_query = f"""
+        INSERT INTO {cst.REWARD_FUNCTIONS_TABLE} ({cst.REWARD_FUNC}, {cst.FUNC_HASH}, {cst.IS_GENERIC})
+        VALUES ($1, $2, $3)
+        ON CONFLICT ({cst.FUNC_HASH}) DO NOTHING
+        RETURNING {cst.REWARD_ID}
+    """
+    grpo_task_functions_query = f"""
+        INSERT INTO {cst.GRPO_TASK_FUNCTIONS_TABLE} ({cst.TASK_ID}, {cst.REWARD_ID}, {cst.REWARD_WEIGHT})
+        VALUES ($1, $2, $3)
+        ON CONFLICT ({cst.TASK_ID}, {cst.REWARD_ID}) DO NOTHING
+    """
+
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        for reward_function in reward_functions:
+            reward_id = await connection.fetchval(reward_functions_query, reward_function.reward_func, reward_function.func_hash, reward_function.is_generic)
+            await connection.execute(grpo_task_functions_query, task_id, reward_id, reward_function.reward_weight)
+
+
+async def get_reward_functions(task_id: UUID, psql_db: PSQLDB) -> list[RewardFunction]:
+    query = f"""
+        SELECT rf.{cst.REWARD_FUNC}, rf.{cst.FUNC_HASH}, rf.{cst.IS_GENERIC}, gtf.{cst.REWARD_WEIGHT}
+        FROM {cst.REWARD_FUNCTIONS_TABLE} rf
+        JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
+        WHERE gtf.{cst.TASK_ID} = $1
+    """
+
+    async with await psql_db.connection() as conn:
+        rows = await conn.fetch(query, task_id)
+        return [RewardFunction(reward_func=row[cst.REWARD_FUNC], func_hash=row[cst.FUNC_HASH], is_generic=row[cst.IS_GENERIC], reward_weight=row[cst.REWARD_WEIGHT]) for row in rows]
+
+
+async def _get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: int) -> list[RewardFunction]:
+    query = f"""
+        SELECT DISTINCT rf.{cst.REWARD_FUNC}, rf.{cst.IS_GENERIC}
+        FROM {cst.REWARD_FUNCTIONS_TABLE} rf
+        JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
+        JOIN {cst.TASKS_TABLE} t ON gtf.{cst.TASK_ID} = t.{cst.TASK_ID}
+        WHERE rf.{cst.IS_GENERIC} = true
+        AND t.{cst.STATUS} = 'SUCCESS'
+        ORDER BY RANDOM()
+        LIMIT $1
+    """
+
+    async with await psql_db.connection() as conn:
+        rows = await conn.fetch(query, num_rewards)
+        return [RewardFunction(reward_func=row[cst.REWARD_FUNC], is_generic=row[cst.IS_GENERIC], reward_weight=1.0) for row in rows]
 
 
 async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_lookup_days: float = 30) -> dict[str, dict]:

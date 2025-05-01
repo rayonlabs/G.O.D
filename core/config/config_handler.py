@@ -7,10 +7,10 @@ from fiber.logging_utils import get_logger
 from transformers import AutoTokenizer
 
 import core.constants as cst
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import InstructTextDatasetType
 
 
 logger = get_logger(__name__)
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 def create_dataset_entry(
     dataset: str,
-    dataset_type: InstructDatasetType | DPODatasetType | GrpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
     file_format: FileFormat,
 ) -> dict:
     dataset_entry = {"path": dataset}
@@ -26,10 +26,10 @@ def create_dataset_entry(
     if file_format == FileFormat.JSON:
         dataset_entry = {"path": "/workspace/input_data/"}
 
-    if isinstance(dataset_type, InstructDatasetType):
+    if isinstance(dataset_type, InstructTextDatasetType):
         instruct_type_dict = {key: value for key, value in dataset_type.model_dump().items() if value is not None}
         dataset_entry.update(_process_instruct_dataset_fields(instruct_type_dict))
-    elif isinstance(dataset_type, DPODatasetType):
+    elif isinstance(dataset_type, DpoDatasetType):
         dataset_entry.update(_process_dpo_dataset_fields(dataset_type))
     elif isinstance(dataset_type, GrpoDatasetType):
         dataset_entry.update(_process_grpo_dataset_fields(dataset_type))
@@ -77,7 +77,7 @@ def _process_grpo_dataset_fields(dataset_type: GrpoDatasetType) -> dict:
     return {"split": "train"}
 
 
-def _process_dpo_dataset_fields(dataset_type: DPODatasetType) -> dict:
+def _process_dpo_dataset_fields(dataset_type: DpoDatasetType) -> dict:
     # Enable below when https://github.com/axolotl-ai-cloud/axolotl/issues/1417 is fixed
     # context: https://discord.com/channels/1272221995400167588/1355226588178022452/1356982842374226125
 

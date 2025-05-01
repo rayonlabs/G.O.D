@@ -6,6 +6,7 @@ from datasets import load_dataset
 from fiber import Keypair
 
 from core.models.payload_models import DpoDatasetColumnsResponse
+from core.models.payload_models import TaskType
 from core.models.utility_models import Message
 from core.models.utility_models import Prompts
 from core.models.utility_models import Role
@@ -134,24 +135,27 @@ async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Key
     return DpoDatasetColumnsResponse(field_prompt = new_prompt, field_chosen=strong_model_result, field_rejected=weak_model_result)
 
 
-async def process_row(row, prompts, keypair, is_dpo=False):
-    if is_dpo:
-        logger.info('REFORMAULATION')
+async def process_row(row, prompts, keypair, task_type: TaskType) -> dict | DpoDatasetColumnsResponse:
+    if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.GRPOTASK]:
+        json_synthetic_data_point = await generate_paraphrased_version(row, prompts, keypair)
+
+        if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
+            return json_synthetic_data_point
+        else:
+            error_message = (
+                f"Generated data point has incorrect schema. Expected keys: {set(row.keys())}, "
+                f"got: {set(json_synthetic_data_point.keys())}"
+            )
+            logger.error(error_message)
+            raise ValueError(error_message)
+    elif task_type == TaskType.DPOTASK:
+        logger.info('REFORMULATION')
         return await generate_dpo_reformulation(row, prompts, keypair)
-    json_synthetic_data_point = await generate_paraphrased_version(row, prompts, keypair)
-
-    if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
-        return json_synthetic_data_point
-    else:
-        error_message = (
-            f"Generated data point has incorrect schema. Expected keys: {set(row.keys())}, "
-            f"got: {set(json_synthetic_data_point.keys())}"
-        )
-        logger.error(error_message)
-        raise ValueError(error_message)
 
 
-async def generate_augmented_text_dataset(sampled_data: list[dict], keypair: Keypair, is_dpo: bool = False) -> list[dict]:
+async def generate_augmented_text_dataset(
+    sampled_data: list[dict], keypair: Keypair, task_type: TaskType
+    ) -> list[dict] | list[DpoDatasetColumnsResponse]:
     prompts = load_prompts()
     logger.info(f"Creating an augmented dataset with {len(sampled_data)} samples...")
     synthetic_dataset = []
@@ -166,7 +170,7 @@ async def generate_augmented_text_dataset(sampled_data: list[dict], keypair: Key
         current_batch = (batch_idx // SYNTH_GEN_BATCH_SIZE) + 1
         logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
 
-        tasks = [process_row(row, prompts, keypair, is_dpo) for row in batch]
+        tasks = [process_row(row, prompts, keypair, task_type) for row in batch]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         batch_results = []

@@ -133,6 +133,7 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         {"type": TaskType.INSTRUCTTEXTTASK, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
         {"type": TaskType.DPOTASK, "weight_key": "DPO_TASK_SCORE_WEIGHT"},
         {"type": TaskType.IMAGETASK, "weight_key": "IMAGE_TASK_SCORE_WEIGHT"},
+        {"type": TaskType.GRPOTASK, "weight_key": "GRPO_TASK_SCORE_WEIGHT"},
     ]
 
     organic_proportions = {}

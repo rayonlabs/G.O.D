@@ -1,3 +1,5 @@
+import ast
+import hashlib
 from datetime import datetime
 from uuid import UUID
 from uuid import uuid4
@@ -9,14 +11,15 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
+from core.models.utility_models import RewardFunction
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
@@ -48,7 +51,7 @@ class TrainRequestText(TrainRequest):
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    dataset_type: InstructDatasetType | DPODatasetType
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
     file_format: FileFormat
 
 
@@ -195,6 +198,73 @@ class NewTaskRequestDPO(NewTaskRequest):
         return values
 
 
+class NewTaskRequestGrpo(NewTaskRequest):
+    field_prompt: str = Field(..., description="The column name for the prompt", examples=["prompt"])
+
+    ds_repo: str = Field(..., description="The repository for the dataset", examples=["trl-lib/tldr"])
+    file_format: FileFormat = Field(
+        FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
+    model_repo: str = Field(..., description="The repository for the model", examples=["Qwen/Qwen2.5-Coder-32B-Instruct"])
+
+    reward_functions: list[RewardFunction]
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
+    @model_validator(mode="before")
+    def convert_empty_strings(cls, values: dict) -> dict:
+        string_fields = ["field_prompt"]
+        for field in string_fields:
+            if field in values and isinstance(values[field], str):
+                values[field] = values[field].strip() or None
+        return values
+
+    @model_validator(mode="after")
+    def validate_reward_lists(self) -> "NewTaskRequestGrpo":
+        if len(self.reward_functions) == 0:
+            raise ValueError("reward_functions must not be empty")
+        return self
+
+    @model_validator(mode="after")
+    def validate_reward_functions(self) -> "NewTaskRequestGrpo":
+        for reward_function in self.reward_functions:
+            try:
+                # Check if it's valid Python code
+                parsed = ast.parse(reward_function.reward_func)
+
+                # Check if it contains a function definition
+                function_found = False
+                for node in ast.walk(parsed):
+                    if isinstance(node, ast.FunctionDef):
+                        function_found = True
+                        arg_names = [arg.arg for arg in node.args.args]
+                        has_completions = "completions" in arg_names
+                        has_kwargs = node.args.kwarg is not None
+
+                        if not has_completions:
+                            raise ValueError(f"Reward function {node.name} must have a 'completions' parameter")
+                        if not has_kwargs:
+                            raise ValueError(f"Reward function {node.name} must have a '**kwargs' parameter")
+
+                        if reward_function.is_generic is None:
+                            allowed_params = {"completions", "prompts"}
+                            reward_function.is_generic = set(arg_names) <= allowed_params
+
+                        if reward_function.func_hash is None:
+                            reward_function.func_hash = hashlib.sha256(reward_function.reward_func.encode()).hexdigest()
+
+                        break
+
+                if not function_found:
+                    raise ValueError("Each reward function must be a proper Python function")
+
+            except Exception as e:
+                raise ValueError(f"Invalid Python syntax: {reward_function.reward_func[:50]}... {e}")
+
+        return self
+
+
 class NewTaskRequestImage(NewTaskRequest):
     model_repo: str = Field(..., description="The model repository to use")
     image_text_pairs: list[ImageTextPair] = Field(
@@ -302,6 +372,18 @@ class DpoTaskDetails(TaskDetails):
     model_config = ConfigDict(protected_namespaces=())
 
 
+class GrpoTaskDetails(TaskDetails):
+    task_type: TaskType = TaskType.GRPOTASK
+    base_model_repository: str
+    ds_repo: str
+
+    field_prompt: str = Field(..., description="The column name for the prompt", examples=["prompt"])
+    reward_functions: list[RewardFunction]
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
+
 class ImageTaskDetails(TaskDetails):
     task_type: TaskType = TaskType.IMAGETASK
     image_text_pairs: list[ImageTextPair]
@@ -329,4 +411,4 @@ class ImageModelsResponse(BaseModel):
     models: list[ImageModelInfo]
 
 # Type alias for task details types
-AnyTypeTaskDetails = InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails
+AnyTypeTaskDetails = InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails

@@ -13,10 +13,11 @@ from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import InstructTextDatasetType
 from core.utils import download_s3_file
 from validator.tasks.task_prep import unzip_to_temp_path
 from validator.utils.logging import get_all_context_tags
@@ -76,15 +77,17 @@ async def run_evaluation_docker_text(
     dataset: str,
     models: list[str],
     original_model: str,
-    dataset_type: InstructDatasetType | DPODatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
     file_format: FileFormat,
     gpu_ids: list[int],
 ) -> DockerEvaluationResults:
 
-    if isinstance(dataset_type, InstructDatasetType):
+    if isinstance(dataset_type, InstructTextDatasetType):
         command = ["python", "-m", "validator.evaluation.eval_instruct_text"]
-    elif isinstance(dataset_type, DPODatasetType):
+    elif isinstance(dataset_type, DpoDatasetType):
         command = ["python", "-m", "validator.evaluation.eval_dpo"]
+    elif isinstance(dataset_type, GrpoDatasetType):
+        command = ["python", "-m", "validator.evaluation.eval_grpo"]
     else:
         raise ValueError(f"Unsupported dataset type: {type(dataset_type)}")
     task_type = type(dataset_type).__name__

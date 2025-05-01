@@ -7,6 +7,7 @@ from core.models.utility_models import TaskType
 from validator.core import constants as cst
 from validator.core.models import AnyTypeRawTask
 from validator.core.models import DpoRawTask
+from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.cycle.util_functions import get_total_image_dataset_size
@@ -54,6 +55,15 @@ class DpoTaskConfig(TaskConfig):
     task_request_prepare_function: Callable = prepare_text_task_request
     start_training_endpoint: str = cst.START_TRAINING_ENDPOINT
 
+
+class GrpoTaskConfig(TaskConfig):
+    task_type: TaskType = TaskType.GRPOTASK
+    data_size_function: Callable = get_total_text_dataset_size
+    task_prep_function: Callable = run_text_task_prep
+    task_request_prepare_function: Callable = prepare_text_task_request
+    start_training_endpoint: str = cst.START_TRAINING_GRPO_ENDPOINT
+
+
 def get_task_config(task: AnyTypeRawTask) -> TaskConfig:
     if isinstance(task, InstructTextRawTask):
         return InstructTextTaskConfig()
@@ -61,5 +71,7 @@ def get_task_config(task: AnyTypeRawTask) -> TaskConfig:
         return ImageTaskConfig()
     elif isinstance(task, DpoRawTask):
         return DpoTaskConfig()
+    elif isinstance(task, GrpoRawTask):
+        return GrpoTaskConfig()
     else:
         raise ValueError(f"Unsupported task type: {type(task).__name__}")

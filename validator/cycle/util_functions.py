@@ -7,12 +7,13 @@ from huggingface_hub import HfApi
 
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskStatus
-from core.models.utility_models import TaskType
 from validator.core.models import DpoRawTask
+from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.tasks.task_prep import prepare_image_task
@@ -25,7 +26,7 @@ logger = get_logger(__name__)
 hf_api = HfApi()
 
 
-async def get_total_text_dataset_size(task: InstructTextRawTask | DpoRawTask) -> int:
+async def get_total_text_dataset_size(task: InstructTextRawTask | DpoRawTask | GrpoRawTask) -> int:
     if task.file_format == FileFormat.S3:
         if not task.training_data:
             logger.error(f"Training data is missing from task: {task.task_id}")
@@ -78,7 +79,7 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawT
     return task
 
 
-async def run_text_task_prep(task: InstructTextRawTask | DpoRawTask, keypair: Keypair) -> InstructTextRawTask | DpoRawTask:
+async def run_text_task_prep(task: InstructTextRawTask | DpoRawTask | GrpoRawTask, keypair: Keypair) -> InstructTextRawTask | DpoRawTask | GrpoRawTask:
     test_data, synth_data, train_data = await prepare_text_task(task, keypair=keypair)
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
@@ -88,9 +89,9 @@ async def run_text_task_prep(task: InstructTextRawTask | DpoRawTask, keypair: Ke
     return task
 
 
-def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRequestText:
-    if task.task_type == TaskType.INSTRUCTTEXTTASK:
-        dataset_type = InstructDatasetType(
+def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask | GrpoRawTask) -> TrainRequestText:
+    if isinstance(task, InstructTextRawTask):
+        dataset_type = InstructTextDatasetType(
             field_system=task.field_system,
             field_input=task.field_input,
             field_output=task.field_output,
@@ -98,8 +99,8 @@ def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRe
             format=task.format,
             no_input_format=task.no_input_format,
         )
-    elif task.task_type == TaskType.DPOTASK:
-        dataset_type = DPODatasetType(
+    elif isinstance(task, DpoRawTask):
+        dataset_type = DpoDatasetType(
             field_prompt=task.field_prompt,
             field_system=task.field_system,
             field_chosen=task.field_chosen,
@@ -107,6 +108,11 @@ def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRe
             prompt_format=task.prompt_format,
             chosen_format=task.chosen_format,
             rejected_format=task.rejected_format,
+        )
+    elif isinstance(task, GrpoRawTask):
+        dataset_type = GrpoDatasetType(
+            field_prompt=task.field_prompt,
+            reward_functions=task.reward_functions,
         )
 
     dataset = task.training_data if task.training_data else "dataset error"

@@ -13,7 +13,7 @@ from transformers import AutoTokenizer
 from trl import DPOConfig
 from trl import DPOTrainer
 
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from validator.core import constants as cst
 from validator.core.models import EvaluationArgs
 from validator.evaluation.common import ProgressLoggerCallback
@@ -34,13 +34,13 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DPODatasetType) -> Dataset:
+def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DpoDatasetType) -> Dataset:
     """
     Transform a DPO dataset to match trl's expected column names.
 
     Args:
         dataset: Hugging Face dataset object
-        dataset_type: DPODatasetType with field mappings
+        dataset_type: DpoDatasetType with field mappings
     """
     logger.info("Adapting DPO columns to standard format")
 
@@ -138,13 +138,12 @@ def evaluate_dpo_model(
 
     @find_executable_batch_size(starting_batch_size=evaluation_config.starting_batch_size)
     def evaluate_dpo_with_batch_size(batch_size):
-        beta = evaluation_config.get("dpo_beta", 0.1)
         training_args = DPOConfig(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
             report_to="none",
             bf16=True,
-            beta=beta,
+            beta=cst.BETA_DPO,
         )
         dpo_trainer = DPOTrainer(
             model=finetuned_model,

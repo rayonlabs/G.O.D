@@ -60,7 +60,7 @@ class TaskMinerResult(BaseModel):
     quality_score: float
 
 
-class InstructDatasetType(BaseModel):
+class InstructTextDatasetType(BaseModel):
     system_prompt: str | None = ""
     system_format: str | None = "{system}"
     field_system: str | None = None
@@ -74,18 +74,26 @@ class InstructDatasetType(BaseModel):
 
 class RewardFunction(BaseModel):
     """Model representing a reward function with its metadata"""
-    reward_func: str
-    reward_weight: float
+    reward_func: str = Field(
+        ...,
+        description="String with the python code of the reward function to use",
+        examples=[
+            "def reward_func_conciseness(completions, **kwargs):",
+            "\"\"\"Reward function that favors shorter, more concise answers.\"\"\"",
+            "    return [100.0/(len(completion.split()) + 10) for completion in completions]"
+        ]
+    )
+    reward_weight: float = Field(..., ge=0)
     func_hash: str | None = None
     is_generic: bool | None = None
 
 
 class GrpoDatasetType(BaseModel):
     field_prompt: str | None = None
-    reward_functions: list[RewardFunction]
+    reward_functions: list[RewardFunction] | None = []
 
 
-class DPODatasetType(BaseModel):
+class DpoDatasetType(BaseModel):
     field_prompt: str | None = None
     field_system: str | None = None
     field_chosen: str | None = None
@@ -110,7 +118,7 @@ class Job(BaseModel):
 
 class TextJob(Job):
     dataset: str
-    dataset_type: InstructDatasetType | DPODatasetType | GrpoDatasetType
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
     file_format: FileFormat
 
 

@@ -1,8 +1,8 @@
 input_output_reformulation_sys: >
   You are an expert in paraphrasing and reformulating text for LLM datasets while preserving meaning.
-  You will receive a data point with different columns.
+  You will receive a data point with either one or multiple columns.
   Your task is to:
-  1. Create a paraphrased version of each column while preserving the meaning
+  1. Create a paraphrased version of each existing column while preserving the meaning
   2. Keep the style of the original text
   3. Try to understand the underlying task the dataset is meant for, and make sure the paraphrased text is consistent with that task.
 
@@ -44,3 +44,30 @@ input_reformulation_user: >
   4. Give just the reformulated version as your output, and only one please.
 
   Return your response as a single reformulated input text.
+
+reward_function_generation_sys: >
+  You are a Python code generator that creates reward functions for LLM evaluation.
+  You must return a list of Python function strings. Here are examples showing the exact formatting, python indentation, and string escaping required:
+
+  [
+  "def format_reward_func(completions, **kwargs):\n    \"\"\"Reward function that checks if the completion has a specific format.\"\"\"\n    import re\n    pattern = r\"^<think>.*?</think><answer>.*?</answer>$\"\n    completion_contents = [completion[0][\"content\"] for completion in completions]\n    matches = [re.match(pattern, content) for content in completion_contents]\n    return [1.0 if match else 0.0 for match in matches]",
+
+  "def reward_func_conciseness(completions, **kwargs):\n    \"\"\"Reward function that favors shorter, more concise answers.\"\"\"\n    return [100.0/(len(completion.split()) + 10) for completion in completions]"
+  ]
+
+  Critical formatting requirements:
+  - All strings must be properly escaped: \\n for newlines, \\\" for quotes
+  - Python indentation must be exactly 4 spaces (written as \\n    in the string)
+  - Function parameters must be exactly (completions, **kwargs)
+  - Must return a list of float scores
+  - Any required imports must be inside the function
+  - Return only the list of function strings with no other text
+  - Each function should be self-contained and evaluate one aspect
+
+  Critical validation requirements:
+  - Function MUST return a list (not tuple, not generator)
+  - Return list MUST contain exactly one float score per input completion
+
+reward_function_generation_user: >
+  Generate {num_rewards} unique and simple reward functions that evaluate different aspects of LLM completions.
+  Return them as a list of properly escaped Python function definition strings.

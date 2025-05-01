@@ -21,11 +21,11 @@ from core.config.config_handler import update_model_info
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.docker_utils import stream_logs
 from core.models.utility_models import DiffusionJob
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TextJob
 from miner.utils import download_flux_unet
 
@@ -70,7 +70,7 @@ class DockerEnvironment:
 def _load_and_modify_config(
     dataset: str,
     model: str,
-    dataset_type: InstructDatasetType | DPODatasetType | GrpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
     file_format: FileFormat,
     task_id: str,
     expected_repo_name: str | None,
@@ -78,7 +78,7 @@ def _load_and_modify_config(
     """
     Loads the config template and modifies it to create a new job config.
     """
-    if isinstance(dataset_type, InstructDatasetType | DPODatasetType):
+    if isinstance(dataset_type, InstructTextDatasetType | DpoDatasetType):
         config_path = cst.CONFIG_TEMPLATE_PATH
     elif isinstance(dataset_type, GrpoDatasetType):
         config_path = cst.CONFIG_TEMPLATE_PATH_GRPO
@@ -92,7 +92,7 @@ def _load_and_modify_config(
     dataset_entry = create_dataset_entry(dataset, dataset_type, file_format)
     config["datasets"].append(dataset_entry)
 
-    if isinstance(dataset_type, DPODatasetType):
+    if isinstance(dataset_type, DpoDatasetType):
         config["rl"] = "dpo"
     elif isinstance(dataset_type, GrpoDatasetType):
         filename, reward_funcs_names = create_reward_funcs_file(
@@ -177,7 +177,7 @@ def create_job_text(
     job_id: str,
     dataset: str,
     model: str,
-    dataset_type: InstructDatasetType | DPODatasetType | GrpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
     file_format: FileFormat,
     expected_repo_name: str | None,
 ):
@@ -309,13 +309,13 @@ def _dpo_format_rejected(row, format_str):
     return result
 
 
-def _adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DPODatasetType, apply_formatting: bool = False):
+def _adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetType, apply_formatting: bool = False):
     """
     Transform a DPO JSON dataset file to match axolotl's `chatml.argilla` expected column names.
 
     Args:
         dataset_path: Path to the JSON dataset file
-        dataset_type: DPODatasetType with field mappings
+        dataset_type: DpoDatasetType with field mappings
         apply_formatting: If True, apply formatting templates to the content
     """
     with open(dataset_path, 'r') as f:
@@ -403,7 +403,7 @@ def _adapt_columns_for_dataset(job: TextJob):
     if job.file_format != FileFormat.JSON:
         return
 
-    if isinstance(job.dataset_type, DPODatasetType):
+    if isinstance(job.dataset_type, DpoDatasetType):
         _adapt_columns_for_dpo_dataset(job.dataset, job.dataset_type, True)
     elif isinstance(job.dataset_type, GrpoDatasetType):
         _adapt_columns_for_grpo_dataset(job.dataset, job.dataset_type)

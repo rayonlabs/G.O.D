@@ -175,10 +175,10 @@ async def task_offer(
         # You will want to optimise this as a miner
         global current_job_finish_time
         current_time = datetime.now()
-        if request.task_type not in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+        if request.task_type not in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
             return MinerTaskResponse(
                 message=f"This endpoint only accepts text tasks: "
-                        f"{TaskType.INSTRUCTTEXTTASK} and {TaskType.DPOTASK}",
+                        f"{TaskType.INSTRUCTTEXTTASK}, {TaskType.DPOTASK} and {TaskType.GRPOTASK}",
                 accepted=False
             )
 

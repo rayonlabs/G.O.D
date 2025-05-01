@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -8,12 +9,15 @@ from uuid import uuid4
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_validator
 
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import RewardFunction
 from core.models.utility_models import TaskType
 
 
@@ -118,6 +122,24 @@ class DpoRawTask(RawTask):
     task_type: TaskType = TaskType.DPOTASK
 
 
+class GrpoRawTask(RawTask):
+    """
+    GRPO task data as stored in the database. It expand the RawTask with fields from the GrpoTask table.
+    """
+    field_prompt: str
+    reward_functions: list[RewardFunction]
+    file_format: FileFormat = FileFormat.HF
+    task_type: TaskType = TaskType.GRPOTASK
+    synthetic_data: str | None = None
+
+    @model_validator(mode="after")
+    def validate_reward_functions(self) -> "GrpoRawTask":
+        for reward_function in self.reward_functions:
+            if reward_function.func_hash is None:
+                reward_function.func_hash = hashlib.sha256(reward_function.reward_func.encode()).hexdigest()
+        return self
+
+
 class InstructTextRawTask(RawTask):
     """
     Instruct Text task data as stored in the database. It expand the RawTask with fields from the instruct_text_tasks table.
@@ -166,6 +188,10 @@ class ImageTask(ImageRawTask):
 
 
 class DpoTask(DpoRawTask):
+    trained_model_repository: str | None = None
+
+
+class GrpoTask(GrpoRawTask):
     trained_model_repository: str | None = None
 
 
@@ -253,8 +279,8 @@ class MinerResultsText(MinerResults):
     task_type: TaskType
     @field_validator("task_type")
     def validate_task_type(cls, v):
-        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK}:
-            raise ValueError("Must be INSTRUCTTEXTTASK or DPOTASK")
+        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK}:
+            raise ValueError("Must be INSTRUCTTEXTTASK, DPOTASK or GRPOTASK")
         return v
 
 
@@ -376,6 +402,10 @@ class DpoTaskWithHotkeyDetails(DpoTask):
     hotkey_details: list[HotkeyDetails]
 
 
+class GrpoTaskWithHotkeyDetails(GrpoTask):
+    hotkey_details: list[HotkeyDetails]
+
+
 class Dataset(BaseModel):
     dataset_id: str
     num_rows: int
@@ -389,7 +419,7 @@ class Dataset(BaseModel):
 class EvaluationArgs(BaseModel):
     dataset: str
     original_model: str
-    dataset_type: InstructDatasetType | DPODatasetType
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
     file_format: FileFormat
     repo: str
 
@@ -404,16 +434,18 @@ class EvaluationArgs(BaseModel):
         if isinstance(value, str):
             try:
                 data = json.loads(value)
-                if "field_chosen" in data:
-                    return DPODatasetType.model_validate(data)
-                else:
-                    return InstructDatasetType.model_validate(data)
+                if "field_instruction" in data and "field_input" in data:
+                    return InstructTextDatasetType.model_validate(data)
+                elif "field_chosen" in data:
+                    return DpoDatasetType.model_validate(data)
+                elif "reward_functions" in data:
+                    return GrpoDatasetType.model_validate(data)
             except Exception as e:
                 raise ValueError(f"Failed to parse dataset type: {e}")
         return value
 
 
 # Type aliases for common task type groupings
-AnyTypeRawTask = InstructTextRawTask | DpoRawTask | ImageRawTask
-AnyTypeTask = InstructTextTask | DpoTask | ImageTask
-AnyTypeTaskWithHotkeyDetails = InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails
+AnyTypeRawTask = InstructTextRawTask | DpoRawTask | ImageRawTask | GrpoRawTask
+AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask
+AnyTypeTaskWithHotkeyDetails = InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails

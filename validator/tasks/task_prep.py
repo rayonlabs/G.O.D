@@ -1,3 +1,4 @@
+import ast
 import os
 import random
 import shutil
@@ -17,10 +18,10 @@ import validator.core.constants as cst
 from core.models.payload_models import DpoDatasetColumnsResponse
 from core.models.payload_models import ImageTextPair
 from core.models.utility_models import FileFormat
-from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from validator.augmentation.augmentation import generate_augmented_text_dataset
 from validator.core.models import DpoRawTask
+from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
@@ -139,9 +140,32 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     return test_zip_path, train_zip_path
 
 
+def adapt_synthetic_columns(
+    synthetic_data: list[dict] | list[DpoDatasetColumnsResponse], task: InstructTextRawTask | DpoRawTask | GrpoRawTask
+    ) -> list[dict]:
+    """
+    Transform synthetic data based on task type.
+
+    Args:
+        synthetic_data: List of synthetic data points
+        task: The task instance that determines how to transform the data
+
+    Returns:
+        Transformed synthetic data
+    """
+    if isinstance(task, InstructTextRawTask):
+        return synthetic_data
+    elif isinstance(task, DpoRawTask):
+        return [validate_and_transform_dpo(data, task) for data in synthetic_data]
+    elif isinstance(task, GrpoRawTask):
+        return synthetic_data
+    else:
+        raise ValueError(f"Unsupported task type: {type(task).__name__}")
+
+
 async def get_additional_synth_data(
-    dataset: Dataset, columns_to_sample: list[str], keypair: Keypair, is_dpo: bool = False
-) -> list[dict] | list[DpoDatasetColumnsResponse]:
+    dataset: Dataset, columns_to_sample: list[str], keypair: Keypair, task: InstructTextRawTask | DpoRawTask | GrpoRawTask
+) -> list[dict]:
     num_samples = min(
         cst.MAX_SYNTH_DATA_POINTS,
         int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
@@ -157,8 +181,8 @@ async def get_additional_synth_data(
         logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
         return None
 
-    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair, is_dpo=is_dpo)
-
+    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair, task_type=task.task_type)
+    synthetic_data = adapt_synthetic_columns(synthetic_data, task)
     return synthetic_data
 
 
@@ -279,24 +303,43 @@ async def _process_and_upload_datasets(
     )
 
 
-def pick_columns_to_sample(task: InstructTextRawTask | DpoRawTask) -> list[str]:
-    if task.task_type == TaskType.INSTRUCTTEXTTASK:
+def extract_grpo_extra_columns(task: GrpoRawTask) -> list[str]:
+    """
+    Extract all unique arguments from reward functions excluding field_prompt.
+    """
+    all_args = set()
+
+    for reward_function in task.reward_functions:
+        parsed = ast.parse(reward_function.reward_func)
+
+        for node in ast.walk(parsed):
+            if isinstance(node, ast.FunctionDef):
+                all_args |= {arg.arg for arg in node.args.args}
+                break
+
+    return list(all_args - {task.field_prompt})
+
+
+def pick_columns_to_sample(task: InstructTextRawTask | DpoRawTask | GrpoRawTask) -> list[str]:
+    if isinstance(task, InstructTextRawTask):
         columns_to_sample = [
             i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
         ]
-    elif task.task_type == TaskType.DPOTASK:
+    elif isinstance(task, DpoRawTask):
         columns_to_sample = [task.field_system, task.field_prompt, task.field_chosen, task.field_rejected]
+    elif isinstance(task, GrpoRawTask):
+        columns_to_sample = [task.field_prompt] + extract_grpo_extra_columns(task)
     else:
         raise ValueError(f"Unsupported task type: {task.task_type}")
     return columns_to_sample
 
 
-def validate_and_transform_dpo(data, task: DpoRawTask):
+def validate_and_transform_dpo(data: DpoDatasetColumnsResponse, task: DpoRawTask) -> dict:
     assert isinstance(data, DpoDatasetColumnsResponse)
     return {task.field_prompt: data.field_prompt, task.field_chosen: data.field_chosen, task.field_rejected: data.field_rejected}
 
 
-async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Keypair) -> tuple[str, str, str]:
+async def prepare_text_task(task: InstructTextRawTask | DpoRawTask | GrpoRawTask, keypair: Keypair) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
 
@@ -327,10 +370,7 @@ async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Key
     total_size = len(train_ds) + len(test_ds)
     check_ds_num_rows(total_size)
 
-    if isinstance(task, InstructTextRawTask):
-        columns_to_sample = pick_columns_to_sample(task)
-    else:
-        columns_to_sample = [task.field_prompt, task.field_chosen, task.field_rejected]
+    columns_to_sample = pick_columns_to_sample(task)
 
     if any(col not in train_ds.column_names for col in columns_to_sample):
         raise ValueError(f"Column {columns_to_sample} not found in train dataset")
@@ -339,13 +379,8 @@ async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Key
     try:
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
-            if isinstance(task, DpoRawTask):
-                # we only need the field prompt to generate new data here
-                synthetic_ds = await get_additional_synth_data(test_ds, [task.field_prompt], keypair, is_dpo=True)
-                synthetic_ds = [validate_and_transform_dpo(data, task) for data in synthetic_ds]
+            synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
 
-            else:
-                synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, is_dpo=False)
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:

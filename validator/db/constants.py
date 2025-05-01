@@ -17,6 +17,9 @@ SUBMISSIONS_TABLE = "submissions"
 OFFER_RESPONSES_TABLE = "offer_responses"
 LATEST_SCORES_URL_TABLE = "latest_scores_url"
 IMAGE_TEXT_PAIRS_TABLE = "image_text_pairs"
+GRPO_TASKS_TABLE = "grpo_tasks"
+REWARD_FUNCTIONS_TABLE = "reward_functions"
+GRPO_TASK_FUNCTIONS_TABLE = "grpo_task_functions"
 
 # Node Table Columns
 NODE_ID = "node_id"
@@ -92,6 +95,14 @@ PROMPT_FORMAT = "prompt_format"
 CHOSEN_FORMAT = "chosen_format"
 REJECTED_FORMAT = "rejected_format"
 
+# Reward Functions Table Columns
+REWARD_ID = "reward_id"
+REWARD_FUNC = "reward_func"
+FUNC_HASH = "func_hash"
+IS_GENERIC = "is_generic"
+
+# GRPO Task Functions Table Columns
+REWARD_WEIGHT = "reward_weight"
 
 # Submissions Table Columns
 SUBMISSION_ID = "submission_id"

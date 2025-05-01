@@ -10,6 +10,7 @@ from tenacity import wait_exponential
 
 from core.models.payload_models import AnyTypeTaskDetails
 from core.models.payload_models import DpoTaskDetails
+from core.models.payload_models import GrpoTaskDetails
 from core.models.payload_models import ImageTaskDetails
 from core.models.payload_models import InstructTextTaskDetails
 from core.models.utility_models import TaskStatus
@@ -132,9 +133,26 @@ def convert_task_to_task_details(task: AnyTypeTask) -> AnyTypeTaskDetails:
             task_type=task.task_type,
             result_model_name=task.result_model_name,
         )
+    elif task.task_type == TaskType.GRPOTASK:
+        return GrpoTaskDetails(
+            id=task.task_id,
+            account_id=task.account_id,
+            status=task.status,
+            base_model_repository=task.model_id,
+            ds_repo=task.ds,
+            field_prompt=task.field_prompt,
+            reward_functions=task.reward_functions,
+            created_at=task.created_at,
+            started_at=task.started_at,
+            finished_at=task.termination_at,
+            hours_to_complete=task.hours_to_complete,
+            trained_model_repository=task.trained_model_repository,
+            task_type=task.task_type,
+            result_model_name=task.result_model_name,
+        )
 
 
-def is_task_in_flight(task: InstructTextTask | DpoTask | ImageTask) -> bool:
+def is_task_in_flight(task: AnyTypeTask) -> bool:
     return task.status not in [
         TaskStatus.SUCCESS,
         TaskStatus.FAILURE,
@@ -144,12 +162,11 @@ def is_task_in_flight(task: InstructTextTask | DpoTask | ImageTask) -> bool:
     ]
 
 
-def hide_sensitive_data_till_finished(task: InstructTextTask | DpoTask | ImageTask) -> InstructTextTask | DpoTask | ImageTask:
+def hide_sensitive_data_till_finished(task: AnyTypeTask) -> AnyTypeTask:
     if is_task_in_flight(task):
-        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
             task.synthetic_data = None
         if task.task_type == TaskType.IMAGETASK:
-            assert isinstance(task, ImageTask), "This should be "
             task.image_text_pairs = [ImageTextPair(image_url="hidden", text_url="hidden")]
         task.test_data = None
 
