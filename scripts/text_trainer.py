@@ -21,7 +21,7 @@ sys.path.append(project_root)
 
 from core.config.config_handler import create_dataset_entry, save_config, update_flash_attention, update_model_info
 from core.utils import download_s3_file
-from core.models.utility_models import FileFormat
+from core.models.utility_models import FileFormat, InstructDatasetType, DPODatasetType, TaskType
 import core.constants as cst
 
 
@@ -123,8 +123,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
     config["datasets"].append(dataset_entry)
 
     # Handle DPO tasks
-    is_dpo = "field_chosen" in dataset_type and "field_rejected" in dataset_type
-    if is_dpo:
+    if isinstance(dataset_type, DPODatasetType):
         config["rl"] = "dpo"
 
     # Update config
@@ -157,6 +156,7 @@ async def main():
     parser.add_argument("--model", required=True, help="Model name or path")
     parser.add_argument("--dataset", required=True, help="Dataset path or HF dataset name")
     parser.add_argument("--dataset-type", required=True, help="JSON string of dataset type config")
+    parser.add_argument("--task-type", required=True, choices=["InstructTextTask", "DpoTask"], help="Type of task")
     parser.add_argument("--file-format", required=True, choices=["csv", "json", "hf", "s3"], help="File format")
     parser.add_argument("--hours-to-complete", type=int, required=True, help="Number of hours to complete the task")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
@@ -176,9 +176,22 @@ async def main():
 
     # Parse dataset_type from JSON string
     try:
-        dataset_type = json.loads(args.dataset_type)
+        dataset_type_dict = json.loads(args.dataset_type)
+        
+        # Create the appropriate dataset type object based on task type
+        if args.task_type == TaskType.DPOTASK:
+            dataset_type = DPODatasetType(**dataset_type_dict)
+        elif args.task_type == TaskType.INSTRUCTTEXTTASK:
+            dataset_type = InstructDatasetType(**dataset_type_dict)
+        else:
+            print(f"Unsupported task type: {args.task_type}")
+            sys.exit(1)
+            
     except json.JSONDecodeError as e:
         print(f"Error parsing dataset_type JSON: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error creating dataset type object: {e}")
         sys.exit(1)
 
     # Download dataset if needed
@@ -188,9 +201,8 @@ async def main():
     dataset_path = copy_dataset_if_needed(dataset_path, file_format)
     
     # Handle DPO dataset adaptation if needed
-    is_dpo = "field_chosen" in dataset_type and "field_rejected" in dataset_type
-    if is_dpo and file_format == FileFormat.JSON.value:
-        _adapt_columns_for_dpo_dataset(dataset_path, dataset_type, True)
+    if args.task_type == TaskType.DPOTASK and file_format == FileFormat.JSON.value:
+        _adapt_columns_for_dpo_dataset(dataset_path, dataset_type_dict, True)
         print(f"Adapted DPO dataset columns in {dataset_path}")
     
     # Create config file

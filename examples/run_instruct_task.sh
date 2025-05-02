@@ -31,6 +31,7 @@ docker run --rm --gpus all \
   --model "$MODEL" \
   --dataset "$DATASET" \
   --dataset-type "$DATASET_TYPE" \
+  --task-type "InstructTextTask" \
   --file-format "$FILE_FORMAT" \
   --hours-to-complete "$HOURS_TO_COMPLETE" \
   --huggingface-token "$HUGGINGFACE_TOKEN" \
