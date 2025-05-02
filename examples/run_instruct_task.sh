@@ -9,7 +9,7 @@ DATASET_TYPE='{
 }'
 FILE_FORMAT="s3"
 HOURS_TO_COMPLETE=6
-# Use your actual HuggingFace credentials for model upload
+
 HUGGINGFACE_TOKEN="hf_your_token_here"
 WANDB_TOKEN="your_wandb_token_here"
 HUGGINGFACE_USERNAME="your_hf_username"
