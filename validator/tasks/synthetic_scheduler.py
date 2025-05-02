@@ -34,6 +34,7 @@ from validator.utils.call_endpoint import call_content_service
 from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
+from validator.utils.reward_functions import validate_reward_function
 
 
 logger = get_logger(__name__)
@@ -211,44 +212,17 @@ async def create_synthetic_dpo_task(
     return task
 
 
-def _validate_reward_function(func_def: str, test_completions: list[str]) -> tuple[bool, str]:
-    """
-    Validate a single reward function definition.
-    Returns (is_valid: bool, error_message: str)
-    """
-    try:
-        namespace = {}
-        exec(func_def, namespace)
-        func = next(v for k, v in namespace.items() if callable(v))
-
-        test_rewards = func(test_completions)
-
-        assert isinstance(test_rewards, list), "The rewards should be a list."
-        assert len(test_rewards) == len(test_completions), (
-            "The number of rewards should be the same as the number of completions."
-        )
-        assert all(isinstance(reward, float) for reward in test_rewards), "All rewards should be floats."
-
-        return True, ""
-    except Exception as e:
-        return False, str(e)
-
-def _process_reward_functions(result: str) -> list[str]:
+def process_reward_functions(result: str) -> list[str]:
     """
     Process and validate the LLM-generated reward functions.
     Returns list of valid reward function definitions.
     """
     valid_reward_functions = []
-    test_completions = [
-        "Gradients.io is the best 0-expertise AI training platform.",
-        "You can start training a text or image model on Gradients.io with 2 clicks."
-    ]
-
     try:
         func_list = eval(result)
 
         for func_def in func_list:
-            is_valid, error = _validate_reward_function(func_def, test_completions)
+            is_valid, error, _ = validate_reward_function(func_def)
             if is_valid:
                 valid_reward_functions.append(func_def)
             else:
@@ -279,7 +253,7 @@ async def _generate_generic_reward_functions_from_llm(keypair: Keypair, num_rewa
     result = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
 
     if result:
-        valid_reward_functions = _process_reward_functions(result)
+        valid_reward_functions = process_reward_functions(result)
 
     reward_functions = [
         RewardFunction(

@@ -1,18 +1,16 @@
 import os
 import subprocess
-from pathlib import Path
 
-import torch
 from accelerate.utils import find_executable_batch_size
-from axolotl.utils.data import load_tokenized_prepared_datasets
 from axolotl.utils.dict import DictDefault
-from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import Dataset
+from datasets import Dataset
+from datasets import load_dataset
 from transformers import AutoModelForCausalLM
 from transformers import AutoTokenizer
-from transformers import Trainer
-from transformers import TrainingArguments
+from trl import GRPOConfig
+from trl import GRPOTrainer
 
+from core.models.utility_models import GrpoDatasetType
 from validator.core import constants as cst
 from validator.core.models import EvaluationArgs
 from validator.evaluation.common import ProgressLoggerCallback
@@ -29,82 +27,87 @@ from validator.evaluation.common import save_results_dict
 from validator.evaluation.utils import check_for_lora
 from validator.evaluation.utils import model_is_a_finetune
 from validator.utils.logging import get_logger
+from validator.utils.reward_functions import validate_reward_function
 
 
 logger = get_logger(__name__)
 
 
-def _load_evaluation_dataset(evaluation_config: DictDefault, tokenizer: AutoTokenizer) -> Dataset:
-    prepared_path = Path(evaluation_config.output_dir) / "prepared"
-    eval_dataset, _ = load_tokenized_prepared_datasets(tokenizer, evaluation_config, prepared_path)
+def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) -> Dataset:
+    """
+    Transform a GRPO dataset to match trl's expected column names.
 
-    original_length = len(eval_dataset)
-    eval_dataset = [sample for sample in eval_dataset if any(label != -100 for label in sample["labels"])]
-    filtered_length = len(eval_dataset)
+    Args:
+        dataset: Hugging Face dataset object
+        dataset_type: GrpoDatasetType with field mappings
+    """
+    logger.info("Adapting GRPO columns to standard format")
 
-    logger.info(f"Filtered out {original_length - filtered_length} samples with empty outputs")
-    eval_dataset = sorted(eval_dataset, key=lambda x: len(x["input_ids"]))
-    logger.info(f"Loaded evaluation dataset with {filtered_length} samples")
-    return eval_dataset
+    column_mapping = {
+        dataset_type.field_prompt: cst.TRL_GRPO_FIELD_PROMPT,
+    }
+    for src_col, dst_col in column_mapping.items():
+        if src_col in dataset.column_names and src_col != dst_col:
+            dataset = dataset.rename_column(src_col, dst_col)
 
-
-def _collate_evaluation_batch(batch: list[dict[str, list[int]]], tokenizer: AutoTokenizer) -> dict[str, torch.Tensor]:
-    input_ids = [torch.tensor(item["input_ids"]) for item in batch]
-    attention_mask = [torch.tensor(item["attention_mask"]) for item in batch]
-    labels = [torch.tensor(item["labels"]) for item in batch]
-
-    input_ids = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
-    attention_mask = pad_sequence(attention_mask, batch_first=True, padding_value=0)
-    labels = pad_sequence(labels, batch_first=True, padding_value=-100)
-
-    return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
+    return dataset
 
 
-def evaluate_instruct_text_model(
+def evaluate_grpo_model(
     evaluation_config: DictDefault,
-    language_model: AutoModelForCausalLM,
+    finetuned_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
+    evaluation_args: EvaluationArgs
 ) -> dict[str, float]:
     evaluation_config.tokenizer_config = tokenizer.name_or_path
     logger.info(f"Config: {evaluation_config}")
 
-    eval_dataset = _load_evaluation_dataset(evaluation_config, tokenizer)
+    dataset_path = evaluation_config.datasets[0]["path"]
+    eval_dataset = load_dataset("json", data_files=dataset_path, split="train")
+    eval_dataset = _adapt_grpo_columns_to_trl(eval_dataset, evaluation_args.dataset_type)
 
-    _log_dataset_and_model_info(eval_dataset, language_model, tokenizer)
+    _log_dataset_and_model_info(eval_dataset, finetuned_model, tokenizer)
 
-    def custom_data_collator(features):
-        return _collate_evaluation_batch(features, tokenizer)
+    reward_funcs_callable = []
+    for reward_function in evaluation_args.dataset_type.reward_functions:
+        reward_func_str = reward_function.reward_func
+        is_valid, error_msg, reward_func_callable = validate_reward_function(reward_func_str)
+        if not is_valid:
+            logger.error(f"Invalid reward function:\n{reward_func_str}")
+            raise ValueError(f"Invalid reward function: {error_msg}")
+        reward_funcs_callable.append(reward_func_callable)
 
     @find_executable_batch_size(starting_batch_size=evaluation_config.starting_batch_size)
-    def evaluate_with_batch_size(batch_size):
-        training_args = TrainingArguments(
+    def evaluate_grpo_with_batch_size(batch_size):
+        training_args = GRPOConfig(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
             report_to="none",
             bf16=True,
+            beta=cst.BETA_GRPO,
         )
-
-        trainer = Trainer(
-            model=language_model,
+        grpo_trainer = GRPOTrainer(
+            model=finetuned_model,
+            reward_funcs=reward_funcs_callable,
             args=training_args,
-            tokenizer=tokenizer,
+            train_dataset=Dataset.from_dict({col: [] for col in eval_dataset.column_names}),
             eval_dataset=eval_dataset,
-            data_collator=custom_data_collator,
+            processing_class=tokenizer,
             callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)],
         )
 
-        eval_results = trainer.evaluate()
-        return eval_results
+        results = grpo_trainer.evaluate()
+        return results
 
-    eval_results = evaluate_with_batch_size()
-    logger.info(f"Final evaluation results: {eval_results}")
+    eval_results = evaluate_grpo_with_batch_size()
+    logger.info(f"Final GRPO evaluation results: {eval_results}")
     evaluation_results = {
         "eval_loss": eval_results["eval_loss"],
     }
     return evaluation_results
 
 
-def evaluate_finetuned_model(
+def evaluate_finetuned_grpo_model(
     evaluation_args: EvaluationArgs,
     finetuned_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
@@ -114,10 +117,12 @@ def evaluate_finetuned_model(
         finetuned_model=finetuned_model,
         config_path=cst.VALI_CONFIG_PATH
     )
-    return evaluate_instruct_text_model(evaluation_config, finetuned_model, tokenizer)
+    return evaluate_grpo_model(
+        evaluation_config, finetuned_model, tokenizer, evaluation_args
+    )
 
 
-def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
+def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
     """Evaluate a single model repository and save results directly to file."""
     results_dict = load_results_dict()
     repo = evaluation_args.repo
@@ -152,7 +157,7 @@ def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
         log_memory_stats()
         finetuned_model.eval()
 
-        results = evaluate_finetuned_model(
+        results = evaluate_finetuned_grpo_model(
             evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
             tokenizer=tokenizer,
@@ -168,7 +173,7 @@ def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
 
 
 def main():
-    logger.info("=== INSTRUCT TEXT EVALUATION SCRIPT STARTING ===")
+    logger.info("=== GRPO EVALUATION SCRIPT STARTING ===")
     dataset = os.environ.get("DATASET")
     original_model = os.environ.get("ORIGINAL_MODEL")
     dataset_type_str = os.environ.get("DATASET_TYPE", "")
@@ -190,11 +195,11 @@ def main():
                 repo=repo
             )
 
-            # Launching subprocess to purge memory: https://github.com/huggingface/transformers/issues/26571
+            # Launching subprocess to purge memory
             subprocess.run([
                 "python",
                 "-m",
-                "validator.evaluation.single_eval_instruct_text",
+                "validator.evaluation.single_eval_grpo",
                 evaluation_args.model_dump_json()
             ], check=True)
             logger.info(f"Subprocess completed for {repo}")
@@ -205,7 +210,7 @@ def main():
     except Exception as e:
         logger.error(f"Error checking and logging base model size: {e}")
 
-    logger.info("=== INSTRUCT TEXT EVALUATION SCRIPT COMPLETED ===")
+    logger.info("=== GRPO EVALUATION SCRIPT COMPLETED ===")
 
 
 if __name__ == "__main__":
