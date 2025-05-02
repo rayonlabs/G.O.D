@@ -165,11 +165,17 @@ async def _insert_grpo_task(connection: Connection, task: GrpoRawTask, task_reco
 
     for reward_function in task.reward_functions:
         query_reward_functions = f"""
-            INSERT INTO {cst.REWARD_FUNCTIONS_TABLE}
-            ({cst.REWARD_FUNC}, {cst.FUNC_HASH}, {cst.IS_GENERIC})
-            VALUES ($1, $2, $3)
-            ON CONFLICT ({cst.FUNC_HASH}) DO NOTHING
-            RETURNING {cst.REWARD_ID}
+            WITH ins AS (
+                INSERT INTO {cst.REWARD_FUNCTIONS_TABLE}
+                ({cst.REWARD_FUNC}, {cst.FUNC_HASH}, {cst.IS_GENERIC})
+                VALUES ($1, $2, $3)
+                ON CONFLICT ({cst.FUNC_HASH}) DO NOTHING
+                RETURNING {cst.REWARD_ID}
+            )
+            SELECT {cst.REWARD_ID} FROM ins
+            UNION ALL
+            SELECT {cst.REWARD_ID} FROM {cst.REWARD_FUNCTIONS_TABLE} WHERE {cst.FUNC_HASH} = $2
+            LIMIT 1
         """
         reward_id = await connection.fetchval(
             query_reward_functions,
@@ -980,10 +986,16 @@ async def delete_reward_functions(task_id: UUID, psql_db: PSQLDB) -> None:
 
 async def add_reward_functions(task_id: UUID, reward_functions: list[RewardFunction], psql_db: PSQLDB) -> None:
     reward_functions_query = f"""
-        INSERT INTO {cst.REWARD_FUNCTIONS_TABLE} ({cst.REWARD_FUNC}, {cst.FUNC_HASH}, {cst.IS_GENERIC})
-        VALUES ($1, $2, $3)
-        ON CONFLICT ({cst.FUNC_HASH}) DO NOTHING
-        RETURNING {cst.REWARD_ID}
+        WITH ins AS (
+            INSERT INTO {cst.REWARD_FUNCTIONS_TABLE} ({cst.REWARD_FUNC}, {cst.FUNC_HASH}, {cst.IS_GENERIC})
+            VALUES ($1, $2, $3)
+            ON CONFLICT ({cst.FUNC_HASH}) DO NOTHING
+            RETURNING {cst.REWARD_ID}
+        )
+        SELECT {cst.REWARD_ID} FROM ins
+        UNION ALL
+        SELECT {cst.REWARD_ID} FROM {cst.REWARD_FUNCTIONS_TABLE} WHERE {cst.FUNC_HASH} = $2
+        LIMIT 1
     """
     grpo_task_functions_query = f"""
         INSERT INTO {cst.GRPO_TASK_FUNCTIONS_TABLE} ({cst.TASK_ID}, {cst.REWARD_ID}, {cst.REWARD_WEIGHT})
