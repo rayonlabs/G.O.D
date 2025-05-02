@@ -40,24 +40,16 @@ DROP TABLE IF EXISTS grpo_task_functions;
 DROP TABLE IF EXISTS reward_functions;
 DROP TABLE IF EXISTS grpo_tasks;
 
--- Delete any GRPO tasks first
 DELETE FROM tasks
   WHERE task_type = 'GrpoTask';
 
--- Create a new type without GrpoTask
-CREATE TYPE tasktype_new AS ENUM (
-    SELECT enumlabel
-    FROM pg_enum
-    JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
-    WHERE typname = 'tasktype'
-    AND enumlabel != 'GrpoTask'
-);
+ALTER TYPE tasktype RENAME TO tasktype_temp;
+CREATE TYPE tasktype AS ENUM ('InstructTextTask', 'ImageTask', 'DpoTask');
 
--- Then alter existing columns to use the new type
 ALTER TABLE tasks
-    ALTER COLUMN task_type TYPE tasktype_new
-    USING (task_type::text::tasktype_new);
+  ALTER COLUMN task_type TYPE VARCHAR;
 
--- Drop old type and rename new one
-DROP TYPE tasktype;
-ALTER TYPE tasktype_new RENAME TO tasktype;
+ALTER TABLE tasks
+  ALTER COLUMN task_type TYPE tasktype USING task_type::tasktype;
+
+DROP TYPE tasktype_temp;
