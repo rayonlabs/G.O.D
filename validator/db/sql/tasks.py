@@ -33,142 +33,162 @@ async def add_task(task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
     """Add a new task"""
     async with await psql_db.connection() as connection:
         async with connection.transaction():
-            query_tasks = f"""
-                INSERT INTO {cst.TASKS_TABLE}
-                ({cst.ACCOUNT_ID},
-                {cst.MODEL_ID},
-                {cst.DS},
-                {cst.STATUS},
-                {cst.IS_ORGANIC},
-                {cst.HOURS_TO_COMPLETE},
-                {cst.TEST_DATA},
-                {cst.TRAINING_DATA},
-                {cst.CREATED_AT},
-                {cst.TASK_TYPE},
-                {cst.RESULT_MODEL_NAME},
-                {cst.TRAINING_REPO_BACKUP},
-                {cst.STARTED_AT},
-                {cst.TERMINATION_AT})
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-                RETURNING *
-            """
-            task_record = await connection.fetchrow(
-                query_tasks,
-                task.account_id,
-                task.model_id,
-                task.ds,
-                task.status,
-                task.is_organic,
-                task.hours_to_complete,
-                task.test_data,
-                task.training_data,
-                task.created_at,
-                task.task_type.value,
-                task.result_model_name,
-                task.training_repo_backup,
-                task.started_at,
-                task.termination_at,
-            )
-
-            if isinstance(task, InstructTextRawTask):
-                query_instruct_text_tasks = f"""
-                    INSERT INTO {cst.INSTRUCT_TEXT_TASKS_TABLE}
-                    ({cst.TASK_ID}, {cst.FIELD_SYSTEM}, {cst.FIELD_INSTRUCTION},
-                    {cst.FIELD_INPUT}, {cst.FIELD_OUTPUT}, {cst.FORMAT},
-                    {cst.NO_INPUT_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FILE_FORMAT})
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                """
-                await connection.execute(
-                    query_instruct_text_tasks,
-                    task_record[cst.TASK_ID],
-                    task.field_system,
-                    task.field_instruction,
-                    task.field_input,
-                    task.field_output,
-                    task.format,
-                    task.no_input_format,
-                    task.synthetic_data,
-                    task.file_format,
-                )
-            elif isinstance(task, ImageRawTask):
-                query_image_tasks = f"""
-                    INSERT INTO {cst.IMAGE_TASKS_TABLE}
-                    ({cst.TASK_ID}, {cst.MODEL_TYPE})
-                    VALUES ($1, $2)
-                """
-                await connection.execute(query_image_tasks, task_record[cst.TASK_ID], task.model_type.value)
-
-                if task.image_text_pairs:
-                    query_pairs = f"""
-                        INSERT INTO {cst.IMAGE_TEXT_PAIRS_TABLE}
-                        ({cst.TASK_ID}, {cst.IMAGE_URL}, {cst.TEXT_URL})
-                        VALUES ($1, $2, $3)
-                    """
-                    for pair in task.image_text_pairs:
-                        await connection.execute(query_pairs, task_record[cst.TASK_ID], pair.image_url, pair.text_url)
-            elif isinstance(task, DpoRawTask):
-                query_dpo_tasks = f"""
-                    INSERT INTO {cst.DPO_TASKS_TABLE}
-                    ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FIELD_SYSTEM}, {cst.FIELD_CHOSEN}, {cst.FIELD_REJECTED},
-                    {cst.PROMPT_FORMAT}, {cst.CHOSEN_FORMAT}, {cst.REJECTED_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FILE_FORMAT})
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                """
-                await connection.execute(
-                    query_dpo_tasks,
-                    task_record[cst.TASK_ID],
-                    task.field_prompt,
-                    task.field_system,
-                    task.field_chosen,
-                    task.field_rejected,
-                    task.prompt_format,
-                    task.chosen_format,
-                    task.rejected_format,
-                    task.synthetic_data,
-                    task.file_format,
-                )
-            elif isinstance(task, GrpoRawTask):
-                query_grpo_tasks = f"""
-                    INSERT INTO {cst.GRPO_TASKS_TABLE}
-                    ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FILE_FORMAT}, {cst.SYNTHETIC_DATA})
-                    VALUES ($1, $2, $3, $4)
-                """
-                await connection.execute(
-                    query_grpo_tasks,
-                    task_record[cst.TASK_ID],
-                    task.field_prompt,
-                    task.file_format,
-                    task.synthetic_data,
-                )
-
-                for reward_function in task.reward_functions:
-                    query_reward_functions = f"""
-                        INSERT INTO {cst.REWARD_FUNCTIONS_TABLE}
-                        ({cst.REWARD_FUNC}, {cst.FUNC_HASH}, {cst.IS_GENERIC})
-                        VALUES ($1, $2, $3)
-                        ON CONFLICT ({cst.FUNC_HASH}) DO NOTHING
-                        RETURNING {cst.REWARD_ID}
-                    """
-                    reward_id = await connection.fetchval(
-                        query_reward_functions,
-                        reward_function.reward_func,
-                        reward_function.func_hash,
-                        reward_function.is_generic
-                    )
-
-                    query_grpo_task_functions = f"""
-                        INSERT INTO {cst.GRPO_TASK_FUNCTIONS_TABLE}
-                        ({cst.TASK_ID}, {cst.REWARD_ID}, {cst.REWARD_WEIGHT})
-                        VALUES ($1, $2, $3)
-                    """
-                    await connection.execute(
-                        query_grpo_task_functions,
-                        task_record[cst.TASK_ID],
-                        reward_id,
-                        reward_function.reward_weight
-                    )
-
+            task_record = await _insert_base_task(connection, task)
+            await _insert_task_specific_data(connection, task, task_record)
             task.task_id = task_record[cst.TASK_ID]
             return task
+
+async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dict:
+    """Insert the base task record and return it"""
+    query_tasks = f"""
+        INSERT INTO {cst.TASKS_TABLE}
+        ({cst.ACCOUNT_ID},
+        {cst.MODEL_ID},
+        {cst.DS},
+        {cst.STATUS},
+        {cst.IS_ORGANIC},
+        {cst.HOURS_TO_COMPLETE},
+        {cst.TEST_DATA},
+        {cst.TRAINING_DATA},
+        {cst.CREATED_AT},
+        {cst.TASK_TYPE},
+        {cst.RESULT_MODEL_NAME},
+        {cst.TRAINING_REPO_BACKUP},
+        {cst.STARTED_AT},
+        {cst.TERMINATION_AT})
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        RETURNING *
+    """
+    return await connection.fetchrow(
+        query_tasks,
+        task.account_id,
+        task.model_id,
+        task.ds,
+        task.status,
+        task.is_organic,
+        task.hours_to_complete,
+        task.test_data,
+        task.training_data,
+        task.created_at,
+        task.task_type.value,
+        task.result_model_name,
+        task.training_repo_backup,
+        task.started_at,
+        task.termination_at,
+    )
+
+async def _insert_task_specific_data(connection: Connection, task: AnyTypeRawTask, task_record: dict) -> None:
+    """Insert task type specific data based on the task type"""
+    if isinstance(task, InstructTextRawTask):
+        await _insert_instruct_text_task(connection, task, task_record)
+    elif isinstance(task, ImageRawTask):
+        await _insert_image_task(connection, task, task_record)
+    elif isinstance(task, DpoRawTask):
+        await _insert_dpo_task(connection, task, task_record)
+    elif isinstance(task, GrpoRawTask):
+        await _insert_grpo_task(connection, task, task_record)
+
+async def _insert_instruct_text_task(connection: Connection, task: InstructTextRawTask, task_record: dict) -> None:
+    query = f"""
+        INSERT INTO {cst.INSTRUCT_TEXT_TASKS_TABLE}
+        ({cst.TASK_ID}, {cst.FIELD_SYSTEM}, {cst.FIELD_INSTRUCTION},
+        {cst.FIELD_INPUT}, {cst.FIELD_OUTPUT}, {cst.FORMAT},
+        {cst.NO_INPUT_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FILE_FORMAT})
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    """
+    await connection.execute(
+        query,
+        task_record[cst.TASK_ID],
+        task.field_system,
+        task.field_instruction,
+        task.field_input,
+        task.field_output,
+        task.format,
+        task.no_input_format,
+        task.synthetic_data,
+        task.file_format,
+    )
+
+
+async def _insert_image_task(connection: Connection, task: ImageRawTask, task_record: dict) -> None:
+    query = f"""
+        INSERT INTO {cst.IMAGE_TASKS_TABLE}
+        ({cst.TASK_ID}, {cst.MODEL_TYPE})
+        VALUES ($1, $2)
+    """
+    await connection.execute(query, task_record[cst.TASK_ID], task.model_type.value)
+
+    if task.image_text_pairs:
+        query_pairs = f"""
+            INSERT INTO {cst.IMAGE_TEXT_PAIRS_TABLE}
+            ({cst.TASK_ID}, {cst.IMAGE_URL}, {cst.TEXT_URL})
+            VALUES ($1, $2, $3)
+        """
+        for pair in task.image_text_pairs:
+            await connection.execute(query_pairs, task_record[cst.TASK_ID], pair.image_url, pair.text_url)
+
+
+async def _insert_dpo_task(connection: Connection, task: DpoRawTask, task_record: dict) -> None:
+    query = f"""
+        INSERT INTO {cst.DPO_TASKS_TABLE}
+        ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FIELD_SYSTEM}, {cst.FIELD_CHOSEN}, {cst.FIELD_REJECTED},
+        {cst.PROMPT_FORMAT}, {cst.CHOSEN_FORMAT}, {cst.REJECTED_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FILE_FORMAT})
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    """
+    await connection.execute(
+        query,
+        task_record[cst.TASK_ID],
+        task.field_prompt,
+        task.field_system,
+        task.field_chosen,
+        task.field_rejected,
+        task.prompt_format,
+        task.chosen_format,
+        task.rejected_format,
+        task.synthetic_data,
+        task.file_format,
+    )
+
+async def _insert_grpo_task(connection: Connection, task: GrpoRawTask, task_record: dict) -> None:
+    query_grpo = f"""
+        INSERT INTO {cst.GRPO_TASKS_TABLE}
+        ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FILE_FORMAT}, {cst.SYNTHETIC_DATA})
+        VALUES ($1, $2, $3, $4)
+    """
+    await connection.execute(
+        query_grpo,
+        task_record[cst.TASK_ID],
+        task.field_prompt,
+        task.file_format,
+        task.synthetic_data,
+    )
+
+    for reward_function in task.reward_functions:
+        query_reward_functions = f"""
+            INSERT INTO {cst.REWARD_FUNCTIONS_TABLE}
+            ({cst.REWARD_FUNC}, {cst.FUNC_HASH}, {cst.IS_GENERIC})
+            VALUES ($1, $2, $3)
+            ON CONFLICT ({cst.FUNC_HASH}) DO NOTHING
+            RETURNING {cst.REWARD_ID}
+        """
+        reward_id = await connection.fetchval(
+            query_reward_functions,
+            reward_function.reward_func,
+            reward_function.func_hash,
+            reward_function.is_generic
+        )
+
+        query_grpo_task_functions = f"""
+            INSERT INTO {cst.GRPO_TASK_FUNCTIONS_TABLE}
+            ({cst.TASK_ID}, {cst.REWARD_ID}, {cst.REWARD_WEIGHT})
+            VALUES ($1, $2, $3)
+        """
+        await connection.execute(
+            query_grpo_task_functions,
+            task_record[cst.TASK_ID],
+            reward_id,
+            reward_function.reward_weight
+        )
 
 
 async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> list[Node]:
@@ -974,7 +994,12 @@ async def add_reward_functions(task_id: UUID, reward_functions: list[RewardFunct
     async with await psql_db.connection() as connection:
         connection: Connection
         for reward_function in reward_functions:
-            reward_id = await connection.fetchval(reward_functions_query, reward_function.reward_func, reward_function.func_hash, reward_function.is_generic)
+            reward_id = await connection.fetchval(
+                reward_functions_query,
+                reward_function.reward_func,
+                reward_function.func_hash,
+                reward_function.is_generic
+                )
             await connection.execute(grpo_task_functions_query, task_id, reward_id, reward_function.reward_weight)
 
 
@@ -988,7 +1013,12 @@ async def get_reward_functions(task_id: UUID, psql_db: PSQLDB) -> list[RewardFun
 
     async with await psql_db.connection() as conn:
         rows = await conn.fetch(query, task_id)
-        return [RewardFunction(reward_func=row[cst.REWARD_FUNC], func_hash=row[cst.FUNC_HASH], is_generic=row[cst.IS_GENERIC], reward_weight=row[cst.REWARD_WEIGHT]) for row in rows]
+        return [RewardFunction(
+            reward_func=row[cst.REWARD_FUNC],
+            func_hash=row[cst.FUNC_HASH],
+            is_generic=row[cst.IS_GENERIC],
+            reward_weight=row[cst.REWARD_WEIGHT]
+            ) for row in rows]
 
 
 async def _get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: int) -> list[RewardFunction]:
@@ -1005,7 +1035,11 @@ async def _get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: in
 
     async with await psql_db.connection() as conn:
         rows = await conn.fetch(query, num_rewards)
-        return [RewardFunction(reward_func=row[cst.REWARD_FUNC], is_generic=row[cst.IS_GENERIC], reward_weight=1.0) for row in rows]
+        return [RewardFunction(
+            reward_func=row[cst.REWARD_FUNC],
+            is_generic=row[cst.IS_GENERIC],
+            reward_weight=1.0
+            ) for row in rows]
 
 
 async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_lookup_days: float = 30) -> dict[str, dict]:
