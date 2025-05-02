@@ -3,74 +3,88 @@ Utility functions for DPO dataset processing and formatting
 """
 
 import json
-import pandas as pd
 from typing import Dict, Any
 
 import core.constants as cst
+from core.models.utility_models import DPODatasetType
 
 
-def _dpo_format_prompt(row, format_str):
+def _dpo_format_prompt(item: dict, format_str: str) -> str:
     """
     Format a prompt for DPO task.
     
     Args:
-        row: DataFrame row with dataset fields
+        item: Dictionary with dataset fields
         format_str: Format string template
         
     Returns:
         Formatted prompt string
     """
     result = format_str
-    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
-        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
-    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
-        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+    
+    # Replace placeholder with actual value if it exists
+    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in item:
+        result = result.replace("{prompt}", str(item[cst.DPO_DEFAULT_FIELD_PROMPT]))
+        
+    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in item:
+        result = result.replace("{system}", str(item[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+        
     return result
 
 
-def _dpo_format_chosen(row, format_str):
+def _dpo_format_chosen(item: dict, format_str: str) -> str:
     """
     Format a chosen response for DPO task.
     
     Args:
-        row: DataFrame row with dataset fields
+        item: Dictionary with dataset fields
         format_str: Format string template
         
     Returns:
         Formatted chosen response string
     """
     result = format_str
-    if "{chosen}" in format_str and cst.DPO_DEFAULT_FIELD_CHOSEN in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_CHOSEN]):
-        result = result.replace("{chosen}", str(row[cst.DPO_DEFAULT_FIELD_CHOSEN]))
-    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
-        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
-    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
-        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+    
+    # Replace placeholders with actual values if they exist
+    if "{chosen}" in format_str and cst.DPO_DEFAULT_FIELD_CHOSEN in item:
+        result = result.replace("{chosen}", str(item[cst.DPO_DEFAULT_FIELD_CHOSEN]))
+        
+    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in item:
+        result = result.replace("{prompt}", str(item[cst.DPO_DEFAULT_FIELD_PROMPT]))
+        
+    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in item:
+        result = result.replace("{system}", str(item[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+        
     return result
 
 
-def _dpo_format_rejected(row, format_str):
+def _dpo_format_rejected(item: dict, format_str: str) -> str:
     """
     Format a rejected response for DPO task.
     
     Args:
-        row: DataFrame row with dataset fields
+        item: Dictionary with dataset fields
         format_str: Format string template
         
     Returns:
         Formatted rejected response string
     """
     result = format_str
-    if "{rejected}" in format_str and cst.DPO_DEFAULT_FIELD_REJECTED in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_REJECTED]):
-        result = result.replace("{rejected}", str(row[cst.DPO_DEFAULT_FIELD_REJECTED]))
-    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
-        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
-    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
-        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+    
+    # Replace placeholders with actual values if they exist
+    if "{rejected}" in format_str and cst.DPO_DEFAULT_FIELD_REJECTED in item:
+        result = result.replace("{rejected}", str(item[cst.DPO_DEFAULT_FIELD_REJECTED]))
+        
+    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in item:
+        result = result.replace("{prompt}", str(item[cst.DPO_DEFAULT_FIELD_PROMPT]))
+        
+    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in item:
+        result = result.replace("{system}", str(item[cst.DPO_DEFAULT_FIELD_SYSTEM]))
+        
     return result
 
 
-def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type, apply_formatting: bool = True):
+def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DPODatasetType, apply_formatting: bool = True):
     """
     Transform a DPO JSON dataset file to match axolotl's expected column names.
 
@@ -81,75 +95,51 @@ def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type, apply_formatt
     """
     with open(dataset_path, 'r') as f:
         data = json.load(f)
-    df = pd.DataFrame(data)
     
-    print(f"Original dataset columns: {df.columns.tolist()}")
-    print(f"DPO_DEFAULT_FIELD_PROMPT: {cst.DPO_DEFAULT_FIELD_PROMPT}")
+    # Use a direct approach instead of pandas to avoid any potential issues
+    print(f"Original dataset keys: {list(data[0].keys()) if data else []}")
     
-    # Build column mapping
-    column_mapping = {}
-    
-    # Add required fields to column mapping
-    if dataset_type.field_prompt:
-        column_mapping[dataset_type.field_prompt] = cst.DPO_DEFAULT_FIELD_PROMPT
-        print(f"Mapping {dataset_type.field_prompt} → {cst.DPO_DEFAULT_FIELD_PROMPT}")
-    
-    if dataset_type.field_system:
-        column_mapping[dataset_type.field_system] = cst.DPO_DEFAULT_FIELD_SYSTEM
-        print(f"Mapping {dataset_type.field_system} → {cst.DPO_DEFAULT_FIELD_SYSTEM}")
-    
-    if dataset_type.field_chosen:
-        column_mapping[dataset_type.field_chosen] = cst.DPO_DEFAULT_FIELD_CHOSEN
-        print(f"Mapping {dataset_type.field_chosen} → {cst.DPO_DEFAULT_FIELD_CHOSEN}")
-    
-    if dataset_type.field_rejected:
-        column_mapping[dataset_type.field_rejected] = cst.DPO_DEFAULT_FIELD_REJECTED
-        print(f"Mapping {dataset_type.field_rejected} → {cst.DPO_DEFAULT_FIELD_REJECTED}")
-    
-    print(f"Column mapping: {column_mapping}")
-    
-    # Rename columns
-    df = df.rename(columns=column_mapping)
-    print(f"Columns after mapping: {df.columns.tolist()}")
-
-    # Let's force create 'question' field from 'prompt' if only one exists and not the other
-    if 'prompt' in df.columns and 'question' not in df.columns:
-        print("Creating 'question' field from 'prompt'")
-        df['question'] = df['prompt'].copy()
-    elif 'question' in df.columns and 'prompt' not in df.columns:
-        print("Creating 'prompt' field from 'question'")
-        df['prompt'] = df['question'].copy()
-
-    print(f"Final columns: {df.columns.tolist()}")
-
-    if apply_formatting:
-        # Apply formatting for the prompt
-        if dataset_type.prompt_format and dataset_type.prompt_format != "{prompt}":
-            df[cst.DPO_DEFAULT_FIELD_PROMPT] = df.apply(
-                lambda row: _dpo_format_prompt(row, dataset_type.prompt_format), axis=1
-            )
+    # Create a new dataset with the correct field names for Axolotl
+    transformed_data = []
+    for item in data:
+        new_item = {}
         
-        # Apply formatting for the chosen response
-        if dataset_type.chosen_format and dataset_type.chosen_format != "{chosen}":
-            df[cst.DPO_DEFAULT_FIELD_CHOSEN] = df.apply(
-                lambda row: _dpo_format_chosen(row, dataset_type.chosen_format), axis=1
-            )
+        # Map fields using constants from settings
+        if dataset_type.field_prompt and dataset_type.field_prompt in item:
+            new_item[cst.DPO_DEFAULT_FIELD_PROMPT] = item[dataset_type.field_prompt]
+            print(f"Mapped '{dataset_type.field_prompt}' to '{cst.DPO_DEFAULT_FIELD_PROMPT}'")
+            
+        if dataset_type.field_chosen and dataset_type.field_chosen in item:
+            new_item[cst.DPO_DEFAULT_FIELD_CHOSEN] = item[dataset_type.field_chosen]
+            
+        if dataset_type.field_rejected and dataset_type.field_rejected in item:
+            new_item[cst.DPO_DEFAULT_FIELD_REJECTED] = item[dataset_type.field_rejected]
+            
+        if dataset_type.field_system and dataset_type.field_system in item:
+            new_item[cst.DPO_DEFAULT_FIELD_SYSTEM] = item[dataset_type.field_system]
         
-        # Apply formatting for the rejected response
-        if dataset_type.rejected_format and dataset_type.rejected_format != "{rejected}":
-            df[cst.DPO_DEFAULT_FIELD_REJECTED] = df.apply(
-                lambda row: _dpo_format_rejected(row, dataset_type.rejected_format), axis=1
-            )
+        # Apply formatting if requested
+        if apply_formatting:
+            # Format prompt if a formatting template is provided
+            if dataset_type.prompt_format and dataset_type.prompt_format != "{prompt}":
+                new_item[cst.DPO_DEFAULT_FIELD_PROMPT] = _dpo_format_prompt(new_item, dataset_type.prompt_format)
+                
+            # Format chosen response if a formatting template is provided
+            if dataset_type.chosen_format and dataset_type.chosen_format != "{chosen}":
+                new_item[cst.DPO_DEFAULT_FIELD_CHOSEN] = _dpo_format_chosen(new_item, dataset_type.chosen_format)
+                
+            # Format rejected response if a formatting template is provided
+            if dataset_type.rejected_format and dataset_type.rejected_format != "{rejected}":
+                new_item[cst.DPO_DEFAULT_FIELD_REJECTED] = _dpo_format_rejected(new_item, dataset_type.rejected_format)
+        
+        transformed_data.append(new_item)
     
-    # Make sure we have the 'question' field explicitly for chatml.intel
-    if 'question' not in df.columns:
-        print("WARNING: 'question' field is missing, which is required by chatml.intel format")
-        print("Trying to create 'question' field from other available fields")
-        if cst.DPO_DEFAULT_FIELD_PROMPT in df.columns:
-            df['question'] = df[cst.DPO_DEFAULT_FIELD_PROMPT].copy()
-            print(f"Created 'question' from {cst.DPO_DEFAULT_FIELD_PROMPT}")
-    
-    output_data = df.to_dict(orient='records')
-    print(f"First sample keys: {list(output_data[0].keys())}")
+    # Write the transformed data back to the file
     with open(dataset_path, 'w') as f:
-        json.dump(output_data, f, indent=2)
+        json.dump(transformed_data, f, indent=2)
+    
+    print(f"Transformed dataset keys: {list(transformed_data[0].keys()) if transformed_data else []}")
+    print(f"Dataset has been adapted for {cst.DPO_DEFAULT_DATASET_TYPE} format with following mappings:")
+    print(f"  - {dataset_type.field_prompt} → {cst.DPO_DEFAULT_FIELD_PROMPT}")
+    print(f"  - {dataset_type.field_chosen} → {cst.DPO_DEFAULT_FIELD_CHOSEN}")
+    print(f"  - {dataset_type.field_rejected} → {cst.DPO_DEFAULT_FIELD_REJECTED}")

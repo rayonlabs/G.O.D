@@ -71,22 +71,11 @@ def save_config_toml(config: dict, config_path: str):
 
 
 def _process_dpo_dataset_fields(dataset_type: DPODatasetType) -> dict:
-    # Enable below when https://github.com/axolotl-ai-cloud/axolotl/issues/1417 is fixed
-    # context: https://discord.com/channels/1272221995400167588/1355226588178022452/1356982842374226125
-
-    # dpo_type_dict = dataset_type.model_dump()
-    # dpo_type_dict["type"] = "user_defined.default"
-    # if not dpo_type_dict.get("prompt_format"):
-    #     if dpo_type_dict.get("field_system"):
-    #         dpo_type_dict["prompt_format"] = "{system} {prompt}"
-    #     else:
-    #         dpo_type_dict["prompt_format"] = "{prompt}"
-    # return dpo_type_dict
-
-    # Fallback to https://axolotl-ai-cloud.github.io/axolotl/docs/rlhf.html#chatml.intel
-    # Column names are hardcoded in axolotl: "DPO_DEFAULT_FIELD_SYSTEM",
-    # "DPO_DEFAULT_FIELD_PROMPT", "DPO_DEFAULT_FIELD_CHOSEN", "DPO_DEFAULT_FIELD_REJECTED"
-    return {"type": cst.DPO_DEFAULT_DATASET_TYPE, "split": "train"}
+    # Back to using chatml.intel with its hardcoded field names
+    return {
+        "type": cst.DPO_DEFAULT_DATASET_TYPE,
+        "split": "train"
+    }
 
 
 def _process_instruct_dataset_fields(instruct_type_dict: dict) -> dict:
