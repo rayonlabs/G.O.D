@@ -157,20 +157,12 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
     
     # Configure Hugging Face Hub upload if not disabled
     if not disable_upload:
-        # Set hub configuration directly to avoid HF Hub errors
-        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME")
-        if not hf_username:
-            print("WARNING: No Hugging Face username provided, using 'rayonlabs' as default")
-            hf_username = "rayonlabs"
-            
-        # Override environment variable for constants.py
+        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", "rayonlabs")
         os.environ["HUGGINGFACE_USERNAME"] = hf_username
         
-        # Set the hub model ID directly to ensure correct username
         repo_name = expected_repo_name or str(uuid.uuid4())
         config["hub_model_id"] = f"{hf_username}/{repo_name}"
         
-        # Use environment variable for token instead of config
         if huggingface_token:
             os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
     else:
@@ -221,10 +213,8 @@ def make_repo_public(repo_id):
         return False
     
     try:
-        # Use the official Hugging Face Hub API
         api = HfApi(token=token)
         
-        # First check if the repository exists
         try:
             api.repo_info(repo_id=repo_id)
             repo_exists = True
@@ -236,7 +226,6 @@ def make_repo_public(repo_id):
             api.create_repo(repo_id=repo_id, private=False, exist_ok=True)
             return True
         else:
-            # Update the visibility to public if it exists
             api.update_repo_visibility(repo_id=repo_id, private=False)
             print(f"Successfully made repository {repo_id} public!")
             return True
@@ -249,26 +238,21 @@ def make_repo_public(repo_id):
 def run_training(config_path):
     print(f"Starting training with config: {config_path}")
     
-    # Read the config to get the repo ID
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     
-    # Extract repository ID
     repo_id = config.get("hub_model_id")
     
-    # Add environment variable to tell HF not to upload to Hub
     training_env = os.environ.copy()
     training_env["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
     training_env["HF_HUB_DISABLE_TELEMETRY"] = "1"
     
-    # Run the training
     subprocess.run(
         ["accelerate", "launch", "-m", "axolotl.cli.train", config_path], 
         check=True,
         env=training_env
     )
     
-    # Make the repository public if we have the repo ID
     if repo_id and os.environ.get("HUGGINGFACE_TOKEN"):
         print(f"Making repository {repo_id} public...")
         if make_repo_public(repo_id):

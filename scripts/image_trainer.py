@@ -55,20 +55,11 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
     
     # Configure Hugging Face Hub upload if not disabled
     if not disable_upload:
-        # Use environment variable for token instead of config
         if huggingface_token:
             os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
         
-        # Use provided HF username or fall back to environment variable
-        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME")
-        if not hf_username:
-            print("WARNING: No Hugging Face username provided, using 'rayonlabs' as default")
-            hf_username = "rayonlabs"
-            
-        # Override environment variable for constants.py
+        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", "rayonlabs")
         os.environ["HUGGINGFACE_USERNAME"] = hf_username
-            
-        # Set the repo ID
         repo_name = expected_repo_name or str(uuid.uuid4())
         config["huggingface_repo_id"] = f"{hf_username}/{repo_name}"
     else:
@@ -94,10 +85,8 @@ def make_repo_public(repo_id):
         return False
     
     try:
-        # Use the official Hugging Face Hub API
         api = HfApi(token=token)
         
-        # First check if the repository exists
         try:
             api.repo_info(repo_id=repo_id)
             repo_exists = True
@@ -109,7 +98,6 @@ def make_repo_public(repo_id):
             api.create_repo(repo_id=repo_id, private=False, exist_ok=True)
             return True
         else:
-            # Update the visibility to public if it exists
             api.update_repo_visibility(repo_id=repo_id, private=False)
             print(f"Successfully made repository {repo_id} public!")
             return True
@@ -122,14 +110,11 @@ def make_repo_public(repo_id):
 def run_training(model_type, config_path):
     print(f"Starting training with config: {config_path}")
     
-    # Read the config to get the repo ID
     with open(config_path, "r") as f:
         config = toml.load(f)
     
-    # Extract repository ID
     repo_id = config.get("huggingface_repo_id")
     
-    # Run the training
     training_command = [
         "accelerate", "launch", 
         "--dynamo_backend", "no", 
@@ -144,7 +129,6 @@ def run_training(model_type, config_path):
     
     subprocess.run(training_command, check=True)
     
-    # Make the repository public if we have the repo ID and token
     if repo_id and os.environ.get("HUGGINGFACE_TOKEN"):
         print(f"Making repository {repo_id} public...")
         if make_repo_public(repo_id):
