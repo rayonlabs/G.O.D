@@ -9,7 +9,8 @@ DATASET_TYPE='{
 }'
 FILE_FORMAT="s3"
 HOURS_TO_COMPLETE=6
-HUGGINGFACE_TOKEN="hf_your_token_here"
+# Set to a real token if you want to upload the model, or leave as-is to disable upload
+HUGGINGFACE_TOKEN="disabled"
 WANDB_TOKEN="your_wandb_token_here"
 HUGGINGFACE_USERNAME="your_hf_username_here"
 

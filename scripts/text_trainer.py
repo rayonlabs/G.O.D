@@ -130,7 +130,8 @@ def copy_dataset_if_needed(dataset_path, file_format):
     return dataset_path
 
 
-def create_config(task_id, model, dataset, dataset_type, file_format, expected_repo_name=None, huggingface_username=None):
+def create_config(task_id, model, dataset, dataset_type, file_format, expected_repo_name=None, 
+                huggingface_username=None, huggingface_token=None, disable_upload=False):
     """Create the axolotl config file"""
     # Load base config
     with open("/workspace/axolotl/base.yml", "r") as file:
@@ -148,11 +149,35 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
     # Update config
     config = update_flash_attention(config, model)
     
-    # Use provided HF username or fall back to environment variable
-    hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME")
-    if hf_username:
+    # Set the model info
+    config["base_model"] = model
+    config["wandb_runid"] = task_id
+    config["wandb_name"] = task_id
+    
+    # Configure Hugging Face Hub upload if not disabled
+    if not disable_upload:
+        # Set hub configuration directly to avoid HF Hub errors
+        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME")
+        if not hf_username:
+            print("WARNING: No Hugging Face username provided, using 'rayonlabs' as default")
+            hf_username = "rayonlabs"
+            
+        # Override environment variable for constants.py
         os.environ["HUGGINGFACE_USERNAME"] = hf_username
-    config = update_model_info(config, model, task_id, expected_repo_name)
+        
+        # Set the hub model ID directly to ensure correct username
+        repo_name = expected_repo_name or str(uuid.uuid4())
+        config["hub_model_id"] = f"{hf_username}/{repo_name}"
+        
+        # Set huggingface_token if available
+        if huggingface_token:
+            config["hub_token"] = huggingface_token
+    else:
+        # Disable Hub upload
+        print("Hub upload is disabled")
+        config.pop("hub_model_id", None)
+        config.pop("hub_strategy", None)
+        config.pop("hub_token", None)
     
     # Set the dataset type to json for local files to avoid HF hub download
     if file_format != FileFormat.HF.value:
@@ -187,7 +212,18 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
 
 def run_training(config_path):
     print(f"Starting training with config: {config_path}")
-    subprocess.run(["accelerate", "launch", "-m", "axolotl.cli.train", config_path], check=True)
+    
+    # Add environment variable to tell HF not to upload to Hub
+    training_env = os.environ.copy()
+    training_env["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+    training_env["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    
+    # Run the training
+    subprocess.run(
+        ["accelerate", "launch", "-m", "axolotl.cli.train", config_path], 
+        check=True,
+        env=training_env
+    )
 
 
 async def main():
@@ -255,6 +291,11 @@ async def main():
         _adapt_columns_for_dpo_dataset(dataset_path, dataset_type_dict, True)
         print(f"Adapted DPO dataset columns in {dataset_path}")
     
+    # Check if we have a valid Hugging Face token for uploads
+    disable_hub = not args.huggingface_token or len(args.huggingface_token) < 10
+    if disable_hub:
+        print("WARNING: No valid Hugging Face token provided. Model upload will be disabled.")
+    
     # Create config file
     config_path = create_config(
         args.task_id, 
@@ -263,7 +304,9 @@ async def main():
         dataset_type, 
         file_format, 
         args.expected_repo_name,
-        args.huggingface_username
+        args.huggingface_username,
+        args.huggingface_token,
+        disable_upload=disable_hub
     )
     
     # Run training
