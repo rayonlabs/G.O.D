@@ -1,6 +1,6 @@
 FROM diagonalge/kohya_latest:latest
 
-RUN pip install aiohttp pydantic requests
+RUN pip install aiohttp pydantic requests toml
 
 RUN mkdir -p /dataset/configs \
     /dataset/outputs \

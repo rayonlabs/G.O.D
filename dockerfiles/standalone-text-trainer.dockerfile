@@ -1,6 +1,6 @@
 FROM axolotlai/axolotl:main-20241128-py3.11-cu124-2.5.1
 
-RUN pip install mlflow huggingface_hub wandb aiohttp pydantic requests
+RUN pip install mlflow huggingface_hub wandb aiohttp pydantic requests toml
 
 WORKDIR /workspace/axolotl
 RUN mkdir -p /workspace/axolotl/configs \
