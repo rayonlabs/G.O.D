@@ -12,6 +12,7 @@ from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskStatus
+from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
@@ -26,7 +27,7 @@ logger = get_logger(__name__)
 hf_api = HfApi()
 
 
-async def get_total_text_dataset_size(task: InstructTextRawTask | DpoRawTask | GrpoRawTask) -> int:
+async def get_total_text_dataset_size(task: AnyTextTypeRawTask) -> int:
     if task.file_format == FileFormat.S3:
         if not task.training_data:
             logger.error(f"Training data is missing from task: {task.task_id}")
@@ -79,7 +80,7 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawT
     return task
 
 
-async def run_text_task_prep(task: InstructTextRawTask | DpoRawTask | GrpoRawTask, keypair: Keypair) -> InstructTextRawTask | DpoRawTask | GrpoRawTask:
+async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair) -> AnyTextTypeRawTask:
     test_data, synth_data, train_data = await prepare_text_task(task, keypair=keypair)
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
@@ -89,7 +90,7 @@ async def run_text_task_prep(task: InstructTextRawTask | DpoRawTask | GrpoRawTas
     return task
 
 
-def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask | GrpoRawTask) -> TrainRequestText:
+def prepare_text_task_request(task: AnyTextTypeRawTask) -> TrainRequestText:
     if isinstance(task, InstructTextRawTask):
         dataset_type = InstructTextDatasetType(
             field_system=task.field_system,

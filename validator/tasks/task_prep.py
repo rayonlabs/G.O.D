@@ -23,6 +23,7 @@ from validator.augmentation.augmentation import generate_augmented_text_dataset
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
+from validator.core.models import AnyTextTypeRawTask
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
@@ -141,7 +142,7 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
 
 
 def adapt_synthetic_columns(
-    synthetic_data: list[dict] | list[DpoDatasetColumnsResponse], task: InstructTextRawTask | DpoRawTask | GrpoRawTask
+    synthetic_data: list[dict] | list[DpoDatasetColumnsResponse], task: AnyTextTypeRawTask
     ) -> list[dict]:
     """
     Transform synthetic data based on task type.
@@ -164,7 +165,7 @@ def adapt_synthetic_columns(
 
 
 async def get_additional_synth_data(
-    dataset: Dataset, columns_to_sample: list[str], keypair: Keypair, task: InstructTextRawTask | DpoRawTask | GrpoRawTask
+    dataset: Dataset, columns_to_sample: list[str], keypair: Keypair, task: AnyTextTypeRawTask
 ) -> list[dict]:
     num_samples = min(
         cst.MAX_SYNTH_DATA_POINTS,
@@ -320,7 +321,7 @@ def extract_grpo_extra_columns(task: GrpoRawTask) -> list[str]:
     return list(all_args - {task.field_prompt})
 
 
-def pick_columns_to_sample(task: InstructTextRawTask | DpoRawTask | GrpoRawTask) -> list[str]:
+def pick_columns_to_sample(task: AnyTextTypeRawTask) -> list[str]:
     if isinstance(task, InstructTextRawTask):
         columns_to_sample = [
             i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
@@ -339,7 +340,7 @@ def validate_and_transform_dpo(data: DpoDatasetColumnsResponse, task: DpoRawTask
     return {task.field_prompt: data.field_prompt, task.field_chosen: data.field_chosen, task.field_rejected: data.field_rejected}
 
 
-async def prepare_text_task(task: InstructTextRawTask | DpoRawTask | GrpoRawTask, keypair: Keypair) -> tuple[str, str, str]:
+async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
 
