@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 """
 Standalone script for image model training (SDXL or Flux)
-This script handles:
-1. Downloading dataset zip if needed
-2. Creating diffusion configuration
-3. Preparing the dataset
-4. Running the training
-
-It's designed to be called with the same parameters the miner receives from the validator.
 """
 
 import os
@@ -35,7 +28,6 @@ from miner.utils import download_flux_unet
 
 
 async def download_dataset_if_needed(dataset_zip_url, task_id):
-    """Download dataset zip if needed and return the local path"""
     local_zip_path = f"{cst.DIFFUSION_DATASET_DIR}/{task_id}.zip"
     print(f"Downloading dataset from: {dataset_zip_url}")
     local_path = await download_s3_file(dataset_zip_url, local_zip_path)
@@ -76,7 +68,6 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
 
 
 def run_training(model_type, config_path):
-    """Run the diffusion training process"""
     print(f"Starting training with config: {config_path}")
     training_command = [
         "accelerate", "launch", 

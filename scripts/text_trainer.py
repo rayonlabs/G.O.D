@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 """
 Standalone script for text model training (InstructText and DPO)
-This script handles:
-1. Downloading datasets if needed
-2. Creating axolotl configuration
-3. Adapting DPO dataset columns if needed
-4. Running the training
-
-It's designed to be called with the same parameters the miner receives from the validator.
 """
 
 import os
@@ -101,7 +94,6 @@ def _adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=
 
 
 async def download_dataset_if_needed(dataset_url, file_format):
-    """Download dataset if needed and return the local path"""
     if file_format == FileFormat.S3.value:
         print(f"Downloading dataset from S3: {dataset_url}")
         local_path = await download_s3_file(dataset_url)
@@ -111,7 +103,6 @@ async def download_dataset_if_needed(dataset_url, file_format):
 
 
 def copy_dataset_if_needed(dataset_path, file_format):
-    """Copy the dataset to axolotl directories if needed"""
     if file_format != FileFormat.HF.value:
         dataset_filename = os.path.basename(dataset_path)
         shutil.copy(dataset_path, f"/workspace/axolotl/data/{dataset_filename}")
@@ -153,7 +144,6 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
 
 
 def run_training(config_path):
-    """Run the axolotl training process"""
     print(f"Starting training with config: {config_path}")
     subprocess.run(["accelerate", "launch", "-m", "axolotl.cli.train", config_path], check=True)
 
