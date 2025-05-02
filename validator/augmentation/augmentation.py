@@ -86,9 +86,6 @@ def create_messages_for_input_output_reformulation(row: dict, prompts: Prompts) 
 
 
 def create_messages_for_input_reformulation(ds_prompt: dict, prompts: Prompts) -> list[Message]:
-    logger.info(f"This is the ds {ds_prompt}")
-    logger.info(f"This is the input reform  {prompts.input_reformulation_user}")
-
     prompt_text = next(iter(ds_prompt.values()))
 
     messages = []
@@ -114,24 +111,18 @@ async def generate_paraphrased_version(row: dict, prompts: Prompts, keypair: Key
     return paraphrased_data
 
 async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Keypair) -> DpoDatasetColumnsResponse:
-    logger.info('in generate dpo reformulated')
     messages = create_messages_for_input_reformulation(prompt, prompts)
-    logger.info(messages)
     payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
-    logger.info(f"Here is the payload {payload}")
     new_prompt = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
-    logger.info(f"Here is the new prompt {new_prompt}")
     assert new_prompt, "new prompt should not be None"
     prompt_message = [Message(
         role=Role.USER,
         content=new_prompt)]
     weak_model_payload = convert_to_nineteen_payload(prompt_message, TEXT_SYNTH_WEAKER_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
     weak_model_result = await post_to_nineteen_chat(weak_model_payload, keypair)
-    logger.info(f"Weak model result {weak_model_result}")
     strong_model_payload = convert_to_nineteen_payload(prompt_message, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
     strong_model_result = await post_to_nineteen_chat_with_reasoning(strong_model_payload, keypair, END_OF_REASONING_TAG)
 
-    logger.info(f"Strong model result {strong_model_result}")
     return DpoDatasetColumnsResponse(field_prompt = new_prompt, field_chosen=strong_model_result, field_rejected=weak_model_result)
 
 
@@ -158,6 +149,8 @@ async def generate_augmented_text_dataset(
     ) -> list[dict] | list[DpoDatasetColumnsResponse]:
     prompts = load_prompts()
     logger.info(f"Creating an augmented dataset with {len(sampled_data)} samples...")
+    logger.info(f"Prompts: {prompts}")
+    logger.info(f"\nTask type: {task_type}")
     synthetic_dataset = []
     json_errors = 0
     generic_errors = 0
@@ -174,7 +167,7 @@ async def generate_augmented_text_dataset(
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         batch_results = []
-        for result in results:
+        for idx, result in enumerate(results):
             if isinstance(result, Exception):
                 if isinstance(result, json.JSONDecodeError):
                     json_errors += 1
@@ -185,6 +178,9 @@ async def generate_augmented_text_dataset(
                     logger.error(f"Maximum consecutive errors reached when generating the augmented dataset. Here is one result {result}")
                     return None
             else:
+                if batch_idx == 0:
+                    logger.info(f"Sample input: {batch[idx]}")
+                    logger.info(f"Sample output: {result}")
                 consecutive_errors = 0  # Reset on success
                 batch_results.append(result)
 
