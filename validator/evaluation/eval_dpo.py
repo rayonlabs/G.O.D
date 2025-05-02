@@ -143,7 +143,7 @@ def evaluate_dpo_model(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
             report_to="none",
-            fp16=torch.cuda.is_available(),
+            bf16=True,
             beta=beta,
         )
         dpo_trainer = DPOTrainer(

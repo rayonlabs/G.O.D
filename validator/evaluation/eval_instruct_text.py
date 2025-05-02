@@ -81,6 +81,7 @@ def evaluate_language_model_loss(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
             report_to="none",
+            bf16=True,
         )
 
         trainer = Trainer(
