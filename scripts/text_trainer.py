@@ -27,7 +27,7 @@ from core.dpo_utils import adapt_columns_for_dpo_dataset
 import core.constants as cst
 
 
-async def download_dataset_if_needed(dataset_url, file_format):
+async def download_dataset_if_needed(dataset_url, file_format, task_type=None, dataset_type=None):
     if file_format == FileFormat.S3.value:
         print(f"Downloading dataset from S3: {dataset_url}")
         local_path = await download_s3_file(dataset_url)
@@ -36,8 +36,14 @@ async def download_dataset_if_needed(dataset_url, file_format):
         # Move the file to input_data directory
         dataset_filename = os.path.basename(local_path)
         input_data_path = f"/workspace/input_data/{dataset_filename}"
+        os.makedirs("/workspace/input_data", exist_ok=True)
         shutil.copy(local_path, input_data_path)
         print(f"Copied dataset to: {input_data_path}")
+        
+        # Process the dataset if needed (for DPO tasks)
+        if task_type == "DpoTask" and dataset_type:
+            adapt_columns_for_dpo_dataset(input_data_path, dataset_type, apply_formatting=True)
+            print(f"Adapted DPO dataset columns in {input_data_path}")
         
         return input_data_path, FileFormat.JSON.value
     return dataset_url, file_format
@@ -47,8 +53,9 @@ def copy_dataset_if_needed(dataset_path, file_format):
     if file_format != FileFormat.HF.value:
         dataset_filename = os.path.basename(dataset_path)
         
-        # Create destination directories if they don't exist
+        # Create all destination directories if they don't exist
         os.makedirs("/workspace/axolotl/data", exist_ok=True)
+        os.makedirs("/workspace/axolotl", exist_ok=True)
         
         # Copy to all required locations
         data_path = f"/workspace/axolotl/data/{dataset_filename}"
@@ -216,6 +223,7 @@ async def main():
     os.makedirs("/workspace/axolotl/configs", exist_ok=True)
     os.makedirs("/workspace/axolotl/outputs", exist_ok=True)
     os.makedirs("/workspace/input_data", exist_ok=True)
+    os.makedirs("/workspace/axolotl", exist_ok=True)
 
     # Login to HF and WANDB if tokens provided
     if args.huggingface_token:
@@ -248,17 +256,16 @@ async def main():
         print(f"Error creating dataset type object: {e}")
         sys.exit(1)
 
-    # Download dataset if needed
-    dataset_path, file_format = await download_dataset_if_needed(args.dataset, args.file_format)
+    # Download and process dataset if needed
+    dataset_path, file_format = await download_dataset_if_needed(
+        args.dataset, 
+        args.file_format,
+        args.task_type,
+        dataset_type
+    )
     
     # Copy dataset to axolotl directories if needed
     dataset_path = copy_dataset_if_needed(dataset_path, file_format)
-    
-    # Handle DPO dataset adaptation if needed
-    if args.task_type == "DpoTask" and file_format == FileFormat.JSON.value:
-        # Use the dataset_type object instead of the dictionary
-        adapt_columns_for_dpo_dataset(dataset_path, dataset_type, True)
-        print(f"Adapted DPO dataset columns in {dataset_path}")
     
     # Create config file
     config_path = create_config(
