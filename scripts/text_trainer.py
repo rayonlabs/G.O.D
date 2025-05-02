@@ -23,75 +23,8 @@ sys.path.append(project_root)
 from core.config.config_handler import create_dataset_entry, save_config, update_flash_attention, update_model_info
 from core.utils import download_s3_file
 from core.models.utility_models import FileFormat, InstructDatasetType, DPODatasetType, TaskType
+from core.dpo_utils import adapt_columns_for_dpo_dataset
 import core.constants as cst
-
-
-def _dpo_format_prompt(row, format_str):
-    result = format_str
-    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
-        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
-    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
-        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
-    return result
-
-
-def _dpo_format_chosen(row, format_str):
-    result = format_str
-    if "{chosen}" in format_str and cst.DPO_DEFAULT_FIELD_CHOSEN in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_CHOSEN]):
-        result = result.replace("{chosen}", str(row[cst.DPO_DEFAULT_FIELD_CHOSEN]))
-    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
-        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
-    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
-        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
-    return result
-
-
-def _dpo_format_rejected(row, format_str):
-    result = format_str
-    if "{rejected}" in format_str and cst.DPO_DEFAULT_FIELD_REJECTED in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_REJECTED]):
-        result = result.replace("{rejected}", str(row[cst.DPO_DEFAULT_FIELD_REJECTED]))
-    if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
-        result = result.replace("{prompt}", str(row[cst.DPO_DEFAULT_FIELD_PROMPT]))
-    if "{system}" in format_str and cst.DPO_DEFAULT_FIELD_SYSTEM in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_SYSTEM]):
-        result = result.replace("{system}", str(row[cst.DPO_DEFAULT_FIELD_SYSTEM]))
-    return result
-
-
-def _adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True):
-    """
-    Transform a DPO JSON dataset file to match axolotl's expected column names.
-
-    Args:
-        dataset_path: Path to the JSON dataset file
-        dataset_type: DPODatasetType with field mappings
-        apply_formatting: If True, apply formatting templates to the content
-    """
-    with open(dataset_path, 'r') as f:
-        data = json.load(f)
-    df = pd.DataFrame(data)
-
-    column_mapping = {
-        dataset_type["field_prompt"]: cst.DPO_DEFAULT_FIELD_PROMPT,
-        dataset_type["field_system"]: cst.DPO_DEFAULT_FIELD_SYSTEM,
-        dataset_type["field_chosen"]: cst.DPO_DEFAULT_FIELD_CHOSEN,
-        dataset_type["field_rejected"]: cst.DPO_DEFAULT_FIELD_REJECTED
-    }
-    df = df.rename(columns=column_mapping)
-
-    if apply_formatting:
-        if dataset_type.get("prompt_format") and dataset_type.get("prompt_format") != "{prompt}":
-            format_str = dataset_type["prompt_format"]
-            df[cst.DPO_DEFAULT_FIELD_PROMPT] = df.apply(lambda row: _dpo_format_prompt(row, format_str), axis=1)
-        if dataset_type.get("chosen_format") and dataset_type.get("chosen_format") != "{chosen}":
-            format_str = dataset_type["chosen_format"]
-            df[cst.DPO_DEFAULT_FIELD_CHOSEN] = df.apply(lambda row: _dpo_format_chosen(row, format_str), axis=1)
-        if dataset_type.get("rejected_format") and dataset_type.get("rejected_format") != "{rejected}":
-            format_str = dataset_type["rejected_format"]
-            df[cst.DPO_DEFAULT_FIELD_REJECTED] = df.apply(lambda row: _dpo_format_rejected(row, format_str), axis=1)
-
-    output_data = df.to_dict(orient='records')
-    with open(dataset_path, 'w') as f:
-        json.dump(output_data, f, indent=2)
 
 
 async def download_dataset_if_needed(dataset_url, file_format):
@@ -323,7 +256,7 @@ async def main():
     
     # Handle DPO dataset adaptation if needed
     if args.task_type == "DpoTask" and file_format == FileFormat.JSON.value:
-        _adapt_columns_for_dpo_dataset(dataset_path, dataset_type_dict, True)
+        adapt_columns_for_dpo_dataset(dataset_path, dataset_type_dict, True)
         print(f"Adapted DPO dataset columns in {dataset_path}")
     
     # Create config file
