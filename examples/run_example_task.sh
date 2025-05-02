@@ -18,7 +18,7 @@ DATA_DIR="$(pwd)/secure_data"
 mkdir -p "$DATA_DIR"
 chmod 700 "$DATA_DIR"
 
-docker build -t standalone-text-trainer -f dockerfiles/standalone-text-trainer.dockerfile .
+docker build --no-cache -t standalone-text-trainer -f dockerfiles/standalone-text-trainer.dockerfile .
 
 docker run --rm --gpus all \
   --security-opt=no-new-privileges \

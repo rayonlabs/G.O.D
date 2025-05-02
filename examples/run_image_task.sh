@@ -13,7 +13,7 @@ CHECKPOINTS_DIR="$(pwd)/secure_checkpoints"
 mkdir -p "$CHECKPOINTS_DIR"
 chmod 700 "$CHECKPOINTS_DIR"
 
-docker build -t standalone-image-trainer -f dockerfiles/standalone-image-trainer.dockerfile .
+docker build --no-cache -t standalone-image-trainer -f dockerfiles/standalone-image-trainer.dockerfile .
 
 docker run --rm --gpus all \
   --security-opt=no-new-privileges \

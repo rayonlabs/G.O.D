@@ -1,6 +1,11 @@
 FROM diagonalge/kohya_latest:latest
 
-RUN pip install aiohttp pydantic requests toml
+# Install core dependencies from pyproject.toml
+RUN pip install aiohttp pydantic requests toml \
+    "fiber @ git+https://github.com/rayonlabs/fiber.git@2.4.0" \
+    fastapi uvicorn httpx loguru python-dotenv \
+    scipy numpy datasets tenacity minio huggingface_hub \
+    transformers==4.46.2 pandas==2.2.3 tiktoken==0.8.0 sentencepiece==0.2.0 peft Pillow==11.1.0 PyYAML
 
 RUN mkdir -p /dataset/configs \
     /dataset/outputs \
@@ -13,6 +18,7 @@ ENV OUTPUT_DIR="/dataset/outputs"
 ENV DATASET_DIR="/dataset/images"
 
 COPY core /workspace/core
+COPY miner /workspace/miner
 COPY scripts /workspace/scripts
 
 RUN chmod +x /workspace/scripts/run_image_trainer.sh

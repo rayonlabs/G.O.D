@@ -132,7 +132,9 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
     
     # Use provided HF username or fall back to environment variable
     hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME")
-    config = update_model_info(config, model, task_id, expected_repo_name, hf_username)
+    if hf_username:
+        os.environ["HUGGINGFACE_USERNAME"] = hf_username
+    config = update_model_info(config, model, task_id, expected_repo_name)
     
     config["mlflow_experiment_name"] = dataset
 
