@@ -149,7 +149,7 @@ def evaluate_dpo_model(
             model=finetuned_model,
             ref_model=reference_model,
             args=training_args,
-            train_dataset=Dataset.from_dict({"prompt": [], "chosen": [], "rejected": []}),
+            train_dataset=Dataset.from_dict({col: [] for col in eval_dataset.column_names}),
             eval_dataset=eval_dataset,
             processing_class=tokenizer,
             callbacks=[ProgressLoggerCallback(log_interval_seconds=evaluation_config.log_interval_seconds)],
