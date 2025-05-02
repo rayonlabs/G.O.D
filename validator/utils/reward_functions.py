@@ -1,10 +1,12 @@
+from typing import Callable
+
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
 
 
-def validate_reward_function(func_def: str) -> tuple[bool, str, callable | None]:
+def validate_reward_function(func_def: str) -> tuple[bool, str, Callable | None]:
     """
     Validate a single reward function definition.
     Returns (is_valid: bool, error_message: str, func: callable | None)
