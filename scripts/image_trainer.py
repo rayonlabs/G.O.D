@@ -86,31 +86,34 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
 
 def make_repo_public(repo_id):
     """Make a Hugging Face repository public"""
-    import requests
+    from huggingface_hub import HfApi
     
     token = os.environ.get("HUGGINGFACE_TOKEN")
     if not token:
         print("No Hugging Face token in environment, can't make repository public")
         return False
     
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-    
-    url = f"https://huggingface.co/api/repos/{repo_id}/settings"
-    data = {
-        "private": False
-    }
-    
     try:
-        response = requests.put(url, headers=headers, json=data)
-        if response.status_code == 200:
-            print(f"Successfully made repository {repo_id} public!")
+        # Use the official Hugging Face Hub API
+        api = HfApi(token=token)
+        
+        # First check if the repository exists
+        try:
+            api.repo_info(repo_id=repo_id)
+            repo_exists = True
+        except Exception:
+            repo_exists = False
+        
+        if not repo_exists:
+            print(f"Repository {repo_id} does not exist yet, creating it...")
+            api.create_repo(repo_id=repo_id, private=False, exist_ok=True)
             return True
         else:
-            print(f"Failed to make repository public. Status code: {response.status_code}")
-            print(f"Response: {response.text}")
-            return False
+            # Update the visibility to public if it exists
+            api.update_repo_visibility(repo_id=repo_id, private=False)
+            print(f"Successfully made repository {repo_id} public!")
+            return True
+            
     except Exception as e:
         print(f"Error making repository public: {e}")
         return False
