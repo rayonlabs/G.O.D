@@ -256,7 +256,8 @@ async def main():
     
     # Handle DPO dataset adaptation if needed
     if args.task_type == "DpoTask" and file_format == FileFormat.JSON.value:
-        adapt_columns_for_dpo_dataset(dataset_path, dataset_type_dict, True)
+        # Use the dataset_type object instead of the dictionary
+        adapt_columns_for_dpo_dataset(dataset_path, dataset_type, True)
         print(f"Adapted DPO dataset columns in {dataset_path}")
     
     # Create config file

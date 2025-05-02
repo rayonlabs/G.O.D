@@ -76,53 +76,51 @@ def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type, apply_formatt
 
     Args:
         dataset_path: Path to the JSON dataset file
-        dataset_type: Either a dictionary or a DPODatasetType object with field mappings
+        dataset_type: DPODatasetType object with field mappings
         apply_formatting: If True, apply formatting templates to the content
     """
     with open(dataset_path, 'r') as f:
         data = json.load(f)
     df = pd.DataFrame(data)
-
-    # Check if dataset_type is a dictionary or DPODatasetType object
-    is_dict = isinstance(dataset_type, dict)
     
-    # Get the field mappings based on the type
-    field_prompt = dataset_type["field_prompt"] if is_dict else dataset_type.field_prompt
-    field_system = dataset_type["field_system"] if is_dict else dataset_type.field_system
-    field_chosen = dataset_type["field_chosen"] if is_dict else dataset_type.field_chosen
-    field_rejected = dataset_type["field_rejected"] if is_dict else dataset_type.field_rejected
+    # Build column mapping
+    column_mapping = {}
     
-    column_mapping = {
-        field_prompt: cst.DPO_DEFAULT_FIELD_PROMPT,
-        field_system: cst.DPO_DEFAULT_FIELD_SYSTEM,
-        field_chosen: cst.DPO_DEFAULT_FIELD_CHOSEN,
-        field_rejected: cst.DPO_DEFAULT_FIELD_REJECTED
-    }
+    # Add required fields to column mapping
+    if dataset_type.field_prompt:
+        column_mapping[dataset_type.field_prompt] = cst.DPO_DEFAULT_FIELD_PROMPT
+    
+    if dataset_type.field_system:
+        column_mapping[dataset_type.field_system] = cst.DPO_DEFAULT_FIELD_SYSTEM
+    
+    if dataset_type.field_chosen:
+        column_mapping[dataset_type.field_chosen] = cst.DPO_DEFAULT_FIELD_CHOSEN
+    
+    if dataset_type.field_rejected:
+        column_mapping[dataset_type.field_rejected] = cst.DPO_DEFAULT_FIELD_REJECTED
+    
+    # Rename columns
     df = df.rename(columns=column_mapping)
 
     if apply_formatting:
-        # Get the format strings based on the type
-        if is_dict:
-            prompt_format = dataset_type.get("prompt_format")
-            chosen_format = dataset_type.get("chosen_format") 
-            rejected_format = dataset_type.get("rejected_format")
-        else:
-            prompt_format = dataset_type.prompt_format
-            chosen_format = dataset_type.chosen_format
-            rejected_format = dataset_type.rejected_format
-            
         # Apply formatting for the prompt
-        if prompt_format and prompt_format != "{prompt}":
-            df[cst.DPO_DEFAULT_FIELD_PROMPT] = df.apply(lambda row: _dpo_format_prompt(row, prompt_format), axis=1)
-            
+        if dataset_type.prompt_format and dataset_type.prompt_format != "{prompt}":
+            df[cst.DPO_DEFAULT_FIELD_PROMPT] = df.apply(
+                lambda row: _dpo_format_prompt(row, dataset_type.prompt_format), axis=1
+            )
+        
         # Apply formatting for the chosen response
-        if chosen_format and chosen_format != "{chosen}":
-            df[cst.DPO_DEFAULT_FIELD_CHOSEN] = df.apply(lambda row: _dpo_format_chosen(row, chosen_format), axis=1)
-            
+        if dataset_type.chosen_format and dataset_type.chosen_format != "{chosen}":
+            df[cst.DPO_DEFAULT_FIELD_CHOSEN] = df.apply(
+                lambda row: _dpo_format_chosen(row, dataset_type.chosen_format), axis=1
+            )
+        
         # Apply formatting for the rejected response
-        if rejected_format and rejected_format != "{rejected}":
-            df[cst.DPO_DEFAULT_FIELD_REJECTED] = df.apply(lambda row: _dpo_format_rejected(row, rejected_format), axis=1)
-
+        if dataset_type.rejected_format and dataset_type.rejected_format != "{rejected}":
+            df[cst.DPO_DEFAULT_FIELD_REJECTED] = df.apply(
+                lambda row: _dpo_format_rejected(row, dataset_type.rejected_format), axis=1
+            )
+    
     output_data = df.to_dict(orient='records')
     with open(dataset_path, 'w') as f:
         json.dump(output_data, f, indent=2)
