@@ -20,11 +20,15 @@ def create_dataset_entry(
     dataset: str,
     dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
     file_format: FileFormat,
+    is_eval: bool = False,
 ) -> dict:
     dataset_entry = {"path": dataset}
 
     if file_format == FileFormat.JSON:
-        dataset_entry = {"path": "/workspace/input_data/"}
+        if not is_eval:
+            dataset_entry = {"path": "/workspace/input_data/"}
+        else:
+            dataset_entry = {"path": f"/workspace/input_data/{os.path.basename(dataset)}"}
 
     if isinstance(dataset_type, InstructTextDatasetType):
         instruct_type_dict = {key: value for key, value in dataset_type.model_dump().items() if value is not None}
