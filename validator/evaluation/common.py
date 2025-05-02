@@ -270,6 +270,7 @@ def _load_and_update_evaluation_config(
         dataset=evaluation_args.dataset,
         dataset_type=evaluation_args.dataset_type,
         file_format=evaluation_args.file_format,
+        is_eval=True,
     )
     config_dict["datasets"] = [dataset_entry]
 
