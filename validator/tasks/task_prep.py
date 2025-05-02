@@ -20,10 +20,10 @@ from core.models.payload_models import ImageTextPair
 from core.models.utility_models import FileFormat
 from core.utils import download_s3_file
 from validator.augmentation.augmentation import generate_augmented_text_dataset
+from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
-from validator.core.models import AnyTextTypeRawTask
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
@@ -318,7 +318,7 @@ def extract_grpo_extra_columns(task: GrpoRawTask) -> list[str]:
                 all_args |= {arg.arg for arg in node.args.args}
                 break
 
-    return list(all_args - {task.field_prompt})
+    return list(all_args - {task.field_prompt, "completions"})
 
 
 def pick_columns_to_sample(task: AnyTextTypeRawTask) -> list[str]:
