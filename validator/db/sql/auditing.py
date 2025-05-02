@@ -6,7 +6,6 @@ from fastapi import Depends
 from fastapi import HTTPException
 from loguru import logger  # noqa
 
-from core.models.utility_models import ImageTextPair, TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.dependencies import get_config
@@ -19,26 +18,7 @@ from validator.core.models import InstructTextTask
 from validator.core.models import InstructTextTaskWithHotkeyDetails
 from validator.db import constants as cst
 from validator.db.sql import tasks as tasks_sql
-
-
-def _check_if_task_has_finished(task: InstructTextTask | DpoTask | ImageTask) -> InstructTextTask | DpoTask | ImageTask:
-    if task.status not in [
-        TaskStatus.SUCCESS,
-        TaskStatus.FAILURE,
-        TaskStatus.FAILURE_FINDING_NODES,
-        TaskStatus.PREP_TASK_FAILURE,
-        TaskStatus.NODE_TRAINING_FAILURE,
-    ]:
-        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
-            task.synthetic_data = None
-        if task.task_type == TaskType.IMAGETASK:
-            assert isinstance(task, ImageTask), "This should be "
-            task.image_text_pairs = [ImageTextPair(image_url="hidden", text_url="hidden")]
-        task.test_data = None
-
-        task.training_data = None
-        task.ds = "Hidden"
-    return task
+from validator.utils.util import hide_sensitive_data_till_finished
 
 
 def normalise_float(float: float | None) -> float | None:
@@ -90,7 +70,7 @@ async def get_recent_tasks(
 
     tasks_processed = []
     for task in full_tasks_list:
-        task = _check_if_task_has_finished(task)
+        task = hide_sensitive_data_till_finished(task)
         tasks_processed.append(task)
 
     return tasks_processed
@@ -106,7 +86,7 @@ async def _process_task_batch(
 
     tasks_by_id = {}
     if task_ids:
-        task_placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(task_ids)))
+        task_placeholders = ", ".join("$%d::uuid" % (i + 1) for i in range(len(task_ids)))
         tasks_query = f"""
             SELECT
                 t.*
@@ -125,7 +105,7 @@ async def _process_task_batch(
     # Step 3: Get all hotkey-specific details for these tasks in a single query
     details_rows = []
     if task_ids:
-        details_placeholders = ", ".join(f"$%d::uuid" % (i + 2) for i in range(len(task_ids)))
+        details_placeholders = ", ".join("$%d::uuid" % (i + 2) for i in range(len(task_ids)))
         details_query = f"""
             SELECT
                 t.{cst.TASK_ID}::text AS task_id,
@@ -190,7 +170,7 @@ async def _process_task_batch(
     # Get all InstructTextTask specific data in one query
     instruct_text_task_data = {}
     if instruct_text_task_ids:
-        placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(instruct_text_task_ids)))
+        placeholders = ", ".join("$%d::uuid" % (i + 1) for i in range(len(instruct_text_task_ids)))
         query = f"""
             SELECT * FROM {cst.INSTRUCT_TEXT_TASKS_TABLE}
             WHERE {cst.TASK_ID} IN ({placeholders})
@@ -201,7 +181,7 @@ async def _process_task_batch(
     # Get all ImageTask specific data in one query
     image_task_data = {}
     if image_task_ids:
-        placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(image_task_ids)))
+        placeholders = ", ".join("$%d::uuid" % (i + 1) for i in range(len(image_task_ids)))
         query = f"""
             SELECT * FROM {cst.IMAGE_TASKS_TABLE}
             WHERE {cst.TASK_ID} IN ({placeholders})
@@ -212,7 +192,7 @@ async def _process_task_batch(
     # Get all DpoTask specific data in one query
     dpo_task_data = {}
     if dpo_task_ids:
-        placeholders = ", ".join(f"$%d::uuid" % (i + 1) for i in range(len(dpo_task_ids)))
+        placeholders = ", ".join("$%d::uuid" % (i + 1) for i in range(len(dpo_task_ids)))
         query = f"""
             SELECT * FROM {cst.DPO_TASKS_TABLE}
             WHERE {cst.TASK_ID} IN ({placeholders})
@@ -255,17 +235,17 @@ async def _process_task_batch(
         if task_type == TaskType.INSTRUCTTEXTTASK.value:
             task_fields = {k: v for k, v in task_data.items() if k in InstructTextTask.model_fields}
             task = InstructTextTask(**task_fields)
-            task = _check_if_task_has_finished(task)
+            task = hide_sensitive_data_till_finished(task)
             tasks_with_details.append(InstructTextTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
         elif task_type == TaskType.IMAGETASK.value:
             task_fields = {k: v for k, v in task_data.items() if k in ImageTask.model_fields}
             task = ImageTask(**task_fields)
-            task = _check_if_task_has_finished(task)
+            task = hide_sensitive_data_till_finished(task)
             tasks_with_details.append(ImageTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
         elif task_type == TaskType.DPOTASK.value:
             task_fields = {k: v for k, v in task_data.items() if k in DpoTask.model_fields}
             task = DpoTask(**task_fields)
-            task = _check_if_task_has_finished(task)
+            task = hide_sensitive_data_till_finished(task)
             tasks_with_details.append(DpoTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
 
     return tasks_with_details
@@ -302,12 +282,13 @@ async def get_recent_tasks_for_hotkey(
         if len(task_ids) > MAX_BATCH_SIZE:
             all_results = []
             for i in range(0, len(task_ids), MAX_BATCH_SIZE):
-                batch_ids = task_ids[i:i+MAX_BATCH_SIZE]
+                batch_ids = task_ids[i : i + MAX_BATCH_SIZE]
                 batch_results = await _process_task_batch(connection, hotkey, batch_ids)
                 all_results.extend(batch_results)
             return all_results
 
         return await _process_task_batch(connection, hotkey, task_ids)
+
 
 async def get_task_with_hotkey_details(
     task_id: str, config: Config = Depends(get_config)
@@ -320,7 +301,7 @@ async def get_task_with_hotkey_details(
     logger.info("Got a task!!")
 
     # NOTE: If the task is not finished, remove details about synthetic data & test data?
-    task = _check_if_task_has_finished(task_raw)
+    task = hide_sensitive_data_till_finished(task_raw)
 
     query = f"""
         SELECT

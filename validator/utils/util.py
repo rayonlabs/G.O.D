@@ -11,9 +11,12 @@ from tenacity import wait_exponential
 from core.models.payload_models import DpoTaskDetails
 from core.models.payload_models import ImageTaskDetails
 from core.models.payload_models import InstructTextTaskDetails
+from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.models import DpoTask
 from validator.core.models import ImageTask
+from validator.core.models import ImageTextPair
 from validator.core.models import InstructTextTask
 from validator.core.models import TaskType
 from validator.utils.logging import get_logger
@@ -132,3 +135,27 @@ def convert_task_to_task_details(
             task_type=task.task_type,
             result_model_name=task.result_model_name,
         )
+
+
+def is_task_in_flight(task: InstructTextTask | DpoTask | ImageTask) -> bool:
+    return task.status not in [
+        TaskStatus.SUCCESS,
+        TaskStatus.FAILURE,
+        TaskStatus.FAILURE_FINDING_NODES,
+        TaskStatus.PREP_TASK_FAILURE,
+        TaskStatus.NODE_TRAINING_FAILURE,
+    ]
+
+
+def hide_sensitive_data_till_finished(task: InstructTextTask | DpoTask | ImageTask) -> InstructTextTask | DpoTask | ImageTask:
+    if is_task_in_flight(task):
+        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+            task.synthetic_data = None
+        if task.task_type == TaskType.IMAGETASK:
+            assert isinstance(task, ImageTask), "This should be "
+            task.image_text_pairs = [ImageTextPair(image_url="hidden", text_url="hidden")]
+        task.test_data = None
+
+        task.training_data = None
+        task.ds = "Hidden"
+    return task
