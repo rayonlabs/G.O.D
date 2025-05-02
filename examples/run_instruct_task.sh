@@ -9,10 +9,10 @@ DATASET_TYPE='{
 }'
 FILE_FORMAT="s3"
 HOURS_TO_COMPLETE=6
-# Set to a real token if you want to upload the model, or leave as-is to disable upload
-HUGGINGFACE_TOKEN="disabled"
+# Use your actual HuggingFace credentials for model upload
+HUGGINGFACE_TOKEN="hf_your_token_here"
 WANDB_TOKEN="your_wandb_token_here"
-HUGGINGFACE_USERNAME="your_hf_username_here"
+HUGGINGFACE_USERNAME="your_hf_username"
 
 DATA_DIR="$(pwd)/secure_data"
 mkdir -p "$DATA_DIR"
