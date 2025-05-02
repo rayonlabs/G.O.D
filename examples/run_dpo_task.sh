@@ -6,7 +6,10 @@ DATASET="https://gradients.s3.eu-north-1.amazonaws.com/755b05591666e560_synth_da
 DATASET_TYPE='{
   "field_prompt":"prompt",
   "field_chosen":"chosen",
-  "field_rejected":"rejected"
+  "field_rejected":"rejected",
+  "prompt_format":"{prompt}",
+  "chosen_format":"{chosen}",
+  "rejected_format":"{rejected}"
 }'
 
 # This is where we'd normally use an LLM to determine the dataset schema,
