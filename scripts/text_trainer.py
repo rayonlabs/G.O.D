@@ -7,6 +7,7 @@ import os
 import json
 import yaml
 import sys
+import uuid
 import shutil
 import subprocess
 import asyncio
@@ -291,11 +292,6 @@ async def main():
         _adapt_columns_for_dpo_dataset(dataset_path, dataset_type_dict, True)
         print(f"Adapted DPO dataset columns in {dataset_path}")
     
-    # Check if we have a valid Hugging Face token for uploads
-    disable_hub = not args.huggingface_token or len(args.huggingface_token) < 10
-    if disable_hub:
-        print("WARNING: No valid Hugging Face token provided. Model upload will be disabled.")
-    
     # Create config file
     config_path = create_config(
         args.task_id, 
@@ -306,7 +302,7 @@ async def main():
         args.expected_repo_name,
         args.huggingface_username,
         args.huggingface_token,
-        disable_upload=disable_hub
+        disable_upload=False  # Always keep uploads enabled
     )
     
     # Run training

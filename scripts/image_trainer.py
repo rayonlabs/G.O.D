@@ -35,7 +35,7 @@ async def download_dataset_if_needed(dataset_zip_url, task_id):
     return local_path
 
 
-def create_config(task_id, model, model_type, expected_repo_name=None, huggingface_username=None, huggingface_token=None):
+def create_config(task_id, model, model_type, expected_repo_name=None, huggingface_username=None, huggingface_token=None, disable_upload=False):
     """Create the diffusion config file"""
     # Load appropriate config template
     if model_type == ImageModelType.SDXL.value:
@@ -53,12 +53,28 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
     # Update config
     config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
     
-    # Use provided HF token or fall back to environment variable
-    config["huggingface_token"] = huggingface_token or os.environ.get("HUGGINGFACE_TOKEN", "")
-    
-    # Use provided HF username or fall back to environment variable
-    hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME")
-    config["huggingface_repo_id"] = f"{hf_username}/{expected_repo_name or str(uuid.uuid4())}"
+    # Configure Hugging Face Hub upload if not disabled
+    if not disable_upload:
+        # Use provided HF token or fall back to environment variable
+        config["huggingface_token"] = huggingface_token or os.environ.get("HUGGINGFACE_TOKEN", "")
+        
+        # Use provided HF username or fall back to environment variable
+        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME")
+        if not hf_username:
+            print("WARNING: No Hugging Face username provided, using 'rayonlabs' as default")
+            hf_username = "rayonlabs"
+            
+        # Override environment variable for constants.py
+        os.environ["HUGGINGFACE_USERNAME"] = hf_username
+            
+        # Set the repo ID
+        repo_name = expected_repo_name or str(uuid.uuid4())
+        config["huggingface_repo_id"] = f"{hf_username}/{repo_name}"
+    else:
+        # Disable Hub upload
+        print("Hub upload is disabled")
+        config.pop("huggingface_token", None)
+        config.pop("huggingface_repo_id", None)
 
     # Save config to file
     config_path = os.path.join("/dataset/configs", f"{task_id}.toml")
@@ -119,7 +135,8 @@ async def main():
         args.model_type,
         args.expected_repo_name,
         args.huggingface_username,
-        args.huggingface_token
+        args.huggingface_token,
+        disable_upload=False  # Always keep uploads enabled
     )
     
     # Prepare dataset
