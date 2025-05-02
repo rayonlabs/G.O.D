@@ -98,16 +98,35 @@ async def download_dataset_if_needed(dataset_url, file_format):
         print(f"Downloading dataset from S3: {dataset_url}")
         local_path = await download_s3_file(dataset_url)
         print(f"Downloaded dataset to: {local_path}")
-        return local_path, FileFormat.JSON.value
+        
+        # Move the file to input_data directory
+        dataset_filename = os.path.basename(local_path)
+        input_data_path = f"/workspace/input_data/{dataset_filename}"
+        shutil.copy(local_path, input_data_path)
+        print(f"Copied dataset to: {input_data_path}")
+        
+        return input_data_path, FileFormat.JSON.value
     return dataset_url, file_format
 
 
 def copy_dataset_if_needed(dataset_path, file_format):
     if file_format != FileFormat.HF.value:
         dataset_filename = os.path.basename(dataset_path)
-        shutil.copy(dataset_path, f"/workspace/axolotl/data/{dataset_filename}")
-        shutil.copy(dataset_path, f"/workspace/axolotl/{dataset_filename}")
-        return f"/workspace/axolotl/data/{dataset_filename}"
+        
+        # Create destination directories if they don't exist
+        os.makedirs("/workspace/axolotl/data", exist_ok=True)
+        
+        # Copy to all required locations
+        data_path = f"/workspace/axolotl/data/{dataset_filename}"
+        root_path = f"/workspace/axolotl/{dataset_filename}"
+        
+        print(f"Copying dataset from {dataset_path} to {data_path}")
+        shutil.copy(dataset_path, data_path)
+        
+        print(f"Copying dataset from {dataset_path} to {root_path}")
+        shutil.copy(dataset_path, root_path)
+        
+        return data_path
     return dataset_path
 
 
@@ -135,12 +154,34 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
         os.environ["HUGGINGFACE_USERNAME"] = hf_username
     config = update_model_info(config, model, task_id, expected_repo_name)
     
+    # Set the dataset type to json for local files to avoid HF hub download
+    if file_format != FileFormat.HF.value:
+        for ds in config["datasets"]:
+            # Make it an explicit local JSON file
+            ds["ds_type"] = "json"
+            
+            # Ensure the path is set to a location within the container
+            if "path" in ds:
+                filename = os.path.basename(ds["path"])
+                ds["path"] = "/workspace/axolotl/data"
+                
+            # Set data_files to the basename of the dataset file
+            ds["data_files"] = [os.path.basename(dataset)]
+            
+            print(f"Setting dataset config to: {ds}")
+    
+    # Also set the dataset_prepared_path to avoid Hugging Face download attempts
+    config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"
+    
     config["mlflow_experiment_name"] = dataset
 
     # Save config to file
     config_path = os.path.join("/workspace/axolotl/configs", f"{task_id}.yml")
     save_config(config, config_path)
     print(f"Created config at {config_path}")
+    # Debug: print the config for troubleshooting
+    print("Config contents:")
+    print(yaml.dump(config))
     return config_path
 
 
@@ -164,6 +205,13 @@ async def main():
     parser.add_argument("--wandb-token", help="Weights & Biases token")
     parser.add_argument("--huggingface-username", help="Hugging Face username")
     args = parser.parse_args()
+    
+    # Ensure all required directories exist
+    os.makedirs("/workspace/axolotl/data", exist_ok=True)
+    os.makedirs("/workspace/axolotl/data_prepared", exist_ok=True)
+    os.makedirs("/workspace/axolotl/configs", exist_ok=True)
+    os.makedirs("/workspace/axolotl/outputs", exist_ok=True)
+    os.makedirs("/workspace/input_data", exist_ok=True)
 
     # Login to HF and WANDB if tokens provided
     if args.huggingface_token:
@@ -179,10 +227,12 @@ async def main():
         dataset_type_dict = json.loads(args.dataset_type)
         
         # Create the appropriate dataset type object based on task type
-        if args.task_type == TaskType.DPOTASK:
+        if args.task_type == "DpoTask":
             dataset_type = DPODatasetType(**dataset_type_dict)
-        elif args.task_type == TaskType.INSTRUCTTEXTTASK:
+            print(f"Created DPO dataset type: {dataset_type}")
+        elif args.task_type == "InstructTextTask":
             dataset_type = InstructDatasetType(**dataset_type_dict)
+            print(f"Created InstructText dataset type: {dataset_type}")
         else:
             print(f"Unsupported task type: {args.task_type}")
             sys.exit(1)
@@ -201,7 +251,7 @@ async def main():
     dataset_path = copy_dataset_if_needed(dataset_path, file_format)
     
     # Handle DPO dataset adaptation if needed
-    if args.task_type == TaskType.DPOTASK and file_format == FileFormat.JSON.value:
+    if args.task_type == "DpoTask" and file_format == FileFormat.JSON.value:
         _adapt_columns_for_dpo_dataset(dataset_path, dataset_type_dict, True)
         print(f"Adapted DPO dataset columns in {dataset_path}")
     
