@@ -55,7 +55,7 @@ CUSTOM_DATASET_TYPE = "custom"
 # DPO default dataset type
 DPO_DEFAULT_DATASET_TYPE = "chatml.intel"
 # Field names must match exactly what Axolotl's chatml.intel formatter expects
-DPO_DEFAULT_FIELD_PROMPT = "prompt"
+DPO_DEFAULT_FIELD_PROMPT = "question"  # Axolotl chatml.intel expects 'question' not 'prompt'
 DPO_DEFAULT_FIELD_SYSTEM = "system"
 DPO_DEFAULT_FIELD_CHOSEN = "chosen"
 DPO_DEFAULT_FIELD_REJECTED = "rejected"
