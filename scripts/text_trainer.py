@@ -28,43 +28,34 @@ import core.constants as cst
 
 
 async def download_dataset_if_needed(dataset_url, file_format, task_type=None, dataset_type=None):
+    """Download dataset from S3 and process it if needed."""
     if file_format == FileFormat.S3.value:
-        print(f"Downloading dataset from S3: {dataset_url}")
         local_path = await download_s3_file(dataset_url)
-        print(f"Downloaded dataset to: {local_path}")
         
-        # Move the file to input_data directory
         dataset_filename = os.path.basename(local_path)
         input_data_path = f"/workspace/input_data/{dataset_filename}"
         os.makedirs("/workspace/input_data", exist_ok=True)
         shutil.copy(local_path, input_data_path)
-        print(f"Copied dataset to: {input_data_path}")
         
-        # Process the dataset if needed (for DPO tasks)
         if task_type == "DpoTask" and dataset_type:
             adapt_columns_for_dpo_dataset(input_data_path, dataset_type, apply_formatting=True)
-            print(f"Adapted DPO dataset columns in {input_data_path}")
         
         return input_data_path, FileFormat.JSON.value
     return dataset_url, file_format
 
 
 def copy_dataset_if_needed(dataset_path, file_format):
+    """Copy dataset to Axolotl directories for non-HF datasets."""
     if file_format != FileFormat.HF.value:
         dataset_filename = os.path.basename(dataset_path)
         
-        # Create all destination directories if they don't exist
         os.makedirs("/workspace/axolotl/data", exist_ok=True)
         os.makedirs("/workspace/axolotl", exist_ok=True)
         
-        # Copy to all required locations
         data_path = f"/workspace/axolotl/data/{dataset_filename}"
         root_path = f"/workspace/axolotl/{dataset_filename}"
         
-        print(f"Copying dataset from {dataset_path} to {data_path}")
         shutil.copy(dataset_path, data_path)
-        
-        print(f"Copying dataset from {dataset_path} to {root_path}")
         shutil.copy(dataset_path, root_path)
         
         return data_path
@@ -73,29 +64,22 @@ def copy_dataset_if_needed(dataset_path, file_format):
 
 def create_config(task_id, model, dataset, dataset_type, file_format, expected_repo_name=None, 
                 huggingface_username=None, huggingface_token=None, disable_upload=False):
-    """Create the axolotl config file"""
-    # Load base config
+    """Create the axolotl config file with appropriate settings."""
     with open("/workspace/axolotl/base.yml", "r") as file:
         config = yaml.safe_load(file)
 
-    # Configure datasets
-    config["datasets"] = []
-    dataset_entry = create_dataset_entry(dataset, dataset_type, FileFormat(file_format))
-    config["datasets"].append(dataset_entry)
-
-    # Handle DPO tasks
-    if isinstance(dataset_type, DPODatasetType):
-        config["rl"] = "dpo"
-
-    # Update config
-    config = update_flash_attention(config, model)
-    
-    # Set the model info
+    config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
     config["base_model"] = model
     config["wandb_runid"] = task_id
     config["wandb_name"] = task_id
+    config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"
+    config["mlflow_experiment_name"] = dataset
     
-    # Configure Hugging Face Hub upload if not disabled
+    config = update_flash_attention(config, model)
+    
+    if isinstance(dataset_type, DPODatasetType):
+        config["rl"] = "dpo"
+
     if not disable_upload:
         hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", "rayonlabs")
         os.environ["HUGGINGFACE_USERNAME"] = hf_username
@@ -106,50 +90,30 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
         if huggingface_token:
             os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
     else:
-        # Disable Hub upload
-        print("Hub upload is disabled")
         config.pop("hub_model_id", None)
         config.pop("hub_strategy", None)
         config.pop("hub_token", None)
     
-    # Set the dataset type to json for local files to avoid HF hub download
     if file_format != FileFormat.HF.value:
         for ds in config["datasets"]:
-            # Make it an explicit local JSON file
             ds["ds_type"] = "json"
             
-            # Ensure the path is set to a location within the container
             if "path" in ds:
-                filename = os.path.basename(ds["path"])
                 ds["path"] = "/workspace/axolotl/data"
                 
-            # Set data_files to the basename of the dataset file
             ds["data_files"] = [os.path.basename(dataset)]
-            
-            print(f"Setting dataset config to: {ds}")
-    
-    # Also set the dataset_prepared_path to avoid Hugging Face download attempts
-    config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"
-    
-    config["mlflow_experiment_name"] = dataset
 
-    # Save config to file
     config_path = os.path.join("/workspace/axolotl/configs", f"{task_id}.yml")
     save_config(config, config_path)
-    print(f"Created config at {config_path}")
-    # Debug: print the config for troubleshooting
-    print("Config contents:")
-    print(yaml.dump(config))
     return config_path
 
 
 def make_repo_public(repo_id):
-    """Make a Hugging Face repository public"""
+    """Make a Hugging Face repository public or create it if it doesn't exist."""
     from huggingface_hub import HfApi
     
     token = os.environ.get("HUGGINGFACE_TOKEN")
     if not token:
-        print("No Hugging Face token in environment, can't make repository public")
         return False
     
     try:
@@ -157,31 +121,20 @@ def make_repo_public(repo_id):
         
         try:
             api.repo_info(repo_id=repo_id)
-            repo_exists = True
-        except Exception:
-            repo_exists = False
-        
-        if not repo_exists:
-            print(f"Repository {repo_id} does not exist yet, creating it...")
-            api.create_repo(repo_id=repo_id, private=False, exist_ok=True)
-            return True
-        else:
             api.update_repo_visibility(repo_id=repo_id, private=False)
-            print(f"Successfully made repository {repo_id} public!")
-            return True
-            
+        except Exception:
+            api.create_repo(repo_id=repo_id, private=False, exist_ok=True)
+        
+        return True
     except Exception as e:
         print(f"Error making repository public: {e}")
         return False
 
 
 def run_training(config_path):
-    print(f"Starting training with config: {config_path}")
-    
+    """Run the training process using the specified config file."""
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
-    
-    repo_id = config.get("hub_model_id")
     
     training_env = os.environ.copy()
     training_env["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
@@ -193,16 +146,13 @@ def run_training(config_path):
         env=training_env
     )
     
+    repo_id = config.get("hub_model_id")
     if repo_id and os.environ.get("HUGGINGFACE_TOKEN"):
-        print(f"Making repository {repo_id} public...")
-        if make_repo_public(repo_id):
-            print(f"Repository available at: https://huggingface.co/{repo_id}")
-        else:
-            print(f"Repository may be available at: https://huggingface.co/{repo_id} but it might be private")
+        make_repo_public(repo_id)
 
 
 async def main():
-    # Parse command line arguments
+    """Main entry point for the text trainer script."""
     parser = argparse.ArgumentParser(description="Text Model Training Script")
     parser.add_argument("--task-id", required=True, help="Task ID")
     parser.add_argument("--model", required=True, help="Model name or path")
@@ -217,46 +167,34 @@ async def main():
     parser.add_argument("--huggingface-username", help="Hugging Face username")
     args = parser.parse_args()
     
-    # Ensure all required directories exist
-    os.makedirs("/workspace/axolotl/data", exist_ok=True)
-    os.makedirs("/workspace/axolotl/data_prepared", exist_ok=True)
-    os.makedirs("/workspace/axolotl/configs", exist_ok=True)
-    os.makedirs("/workspace/axolotl/outputs", exist_ok=True)
-    os.makedirs("/workspace/input_data", exist_ok=True)
-    os.makedirs("/workspace/axolotl", exist_ok=True)
+    for directory in [
+        "/workspace/axolotl/data", 
+        "/workspace/axolotl/data_prepared", 
+        "/workspace/axolotl/configs", 
+        "/workspace/axolotl/outputs", 
+        "/workspace/input_data",
+        "/workspace/axolotl"
+    ]:
+        os.makedirs(directory, exist_ok=True)
 
-    # Login to HF and WANDB if tokens provided
     if args.huggingface_token:
-        print("Logging in to Hugging Face")
         subprocess.run(["huggingface-cli", "login", "--token", args.huggingface_token, "--add-to-git-credential"], check=True)
 
     if args.wandb_token:
-        print("Logging in to W&B")
         subprocess.run(["wandb", "login", args.wandb_token], check=True)
 
-    # Parse dataset_type from JSON string
     try:
         dataset_type_dict = json.loads(args.dataset_type)
         
-        # Create the appropriate dataset type object based on task type
         if args.task_type == "DpoTask":
             dataset_type = DPODatasetType(**dataset_type_dict)
-            print(f"Created DPO dataset type: {dataset_type}")
         elif args.task_type == "InstructTextTask":
             dataset_type = InstructDatasetType(**dataset_type_dict)
-            print(f"Created InstructText dataset type: {dataset_type}")
         else:
-            print(f"Unsupported task type: {args.task_type}")
-            sys.exit(1)
-            
-    except json.JSONDecodeError as e:
-        print(f"Error parsing dataset_type JSON: {e}")
-        sys.exit(1)
+            sys.exit(f"Unsupported task type: {args.task_type}")
     except Exception as e:
-        print(f"Error creating dataset type object: {e}")
-        sys.exit(1)
+        sys.exit(f"Error creating dataset type object: {e}")
 
-    # Download and process dataset if needed
     dataset_path, file_format = await download_dataset_if_needed(
         args.dataset, 
         args.file_format,
@@ -264,10 +202,8 @@ async def main():
         dataset_type
     )
     
-    # Copy dataset to axolotl directories if needed
     dataset_path = copy_dataset_if_needed(dataset_path, file_format)
     
-    # Create config file
     config_path = create_config(
         args.task_id, 
         args.model, 
@@ -276,11 +212,9 @@ async def main():
         file_format, 
         args.expected_repo_name,
         args.huggingface_username,
-        args.huggingface_token,
-        disable_upload=False  # Always keep uploads enabled
+        args.huggingface_token
     )
     
-    # Run training
     run_training(config_path)
 
 
