@@ -84,9 +84,14 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
     return config_path
 
 
-def make_repo_public(repo_id, token):
+def make_repo_public(repo_id):
     """Make a Hugging Face repository public"""
     import requests
+    
+    token = os.environ.get("HUGGINGFACE_TOKEN")
+    if not token:
+        print("No Hugging Face token in environment, can't make repository public")
+        return False
     
     headers = {
         "Authorization": f"Bearer {token}"
@@ -101,11 +106,14 @@ def make_repo_public(repo_id, token):
         response = requests.put(url, headers=headers, json=data)
         if response.status_code == 200:
             print(f"Successfully made repository {repo_id} public!")
+            return True
         else:
             print(f"Failed to make repository public. Status code: {response.status_code}")
             print(f"Response: {response.text}")
+            return False
     except Exception as e:
         print(f"Error making repository public: {e}")
+        return False
 
 
 def run_training(model_type, config_path):
@@ -115,9 +123,8 @@ def run_training(model_type, config_path):
     with open(config_path, "r") as f:
         config = toml.load(f)
     
-    # Extract repository ID and token
+    # Extract repository ID
     repo_id = config.get("huggingface_repo_id")
-    token = config.get("huggingface_token")
     
     # Run the training
     training_command = [
@@ -135,10 +142,12 @@ def run_training(model_type, config_path):
     subprocess.run(training_command, check=True)
     
     # Make the repository public if we have the repo ID and token
-    if repo_id and token:
+    if repo_id and os.environ.get("HUGGINGFACE_TOKEN"):
         print(f"Making repository {repo_id} public...")
-        make_repo_public(repo_id, token)
-        print(f"Repository available at: https://huggingface.co/{repo_id}")
+        if make_repo_public(repo_id):
+            print(f"Repository available at: https://huggingface.co/{repo_id}")
+        else:
+            print(f"Repository may be available at: https://huggingface.co/{repo_id} but it might be private")
 
 
 async def main():
