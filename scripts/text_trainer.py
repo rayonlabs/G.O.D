@@ -170,9 +170,9 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
         repo_name = expected_repo_name or str(uuid.uuid4())
         config["hub_model_id"] = f"{hf_username}/{repo_name}"
         
-        # Set huggingface_token if available
+        # Use environment variable for token instead of config
         if huggingface_token:
-            config["hub_token"] = huggingface_token
+            os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
     else:
         # Disable Hub upload
         print("Hub upload is disabled")

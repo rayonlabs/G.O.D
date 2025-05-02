@@ -55,8 +55,9 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
     
     # Configure Hugging Face Hub upload if not disabled
     if not disable_upload:
-        # Use provided HF token or fall back to environment variable
-        config["huggingface_token"] = huggingface_token or os.environ.get("HUGGINGFACE_TOKEN", "")
+        # Use environment variable for token instead of config
+        if huggingface_token:
+            os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
         
         # Use provided HF username or fall back to environment variable
         hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME")
