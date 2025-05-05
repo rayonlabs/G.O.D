@@ -140,7 +140,6 @@ async def process_row(row, prompts, keypair, task_type: TaskType) -> dict | DpoD
             logger.error(error_message)
             raise ValueError(error_message)
     elif task_type == TaskType.DPOTASK:
-        logger.info('REFORMULATION')
         return await generate_dpo_reformulation(row, prompts, keypair)
 
 
@@ -178,7 +177,7 @@ async def generate_augmented_text_dataset(
                     logger.error(f"Maximum consecutive errors reached when generating the augmented dataset. Here is one result {result}")
                     return None
             else:
-                if batch_idx == 0:
+                if batch_idx == 0 and idx<5:
                     logger.info(f"Sample input: {batch[idx]}")
                     logger.info(f"Sample output: {result}")
                 consecutive_errors = 0  # Reset on success
