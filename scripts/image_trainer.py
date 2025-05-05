@@ -28,7 +28,11 @@ from miner.utils import download_flux_unet
 
 
 async def download_dataset_if_needed(dataset_zip_url, task_id):
-    local_zip_path = f"{cst.DIFFUSION_DATASET_DIR}/{task_id}.zip"
+    # Ensure the dataset directory exists
+    dataset_dir = os.environ.get("DATASET_DIR", cst.DIFFUSION_DATASET_DIR)
+    os.makedirs(dataset_dir, exist_ok=True)
+    
+    local_zip_path = f"{dataset_dir}/{task_id}.zip"
     print(f"Downloading dataset from: {dataset_zip_url}")
     local_path = await download_s3_file(dataset_zip_url, local_zip_path)
     print(f"Downloaded dataset to: {local_path}")
