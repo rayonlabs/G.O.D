@@ -28,9 +28,12 @@ from miner.utils import download_flux_unet
 
 
 async def download_dataset_if_needed(dataset_zip_url, task_id):
-    # Ensure the dataset directory exists
+    # Use environment variable if set, otherwise use constant
     dataset_dir = os.environ.get("DATASET_DIR", cst.DIFFUSION_DATASET_DIR)
     os.makedirs(dataset_dir, exist_ok=True)
+    
+    # Create tmp directory that will be needed for extraction
+    os.makedirs(f"{dataset_dir}/tmp", exist_ok=True)
     
     local_zip_path = f"{dataset_dir}/{task_id}.zip"
     print(f"Downloading dataset from: {dataset_zip_url}")
@@ -41,13 +44,22 @@ async def download_dataset_if_needed(dataset_zip_url, task_id):
 
 def create_config(task_id, model, model_type, expected_repo_name=None, huggingface_username=None, huggingface_token=None, disable_upload=False):
     """Create the diffusion config file"""
+    # In Docker environment, adjust paths
+    if os.path.exists("/workspace/core/config"):
+        config_path = "/workspace/core/config"
+        sdxl_path = f"{config_path}/base_diffusion_sdxl.toml"
+        flux_path = f"{config_path}/base_diffusion_flux.toml"
+    else:
+        sdxl_path = cst.CONFIG_TEMPLATE_PATH_DIFFUSION_SDXL
+        flux_path = cst.CONFIG_TEMPLATE_PATH_DIFFUSION_FLUX
+
     # Load appropriate config template
     if model_type == ImageModelType.SDXL.value:
-        with open(cst.CONFIG_TEMPLATE_PATH_DIFFUSION_SDXL, "r") as file:
+        with open(sdxl_path, "r") as file:
             config = toml.load(file)
         config["pretrained_model_name_or_path"] = model
     elif model_type == ImageModelType.FLUX.value:
-        with open(cst.CONFIG_TEMPLATE_PATH_DIFFUSION_FLUX, "r") as file:
+        with open(flux_path, "r") as file:
             config = toml.load(file)
         flux_unet_path = download_flux_unet(model)
         config["pretrained_model_name_or_path"] = f"{cst.CONTAINER_FLUX_PATH}/flux_unet_{model.replace('/', '_')}.safetensors"
@@ -182,6 +194,12 @@ async def main():
     
     # Prepare dataset
     print("Preparing dataset...")
+    
+    # Set DIFFUSION_DATASET_DIR to environment variable if available
+    original_dataset_dir = cst.DIFFUSION_DATASET_DIR
+    if os.environ.get("DATASET_DIR"):
+        cst.DIFFUSION_DATASET_DIR = os.environ.get("DATASET_DIR")
+    
     prepare_dataset(
         training_images_zip_path=dataset_zip,
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
@@ -189,6 +207,9 @@ async def main():
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,
         job_id=args.task_id,
     )
+    
+    # Restore original value
+    cst.DIFFUSION_DATASET_DIR = original_dataset_dir
     
     # Run training
     run_training(args.model_type, config_path)
