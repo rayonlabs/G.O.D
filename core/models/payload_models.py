@@ -130,7 +130,7 @@ class DpoDatasetColumnsResponse(BaseModel):
     field_rejected: str | None = None
 
 
-class InstructDatasetColumnsResponse(BaseModel):
+class InstructTextDatasetColumnsResponse(BaseModel):
     field_instruction: str
     field_input: str | None = None
     field_output: str | None = None

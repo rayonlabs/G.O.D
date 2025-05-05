@@ -10,7 +10,7 @@ from substrateinterface import Keypair
 import validator.core.constants as cst
 from core.models.payload_models import ImageModelInfo
 from core.models.payload_models import ImageModelsResponse
-from core.models.payload_models import InstructDatasetColumnsResponse
+from core.models.payload_models import InstructTextDatasetColumnsResponse
 from core.models.utility_models import Message
 from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
@@ -146,7 +146,7 @@ async def _get_dpo_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
 async def _get_columns_for_instruct_dataset(
     dataset_id: str,
     keypair: Keypair,
-) -> InstructDatasetColumnsResponse:
+) -> InstructTextDatasetColumnsResponse:
     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
     logger.info(f"Getting columns for dataset {dataset_id}")
 
@@ -154,7 +154,7 @@ async def _get_columns_for_instruct_dataset(
     if not isinstance(response, dict):
         raise TypeError(f"Expected dictionary response, got {type(response)}")
     try:
-        columns = InstructDatasetColumnsResponse.model_validate(response)
+        columns = InstructTextDatasetColumnsResponse.model_validate(response)
     except Exception as exc:
         logger.error(f"The get columns for dataset endpoint should return a DatasetColumnsResponse type: {exc}")
         raise TypeError(f"The get columns for dataset endpoint should return a DatasetColumnsResponse type: {exc}")
