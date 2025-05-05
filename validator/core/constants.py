@@ -219,6 +219,12 @@ CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
 MAX_CACHE_SIZE_BYTES = 1000 * 1024**3  # in bytes
 CACHE_CLEANUP_INTERVAL = 8 * 60 * 60  # in seconds
 
+
+# Tournament stuff
+MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND = 16
+PREVIOUS_WINNER_BASE_CONTESTANT = 'BASE'
+EXPECTED_GROUP_SIZE = 8
+
 # Docker evaluation
 DOCKER_EVAL_HF_CACHE_DIR = "/root/.cache/huggingface"
 

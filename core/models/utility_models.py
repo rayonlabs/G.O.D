@@ -140,3 +140,19 @@ class TaskType(str, Enum):
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")
     text_url: str = Field(..., description="Presigned URL for the text file")
+
+
+
+class Group(BaseModel):
+    member_ids: list[str]
+
+
+class GroupRound(BaseModel):
+    groups: list[Group]
+
+
+class KnockoutRound(BaseModel):
+    pairs: list[tuple[str, str]]
+
+
+Round = GroupRound  | KnockoutRound
