@@ -77,14 +77,18 @@ def evaluate_grpo_model(
             raise ValueError(f"Invalid reward function: {error_msg}")
         reward_funcs_callable.append(reward_func_callable)
 
-    @find_executable_batch_size(starting_batch_size=evaluation_config.starting_batch_size)
+    @find_executable_batch_size(starting_batch_size=cst.GRPO_INITIAL_BATCH_SIZE)
     def evaluate_grpo_with_batch_size(batch_size):
+        num_generations = cst.GRPO_DEFAULT_NUM_GENERATIONS
+        while batch_size < num_generations:
+            num_generations = num_generations // 2
         training_args = GRPOConfig(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
             report_to="none",
             bf16=True,
             beta=cst.BETA_GRPO,
+            num_generations=num_generations,
         )
         grpo_trainer = GRPOTrainer(
             model=finetuned_model,
