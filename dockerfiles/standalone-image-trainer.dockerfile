@@ -1,5 +1,8 @@
 FROM diagonalge/kohya_latest:latest
 
+# Install git (required for pip installations from git repositories)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
 # Install core dependencies from pyproject.toml
 RUN pip install aiohttp pydantic requests toml \
     "fiber @ git+https://github.com/rayonlabs/fiber.git@2.4.0" \
