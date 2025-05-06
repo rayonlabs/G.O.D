@@ -624,7 +624,7 @@ async def process_miners_pool(
                         )
                         continue
 
-                miner_repos[miner.hotkey] = repo
+                    miner_repos[miner.hotkey] = repo
             logger.info(f"Found repo {repo} for miner {miner.hotkey}")
 
     results = [
