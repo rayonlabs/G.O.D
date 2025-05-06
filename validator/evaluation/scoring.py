@@ -731,6 +731,7 @@ async def process_miners_pool(
 
 
 async def blacklist_nodes(task_results: list[MinerResultsText | MinerResultsImage], psql_db) -> None:
+    logger.info('In blacklist nodes')
     hotkeys_to_blacklist = [
         result.hotkey
         for result in task_results
@@ -763,6 +764,7 @@ async def evaluate_and_score(
 
     logger.info("Calculating final scores...")
     task_results = calculate_miner_ranking_and_scores(task_results)
+    logger.info("attempting to blacklist")
     await blacklist_nodes(task_results, config.psql_db)
     await _update_scores(task, task_results, config.psql_db)
     all_scores_zero = all(result.score == 0.0 for result in task_results)
