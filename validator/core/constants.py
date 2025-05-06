@@ -146,6 +146,9 @@ REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
 SCORING_WINDOW = 7  # number of days over which we score
 OUTLIER_STD_THRESHOLD = 2.0  # number of standard deviations from the mean to reject the outlier scores
 
+BLACKLIST_THRESHOLD = 1000  # synth/test loss ratio threshold to blacklist nodes
+BLACKLIST_REASON = "Blacklisted node for cheating"
+
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
 MAX_CONCURRENT_TASK_PREPS = 3

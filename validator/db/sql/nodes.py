@@ -15,6 +15,16 @@ from validator.utils.query_substrate import query_substrate
 
 logger = get_logger(__name__)
 
+async def _blacklist_nodes(hotkeys: list[str], psql_db: PSQLDB) -> None:
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            UPDATE {dcst.NODES_TABLE}
+            SET is_blacklisted = TRUE
+            WHERE {dcst.HOTKEY} = ANY($1)
+        """
+        await connection.execute(query, hotkeys)
+
 async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
     """
     Get all nodes that either:
@@ -29,6 +39,7 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
         query = f"""
             SELECT n.* FROM {dcst.NODES_TABLE} n
             WHERE n.{dcst.NETUID} = $1
+            AND n.is_blacklisted = FALSE
             AND (
                 -- Condition a: No entries in task_nodes table
                 NOT EXISTS (
