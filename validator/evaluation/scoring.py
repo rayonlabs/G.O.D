@@ -168,7 +168,7 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
     return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
-def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
+def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 1.5, threshold: float = 0.4) -> bool:
     if all(np.isnan(result.synth_loss) for result in valid_results):
         logger.info("All synth losses are NaN, using test_loss only for ranking")
         return False
