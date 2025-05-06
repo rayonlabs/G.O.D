@@ -736,6 +736,7 @@ async def blacklist_nodes(task_results: list[MinerResultsText | MinerResultsImag
         for result in task_results
         if result.score_reason == cts.BLACKLIST_REASON
     ]
+    logger.info(f"WE ARE BLACKLISTING {hotkeys_to_blacklist}")
     await _blacklist_nodes(hotkeys_to_blacklist, psql_db)
 
 

@@ -16,6 +16,7 @@ from validator.utils.query_substrate import query_substrate
 logger = get_logger(__name__)
 
 async def _blacklist_nodes(hotkeys: list[str], psql_db: PSQLDB) -> None:
+    logger.info(f"NODES ARE BEING BLACKLISTED {hotkeys}")
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
