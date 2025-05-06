@@ -270,6 +270,8 @@ def calculate_miner_ranking_and_scores(
         penalty_start_idx = total_valid_miners - penalty_count
 
         for result, metric in ranked_results[1:penalty_start_idx]:
+            if result.score_reason == cts.BLACKLIST_REASON:
+                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score_reason = f"Ranked below top 1 by {ranking_type}"
                 logger.info(
@@ -282,6 +284,8 @@ def calculate_miner_ranking_and_scores(
                 )
 
         for result, metric in ranked_results[penalty_start_idx:]:
+            if result.score_reason == cts.BLACKLIST_REASON:
+                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score = cts.SCORE_PENALTY
                 result.score_reason = f"Bottom 25% ranked by {ranking_type}"
@@ -295,6 +299,8 @@ def calculate_miner_ranking_and_scores(
                 )
     else:
         for result, metric in ranked_results[1:]:
+            if result.score_reason == cts.BLACKLIST_REASON:
+                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score_reason = f"Ranked below top 1 by {ranking_type}"
                 logger.info(
