@@ -241,7 +241,7 @@ def _attempt_delay_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask):
         "We wanted to check delay vs created timestamps but they are missing"
     )
 
-    if task.times_delayed >= cst.MAX_DELAY_TIMES or not task.is_organic:
+    if task.times_delayed >= cst.MAX_DELAY_TIMES:
         if task.is_organic:
             logger.info(f"We have already delayed {task.times_delayed}")
         else:

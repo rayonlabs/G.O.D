@@ -124,7 +124,7 @@ MIN_IMAGE_COMPETITION_HOURS = 1
 MAX_IMAGE_COMPETITION_HOURS = 2
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 # how many times in total do we attempt to delay an organic request looking for miners
-MAX_DELAY_TIMES = 6
+MAX_DELAY_TIMES = 8
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
 MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
@@ -141,7 +141,7 @@ SIGMOID_POWER = 0.75  # Higher = more extreme difference between high and low sc
 LINEAR_WEIGHT = 0.05  # Weight for linear component (0-1) - benefits low scores
 SIGMOID_WEIGHT = 0.7  # Weight for sigmoid component (0-1) - benefits high scores
 
-REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
+REWEIGHTING_EXP = 0.9  # how much of a drop off from leader
 
 SCORING_WINDOW = 7  # number of days over which we score
 OUTLIER_STD_THRESHOLD = 2.0  # number of standard deviations from the mean to reject the outlier scores
@@ -157,7 +157,7 @@ MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
 
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT = 0.4  # image is currently 1 minus DPO minus this
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.1
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.15
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE = (
     1 - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
 )

@@ -11,8 +11,10 @@ from datetime import timezone
 from dotenv import load_dotenv
 
 from core.models.utility_models import TaskType
+from validator.db.database import PSQLDB
 from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
+from validator.db.sql.tasks import get_failure_rate
 
 
 load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
@@ -263,17 +265,17 @@ async def _upload_results_to_s3(config: Config, task_results: list[TaskResults])
     await store_latest_scores_url(presigned_url, config)
     return presigned_url
 
-
 async def get_node_weights_from_period_scores(
-    substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore]
+        substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore], psql_db: PSQLDB
 ) -> tuple[list[int], list[float]]:
     """
     Get the node ids and weights from the node results.
     """
+    failure_rate = await get_failure_rate(psql_db)
+
     all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(substrate, netuid)
 
     hotkey_to_node_id = {node.hotkey: node.node_id for node in all_nodes}
-
     all_node_ids = [node.node_id for node in all_nodes]
     all_node_weights = [0.0 for _ in all_nodes]
     for node_result in node_results:
@@ -281,8 +283,9 @@ async def get_node_weights_from_period_scores(
             node_id = hotkey_to_node_id.get(node_result.hotkey)
             if node_id is not None:
                 all_node_weights[node_id] = (
-                    all_node_weights[node_id] + node_result.normalised_score * node_result.weight_multiplier
+                    all_node_weights[node_id] + node_result.normalised_score * node_result.weight_multiplier * (1 - failure_rate)
                 )
+    all_node_weights[cts.BURN_NODE_ID] = failure_rate
 
     logger.info(f"Node ids: {all_node_ids}")
     logger.info(f"Node weights: {all_node_weights}")
@@ -328,7 +331,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
         logger.info("No nodes to set weights for. Skipping weight setting.")
         return False
 
-    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(config.substrate, config.netuid, node_results)
+    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(config.substrate, config.netuid, node_results, config.psql_db)
     logger.info("Weights calculated, about to set...")
 
     success = await set_weights(config, all_node_ids, all_node_weights, validator_node_id)
