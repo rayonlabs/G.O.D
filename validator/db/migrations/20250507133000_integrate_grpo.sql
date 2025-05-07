@@ -1,7 +1,16 @@
 -- migrate:up
 
--- First, add the new task type to the enum
-ALTER TYPE tasktype ADD VALUE 'GrpoTask';
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_enum
+        WHERE enumlabel = 'GrpoTask'
+        AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'tasktype')
+    ) THEN
+        ALTER TYPE tasktype ADD VALUE 'GrpoTask';
+    END IF;
+END $$;
 
 -- Create the GRPO tasks table
 CREATE TABLE IF NOT EXISTS grpo_tasks (
