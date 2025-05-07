@@ -1,5 +1,6 @@
 import asyncio
 import random
+from ast import literal_eval
 from datetime import datetime
 from datetime import timedelta
 from typing import Any
@@ -218,7 +219,11 @@ def process_reward_functions(result: str) -> list[str]:
     valid_reward_functions = []
     try:
         list_str = result[result.find('['):result.rfind(']') + 1]
-        func_list = eval(list_str)
+        func_list = literal_eval(list_str)
+        if not isinstance(func_list, list):
+            raise ValueError("Expected a list")
+        if not all(isinstance(item, str) for item in func_list):
+            raise ValueError("Expected a list of strings")
 
         for func_def in func_list:
             is_valid, error, _ = validate_reward_function(func_def)
