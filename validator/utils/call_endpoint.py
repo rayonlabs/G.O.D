@@ -21,7 +21,7 @@ from validator.core.constants import NETUID
 from validator.core.constants import NINETEEN_API_KEY
 from validator.core.constants import PROMPT_GEN_ENDPOINT
 from validator.utils.logging import get_logger
-from validator.utils.util import retry_http_with_backoff
+from validator.utils.util import retry_on_5xx
 
 
 logger = get_logger(__name__)
@@ -114,7 +114,7 @@ async def post_to_nineteen_image(payload: dict[str, Any], keypair: Keypair) -> s
     return response.json()
 
 
-@retry_http_with_backoff
+@retry_on_5xx()
 async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypair) -> httpx.Response:
     if NINETEEN_API_KEY is None:
         headers = _get_headers_for_signed_https_request(keypair)
@@ -136,7 +136,7 @@ async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypa
 
 # If this it to talk to the miner, its already in fiber
 # We can change to that once we add bittensor stuff (i know that's why its like this ATM)
-@retry_http_with_backoff
+@retry_on_5xx()
 async def process_non_stream_get(base_url: str, token: Optional[str]) -> dict[str, Any] | list[dict[str, Any]]:
     headers = {
         "Accept": "application/json",
@@ -264,14 +264,34 @@ async def sign_up_cron_job(keypair: Keypair) -> None:
         await asyncio.sleep(60 * 60 * 24)  # 3 hours
 
 
-@retry_http_with_backoff
+@retry_on_5xx()
 async def call_content_service(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any] | list[dict[str, Any]]:
-    """Make a signed request to the content service."""
+    """Make a signed GET request to the content service."""
     headers = _get_headers_for_signed_https_request(keypair)
 
     async with httpx.AsyncClient(timeout=120) as client:
         response = await client.get(url=endpoint, headers=headers, params=params)
         if response.status_code != 200:
-            logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")
+            logger.error(
+                f"Error in content service GET response. Status code: {response.status_code} and response: {response.text}"
+            )
             response.raise_for_status()
+        return response.json()
+
+
+@retry_on_5xx()
+async def post_to_content_service(
+    endpoint: str,
+    keypair: Keypair,
+    payload: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    headers = _get_headers_for_signed_https_request(keypair)
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.post(
+            url=endpoint,
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
         return response.json()

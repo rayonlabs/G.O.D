@@ -14,6 +14,7 @@ from core.models.utility_models import FileFormat
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import ModelCheckStatus
 from core.models.utility_models import TaskType
 
 
@@ -106,6 +107,7 @@ class DpoRawTask(RawTask):
     """
     DPO task data as stored in the database. It expand the RawTask with fields from the DpoTask table.
     """
+
     field_prompt: str
     field_system: str | None = None
     field_chosen: str
@@ -251,6 +253,7 @@ class MinerResults(BaseModel):
 
 class MinerResultsText(MinerResults):
     task_type: TaskType
+
     @field_validator("task_type")
     def validate_task_type(cls, v):
         if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK}:
@@ -382,8 +385,8 @@ class Dataset(BaseModel):
     num_bytes_parquet_files: int
     dpo_available: bool = False
     dpo_prompt_column: str | None = None
-    dpo_accepted_column:str | None = None
-    dpo_rejected_column:str | None = None
+    dpo_accepted_column: str | None = None
+    dpo_rejected_column: str | None = None
 
 
 class EvaluationArgs(BaseModel):
@@ -411,3 +414,26 @@ class EvaluationArgs(BaseModel):
             except Exception as e:
                 raise ValueError(f"Failed to parse dataset type: {e}")
         return value
+
+
+class ContentServiceCheckResult(BaseModel):
+    model_found: bool = False
+    is_suitable: bool | None = None
+    parameter_count: int | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class ModelCheckQueueEntry(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    model_id: str
+    status: ModelCheckStatus = ModelCheckStatus.PENDING
+    requested_at: datetime = Field(default_factory=datetime.utcnow)
+    processed_at: datetime | None = None
+    parameter_count: int | None = None
+    error_message: str | None = None
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True

@@ -2,9 +2,9 @@ import json
 import os
 import tempfile
 
-import httpx
+from requests.exceptions import HTTPError
 from tenacity import retry
-from tenacity import retry_if_exception_type
+from tenacity import retry_if_exception
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
@@ -25,12 +25,27 @@ from validator.utils.minio import async_minio_client
 
 logger = get_logger(__name__)
 
-retry_http_with_backoff = retry(
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=4, max=10),
-    retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.RequestError)),
-    reraise=True,
-)
+
+def has_status_code_5xx(e):
+    while e is not None:
+        if isinstance(e, HTTPError):
+            if e.response is None:
+                logger.error(f"HTTPError with no response: {e}, cause: {e.__cause__}")
+                return True
+            elif 500 <= e.response.status_code < 600:
+                return True
+        e = e.__cause__
+    return False
+
+
+def retry_on_5xx():
+    return retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2.5, min=30, max=600),
+        retry=retry_if_exception(has_status_code_5xx),
+        reraise=True,
+    )
+
 
 retry_with_backoff = retry(
     stop=stop_after_attempt(5),

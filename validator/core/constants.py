@@ -43,7 +43,8 @@ GET_RANDOM_DATASETS_ENDPOINT = f"{CONTENT_BASE_URL}/datasets/random"
 GET_RANDOM_MODELS_ENDPOINT = f"{CONTENT_BASE_URL}/models/random"
 GET_COLUMNS_FOR_DATASET_ENDPOINT = f"{CONTENT_BASE_URL}/dataset/{{dataset}}/columns/suggest"
 GET_IMAGE_MODELS_ENDPOINT = f"{CONTENT_BASE_URL}/images/models"
-
+GET_MODEL_INFO_ENDPOINT = f"{CONTENT_BASE_URL}/model/{{model}}"
+POST_MODEL_INFO_ENDPOINT = f"{CONTENT_BASE_URL}/model/{{model}}"
 
 GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
@@ -221,8 +222,20 @@ CACHE_CLEANUP_INTERVAL = 8 * 60 * 60  # in seconds
 
 # Docker evaluation
 DOCKER_EVAL_HF_CACHE_DIR = "/root/.cache/huggingface"
+CHECK_RESULTS_PATH = "/tmp/check_results.json"
+
 
 # DPO evaluation
 TRL_DPO_FIELD_PROMPT = "prompt"
 TRL_DPO_FIELD_CHOSEN = "chosen"
 TRL_DPO_FIELD_REJECTED = "rejected"
+
+# Model Checks Queue Table
+MODEL_CHECKS_QUEUE_TABLE = "model_checks_queue"
+MCQ_ID = "id"
+MCQ_MODEL_ID = "model_id"
+MCQ_STATUS = "status"
+MCQ_REQUESTED_AT = "requested_at"
+MCQ_PROCESSED_AT = "processed_at"
+MCQ_PARAMETER_COUNT = "parameter_count"
+MCQ_ERROR_MESSAGE = "error_message"

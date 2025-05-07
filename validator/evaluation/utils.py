@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 import shutil
 import tempfile
 from io import BytesIO
@@ -11,6 +12,7 @@ from PIL import Image
 from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 
+import validator.core.constants as cst
 from validator.utils.logging import get_logger
 
 
@@ -50,10 +52,9 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
                 architecture_same = False
                 break
 
-    logger.info(
-        f"Architecture same: {architecture_same}, Architecture classes match: {architecture_classes_match}"
-    )
+    logger.info(f"Architecture same: {architecture_same}, Architecture classes match: {architecture_classes_match}")
     return architecture_same and architecture_classes_match
+
 
 def check_for_lora(model_id: str) -> bool:
     """
@@ -66,11 +67,10 @@ def check_for_lora(model_id: str) -> bool:
         bool: True if it's a LoRA adapter, False otherwise
     """
     try:
-        return 'adapter_config.json' in hf_api.list_repo_files(model_id)
+        return "adapter_config.json" in hf_api.list_repo_files(model_id)
     except Exception as e:
         logger.error(f"Error checking for LoRA adapters: {e}")
         return False
-
 
 
 def get_default_dataset_config(dataset_name: str) -> str | None:
@@ -159,3 +159,30 @@ def read_prompt_file(text_file_path: str) -> str:
         with open(text_file_path, "r", encoding="utf-8") as text_file:
             return text_file.read()
     return None
+
+
+def get_model_num_params(model_id: str) -> int | None:
+    try:
+        model_info = hf_api.model_info(model_id)
+        size = model_info.safetensors.total
+        return size
+    except Exception as e:
+        logger.warning(f"Error getting model size from safetensors for {model_id}: {e}")
+        match = re.search(r"(\d+(?:\.\d+)?)([bBmM])", model_id)
+        if match:
+            num = float(match.group(1))
+            unit = match.group(2).lower()
+            if unit == "b":
+                return int(num * 1_000_000_000)
+            elif unit == "m":
+                return int(num * 1_000_000)
+        logger.info(f"Could not determine model size for {model_id} from safetensors or regex.")
+        return None
+
+
+def compute_required_gpus(model_id: str, model_params_count: int | None) -> int:
+    num_params = model_params_count if model_params_count is not None else get_model_num_params(model_id)
+
+    if num_params and num_params > cst.MODEL_SIZE_REQUIRING_2_GPUS:
+        return 2
+    return 1
