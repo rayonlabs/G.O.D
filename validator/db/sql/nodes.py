@@ -16,18 +16,13 @@ from validator.utils.query_substrate import query_substrate
 logger = get_logger(__name__)
 
 async def _blacklist_nodes(hotkeys: list[str], psql_db: PSQLDB) -> None:
-    """Add nodes to the blacklisted_nodes table
-    
-    This function adds the provided hotkeys to the blacklisted_nodes table.
-    The is_blacklisted column has been removed from the nodes table.
-    """
+    """Add nodes to the blacklisted_nodes table"""
     if not hotkeys:
         return
         
     logger.info(f"NODES ARE BEING BLACKLISTED {hotkeys}")
     async with await psql_db.connection() as connection:
         connection: Connection
-        # We use INSERT ... ON CONFLICT DO NOTHING to handle potential duplicate entries
         query = f"""
             INSERT INTO blacklisted_nodes ({dcst.HOTKEY}, {dcst.NETUID})
             SELECT UNNEST($1::text[]), $2
@@ -37,13 +32,12 @@ async def _blacklist_nodes(hotkeys: list[str], psql_db: PSQLDB) -> None:
 
 async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
     """
-    Get all nodes that either:
-    a) Do not have any entries in the task_nodes table (new nodes with no scores)
-    b) Have at least one entry in the task_nodes table with a task_node_quality_score > 0
-    c) Have entries in task_nodes but all scores are NULL (not yet evaluated nodes)
-    This only excludes nodes that have been scored but ALL their non-NULL scores are ≤ 0
+    Get all nodes eligible for tasks, excluding blacklisted nodes.
     
-    Nodes in the blacklisted_nodes table are excluded.
+    Includes nodes that either:
+    a) Do not have any entries in the task_nodes table (new nodes with no scores)
+    b) Have at least one entry with quality_score > 0
+    c) Have entries but all scores are NULL (not yet evaluated)
     """
     logger.info("Getting eligible nodes (new nodes, nodes with NULL scores, or nodes with positive scores)")
     async with await psql_db.connection() as connection:
@@ -272,16 +266,7 @@ async def get_node_id_by_hotkey(hotkey: str, psql_db: PSQLDB) -> int | None:
         
         
 async def is_node_blacklisted(hotkey: str, psql_db: PSQLDB, netuid: int = NETUID) -> bool:
-    """Check if a node is blacklisted
-    
-    Args:
-        hotkey: The hotkey of the node to check
-        psql_db: The database connection
-        netuid: The netuid of the node (defaults to the current NETUID)
-        
-    Returns:
-        True if the node is blacklisted, False otherwise
-    """
+    """Check if a node is blacklisted"""
     async with await psql_db.connection() as connection:
         connection: Connection
         query = """

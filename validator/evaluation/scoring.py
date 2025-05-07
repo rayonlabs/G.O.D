@@ -731,12 +731,7 @@ async def process_miners_pool(
 
 
 async def blacklist_nodes(task_results: list[MinerResultsText | MinerResultsImage], psql_db) -> None:
-    """
-    Blacklist nodes by adding them to the blacklisted_nodes table.
-    
-    Nodes are blacklisted if their score_reason is equal to cts.BLACKLIST_REASON.
-    This typically happens when their synth/test loss ratio exceeds the threshold.
-    """
+    """Blacklist nodes with suspicious performance metrics"""
     logger.info('In blacklist nodes')
     hotkeys_to_blacklist = [
         result.hotkey
