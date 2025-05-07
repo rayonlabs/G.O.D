@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 
 import validator.core.constants as cst
+from validator.evaluation.utils import get_model_num_params
 
 
 class GPUQueueManager:
