@@ -88,9 +88,7 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
             if not isinstance(response, list):
                 raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
 
-            logger.info(f"2Here is what we got back {response}")
             dataset_dicts: list[dict[str, Any]] = response
-            logger.info(f"Here is what we got back {dataset_dicts}")
             datasets = [Dataset.model_validate(ds) for ds in dataset_dicts]
             random.shuffle(datasets)
 
