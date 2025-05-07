@@ -1035,13 +1035,22 @@ async def get_reward_functions(task_id: UUID, psql_db: PSQLDB) -> list[RewardFun
 
 async def _get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: int) -> list[RewardFunction]:
     query = f"""
-        SELECT DISTINCT rf.{cst.REWARD_FUNC}, rf.{cst.IS_GENERIC}
-        FROM {cst.REWARD_FUNCTIONS_TABLE} rf
-        JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
-        JOIN {cst.TASKS_TABLE} t ON gtf.{cst.TASK_ID} = t.{cst.TASK_ID}
-        WHERE rf.{cst.IS_GENERIC} = true
-        AND t.{cst.STATUS} = 'SUCCESS'
-        ORDER BY RANDOM()
+        WITH distinct_funcs AS (
+            SELECT DISTINCT ON (rf.{cst.FUNC_HASH})
+                rf.{cst.FUNC_HASH},
+                rf.{cst.REWARD_FUNC},
+                rf.{cst.IS_GENERIC},
+                RANDOM() as random_num
+            FROM {cst.REWARD_FUNCTIONS_TABLE} rf
+            JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
+            JOIN {cst.TASKS_TABLE} t ON gtf.{cst.TASK_ID} = t.{cst.TASK_ID}
+            WHERE rf.{cst.IS_GENERIC} = true
+            AND t.{cst.STATUS} = '{TaskStatus.SUCCESS.value}'
+            LIMIT 300
+        )
+        SELECT {cst.FUNC_HASH}, {cst.REWARD_FUNC}, {cst.IS_GENERIC}
+        FROM distinct_funcs
+        ORDER BY random_num
         LIMIT $1
     """
 

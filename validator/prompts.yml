@@ -56,6 +56,7 @@ reward_function_generation_sys: >
   ]
 
   Critical formatting requirements:
+  - The function will ONLY use the completions variable, which is a list of strings!
   - All strings must be properly escaped: \\n for newlines, \\\" for quotes
   - Python indentation must be exactly 4 spaces (written as \\n    in the string)
   - Function parameters must be exactly (completions, **kwargs)

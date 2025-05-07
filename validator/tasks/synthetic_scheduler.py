@@ -217,7 +217,8 @@ def process_reward_functions(result: str) -> list[str]:
     """
     valid_reward_functions = []
     try:
-        func_list = eval(result)
+        list_str = result[result.find('['):result.rfind(']') + 1]
+        func_list = eval(list_str)
 
         for func_def in func_list:
             is_valid, error, _ = validate_reward_function(func_def)

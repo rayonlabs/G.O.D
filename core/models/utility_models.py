@@ -147,6 +147,8 @@ class Prompts(BaseModel):
     input_output_reformulation_user: str
     input_reformulation_sys: str
     input_reformulation_user: str
+    reward_function_generation_sys: str
+    reward_function_generation_user: str
 
 
 class TaskType(str, Enum):
