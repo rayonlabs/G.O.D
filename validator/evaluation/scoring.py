@@ -196,11 +196,11 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
         if result.test_loss > 0
     ]
 
-    blacklisted_miners = [
-        (result, ratio)
-        for result, ratio in miners_with_ratios
-        if ratio > cts.BLACKLIST_THRESHOLD and result.synth_loss < 999.0
-    ]
+    blacklisted_miners = []
+#        (result, ratio)
+#        for result, ratio in miners_with_ratios
+#        if ratio > cts.BLACKLIST_THRESHOLD and result.synth_loss < 999.0
+#    ]
 
     # Only blacklist if not all the group is above the threshold
     if blacklisted_miners and len(blacklisted_miners) < len(miners_with_ratios):
