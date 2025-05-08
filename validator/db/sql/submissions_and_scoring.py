@@ -289,11 +289,6 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                 WHERE tn2.{cst.TASK_ID} = t.{cst.TASK_ID}
                 AND (tn2.{cst.TASK_NODE_QUALITY_SCORE} >= 1 OR tn2.{cst.TASK_NODE_QUALITY_SCORE} < 0)
                 AND tn2.{cst.NETUID} = $2
-                AND NOT EXISTS (
-                    SELECT 1 FROM blacklisted_nodes bn
-                    WHERE bn.{cst.HOTKEY} = tn2.{cst.HOTKEY}
-                    AND bn.{cst.NETUID} = tn2.{cst.NETUID}
-                )
             )
             GROUP BY t.{cst.TASK_ID}
             ORDER BY t.{cst.CREATED_AT} DESC
