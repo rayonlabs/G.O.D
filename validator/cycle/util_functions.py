@@ -1,5 +1,4 @@
 import asyncio
-import re
 
 from datasets import get_dataset_infos
 from fiber import Keypair
@@ -46,19 +45,6 @@ async def get_total_text_dataset_size(task: InstructTextRawTask | DpoRawTask) ->
         dataset_infos = await loop.run_in_executor(None, get_dataset_infos, task.ds)
         size = sum(info.dataset_size for info in dataset_infos.values() if info.dataset_size)
     return int(size)
-
-
-def get_model_num_params(model_id: str) -> int:
-    try:
-        model_info = hf_api.model_info(model_id)
-        size = model_info.safetensors.total
-        return size
-    except Exception as e:
-        logger.warning(f"Error getting model size from safetensors: {e}")
-        model_size = re.search(r"(\d+)(?=[bB])", model_id)
-        model_size = int(model_size.group(1)) * 1_000_000_000 if model_size else None
-        logger.info(f"Model size from regex: {model_size}")
-        return model_size
 
 
 async def get_total_image_dataset_size(task: ImageRawTask) -> int:
@@ -108,6 +94,8 @@ def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRe
             chosen_format=task.chosen_format,
             rejected_format=task.rejected_format,
         )
+    else:
+        raise ValueError(f"Unsupported task type for text task request: {task.task_type}")
 
     dataset = task.training_data if task.training_data else "dataset error"
     task_request_body = TrainRequestText(
@@ -128,5 +116,5 @@ def prepare_image_task_request(task: ImageRawTask) -> TrainRequestImage:
         task_id=str(task.task_id),
         hours_to_complete=task.hours_to_complete,
         dataset_zip=task.training_data,
-        model_type=task.model_type
+        model_type=task.model_type,
     )

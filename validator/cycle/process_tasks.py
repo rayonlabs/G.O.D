@@ -6,24 +6,26 @@ import uuid
 
 from fiber.chain.models import Node
 
-from core.constants import IS_PROD_ENV
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
+from core.constants import IS_PROD_ENV
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
+from validator.core.gpu_management import GPUQueueManager
 from validator.core.models import DpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
-from validator.core.models import RawTask
 from validator.core.task_config_models import get_task_config
-from validator.cycle.util_functions import get_model_num_params
+from validator.cycle.check_models import model_testing_loop
 from validator.db.database import PSQLDB
 from validator.evaluation.scoring import evaluate_and_score
+from validator.evaluation.utils import compute_required_gpus
+from validator.evaluation.utils import get_model_num_params
 from validator.utils.cache_clear import clean_all_hf_datasets_cache
 from validator.utils.cache_clear import manage_models_cache
 from validator.utils.call_endpoint import process_non_stream_fiber
@@ -428,33 +430,22 @@ async def cleanup_model_cache_loop(psql_db: PSQLDB):
             await asyncio.sleep(cst.CACHE_CLEANUP_INTERVAL)
 
 
-async def evaluate_tasks_loop(config: Config):
+async def evaluate_tasks_loop(config: Config, gpu_manager: GPUQueueManager):
     task_queue = asyncio.Queue()
-    gpu_queue = asyncio.Queue()
     processing_task_ids = set()
-    # Lock to prevent race conditions (thus potential deadlocks) during GPU acquisition
-    gpu_acquisition_lock = asyncio.Lock()
-
-    for gpu_id in cst.GPU_IDS:
-        await gpu_queue.put(gpu_id)
 
     async def evaluation_worker():
         while True:
             try:
                 task = await asyncio.wait_for(task_queue.get(), timeout=1)
-                required_gpus = compute_required_gpus(task)
-                gpu_ids = []
+                required_gpus = compute_required_gpus(str(task.model_id), task.model_params_count)
 
-                # Acquire lock to prevent other tasks from taking GPUs until we get all we need
-                async with gpu_acquisition_lock:
-                    for _ in range(required_gpus):
-                        gpu_ids.append(await gpu_queue.get())
+                gpu_ids = await gpu_manager.acquire_gpus(required_gpus)
 
                 try:
                     await _evaluate_task(task, gpu_ids, config)
                 finally:
-                    for gpu_id in gpu_ids:
-                        await gpu_queue.put(gpu_id)
+                    await gpu_manager.release_gpus(gpu_ids)
                     processing_task_ids.remove(task.task_id)
                     task_queue.task_done()
             except asyncio.TimeoutError:
@@ -464,11 +455,11 @@ async def evaluate_tasks_loop(config: Config):
                 logger.error(f"Error in evaluation worker: {str(e)}")
                 continue
 
-    for _ in cst.GPU_IDS:
+    for _ in range(len(gpu_manager._gpu_ids)):
         asyncio.create_task(evaluation_worker())
 
     while True:
-        if len(processing_task_ids) < 2 * len(cst.GPU_IDS):
+        if len(processing_task_ids) < 2 * len(gpu_manager._gpu_ids):
             tasks_to_evaluate = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=config.psql_db)
             if tasks_to_evaluate:
                 logger.info(f"Found {len(tasks_to_evaluate)} new tasks awaiting evaluation, adding to queue")
@@ -484,17 +475,13 @@ async def evaluate_tasks_loop(config: Config):
         await asyncio.sleep(30)
 
 
-def compute_required_gpus(task: RawTask) -> int:
-    model = task.model_id
-    num_params = task.model_params_count
-    if not num_params:
-        num_params = get_model_num_params(model)
-    if num_params and num_params > cst.MODEL_SIZE_REQUIRING_2_GPUS:
-        return 2
-    return 1
-
-
 async def process_completed_tasks(config: Config) -> None:
+    gpu_manager = GPUQueueManager()
+    await gpu_manager.initialize()
+
     await asyncio.gather(
-        move_tasks_to_preevaluation_loop(config), evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db)
+        move_tasks_to_preevaluation_loop(config),
+        evaluate_tasks_loop(config, gpu_manager),
+        cleanup_model_cache_loop(config.psql_db),
+        model_testing_loop(config, gpu_manager),
     )

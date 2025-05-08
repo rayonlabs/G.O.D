@@ -140,3 +140,10 @@ class TaskType(str, Enum):
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")
     text_url: str = Field(..., description="Presigned URL for the text file")
+
+
+class ModelCheckStatus(str, Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"

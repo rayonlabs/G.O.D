@@ -21,6 +21,8 @@ from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.models import AllNodeStats
 
+from .utility_models import ModelCheckStatus
+
 
 logger = get_logger(__name__)
 
@@ -316,3 +318,14 @@ class ImageModelInfo(BaseModel):
 
 class ImageModelsResponse(BaseModel):
     models: list[ImageModelInfo]
+
+
+class ModelCheckRequest(BaseModel):
+    model_id: str = Field(..., description="Hugging Face model ID to be checked", min_length=1)
+
+
+class ModelCheckSubmissionResponse(BaseModel):
+    request_id: UUID
+    model_id: str
+    status: ModelCheckStatus
+    message: str
