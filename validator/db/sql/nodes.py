@@ -45,11 +45,6 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
         query = f"""
             SELECT n.* FROM {dcst.NODES_TABLE} n
             WHERE n.{dcst.NETUID} = $1
-            AND NOT EXISTS (
-                SELECT 1 FROM blacklisted_nodes bn
-                WHERE bn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
-                AND bn.{dcst.NETUID} = n.{dcst.NETUID}
-            )
             AND (
                 -- Condition a: No entries in task_nodes table
                 NOT EXISTS (
