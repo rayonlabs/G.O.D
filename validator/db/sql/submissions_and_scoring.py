@@ -275,11 +275,6 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                     ) FILTER (
                         WHERE tn.{cst.HOTKEY} IS NOT NULL 
                         AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
-                        AND NOT EXISTS (
-                            SELECT 1 FROM blacklisted_nodes bn
-                            WHERE bn.{cst.HOTKEY} = tn.{cst.HOTKEY}
-                            AND bn.{cst.NETUID} = tn.{cst.NETUID}
-                        )
                     ),
                     '[]'::json
                 ) as node_scores
