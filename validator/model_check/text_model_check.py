@@ -75,13 +75,6 @@ async def run_model_loading_and_inference_check(model_id: str, gpu_ids: list[int
         "NVIDIA_VISIBLE_DEVICES": ",".join(str(gid) for gid in gpu_ids),
     }
 
-    volume_bindings = {
-        os.path.expanduser(cst.CACHE_DIR_HUB): {
-            "bind": "/root/.cache/huggingface/hub",
-            "mode": "rw",
-        }
-    }
-
     command = ["python", "-m", "validator.model_check.check_model_inference"]
 
     container = None

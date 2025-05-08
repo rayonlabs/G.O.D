@@ -65,7 +65,7 @@ def run_check():
             )
 
         logger.info("Loading tokenizer...")
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=False)
         if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
             logger.info("Setting pad_token to eos_token as pad_token is None.")
             tokenizer.pad_token = tokenizer.eos_token
@@ -76,6 +76,7 @@ def run_check():
             model_id,
             torch_dtype=torch.bfloat16,
             device_map="auto",
+            trust_remote_code=False,
         )
         logger.info("Model loaded successfully.")
         model.eval()
