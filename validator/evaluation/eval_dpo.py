@@ -252,44 +252,6 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
         finetuned_model.eval()
         reference_model.eval()
         
-        # Validate models are functioning properly
-        logger.info("Validating model functionality before evaluation...")
-        def validate_models(ref_model, ft_model, tokenizer):
-            try:
-                test_input = "This is a test input to verify model functionality."
-                inputs = tokenizer(test_input, return_tensors="pt").to(ref_model.device)
-                
-                with torch.no_grad():
-                    ref_output = ref_model(**inputs).logits
-                    ft_output = ft_model(**inputs).logits
-                
-                if not isinstance(ref_output, torch.Tensor) or ref_output.size(0) == 0:
-                    raise ValueError(f"Reference model produced invalid output: {ref_output}")
-                if not isinstance(ft_output, torch.Tensor) or ft_output.size(0) == 0:
-                    raise ValueError(f"Finetuned model produced invalid output: {ft_output}")
-                    
-                output_diff = torch.abs(ref_output - ft_output).mean().item()
-                logger.info(f"Average difference between model outputs: {output_diff:.6f}")
-                
-                if output_diff < 1e-5:
-                    logger.warning("="*80)
-                    logger.warning(f"CRITICAL WARNING: Models have nearly identical outputs (diff={output_diff:.6f})!")
-                    logger.warning("This will likely result in a 0.693 loss value (~ln(2)) in DPO evaluation.")
-                    logger.warning("Root cause: The finetuned model and reference model are essentially identical.")
-                    logger.warning("Solutions to try:")
-                    logger.warning(" 1. Check that fine-tuning actually completed successfully")
-                    logger.warning(" 2. Verify that the LoRA adapter weights are being properly loaded") 
-                    logger.warning(" 3. Ensure the model paths are correct and point to different models")
-                    logger.warning("="*80)
-                
-                return True
-            except Exception as e:
-                logger.error(f"Model validation failed: {e}")
-                return False
-        
-        models_valid = validate_models(reference_model, finetuned_model, tokenizer)
-        if not models_valid:
-            raise ValueError("Model validation failed - models unable to generate valid outputs")
 
         results = evaluate_finetuned_dpo_model(
             evaluation_args=evaluation_args,
