@@ -239,7 +239,7 @@ def calculate_miner_ranking_and_scores(
     if valid_results and isinstance(valid_results[0], MinerResultsText):
         is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
         if is_dpo_task:
-            logger.info("Processing DPO task with ratio-based penalty")
+            logger.info("Processing DPO task with max(test_loss, synth_loss) approach")
     
     # For DPO tasks, always use the ratio-based penalty regardless of synth loss validity
     use_weighted_loss = is_dpo_task or _is_synth_loss_valid_for_group(valid_results)

@@ -5,7 +5,6 @@ from unittest.mock import patch, MagicMock
 from core.models.utility_models import TaskType
 from validator.core.models import MinerResultsText
 from validator.evaluation.scoring import (
-    calculate_test_synth_ratio_penalty,
     calculate_weighted_loss,
     calculate_miner_ranking_and_scores
 )
