@@ -35,11 +35,11 @@ def test_calculate_weighted_loss():
     
     # For DPO tasks with test_loss >= synth_loss (no penalty)
     dpo_no_penalty = calculate_weighted_loss(10.0, 5.0, is_dpo=True)
-    assert dpo_no_penalty == 10.0
+    assert dpo_no_penalty == pytest.approx(10.0)
     
     # For DPO tasks with test_loss < synth_loss (apply ratio penalty)
     dpo_with_penalty = calculate_weighted_loss(2.0, 10.0, is_dpo=True)
-    assert dpo_with_penalty == 0.4  # 2.0 * (2.0/10.0)
+    assert abs(dpo_with_penalty - 0.4) < 1e-10  # 2.0 * (2.0/10.0)
 
 @patch('validator.evaluation.scoring.logger')
 def test_miner_ranking_with_dpo_penalty(mock_logger):
