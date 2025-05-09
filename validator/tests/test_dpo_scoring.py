@@ -46,33 +46,34 @@ def test_miner_ranking_with_dpo_penalty(mock_logger):
     # Let's print debug output to understand what's happening
     print("\n===== DPO Penalty Test =====")
     
-    # Create mock DPO task results with more extreme differences to ensure penalty works
+    # Create mock DPO task results with EXTREMELY different values to isolate the issue
+    # We'll make the differences so large that there's no way they could be sorted incorrectly
     miner_results = [
         MinerResultsText(
             hotkey="miner1",
-            test_loss=0.5,      # Middle test loss
-            synth_loss=1.5,     # 3x higher than test
+            test_loss=10.0,     # Very high test loss
+            synth_loss=11.0,    # Close to test
             is_finetune=True,
             task_type=TaskType.DPOTASK
         ),
         MinerResultsText(
             hotkey="miner2",
-            test_loss=0.6,      # Slightly worse test loss but very close to synth
-            synth_loss=0.65,    # Almost equal to test (minimal penalty)
+            test_loss=1.0,      # Good test loss and same as synth (no penalty)
+            synth_loss=1.0,     # Equal to test (NO penalty)
             is_finetune=True,
             task_type=TaskType.DPOTASK
         ),
         MinerResultsText(
             hotkey="miner3",
-            test_loss=0.2,      # Best test loss but suspiciously low vs synth
-            synth_loss=2.0,     # 10x higher than test (severe penalty)
-            is_finetune=True,
+            test_loss=0.1,      # Extremely good test loss but vs huge synth (severe penalty)
+            synth_loss=10.0,    # 100x higher than test (should become 0.01 after penalty)
+            is_finetune=True, 
             task_type=TaskType.DPOTASK
         ),
         MinerResultsText(
             hotkey="miner4",
-            test_loss=1.0,      # Worst test loss
-            synth_loss=1.1,     # Close to test (small penalty)
+            test_loss=5.0,      # Poor test loss
+            synth_loss=5.5,     # Close to test (small penalty)
             is_finetune=True,
             task_type=TaskType.DPOTASK
         )
