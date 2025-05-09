@@ -15,8 +15,8 @@ def test_calculate_test_synth_ratio_penalty():
     assert calculate_test_synth_ratio_penalty(5.0, 5.0) == 1.0
     
     # Test when test_loss < synth_loss (apply ratio penalty)
-    assert calculate_test_synth_ratio_penalty(2.0, 10.0) == 0.2
-    assert calculate_test_synth_ratio_penalty(0.01, 0.1) == 0.1
+    assert abs(calculate_test_synth_ratio_penalty(2.0, 10.0) - 0.2) < 1e-10
+    assert abs(calculate_test_synth_ratio_penalty(0.01, 0.1) - 0.1) < 1e-10
     
     # Test edge cases
     assert calculate_test_synth_ratio_penalty(0.0, 1.0) < 1.0  # Should handle zeros gracefully
