@@ -1,10 +1,16 @@
+import asyncio
 import glob
+import json
 import os
 import shutil
 import tempfile
 
+import docker
+from docker.models.containers import Container
+
 from core import constants as cst
 from validator.utils.logging import get_logger
+from validator.utils.logging import stream_container_logs
 
 
 logger = get_logger(__name__)
@@ -88,8 +94,8 @@ def remove_cache_models_except(models_to_keep: list[str]):
     # Handle directories
     existing_models = {
         orig_dir: orig_dir.lower()
-        for orig_dir in os.listdir(cst.CACHE_DIR_HUB)
-        if orig_dir.startswith("models--") and os.path.isdir(os.path.join(cst.CACHE_DIR_HUB, orig_dir))
+        for orig_dir in os.listdir(cst.CONTAINER_CACHE_DIR_HUB)
+        if orig_dir.startswith("models--") and os.path.isdir(os.path.join(cst.CONTAINER_CACHE_DIR_HUB, orig_dir))
     }
 
     to_delete = {orig_dir for orig_dir, lower_dir in existing_models.items() if lower_dir not in keep_patterns}
@@ -97,21 +103,21 @@ def remove_cache_models_except(models_to_keep: list[str]):
     deleted_count = 0
     for dir_name in to_delete:
         try:
-            model_path = os.path.join(cst.CACHE_DIR_HUB, dir_name)
+            model_path = os.path.join(cst.CONTAINER_CACHE_DIR_HUB, dir_name)
             shutil.rmtree(model_path)
             deleted_count += 1
         except Exception as e:
             logger.error(f"Error deleting cache for directory {dir_name}: {e}")
 
     # Handle safetensor files
-    safetensor_files = [f for f in os.listdir(cst.CACHE_DIR_HUB) if f.endswith(".safetensors")]
+    safetensor_files = [f for f in os.listdir(cst.CONTAINER_CACHE_DIR_HUB) if f.endswith(".safetensors")]
 
     deleted_files = 0
     for file_name in safetensor_files:
         # Check if file belongs to a model we want to keep
         if not any(file_name.lower().startswith(pattern) for pattern in keep_patterns):
             try:
-                file_path = os.path.join(cst.CACHE_DIR_HUB, file_name)
+                file_path = os.path.join(cst.CONTAINER_CACHE_DIR_HUB, file_name)
                 os.remove(file_path)
                 deleted_files += 1
             except Exception as e:
@@ -143,16 +149,16 @@ def get_hf_model_cache_size(model_id: str) -> int:
     total_size = 0
 
     # Find and measure directory size (case insensitive)
-    if os.path.exists(cst.CACHE_DIR_HUB):
-        for dir_name in os.listdir(cst.CACHE_DIR_HUB):
+    if os.path.exists(cst.CONTAINER_CACHE_DIR_HUB):
+        for dir_name in os.listdir(cst.CONTAINER_CACHE_DIR_HUB):
             if dir_name.lower() == model_pattern:
-                total_size += get_directory_size(os.path.join(cst.CACHE_DIR_HUB, dir_name))
+                total_size += get_directory_size(os.path.join(cst.CONTAINER_CACHE_DIR_HUB, dir_name))
 
         # Check for matching safetensor files
-        for file_name in os.listdir(cst.CACHE_DIR_HUB):
+        for file_name in os.listdir(cst.CONTAINER_CACHE_DIR_HUB):
             if file_name.endswith(".safetensors") and file_name.lower().startswith(model_pattern):
                 try:
-                    file_path = os.path.join(cst.CACHE_DIR_HUB, file_name)
+                    file_path = os.path.join(cst.CONTAINER_CACHE_DIR_HUB, file_name)
                     total_size += os.path.getsize(file_path)
                 except (OSError, FileNotFoundError):
                     pass
@@ -160,9 +166,12 @@ def get_hf_model_cache_size(model_id: str) -> int:
     return total_size
 
 
-def manage_models_cache(model_stats: dict[str, dict], max_size: int) -> None:
+def manage_models_cache() -> None:
     """Manage HF models cache based on model usage statistics."""
-    current_size = get_directory_size(cst.CACHE_DIR_HUB)
+    model_stats = json.loads(os.environ.get("MODEL_STATS"))
+    max_size = int(os.environ.get("MAX_SIZE"))
+
+    current_size = get_directory_size(cst.CONTAINER_CACHE_DIR_HUB)
     if current_size <= max_size:
         return
 
@@ -174,7 +183,7 @@ def manage_models_cache(model_stats: dict[str, dict], max_size: int) -> None:
     logger.info(f"Cache cleanup: Will remove models with no cache score record ({len(allowed_models)} records)")
     remove_cache_models_except(allowed_models)
 
-    current_size = get_directory_size(cst.CACHE_DIR_HUB)
+    current_size = get_directory_size(cst.CONTAINER_CACHE_DIR_HUB)
     if current_size <= max_size:
         logger.info(f"Cache size now {current_size / 1024**3:.2f}GB after removing unused models.")
         return
@@ -198,5 +207,66 @@ def manage_models_cache(model_stats: dict[str, dict], max_size: int) -> None:
 
     logger.info(f"Cache cleanup: Will keep {len(models_to_keep)} models")
     remove_cache_models_except(models_to_keep)
-    final_size = get_directory_size(cst.CACHE_DIR_HUB)
+    final_size = get_directory_size(cst.CONTAINER_CACHE_DIR_HUB)
     logger.info(f"Cache cleanup complete. Final size: {final_size / 1024**3:.2f}GB")
+
+
+async def run_model_cache_cleanup_container(model_stats: dict[str, dict], max_size: int) -> None:
+    client = docker.from_env()
+    environment = {
+        "MODEL_STATS": json.dumps(model_stats),
+        "MAX_SIZE": str(max_size),
+    }
+    logger.info("Running model cache management")
+
+    volume_bindings = {
+        cst.HF_CACHE_CONTAINER_VOLUME: {
+            "bind": cst.CONTAINER_CACHE_DIR_HUB,
+            "mode": "rw",
+        }
+    }
+    try:
+        client.volumes.get(cst.HF_CACHE_CONTAINER_VOLUME)
+    except Exception as e:
+        logger.info(f"Volume {cst.HF_CACHE_CONTAINER_VOLUME} not found, error: {e}, skipping")
+        return
+
+    async def cleanup_resources():
+        try:
+            await asyncio.to_thread(client.containers.prune)
+            await asyncio.to_thread(client.images.prune, filters={"dangling": True})
+            await asyncio.to_thread(client.volumes.prune, filters={"label!": ["persistent=true"]})
+            logger.debug("Completed Docker resource cleanup")
+        except Exception as e:
+            logger.error(f"Cleanup failed: {str(e)}")
+
+    try:
+        container: Container = await asyncio.to_thread(
+            client.containers.run,
+            cst.VALIDATOR_DOCKER_IMAGE,
+            command=["python", "-m", "validator.utils.cache_clear"],
+            environment=environment,
+            volumes=volume_bindings,
+            detach=True,
+        )
+        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container))
+        result = await asyncio.to_thread(container.wait)
+        log_task.cancel()
+
+        if result["StatusCode"] != 0:
+            raise Exception(f"Container exited with status {result['StatusCode']}")
+
+    except Exception as e:
+        logger.error(f"Failed to run model cache management: {str(e)}", exc_info=True)
+
+    finally:
+        try:
+            await asyncio.to_thread(container.remove, force=True)
+            await cleanup_resources()
+        except Exception as e:
+            logger.info(f"A problem with cleaning up {e}")
+        client.close()
+
+
+if __name__ == "__main__":
+    manage_models_cache()
