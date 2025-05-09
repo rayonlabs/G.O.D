@@ -196,26 +196,42 @@ def change_to_json_format(dataset: Dataset, columns: List[str]):
         return []
 
 
-def assign_some_of_the_train_to_synth(train_dataset: Dataset):
+def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = False):
     if not isinstance(train_dataset, Dataset):
         raise TypeError("train_dataset must be an instance of datasets.Dataset")
     if len(train_dataset) == 0:
         raise ValueError("Cannot split an empty dataset")
+    
     try:
         num_synthetic_samples = min(cst.MAX_SYNTH_DATA_POINTS, int(len(train_dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE))
         dataset_length = len(train_dataset)
-        split_index = dataset_length - num_synthetic_samples
-        synthetic_dataset = train_dataset.select(range(split_index, dataset_length))
-        remaining_train_dataset = train_dataset.select(range(split_index))
+        
+        if is_dpo:
+            # For DPO: Sample with replacement
+            synthetic_dataset = train_dataset.shuffle(seed=42).select(range(num_synthetic_samples))
+            remaining_train_dataset = train_dataset
+            
+            logger.info(
+                f"DPO task: Sampling {num_synthetic_samples} examples WITH REPLACEMENT from train set. "
+                f"Original train size: {dataset_length}, "
+                f"Training size (unchanged): {len(remaining_train_dataset)}, "
+                f"Synthetic size: {len(synthetic_dataset)}"
+            )
+        else:
+            # Standard split for non-DPO tasks
+            split_index = dataset_length - num_synthetic_samples
+            synthetic_dataset = train_dataset.select(range(split_index, dataset_length))
+            remaining_train_dataset = train_dataset.select(range(split_index))
+            
+            logger.info(
+                f"Taking {num_synthetic_samples} samples from the train set to be synthetic data. "
+                f"Original size: {dataset_length}, "
+                f"Training size: {len(remaining_train_dataset)}, "
+                f"Synthetic size: {len(synthetic_dataset)}"
+            )
     except Exception as e:
         logger.info(f"There was an issue with the split {e} ")
-
-    logger.info(
-        f"Taking {num_synthetic_samples} samples from the train set to be synthetic data. "
-        f"Original size: {dataset_length}, "
-        f"Training size: {len(remaining_train_dataset)}, "
-        f"Synthetic size: {len(synthetic_dataset)}"
-    )
+        raise e
 
     return remaining_train_dataset, synthetic_dataset
 
@@ -341,23 +357,21 @@ async def prepare_text_task(task: InstructTextRawTask | DpoRawTask, keypair: Key
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
             if isinstance(task, DpoRawTask):
-                # we only need the field prompt to generate new data here
-                synthetic_ds = await get_additional_synth_data(test_ds, [task.field_prompt], keypair, is_dpo=True)
-                synthetic_ds = [validate_and_transform_dpo(data, task) for data in synthetic_ds]
-
+                logger.info("DPO task: Sampling from train dataset for synthetic data")
+                _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
             else:
                 synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, is_dpo=False)
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:
-        # if for some reason the api is down, we move some of the train over to be synth
-
         logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
-        train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds)
+        is_dpo = isinstance(task, DpoRawTask)
+        train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=is_dpo)
 
     if synthetic_ds is None:
-        logger.info("There was not enough synthetic data created we are instead grabbing from train ")
-        train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds)
+        logger.info("There was not enough synthetic data created, using train samples instead")
+        is_dpo = isinstance(task, DpoRawTask)
+        train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=is_dpo)
 
     return await _process_and_upload_datasets(
         train_ds,

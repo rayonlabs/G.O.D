@@ -162,10 +162,35 @@ def get_period_scores_from_results(task_results: list[TaskResults], weight_multi
     return final_scores
 
 
-def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
+def calculate_test_synth_ratio_penalty(test_loss: float, synth_loss: float) -> float:
+    EPSILON = 1e-6
+    
+    test_loss = max(test_loss, EPSILON)
+    synth_loss = max(synth_loss, EPSILON)
+    
+    if abs(test_loss - synth_loss) < EPSILON:
+        return 1.0
+        
+    if test_loss >= synth_loss:
+        return 1.0
+    
+    ratio = test_loss / synth_loss
+    logger.info(f"DPO ratio penalty: test_loss={test_loss:.6f}, synth_loss={synth_loss:.6f}, ratio={ratio:.6f}")
+    
+    return ratio
+
+
+def calculate_weighted_loss(test_loss: float, synth_loss: float, is_dpo: bool = False) -> float:
     assert not np.isnan(test_loss), "Test loss cannot be NaN"
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
-    return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
+    
+    if is_dpo:
+        ratio_penalty = calculate_test_synth_ratio_penalty(test_loss, synth_loss)
+        adjusted_loss = test_loss * ratio_penalty
+        logger.info(f"DPO adjusted loss: {adjusted_loss:.6f} (original: {test_loss:.6f}, penalty: {ratio_penalty:.6f})")
+        return adjusted_loss
+    else:
+        return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
 def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 1.5, threshold: float = 0.4) -> bool:
@@ -223,12 +248,22 @@ def calculate_miner_ranking_and_scores(
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
 
+    # Check if this is a DPO task
+    is_dpo_task = False
+    if valid_results and isinstance(valid_results[0], MinerResultsText):
+        is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
+        if is_dpo_task:
+            logger.info("Processing DPO task with ratio-based penalty")
+    
     use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
         logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
-        ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss)) for result in valid_results]
+        ranked_results = [
+            (result, calculate_weighted_loss(result.test_loss, result.synth_loss, is_dpo=is_dpo_task)) 
+            for result in valid_results
+        ]
         ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-        ranking_type = "weighted_loss"
+        ranking_type = "dpo_ratio_adjusted_loss" if is_dpo_task else "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
