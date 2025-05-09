@@ -265,11 +265,24 @@ def calculate_miner_ranking_and_scores(
         else:
             logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
             
-        ranked_results = [
-            (result, calculate_weighted_loss(result.test_loss, result.synth_loss, is_dpo=is_dpo_task)) 
-            for result in valid_results
-        ]
+        ranked_results = []
+        for result in valid_results:
+            adjusted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss, is_dpo=is_dpo_task)
+            ranked_results.append((result, adjusted_loss))
+            logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
+        
+        # Debug log before sorting
+        logger.info("Ranking values before sorting:")
+        for r, loss in ranked_results:
+            logger.info(f"  {r.hotkey}: {loss:.6f}")
+            
         ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
+        
+        # Debug log after sorting
+        logger.info("Ranking values after sorting (first=winner):")
+        for r, loss in ranked_results:
+            logger.info(f"  {r.hotkey}: {loss:.6f}")
+            
         ranking_type = "dpo_ratio_adjusted_loss" if is_dpo_task else "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
