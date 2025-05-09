@@ -255,9 +255,14 @@ def calculate_miner_ranking_and_scores(
         if is_dpo_task:
             logger.info("Processing DPO task with ratio-based penalty")
     
-    use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
+    # For DPO tasks, always use the ratio-based penalty regardless of synth loss validity
+    use_weighted_loss = is_dpo_task or _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
-        logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
+        if is_dpo_task:
+            logger.info("Using ratio-adjusted loss for DPO task ranking")
+        else:
+            logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
+            
         ranked_results = [
             (result, calculate_weighted_loss(result.test_loss, result.synth_loss, is_dpo=is_dpo_task)) 
             for result in valid_results
