@@ -61,19 +61,13 @@ def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DPODatasetType) ->
                 identical_count += 1
         
         if identical_count > 0:
-            logger.warning("="*80)
-            logger.warning(f"CRITICAL WARNING: Found {identical_count}/{sample_size} samples where chosen and rejected are identical!")
-            logger.warning("This will cause the model to make random choices (50/50 probability)")
-            logger.warning("Expect a loss value of ~0.693 (ln(2)) during evaluation")
-            logger.warning("="*80)
-            
+            logger.warning(f"CRITICAL: Found {identical_count}/{sample_size} samples with identical chosen/rejected, causing random predictions")
+
             if identical_count > 0:
                 example = dataset[sample_indices[0]]
                 chosen = example[chosen_field]
                 rejected = example[rejected_field]
-                logger.warning(f"Example with identical responses:")
-                logger.warning(f"Chosen: '{chosen[:100]}...'")
-                logger.warning(f"Rejected: '{rejected[:100]}...'")
+                logger.warning(f"Example: Chosen/Rejected: '{chosen[:100]}...'")
 
     column_mapping = {
         dataset_type.field_prompt: cst.TRL_DPO_FIELD_PROMPT,
@@ -176,14 +170,7 @@ def evaluate_dpo_model(
     logger.info(f"Final DPO evaluation results: {eval_results}")
     
     if abs(eval_results["eval_loss"] - 0.6931) < 0.0001:
-        logger.error("="*80)
-        logger.error("CRITICAL: Loss value is approximately ln(2) ≈ 0.6931")
-        logger.error("This suggests models are making random predictions between chosen/rejected")
-        logger.error("Possible causes:")
-        logger.error(" 1. Model fine-tuning failed or didn't change the model")
-        logger.error(" 2. Chosen and rejected samples are identical or too similar")
-        logger.error(" 3. Model loading issues (weights not properly applied)")
-        logger.error("="*80)
+        logger.error("CRITICAL: Loss value is approximately ln(2) ≈ 0.6931, suggesting models are making random predictions")
     
     evaluation_results = {
         "eval_loss": eval_results["eval_loss"],
