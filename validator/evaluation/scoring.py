@@ -29,7 +29,6 @@ from validator.core.models import PeriodScore
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
-from validator.db.sql.nodes import _blacklist_nodes
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
@@ -196,20 +195,6 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
         if result.test_loss > 0
     ]
 
-    blacklisted_miners = []
-#        (result, ratio)
-#        for result, ratio in miners_with_ratios
-#        if ratio > cts.BLACKLIST_THRESHOLD and result.synth_loss < 999.0
-#    ]
-
-    # Only blacklist if not all the group is above the threshold
-    if blacklisted_miners and len(blacklisted_miners) < len(miners_with_ratios):
-        for result, ratio in blacklisted_miners:
-            result.score_reason = cts.BLACKLIST_REASON
-            result.test_loss = 1000.0
-            result.synth_loss = 1000.0
-            logger.info(f"Blacklisted node {result.hotkey} with ratio {ratio}")
-
     valid_ratios = sum(1 for _, ratio in miners_with_ratios if ratio <= max_ratio)
     ratio = valid_ratios / valid_miners if valid_miners > 0 else 0
     logger.info(f"Valid ratios: {valid_ratios}/{valid_miners} = {ratio:.3f}, threshold is {threshold}")
@@ -270,8 +255,6 @@ def calculate_miner_ranking_and_scores(
         penalty_start_idx = total_valid_miners - penalty_count
 
         for result, metric in ranked_results[1:penalty_start_idx]:
-            if result.score_reason == cts.BLACKLIST_REASON:
-                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score_reason = f"Ranked below top 1 by {ranking_type}"
                 logger.info(
@@ -284,8 +267,6 @@ def calculate_miner_ranking_and_scores(
                 )
 
         for result, metric in ranked_results[penalty_start_idx:]:
-            if result.score_reason == cts.BLACKLIST_REASON:
-                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score = cts.SCORE_PENALTY
                 result.score_reason = f"Bottom 25% ranked by {ranking_type}"
@@ -299,8 +280,6 @@ def calculate_miner_ranking_and_scores(
                 )
     else:
         for result, metric in ranked_results[1:]:
-            if result.score_reason == cts.BLACKLIST_REASON:
-                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score_reason = f"Ranked below top 1 by {ranking_type}"
                 logger.info(
@@ -730,16 +709,6 @@ async def process_miners_pool(
     return results
 
 
-async def blacklist_nodes(task_results: list[MinerResultsText | MinerResultsImage], psql_db) -> None:
-    """Blacklist nodes with suspicious performance metrics"""
-    logger.info('In blacklist nodes')
-    hotkeys_to_blacklist = [
-        result.hotkey
-        for result in task_results
-        if result.score_reason == cts.BLACKLIST_REASON
-    ]
-    logger.info(f"WE ARE BLACKLISTING {hotkeys_to_blacklist}")
-    await _blacklist_nodes(hotkeys_to_blacklist, psql_db)
 
 
 async def evaluate_and_score(
@@ -765,8 +734,6 @@ async def evaluate_and_score(
 
     logger.info("Calculating final scores...")
     task_results = calculate_miner_ranking_and_scores(task_results)
-    logger.info("attempting to blacklist")
-    await blacklist_nodes(task_results, config.psql_db)
     await _update_scores(task, task_results, config.psql_db)
     all_scores_zero = all(result.score == 0.0 for result in task_results)
 

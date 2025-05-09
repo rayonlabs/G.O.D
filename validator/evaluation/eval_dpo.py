@@ -44,6 +44,40 @@ def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DPODatasetType) ->
     """
     logger.info("Adapting DPO columns to standard format")
 
+    # Check if chosen and rejected responses are too similar across the dataset
+    chosen_field = dataset_type.field_chosen
+    rejected_field = dataset_type.field_rejected
+    
+    if chosen_field in dataset.column_names and rejected_field in dataset.column_names:
+        # Sample a few examples to verify chosen != rejected
+        identical_count = 0
+        sample_size = min(10, len(dataset))
+        sample_indices = list(range(sample_size))
+        
+        for idx in sample_indices:
+            example = dataset[idx]
+            chosen = example[chosen_field]
+            rejected = example[rejected_field]
+            
+            if chosen == rejected:
+                identical_count += 1
+        
+        if identical_count > 0:
+            logger.warning("="*80)
+            logger.warning(f"CRITICAL WARNING: Found {identical_count}/{sample_size} samples where chosen and rejected are identical!")
+            logger.warning("This will cause the model to make random choices (50/50 probability)")
+            logger.warning("Expect a loss value of ~0.693 (ln(2)) during evaluation")
+            logger.warning("="*80)
+            
+            # Log an example
+            if identical_count > 0:
+                example = dataset[sample_indices[0]]
+                chosen = example[chosen_field]
+                rejected = example[rejected_field]
+                logger.warning(f"Example with identical responses:")
+                logger.warning(f"Chosen: '{chosen[:100]}...'")
+                logger.warning(f"Rejected: '{rejected[:100]}...'")
+
     column_mapping = {
         dataset_type.field_prompt: cst.TRL_DPO_FIELD_PROMPT,
         dataset_type.field_chosen: cst.TRL_DPO_FIELD_CHOSEN,
@@ -161,6 +195,18 @@ def evaluate_dpo_model(
 
     eval_results = evaluate_dpo_with_batch_size()
     logger.info(f"Final DPO evaluation results: {eval_results}")
+    
+    # Check for the suspicious ln(2) loss value
+    if abs(eval_results["eval_loss"] - 0.6931) < 0.0001:
+        logger.error("="*80)
+        logger.error("CRITICAL: Loss value is approximately ln(2) ≈ 0.6931")
+        logger.error("This suggests models are making random predictions between chosen/rejected")
+        logger.error("Possible causes:")
+        logger.error(" 1. Model fine-tuning failed or didn't change the model")
+        logger.error(" 2. Chosen and rejected samples are identical or too similar")
+        logger.error(" 3. Model loading issues (weights not properly applied)")
+        logger.error("="*80)
+    
     evaluation_results = {
         "eval_loss": eval_results["eval_loss"],
     }
@@ -201,15 +247,24 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
     try:
         logger.info(f"Loading reference model: {evaluation_args.original_model}")
         reference_model = load_model(evaluation_args.original_model, is_base_model=True)
+        if reference_model is None:
+            raise ValueError(f"Reference model {evaluation_args.original_model} failed to load")
+            
         if "model_params_count" not in results_dict:
             results_dict["model_params_count"] = count_model_parameters(reference_model)
+            
         try:
+            logger.info(f"Loading finetuned model as LoRA adapter: {repo}")
             finetuned_model = load_finetuned_model(reference_model, repo)
             is_finetune = True
         except Exception as lora_error:
             logger.info(f"Failed to load as LoRA adapter: {lora_error}")
             logger.info(f"Loading finetuned model as full model: {repo}")
             finetuned_model = load_model(repo, is_base_model=False)
+            
+            if finetuned_model is None:
+                raise ValueError(f"Finetuned model {repo} failed to load as full model")
+                
             try:
                 is_finetune = model_is_a_finetune(evaluation_args.original_model, finetuned_model)
             except Exception as e:
@@ -219,6 +274,49 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
         log_memory_stats()
         finetuned_model.eval()
         reference_model.eval()
+        
+        # Validate models are functioning properly
+        logger.info("Validating model functionality before evaluation...")
+        def validate_models(ref_model, ft_model, tokenizer):
+            try:
+                # Create a simple test input
+                test_input = "This is a test input to verify model functionality."
+                inputs = tokenizer(test_input, return_tensors="pt").to(ref_model.device)
+                
+                # Get outputs from both models
+                with torch.no_grad():
+                    ref_output = ref_model(**inputs).logits
+                    ft_output = ft_model(**inputs).logits
+                
+                # Check if outputs are valid tensors with expected shape
+                if not isinstance(ref_output, torch.Tensor) or ref_output.size(0) == 0:
+                    raise ValueError(f"Reference model produced invalid output: {ref_output}")
+                if not isinstance(ft_output, torch.Tensor) or ft_output.size(0) == 0:
+                    raise ValueError(f"Finetuned model produced invalid output: {ft_output}")
+                    
+                # Check models produce different outputs
+                output_diff = torch.abs(ref_output - ft_output).mean().item()
+                logger.info(f"Average difference between model outputs: {output_diff:.6f}")
+                
+                if output_diff < 1e-5:
+                    logger.warning("="*80)
+                    logger.warning(f"CRITICAL WARNING: Models have nearly identical outputs (diff={output_diff:.6f})!")
+                    logger.warning("This will likely result in a 0.693 loss value (~ln(2)) in DPO evaluation.")
+                    logger.warning("Root cause: The finetuned model and reference model are essentially identical.")
+                    logger.warning("Solutions to try:")
+                    logger.warning(" 1. Check that fine-tuning actually completed successfully")
+                    logger.warning(" 2. Verify that the LoRA adapter weights are being properly loaded") 
+                    logger.warning(" 3. Ensure the model paths are correct and point to different models")
+                    logger.warning("="*80)
+                
+                return True
+            except Exception as e:
+                logger.error(f"Model validation failed: {e}")
+                return False
+        
+        models_valid = validate_models(reference_model, finetuned_model, tokenizer)
+        if not models_valid:
+            raise ValueError("Model validation failed - models unable to generate valid outputs")
 
         results = evaluate_finetuned_dpo_model(
             evaluation_args=evaluation_args,

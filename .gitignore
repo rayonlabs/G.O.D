@@ -226,3 +226,5 @@ cython_debug/
 
 # HTTPie
 .http
+
+**/.claude/settings.local.json

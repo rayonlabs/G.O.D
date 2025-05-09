@@ -9,8 +9,8 @@ from fastapi import HTTPException
 from fastapi.routing import APIRouter
 from fiber.logging_utils import get_logger
 from fiber.miner.core.configuration import Config
-from fiber.miner.dependencies import blacklist_low_stake
 from fiber.miner.dependencies import get_config
+from fiber.miner.dependencies import blacklist_low_stake
 from fiber.miner.dependencies import verify_get_request
 from fiber.miner.dependencies import verify_request
 from pydantic import ValidationError
