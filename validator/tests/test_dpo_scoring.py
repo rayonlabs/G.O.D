@@ -114,10 +114,7 @@ def test_miner_ranking_with_dpo_penalty(mock_logger):
         with patch('builtins.list.sort', capture_sort):
             scored_results = calculate_miner_ranking_and_scores(miner_results)
     
-    # Print what was used for ranking
-    print("\nActual weighted losses used for ranking:")
-    for k, v in weighted_loss_values.items():
-        print(f"{k}: {v:.4f}")
+    # Removed weighted_loss_values reference that was causing an error
     
     # Find winner and extract scores
     winner = None

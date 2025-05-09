@@ -187,7 +187,9 @@ def calculate_weighted_loss(test_loss: float, synth_loss: float, is_dpo: bool = 
     if is_dpo:
         ratio_penalty = calculate_test_synth_ratio_penalty(test_loss, synth_loss)
         adjusted_loss = test_loss * ratio_penalty
-        logger.info(f"DPO adjusted loss: {adjusted_loss:.6f} (original: {test_loss:.6f}, penalty: {ratio_penalty:.6f})")
+        # Debug with more specific information
+        logger.info(f"DPO adjusted loss calculation for test={test_loss:.6f}, synth={synth_loss:.6f}")
+        logger.info(f"Ratio penalty: {ratio_penalty:.6f}, final adjusted loss: {adjusted_loss:.6f}")
         return adjusted_loss
     else:
         return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
