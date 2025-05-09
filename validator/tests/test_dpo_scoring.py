@@ -94,9 +94,24 @@ def test_miner_ranking_with_dpo_penalty(mock_logger):
         
     # Ranking with penalty should be: miner2, miner4, miner1, miner3
     
-    # Mock the _is_synth_loss_valid_for_group to return True
-    with patch('validator.evaluation.scoring._is_synth_loss_valid_for_group', return_value=True):
-        scored_results = calculate_miner_ranking_and_scores(miner_results)
+    # Add a spy to capture the actual loss values used for ranking
+    original_func = validator.evaluation.scoring.calculate_weighted_loss
+    weighted_loss_values = {}
+    
+    def spy_on_weighted_loss(test_loss, synth_loss, is_dpo=False):
+        result = original_func(test_loss, synth_loss, is_dpo)
+        weighted_loss_values[f"test={test_loss:.4f},synth={synth_loss:.4f}"] = result
+        return result
+    
+    # Mock both functions
+    with patch('validator.evaluation.scoring.calculate_weighted_loss', side_effect=spy_on_weighted_loss):
+        with patch('validator.evaluation.scoring._is_synth_loss_valid_for_group', return_value=True):
+            scored_results = calculate_miner_ranking_and_scores(miner_results)
+    
+    # Print what was used for ranking
+    print("\nActual weighted losses used for ranking:")
+    for k, v in weighted_loss_values.items():
+        print(f"{k}: {v:.4f}")
     
     # Find winner and extract scores
     winner = None
