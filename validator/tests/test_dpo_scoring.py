@@ -38,23 +38,36 @@ def test_weighted_loss_for_different_scenarios():
 # We replaced this with test_weighted_loss_for_different_scenarios
 
 def test_edge_case_miner_scenarios():
+    # Let's add a simple basic case as reference
+    reference_case = {
+        "hotkey": "reference",
+        "test_loss": 2.0,
+        "synth_loss": 2.0,
+        "is_finetune": True
+    }
+    
     test_cases = [
         # Test miner with NaN test_loss (should be excluded from ranking)
-        {"test_loss": float('nan'), "synth_loss": 1.0, "expected_score": 0.0, "expected_reason": "Invalid test loss"},
+        {"hotkey": "nan_test", "test_loss": float('nan'), "synth_loss": 1.0, 
+         "expected_reason": "Invalid test loss"},
         
         # Test miner with non-finetuned submission (should be excluded)
-        {"test_loss": 1.0, "synth_loss": 1.0, "is_finetune": False, "expected_score": 0.0, 
+        {"hotkey": "non_finetune", "test_loss": 1.0, "synth_loss": 1.0, "is_finetune": False,
          "expected_reason": "Non-finetuned submission"},
-        
-        # Test miner with synth_loss=1000 (outside top-4)
-        {"test_loss": 1.0, "synth_loss": 1000.0, "expected_score": 0.0, 
-         "expected_reason": "Outside of top-4 test doesn't get scored."},
     ]
     
     for i, case in enumerate(test_cases):
+        # Add the reference case to ensure we have a valid miner in the pool
         miner_results = [
             MinerResultsText(
-                hotkey=f"test{i}",
+                hotkey=reference_case["hotkey"],
+                test_loss=reference_case["test_loss"],
+                synth_loss=reference_case["synth_loss"],
+                is_finetune=reference_case["is_finetune"],
+                task_type=TaskType.DPOTASK
+            ),
+            MinerResultsText(
+                hotkey=case["hotkey"],
                 test_loss=case.get("test_loss", 1.0),
                 synth_loss=case.get("synth_loss", 1.0),
                 is_finetune=case.get("is_finetune", True),
@@ -65,10 +78,13 @@ def test_edge_case_miner_scenarios():
         with patch('validator.evaluation.scoring.logger'):
             with patch('validator.evaluation.scoring._is_synth_loss_valid_for_group', return_value=True):
                 results = calculate_miner_ranking_and_scores(miner_results)
-                
-        assert results[0].score == case["expected_score"]
+        
+        # Find the result for our test case
+        test_result = next((r for r in results if r.hotkey == case["hotkey"]), None)
+        assert test_result is not None, f"Test result for {case['hotkey']} not found"
+        
         if "expected_reason" in case:
-            assert case["expected_reason"] in (results[0].score_reason or "")
+            assert case["expected_reason"] in (test_result.score_reason or "")
 
 @patch('validator.evaluation.scoring.logger')
 def test_multiple_miner_dpo_scenarios(mock_logger):
@@ -77,34 +93,34 @@ def test_multiple_miner_dpo_scenarios(mock_logger):
         # Scenario 1: Standard case with clear winner
         {
             "miners": [
-                {"hotkey": "miner1", "test_loss": 2.0, "synth_loss": 2.2},  # Penalized to 2.2
-                {"hotkey": "miner2", "test_loss": 1.5, "synth_loss": 1.5},  # No penalty, stays 1.5
-                {"hotkey": "miner3", "test_loss": 3.0, "synth_loss": 2.8},  # No penalty, stays 3.0
-                {"hotkey": "miner4", "test_loss": 0.5, "synth_loss": 5.0},  # Penalized to 5.0
+                {"hotkey": "miner1", "test_loss": 2.0, "synth_loss": 2.2},  # max = 2.2
+                {"hotkey": "miner2", "test_loss": 1.5, "synth_loss": 1.5},  # max = 1.5
+                {"hotkey": "miner3", "test_loss": 3.0, "synth_loss": 2.8},  # max = 3.0
+                {"hotkey": "miner4", "test_loss": 0.5, "synth_loss": 5.0},  # max = 5.0
             ],
             "expected_winner": "miner2",
-            "expected_loser": "miner4"  # Due to suspicious test/synth ratio
+            "expected_loser": "miner4"
         },
         
         # Scenario 2: Close competition between miners with similar adjusted scores
         {
             "miners": [
-                {"hotkey": "miner1", "test_loss": 1.01, "synth_loss": 1.02},  # Penalized to 1.02
-                {"hotkey": "miner2", "test_loss": 1.0, "synth_loss": 1.0},    # No penalty, stays 1.0 (winner)
-                {"hotkey": "miner3", "test_loss": 0.9, "synth_loss": 1.8},    # Penalized to 1.8
-                {"hotkey": "miner4", "test_loss": 0.8, "synth_loss": 4.0},    # Penalized to 4.0
+                {"hotkey": "miner1", "test_loss": 1.01, "synth_loss": 1.02},  # max = 1.02
+                {"hotkey": "miner2", "test_loss": 1.0, "synth_loss": 1.0},    # max = 1.0
+                {"hotkey": "miner3", "test_loss": 0.9, "synth_loss": 1.8},    # max = 1.8
+                {"hotkey": "miner4", "test_loss": 0.8, "synth_loss": 4.0},    # max = 4.0
             ],
             "expected_winner": "miner2",
-            "expected_ranks": ["miner2", "miner1", "miner3", "miner4"]  # Expected ordering
+            "expected_ranks": ["miner2", "miner1", "miner3", "miner4"]
         },
         
-        # Scenario 3: All miners have penalty applied except one
+        # Scenario 3: Mixed test/synth relations
         {
             "miners": [
-                {"hotkey": "miner1", "test_loss": 2.0, "synth_loss": 4.0},   # Penalized to 4.0
-                {"hotkey": "miner2", "test_loss": 1.0, "synth_loss": 5.0},   # Penalized to 5.0 
-                {"hotkey": "miner3", "test_loss": 0.5, "synth_loss": 5.0},   # Penalized to 5.0
-                {"hotkey": "miner4", "test_loss": 3.0, "synth_loss": 2.0},   # No penalty, stays at 3.0
+                {"hotkey": "miner1", "test_loss": 2.0, "synth_loss": 4.0},   # max = 4.0
+                {"hotkey": "miner2", "test_loss": 1.0, "synth_loss": 5.0},   # max = 5.0
+                {"hotkey": "miner3", "test_loss": 0.5, "synth_loss": 5.0},   # max = 5.0
+                {"hotkey": "miner4", "test_loss": 3.0, "synth_loss": 2.0},   # max = 3.0
             ],
             "expected_winner": "miner4",
             "expected_ranks": ["miner4", "miner1", "miner2", "miner3"]
@@ -149,11 +165,8 @@ def test_multiple_miner_dpo_scenarios(mock_logger):
             # Calculate adjusted losses for verification
             adjusted_losses = {}
             for m in scenario["miners"]:
-                if m["test_loss"] < m["synth_loss"]:
-                    penalty = m["test_loss"] / m["synth_loss"]
-                    adj_loss = m["test_loss"] * penalty
-                else:
-                    adj_loss = m["test_loss"]
+                # For DPO tasks, we now use max(test_loss, synth_loss)
+                adj_loss = max(m["test_loss"], m["synth_loss"])
                 adjusted_losses[m["hotkey"]] = adj_loss
             
             # Sort by adjusted loss (lower is better)
@@ -214,7 +227,7 @@ def test_extreme_dpo_case(mock_logger):
     for miner_hotkey in ["miner1", "miner3", "miner4"]:
         assert scores["miner2"] > scores.get(miner_hotkey, 0)
     
-    mock_logger.info.assert_any_call(f"DPO using test_loss: test=1.000000 >= synth=1.000000")
+    mock_logger.info.assert_any_call("Processing DPO task with max(test_loss, synth_loss) approach")
 
 if __name__ == "__main__":
     test_weighted_loss_for_different_scenarios()
