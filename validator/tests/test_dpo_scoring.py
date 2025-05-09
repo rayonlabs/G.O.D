@@ -94,18 +94,24 @@ def test_miner_ranking_with_dpo_penalty(mock_logger):
         
     # Ranking with penalty should be: miner2, miner4, miner1, miner3
     
-    # Add a spy to capture the actual loss values used for ranking
-    original_func = validator.evaluation.scoring.calculate_weighted_loss
-    weighted_loss_values = {}
-    
-    def spy_on_weighted_loss(test_loss, synth_loss, is_dpo=False):
-        result = original_func(test_loss, synth_loss, is_dpo)
-        weighted_loss_values[f"test={test_loss:.4f},synth={synth_loss:.4f}"] = result
-        return result
-    
-    # Mock both functions
-    with patch('validator.evaluation.scoring.calculate_weighted_loss', side_effect=spy_on_weighted_loss):
-        with patch('validator.evaluation.scoring._is_synth_loss_valid_for_group', return_value=True):
+    # Mock just the validation function - we want to see the real behavior
+    with patch('validator.evaluation.scoring._is_synth_loss_valid_for_group', return_value=True):
+        # Directly patch the ranking sort to see the values being used
+        original_sort = list.sort
+        ranked_pairs = []
+        
+        def capture_sort(self, *args, **kwargs):
+            nonlocal ranked_pairs
+            if len(self) > 0 and isinstance(self[0], tuple) and len(self[0]) == 2:
+                # This looks like our ranked_results list
+                if hasattr(self[0][0], 'hotkey'):
+                    ranked_pairs = [(r[0].hotkey, r[1]) for r in self]
+                    print("\nValues being sorted for ranking:")
+                    for miner, val in ranked_pairs:
+                        print(f"{miner}: {val:.6f}")
+            return original_sort(self, *args, **kwargs)
+        
+        with patch('builtins.list.sort', capture_sort):
             scored_results = calculate_miner_ranking_and_scores(miner_results)
     
     # Print what was used for ranking
