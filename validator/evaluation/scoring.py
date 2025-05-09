@@ -28,7 +28,6 @@ from validator.core.models import PeriodScore
 from validator.core.models import Submission
 from validator.core.models import TaskNode
 from validator.core.models import TaskResults
-from validator.db.sql.nodes import _blacklist_nodes
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
@@ -77,7 +76,7 @@ def calculate_adjusted_task_score(quality_score: float, task_work_score: float) 
 def update_node_aggregation(
     node_aggregations: dict[str, NodeAggregationResult], node_score: TaskNode, task_work_score: float
 ) -> None:
-    assert isinstance(node_score.hotkey, str), "hotkey is string"
+    assert isinstance(node_score.hotkey, str)
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
 
     if node_score.hotkey not in node_aggregations:
@@ -162,10 +161,21 @@ def get_period_scores_from_results(task_results: list[TaskResults], weight_multi
     return final_scores
 
 
-def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
+def calculate_weighted_loss(test_loss: float, synth_loss: float, is_dpo: bool = False) -> float:
     assert not np.isnan(test_loss), "Test loss cannot be NaN"
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
-    return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
+    
+    if is_dpo:
+        adjusted_loss = max(test_loss, synth_loss)
+        
+        if test_loss >= synth_loss:
+            logger.info(f"DPO using test_loss: test={test_loss:.6f} >= synth={synth_loss:.6f}")
+        else:
+            logger.info(f"DPO using synth_loss: test={test_loss:.6f} < synth={synth_loss:.6f}, adjusted={adjusted_loss:.6f}")
+            
+        return adjusted_loss
+    else:
+        return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
 def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 1.5, threshold: float = 0.4) -> bool:
@@ -195,20 +205,6 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
         if result.test_loss > 0
     ]
 
-    blacklisted_miners = [
-        (result, ratio)
-        for result, ratio in miners_with_ratios
-        if ratio > cts.BLACKLIST_THRESHOLD and result.synth_loss < 999.0
-    ]
-
-    # Only blacklist if not all the group is above the threshold
-    if blacklisted_miners and len(blacklisted_miners) < len(miners_with_ratios):
-        for result, ratio in blacklisted_miners:
-            result.score_reason = cts.BLACKLIST_REASON
-            result.test_loss = 1000.0
-            result.synth_loss = 1000.0
-            logger.info(f"Blacklisted node {result.hotkey} with ratio {ratio}")
-
     valid_ratios = sum(1 for _, ratio in miners_with_ratios if ratio <= max_ratio)
     ratio = valid_ratios / valid_miners if valid_miners > 0 else 0
     logger.info(f"Valid ratios: {valid_ratios}/{valid_miners} = {ratio:.3f}, threshold is {threshold}")
@@ -237,12 +233,27 @@ def calculate_miner_ranking_and_scores(
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
 
-    use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
+    is_dpo_task = False
+    if valid_results and isinstance(valid_results[0], MinerResultsText):
+        is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
+        if is_dpo_task:
+            logger.info("Processing DPO task with max(test_loss, synth_loss) approach")
+    
+    use_weighted_loss = is_dpo_task or _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
-        logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
-        ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss)) for result in valid_results]
+        if is_dpo_task:
+            logger.info("Using ratio-adjusted loss for DPO task ranking")
+        else:
+            logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
+            
+        ranked_results = []
+        for result in valid_results:
+            adjusted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss, is_dpo=is_dpo_task)
+            ranked_results.append((result, adjusted_loss))
+            logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
+        
         ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-        ranking_type = "weighted_loss"
+        ranking_type = "dpo_ratio_adjusted_loss" if is_dpo_task else "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
@@ -269,8 +280,6 @@ def calculate_miner_ranking_and_scores(
         penalty_start_idx = total_valid_miners - penalty_count
 
         for result, metric in ranked_results[1:penalty_start_idx]:
-            if result.score_reason == cts.BLACKLIST_REASON:
-                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score_reason = f"Ranked below top 1 by {ranking_type}"
                 logger.info(
@@ -283,8 +292,6 @@ def calculate_miner_ranking_and_scores(
                 )
 
         for result, metric in ranked_results[penalty_start_idx:]:
-            if result.score_reason == cts.BLACKLIST_REASON:
-                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score = cts.SCORE_PENALTY
                 result.score_reason = f"Bottom 25% ranked by {ranking_type}"
@@ -298,8 +305,6 @@ def calculate_miner_ranking_and_scores(
                 )
     else:
         for result, metric in ranked_results[1:]:
-            if result.score_reason == cts.BLACKLIST_REASON:
-                continue
             with LogContext(miner_hotkey=result.hotkey):
                 result.score_reason = f"Ranked below top 1 by {ranking_type}"
                 logger.info(
@@ -736,16 +741,6 @@ async def process_miners_pool(
     return results
 
 
-async def blacklist_nodes(task_results: list[MinerResultsText | MinerResultsImage], psql_db) -> None:
-    """Blacklist nodes with suspicious performance metrics"""
-    logger.info('In blacklist nodes')
-    hotkeys_to_blacklist = [
-        result.hotkey
-        for result in task_results
-        if result.score_reason == cts.BLACKLIST_REASON
-    ]
-    logger.info(f"WE ARE BLACKLISTING {hotkeys_to_blacklist}")
-    await _blacklist_nodes(hotkeys_to_blacklist, psql_db)
 
 
 async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: Config) -> AnyTypeRawTask:
@@ -764,8 +759,6 @@ async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: C
 
     logger.info("Calculating final scores...")
     task_results = calculate_miner_ranking_and_scores(task_results)
-    logger.info("attempting to blacklist")
-    await blacklist_nodes(task_results, config.psql_db)
     await _update_scores(task, task_results, config.psql_db)
     all_scores_zero = all(result.score == 0.0 for result in task_results)
 

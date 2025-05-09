@@ -44,6 +44,31 @@ def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DpoDatasetType) ->
     """
     logger.info("Adapting DPO columns to standard format")
 
+    chosen_field = dataset_type.field_chosen
+    rejected_field = dataset_type.field_rejected
+    
+    if chosen_field in dataset.column_names and rejected_field in dataset.column_names:
+        identical_count = 0
+        sample_size = min(10, len(dataset))
+        sample_indices = list(range(sample_size))
+        
+        for idx in sample_indices:
+            example = dataset[idx]
+            chosen = example[chosen_field]
+            rejected = example[rejected_field]
+            
+            if chosen == rejected:
+                identical_count += 1
+        
+        if identical_count > 0:
+            logger.warning(f"CRITICAL: Found {identical_count}/{sample_size} samples with identical chosen/rejected, causing random predictions")
+
+            if identical_count > 0:
+                example = dataset[sample_indices[0]]
+                chosen = example[chosen_field]
+                rejected = example[rejected_field]
+                logger.warning(f"Example: Chosen/Rejected: '{chosen[:100]}...'")
+
     column_mapping = {
         dataset_type.field_prompt: cst.TRL_DPO_FIELD_PROMPT,
         dataset_type.field_chosen: cst.TRL_DPO_FIELD_CHOSEN,
@@ -71,17 +96,8 @@ def _collate_dpo_batch(batch: list[dict[str, list[int]]], tokenizer: AutoTokeniz
         rejected_ids = [torch.tensor(item["rejected_ids"]) for item in batch]
         rejected_attention_mask = [torch.tensor(item["rejected_attention_mask"]) for item in batch]
 
-        # Log tensors shape before padding
-        if logger.isEnabledFor(10):  # DEBUG level
-            shapes = {
-                "prompt_ids": [t.shape for t in prompt_ids],
-                "prompt_attention_mask": [t.shape for t in prompt_attention_mask],
-                "chosen_ids": [t.shape for t in chosen_ids],
-                "chosen_attention_mask": [t.shape for t in chosen_attention_mask],
-                "rejected_ids": [t.shape for t in rejected_ids],
-                "rejected_attention_mask": [t.shape for t in rejected_attention_mask],
-            }
-            logger.debug(f"Tensor shapes before padding: {shapes}")
+        if logger.isEnabledFor(10):
+            logger.debug(f"Processing batch with {len(prompt_ids)} examples")
 
         prompt_ids = pad_sequence(prompt_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
         prompt_attention_mask = pad_sequence(prompt_attention_mask, batch_first=True, padding_value=0)
@@ -90,17 +106,8 @@ def _collate_dpo_batch(batch: list[dict[str, list[int]]], tokenizer: AutoTokeniz
         rejected_ids = pad_sequence(rejected_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
         rejected_attention_mask = pad_sequence(rejected_attention_mask, batch_first=True, padding_value=0)
 
-        # Log tensors shape after padding
-        if logger.isEnabledFor(10):  # DEBUG level
-            shapes = {
-                "prompt_ids": prompt_ids.shape,
-                "prompt_attention_mask": prompt_attention_mask.shape,
-                "chosen_ids": chosen_ids.shape,
-                "chosen_attention_mask": chosen_attention_mask.shape,
-                "rejected_ids": rejected_ids.shape,
-                "rejected_attention_mask": rejected_attention_mask.shape,
-            }
-            logger.debug(f"Tensor shapes after padding: {shapes}")
+        if logger.isEnabledFor(10):
+            logger.debug(f"Padded tensors to shape {prompt_ids.shape[1]} tokens")
 
         return {
             "prompt_ids": prompt_ids,
@@ -160,6 +167,10 @@ def evaluate_dpo_model(
 
     eval_results = evaluate_dpo_with_batch_size()
     logger.info(f"Final DPO evaluation results: {eval_results}")
+    
+    if abs(eval_results["eval_loss"] - 0.6931) < 0.0001:
+        logger.error("CRITICAL: Loss value is approximately ln(2) ≈ 0.6931, suggesting models are making random predictions")
+    
     evaluation_results = {
         "eval_loss": eval_results["eval_loss"],
     }
@@ -187,7 +198,6 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
     results_dict = load_results_dict()
     repo = evaluation_args.repo
 
-    # Skip if duplicate
     if repo in results_dict:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
@@ -200,15 +210,24 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
     try:
         logger.info(f"Loading reference model: {evaluation_args.original_model}")
         reference_model = load_model(evaluation_args.original_model, is_base_model=True)
+        if reference_model is None:
+            raise ValueError(f"Reference model {evaluation_args.original_model} failed to load")
+            
         if "model_params_count" not in results_dict:
             results_dict["model_params_count"] = count_model_parameters(reference_model)
+            
         try:
+            logger.info(f"Loading finetuned model as LoRA adapter: {repo}")
             finetuned_model = load_finetuned_model(reference_model, repo)
             is_finetune = True
         except Exception as lora_error:
             logger.info(f"Failed to load as LoRA adapter: {lora_error}")
             logger.info(f"Loading finetuned model as full model: {repo}")
             finetuned_model = load_model(repo, is_base_model=False)
+            
+            if finetuned_model is None:
+                raise ValueError(f"Finetuned model {repo} failed to load as full model")
+                
             try:
                 is_finetune = model_is_a_finetune(evaluation_args.original_model, finetuned_model)
             except Exception as e:
@@ -218,6 +237,7 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
         log_memory_stats()
         finetuned_model.eval()
         reference_model.eval()
+        
 
         results = evaluate_finetuned_dpo_model(
             evaluation_args=evaluation_args,
@@ -257,7 +277,6 @@ def main():
                 repo=repo
             )
 
-            # Launching subprocess to purge memory
             subprocess.run([
                 "python",
                 "-m",

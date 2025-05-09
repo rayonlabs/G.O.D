@@ -254,7 +254,6 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
     """
     Get aggregate scores for all completed tasks since the given start time.
     Only includes tasks that have at least one node with score >= 1 or < 0
-    Excludes blacklisted nodes from the results.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -272,11 +271,6 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
                     ) FILTER (
                         WHERE tn.{cst.HOTKEY} IS NOT NULL 
                         AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
-                        AND NOT EXISTS (
-                            SELECT 1 FROM blacklisted_nodes bn
-                            WHERE bn.{cst.HOTKEY} = tn.{cst.HOTKEY}
-                            AND bn.{cst.NETUID} = tn.{cst.NETUID}
-                        )
                     ),
                     '[]'::json
                 ) as node_scores
@@ -291,11 +285,6 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
                 WHERE tn2.{cst.TASK_ID} = t.{cst.TASK_ID}
                 AND (tn2.{cst.TASK_NODE_QUALITY_SCORE} >= 1 OR tn2.{cst.TASK_NODE_QUALITY_SCORE} < 0)
                 AND tn2.{cst.NETUID} = $2
-                AND NOT EXISTS (
-                    SELECT 1 FROM blacklisted_nodes bn
-                    WHERE bn.{cst.HOTKEY} = tn2.{cst.HOTKEY}
-                    AND bn.{cst.NETUID} = tn2.{cst.NETUID}
-                )
             )
             GROUP BY t.{cst.TASK_ID}
             ORDER BY t.{cst.CREATED_AT} DESC
