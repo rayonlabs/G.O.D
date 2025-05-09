@@ -234,14 +234,12 @@ def calculate_miner_ranking_and_scores(
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
 
-    # Check if this is a DPO task
     is_dpo_task = False
     if valid_results and isinstance(valid_results[0], MinerResultsText):
         is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
         if is_dpo_task:
             logger.info("Processing DPO task with max(test_loss, synth_loss) approach")
     
-    # For DPO tasks, always use the ratio-based penalty regardless of synth loss validity
     use_weighted_loss = is_dpo_task or _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
         if is_dpo_task:
@@ -255,18 +253,7 @@ def calculate_miner_ranking_and_scores(
             ranked_results.append((result, adjusted_loss))
             logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
         
-        # Debug log before sorting
-        logger.info("Ranking values before sorting:")
-        for r, loss in ranked_results:
-            logger.info(f"  {r.hotkey}: {loss:.6f}")
-            
         ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-        
-        # Debug log after sorting
-        logger.info("Ranking values after sorting (first=winner):")
-        for r, loss in ranked_results:
-            logger.info(f"  {r.hotkey}: {loss:.6f}")
-            
         ranking_type = "dpo_ratio_adjusted_loss" if is_dpo_task else "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
