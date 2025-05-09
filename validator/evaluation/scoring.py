@@ -77,7 +77,7 @@ def calculate_adjusted_task_score(quality_score: float, task_work_score: float) 
 def update_node_aggregation(
     node_aggregations: dict[str, NodeAggregationResult], node_score: TaskNode, task_work_score: float
 ) -> None:
-    assert isinstance(node_score.hotkey, str), "hotkey is string"
+    assert isinstance(node_score.hotkey, str)
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
 
     if node_score.hotkey not in node_aggregations:
