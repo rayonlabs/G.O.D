@@ -143,7 +143,7 @@ SIGMOID_POWER = 0.75  # Higher = more extreme difference between high and low sc
 LINEAR_WEIGHT = 0.05  # Weight for linear component (0-1) - benefits low scores
 SIGMOID_WEIGHT = 0.7  # Weight for sigmoid component (0-1) - benefits high scores
 
-REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
+REWEIGHTING_EXP = 1.0  # how much of a drop off from leader
 
 SCORING_WINDOW = 7  # number of days over which we score
 OUTLIER_STD_THRESHOLD = 2.0  # number of standard deviations from the mean to reject the outlier scores
@@ -156,9 +156,9 @@ MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
 
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT = 0.3
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT = 0.2
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE = 0.5
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.1
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.15
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO = (
     1 - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
     - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE
