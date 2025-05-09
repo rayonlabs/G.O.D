@@ -162,34 +162,18 @@ def get_period_scores_from_results(task_results: list[TaskResults], weight_multi
     return final_scores
 
 
-def calculate_test_synth_ratio_penalty(test_loss: float, synth_loss: float) -> float:
-    EPSILON = 1e-6
-    
-    test_loss = max(test_loss, EPSILON)
-    synth_loss = max(synth_loss, EPSILON)
-    
-    if abs(test_loss - synth_loss) < EPSILON:
-        return 1.0
-        
-    if test_loss >= synth_loss:
-        return 1.0
-    
-    ratio = test_loss / synth_loss
-    logger.info(f"DPO ratio penalty: test_loss={test_loss:.6f}, synth_loss={synth_loss:.6f}, ratio={ratio:.6f}")
-    
-    return ratio
-
-
 def calculate_weighted_loss(test_loss: float, synth_loss: float, is_dpo: bool = False) -> float:
     assert not np.isnan(test_loss), "Test loss cannot be NaN"
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
     
     if is_dpo:
-        ratio_penalty = calculate_test_synth_ratio_penalty(test_loss, synth_loss)
-        adjusted_loss = test_loss * ratio_penalty
-        # Debug with more specific information
-        logger.info(f"DPO adjusted loss calculation for test={test_loss:.6f}, synth={synth_loss:.6f}")
-        logger.info(f"Ratio penalty: {ratio_penalty:.6f}, final adjusted loss: {adjusted_loss:.6f}")
+        adjusted_loss = max(test_loss, synth_loss)
+        
+        if test_loss >= synth_loss:
+            logger.info(f"DPO using test_loss: test={test_loss:.6f} >= synth={synth_loss:.6f}")
+        else:
+            logger.info(f"DPO using synth_loss: test={test_loss:.6f} < synth={synth_loss:.6f}, adjusted={adjusted_loss:.6f}")
+            
         return adjusted_loss
     else:
         return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss

@@ -207,7 +207,6 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
         dataset_length = len(train_dataset)
         
         if is_dpo:
-            # For DPO: Sample with replacement
             synthetic_dataset = train_dataset.shuffle(seed=42).select(range(num_synthetic_samples))
             remaining_train_dataset = train_dataset
             
@@ -218,7 +217,6 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
                 f"Synthetic size: {len(synthetic_dataset)}"
             )
         else:
-            # Standard split for non-DPO tasks
             split_index = dataset_length - num_synthetic_samples
             synthetic_dataset = train_dataset.select(range(split_index, dataset_length))
             remaining_train_dataset = train_dataset.select(range(split_index))
