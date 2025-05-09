@@ -44,12 +44,10 @@ def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DPODatasetType) ->
     """
     logger.info("Adapting DPO columns to standard format")
 
-    # Check if chosen and rejected responses are too similar across the dataset
     chosen_field = dataset_type.field_chosen
     rejected_field = dataset_type.field_rejected
     
     if chosen_field in dataset.column_names and rejected_field in dataset.column_names:
-        # Sample a few examples to verify chosen != rejected
         identical_count = 0
         sample_size = min(10, len(dataset))
         sample_indices = list(range(sample_size))
@@ -69,7 +67,6 @@ def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DPODatasetType) ->
             logger.warning("Expect a loss value of ~0.693 (ln(2)) during evaluation")
             logger.warning("="*80)
             
-            # Log an example
             if identical_count > 0:
                 example = dataset[sample_indices[0]]
                 chosen = example[chosen_field]
@@ -105,17 +102,8 @@ def _collate_dpo_batch(batch: list[dict[str, list[int]]], tokenizer: AutoTokeniz
         rejected_ids = [torch.tensor(item["rejected_ids"]) for item in batch]
         rejected_attention_mask = [torch.tensor(item["rejected_attention_mask"]) for item in batch]
 
-        # Log tensors shape before padding
-        if logger.isEnabledFor(10):  # DEBUG level
-            shapes = {
-                "prompt_ids": [t.shape for t in prompt_ids],
-                "prompt_attention_mask": [t.shape for t in prompt_attention_mask],
-                "chosen_ids": [t.shape for t in chosen_ids],
-                "chosen_attention_mask": [t.shape for t in chosen_attention_mask],
-                "rejected_ids": [t.shape for t in rejected_ids],
-                "rejected_attention_mask": [t.shape for t in rejected_attention_mask],
-            }
-            logger.debug(f"Tensor shapes before padding: {shapes}")
+        if logger.isEnabledFor(10):
+            logger.debug(f"Processing batch with {len(prompt_ids)} examples")
 
         prompt_ids = pad_sequence(prompt_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
         prompt_attention_mask = pad_sequence(prompt_attention_mask, batch_first=True, padding_value=0)
@@ -124,17 +112,8 @@ def _collate_dpo_batch(batch: list[dict[str, list[int]]], tokenizer: AutoTokeniz
         rejected_ids = pad_sequence(rejected_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
         rejected_attention_mask = pad_sequence(rejected_attention_mask, batch_first=True, padding_value=0)
 
-        # Log tensors shape after padding
-        if logger.isEnabledFor(10):  # DEBUG level
-            shapes = {
-                "prompt_ids": prompt_ids.shape,
-                "prompt_attention_mask": prompt_attention_mask.shape,
-                "chosen_ids": chosen_ids.shape,
-                "chosen_attention_mask": chosen_attention_mask.shape,
-                "rejected_ids": rejected_ids.shape,
-                "rejected_attention_mask": rejected_attention_mask.shape,
-            }
-            logger.debug(f"Tensor shapes after padding: {shapes}")
+        if logger.isEnabledFor(10):
+            logger.debug(f"Padded tensors to shape {prompt_ids.shape[1]} tokens")
 
         return {
             "prompt_ids": prompt_ids,
@@ -196,7 +175,6 @@ def evaluate_dpo_model(
     eval_results = evaluate_dpo_with_batch_size()
     logger.info(f"Final DPO evaluation results: {eval_results}")
     
-    # Check for the suspicious ln(2) loss value
     if abs(eval_results["eval_loss"] - 0.6931) < 0.0001:
         logger.error("="*80)
         logger.error("CRITICAL: Loss value is approximately ln(2) ≈ 0.6931")
@@ -234,7 +212,6 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
     results_dict = load_results_dict()
     repo = evaluation_args.repo
 
-    # Skip if duplicate
     if repo in results_dict:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
@@ -279,22 +256,18 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
         logger.info("Validating model functionality before evaluation...")
         def validate_models(ref_model, ft_model, tokenizer):
             try:
-                # Create a simple test input
                 test_input = "This is a test input to verify model functionality."
                 inputs = tokenizer(test_input, return_tensors="pt").to(ref_model.device)
                 
-                # Get outputs from both models
                 with torch.no_grad():
                     ref_output = ref_model(**inputs).logits
                     ft_output = ft_model(**inputs).logits
                 
-                # Check if outputs are valid tensors with expected shape
                 if not isinstance(ref_output, torch.Tensor) or ref_output.size(0) == 0:
                     raise ValueError(f"Reference model produced invalid output: {ref_output}")
                 if not isinstance(ft_output, torch.Tensor) or ft_output.size(0) == 0:
                     raise ValueError(f"Finetuned model produced invalid output: {ft_output}")
                     
-                # Check models produce different outputs
                 output_diff = torch.abs(ref_output - ft_output).mean().item()
                 logger.info(f"Average difference between model outputs: {output_diff:.6f}")
                 
@@ -356,7 +329,6 @@ def main():
                 repo=repo
             )
 
-            # Launching subprocess to purge memory
             subprocess.run([
                 "python",
                 "-m",

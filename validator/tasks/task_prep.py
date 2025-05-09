@@ -66,7 +66,6 @@ def unzip_to_temp_path(zip_file_path: str) -> str:
 async def load_dataset_from_s3(dataset_url: str, max_file_size_bytes: int = None) -> Dataset | DatasetDict:
     """Load a dataset from S3 storage."""
     try:
-        # TODO: check what is going on here
         with tempfile.TemporaryDirectory() as temp_dir:
             local_file_path = await download_s3_file(dataset_url)
             if max_file_size_bytes:
@@ -203,10 +202,11 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
         raise ValueError("Cannot split an empty dataset")
     
     try:
-        num_synthetic_samples = min(cst.MAX_SYNTH_DATA_POINTS, int(len(train_dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE))
         dataset_length = len(train_dataset)
         
         if is_dpo:
+            test_size = min(cst.MAX_TEST_DATA_POINTS, int(len(train_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE))
+            num_synthetic_samples = test_size
             synthetic_dataset = train_dataset.shuffle(seed=42).select(range(num_synthetic_samples))
             remaining_train_dataset = train_dataset
             
@@ -217,6 +217,10 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
                 f"Synthetic size: {len(synthetic_dataset)}"
             )
         else:
+            num_synthetic_samples = min(
+                cst.MAX_SYNTH_DATA_POINTS,
+                int(len(train_dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
+            )
             split_index = dataset_length - num_synthetic_samples
             synthetic_dataset = train_dataset.select(range(split_index, dataset_length))
             remaining_train_dataset = train_dataset.select(range(split_index))
