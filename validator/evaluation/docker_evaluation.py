@@ -108,17 +108,22 @@ async def run_evaluation_docker_text(
             "bind": "/workspace/input_data",
             "mode": "ro",
         },
-        os.path.expanduser(cst.CACHE_DIR_HUB): {
-            "bind": "/root/.cache/huggingface/hub",
+        cst.HF_CACHE_CONTAINER_VOLUME: {
+            "bind": cst.CONTAINER_CACHE_DIR_HUB,
             "mode": "rw",
         }
     }
+    try:
+        client.volumes.get(cst.HF_CACHE_CONTAINER_VOLUME)
+    except Exception as e:
+        logger.info(f"Volume {cst.HF_CACHE_CONTAINER_VOLUME} not found, error: {e}, creating it")
+        client.volumes.create(cst.HF_CACHE_CONTAINER_VOLUME)
 
     async def cleanup_resources():
         try:
             await asyncio.to_thread(client.containers.prune)
             await asyncio.to_thread(client.images.prune, filters={"dangling": True})
-            await asyncio.to_thread(client.volumes.prune)
+            await asyncio.to_thread(client.volumes.prune, filters={"label!": ["persistent=true"]})
             logger.debug("Completed Docker resource cleanup")
         except Exception as e:
             logger.error(f"Cleanup failed: {str(e)}")
@@ -181,17 +186,23 @@ async def run_evaluation_docker_image(
         ),
         Mount(
             target=f"{base_path}/checkpoints",
-            source=cst.CACHE_DIR_HUB,
-            type='bind',
+            source=cst.HF_CACHE_CONTAINER_VOLUME,
+            type='volume',
             read_only=False
         ),
         Mount(
             target=f"{base_path}/diffusers",
-            source=cst.CACHE_DIR_HUB,
-            type='bind',
+            source=cst.HF_CACHE_CONTAINER_VOLUME,
+            type='volume',
             read_only=False
         )
     ]
+
+    try:
+        client.volumes.get(cst.HF_CACHE_CONTAINER_VOLUME)
+    except Exception as e:
+        logger.info(f"Volume {cst.HF_CACHE_CONTAINER_VOLUME} not found, error: {e}, creating it")
+        client.volumes.create(cst.HF_CACHE_CONTAINER_VOLUME)
 
     environment = {
         "DATASET": container_dataset_path,
@@ -204,7 +215,7 @@ async def run_evaluation_docker_image(
         try:
             await asyncio.to_thread(client.containers.prune)
             await asyncio.to_thread(client.images.prune, filters={"dangling": True})
-            await asyncio.to_thread(client.volumes.prune)
+            await asyncio.to_thread(client.volumes.prune, filters={"label!": ["persistent=true"]})
             logger.debug("Completed Docker resource cleanup")
         except Exception as e:
             logger.error(f"Cleanup failed: {str(e)}")
