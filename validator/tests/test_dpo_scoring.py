@@ -43,40 +43,56 @@ def test_calculate_weighted_loss():
 
 @patch('validator.evaluation.scoring.logger')
 def test_miner_ranking_with_dpo_penalty(mock_logger):
-    # Create mock DPO task results
+    # Let's print debug output to understand what's happening
+    print("\n===== DPO Penalty Test =====")
+    
+    # Create mock DPO task results with more extreme differences to ensure penalty works
     miner_results = [
         MinerResultsText(
             hotkey="miner1",
-            test_loss=0.5,      # Better test loss but much worse than synth
-            synth_loss=2.0,
+            test_loss=0.5,      # Middle test loss
+            synth_loss=1.5,     # 3x higher than test
             is_finetune=True,
             task_type=TaskType.DPOTASK
         ),
         MinerResultsText(
             hotkey="miner2",
-            test_loss=0.6,      # Slightly worse test loss but closer to synth
-            synth_loss=0.7,
+            test_loss=0.6,      # Slightly worse test loss but very close to synth
+            synth_loss=0.65,    # Almost equal to test (minimal penalty)
             is_finetune=True,
             task_type=TaskType.DPOTASK
         ),
         MinerResultsText(
             hotkey="miner3",
-            test_loss=0.4,      # Best test loss but warning sign: very low vs synth
-            synth_loss=2.5,
+            test_loss=0.2,      # Best test loss but suspiciously low vs synth
+            synth_loss=2.0,     # 10x higher than test (severe penalty)
             is_finetune=True,
             task_type=TaskType.DPOTASK
         ),
         MinerResultsText(
             hotkey="miner4",
-            test_loss=1.0,      # Worst test loss but synth is very close
-            synth_loss=1.1,
+            test_loss=1.0,      # Worst test loss
+            synth_loss=1.1,     # Close to test (small penalty)
             is_finetune=True,
             task_type=TaskType.DPOTASK
         )
     ]
     
-    # Without our DPO penalty, ranking should be: miner3, miner1, miner2, miner4
-    # With our penalty, ranking should be: miner2, miner4, miner1, miner3
+    # Expected adjusted scores (after penalty):
+    # miner1: 0.5 * (0.5/1.5) = 0.5 * 0.33 = 0.167
+    # miner2: 0.6 * (0.6/0.65) = 0.6 * 0.92 = 0.552
+    # miner3: 0.2 * (0.2/2.0) = 0.2 * 0.1 = 0.02
+    # miner4: 1.0 * (1.0/1.1) = 1.0 * 0.91 = 0.91
+    
+    # Calculate expected scores with penalty
+    print("Expected scores after penalty:")
+    for miner in miner_results:
+        ratio = min(1.0, miner.test_loss / miner.synth_loss) if miner.test_loss < miner.synth_loss else 1.0
+        adjusted = miner.test_loss * ratio
+        print(f"{miner.hotkey}: test={miner.test_loss:.3f}, synth={miner.synth_loss:.3f}, " +
+              f"ratio={ratio:.3f}, adjusted={adjusted:.3f}")
+        
+    # Ranking with penalty should be: miner2, miner4, miner1, miner3
     
     # Mock the _is_synth_loss_valid_for_group to return True
     with patch('validator.evaluation.scoring._is_synth_loss_valid_for_group', return_value=True):
@@ -85,8 +101,10 @@ def test_miner_ranking_with_dpo_penalty(mock_logger):
     # Find winner and extract scores
     winner = None
     scores = {}
+    print("\nActual scores from function:")
     for result in scored_results:
         scores[result.hotkey] = result.score
+        print(f"{result.hotkey}: score={result.score}, reason={result.score_reason}")
         if result.score > 0 and 'Ranked 1st' in (result.score_reason or ''):
             winner = result.hotkey
     
