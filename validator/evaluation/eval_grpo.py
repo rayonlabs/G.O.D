@@ -105,9 +105,17 @@ def evaluate_grpo_model(
 
     eval_results = evaluate_grpo_with_batch_size()
     logger.info(f"Final GRPO evaluation results: {eval_results}")
-    evaluation_results = {
-        "eval_loss": eval_results["eval_loss"],
-    }
+
+    if "eval_reward" in eval_results:
+        evaluation_results = {
+            "eval_loss": eval_results["eval_reward"] - eval_results["eval_loss"],
+        }
+    else:
+        logger.warning("No eval_reward found in results. Using loss. This is just the KL * beta, we should not be hitting this")
+        evaluation_results = {
+            "eval_loss": eval_results["eval_loss"],
+        }
+
     return evaluation_results
 
 
