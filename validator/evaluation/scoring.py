@@ -257,9 +257,9 @@ def calculate_miner_ranking_and_scores(
             logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
 
         if is_grpo_task:
-            # For GRPO, sort in reverse order (higher loss is better)
+            # For GRPO, sort in reverse order (higher value is better)
             ranked_results.sort(key=lambda x: float("-inf") if math.isnan(x[1]) else -x[1])
-            ranking_type = "GRPO loss (bigger is better)"
+            ranking_type = "GRPO score (bigger is better)"
         else:
             # For other tasks, sort normally (lower loss is better)
             ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
@@ -269,9 +269,9 @@ def calculate_miner_ranking_and_scores(
         ranked_results = [(result, result.test_loss) for result in valid_results]
 
         if is_grpo_task:
-            # For GRPO, sort in reverse order (higher loss is better)
+            # For GRPO, sort in reverse order (higher value is better)
             ranked_results.sort(key=lambda x: float("-inf") if math.isnan(x[1]) else -x[1])
-            ranking_type = "GRPO loss (bigger is better)"
+            ranking_type = "GRPO score (bigger is better)"
         else:
             # For other tasks, sort normally (lower loss is better)
             ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
@@ -423,7 +423,7 @@ async def _evaluate_submissions(
     dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | None = None,
 ) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
     unique_repos = list(set(submission_repos))
-    if len(unique_repos) != len(submission_repos):
+    if len(unique_repos) \!= len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
 
     if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
@@ -495,7 +495,7 @@ async def _evaluate_submissions(
             synth_results = await run_evaluation_docker_text(
                 dataset=synthetic_data_filepath,
                 models=top_4_repos,
-                **{k: v for k, v in evaluation_params.items() if k != "models"},
+                **{k: v for k, v in evaluation_params.items() if k \!= "models"},
             )
 
             try:
@@ -668,7 +668,7 @@ async def process_miners_pool(
                 if len(repo_parts) >= 2:
                     submitted_name = repo_parts[-1]
 
-                    if expected_name and submitted_name != expected_name:
+                    if expected_name and submitted_name \!= expected_name:
                         logger.warning(
                             f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
                             f"but expected {expected_name}. Marking as failed."

@@ -1,5 +1,7 @@
 import os
 import subprocess
+import math
+import numpy as np
 
 from accelerate.utils import find_executable_batch_size
 from axolotl.utils.dict import DictDefault
@@ -53,6 +55,81 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
     return dataset
 
 
+def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
+    """Calculate aggregate scores across all reward functions for each model."""
+
+    evaluations_by_reward = {}
+    for eval_result in model_evaluations:
+        reward_func = eval_result['reward_function']
+        if reward_func not in evaluations_by_reward:
+            evaluations_by_reward[reward_func] = []
+        evaluations_by_reward[reward_func].append(eval_result)
+
+    all_normalized_evaluations = []
+    for reward_func, evals in evaluations_by_reward.items():
+        for eval_result in evals:
+            reward = eval_result['results'].get('eval_reward', 0.0)
+            loss = max(0.0001, eval_result['results'].get('eval_loss', 0.0))
+            eval_result['raw_metrics'] = {'reward': reward, 'loss': loss}
+
+        raw_rewards = [e['raw_metrics']['reward'] for e in evals]
+        raw_losses = [e['raw_metrics']['loss'] for e in evals]
+
+        sum_rewards = sum(raw_rewards)
+        sum_losses = sum(raw_losses)
+
+        for i, eval_result in enumerate(evals):
+            norm_reward = raw_rewards[i] / sum_rewards if sum_rewards > 0 else 1.0 / len(evals)
+
+            if sum_losses > 0:
+                inverse_losses = [1.0/max(0.0001, loss) for loss in raw_losses]
+                sum_inverse_losses = sum(inverse_losses)
+                norm_loss = inverse_losses[i] / sum_inverse_losses if sum_inverse_losses > 0 else 1.0 / len(evals)
+            else:
+                norm_loss = 1.0 / len(evals)
+
+            eval_result['normalized_metrics'] = {'reward': norm_reward, 'loss': norm_loss}
+            # Use reward minus loss (KL penalty already beta-weighted)
+            eval_result['grpo_score'] = norm_reward - norm_loss
+        evals.sort(key=lambda x: x['grpo_score'], reverse=True)
+        all_normalized_evaluations.extend(evals)
+
+    return all_normalized_evaluations
+
+
+def calculate_aggregate_scores(normalized_evaluations: list[dict]) -> list[dict]:
+    """Calculate aggregate scores across all reward functions for each model."""
+    scores_by_model = {}
+    for eval_result in normalized_evaluations:
+        model_name = eval_result['model_name']
+        if model_name not in scores_by_model:
+            scores_by_model[model_name] = {
+                'scores': [], 'raw_rewards': [], 'raw_losses': [],
+                'norm_rewards': [], 'norm_losses': []
+            }
+
+        data = scores_by_model[model_name]
+        data['scores'].append(eval_result['grpo_score'])
+        data['raw_rewards'].append(eval_result['raw_metrics']['reward'])
+        data['raw_losses'].append(eval_result['raw_metrics']['loss'])
+        data['norm_rewards'].append(eval_result['normalized_metrics']['reward'])
+        data['norm_losses'].append(eval_result['normalized_metrics']['loss'])
+
+    aggregate_results = []
+    for model_name, data in scores_by_model.items():
+        aggregate_results.append({
+            'model_name': model_name,
+            'aggregate_score': sum(data['scores']) / len(data['scores']),
+            'avg_raw_reward': sum(data['raw_rewards']) / len(data['raw_rewards']),
+            'avg_raw_loss': sum(data['raw_losses']) / len(data['raw_losses']),
+            'avg_norm_reward': sum(data['norm_rewards']) / len(data['norm_rewards']),
+            'avg_norm_loss': sum(data['norm_losses']) / len(data['norm_losses'])
+        })
+
+    aggregate_results.sort(key=lambda x: x['aggregate_score'], reverse=True)
+    return aggregate_results
+
+
 def evaluate_grpo_model(
     evaluation_config: DictDefault,
     finetuned_model: AutoModelForCausalLM,
@@ -69,13 +146,29 @@ def evaluate_grpo_model(
     _log_dataset_and_model_info(eval_dataset, finetuned_model, tokenizer)
 
     reward_funcs_callable = []
-    for reward_function in evaluation_args.dataset_type.reward_functions:
+    reward_func_names = []
+    for i, reward_function in enumerate(evaluation_args.dataset_type.reward_functions):
         reward_func_str = reward_function.reward_func
         is_valid, error_msg, reward_func_callable = validate_reward_function(reward_func_str)
         if not is_valid:
             logger.error(f"Invalid reward function:\n{reward_func_str}")
             raise ValueError(f"Invalid reward function: {error_msg}")
         reward_funcs_callable.append(reward_func_callable)
+        reward_func_names.append(f"reward_func_{i}")
+
+    captured_rewards = {name: [] for name in reward_func_names}
+    wrapped_reward_funcs = []
+    for i, original_func in enumerate(reward_funcs_callable):
+        func_name = reward_func_names[i]
+
+        def create_wrapper(original_func, func_name):
+            def wrapper(completions, **kwargs):
+                rewards = original_func(completions, **kwargs)
+                captured_rewards[func_name].extend(rewards)
+                return rewards
+            return wrapper
+
+        wrapped_reward_funcs.append(create_wrapper(original_func, func_name))
 
     @find_executable_batch_size(starting_batch_size=cst.GRPO_INITIAL_BATCH_SIZE)
     def evaluate_grpo_with_batch_size(batch_size):
@@ -92,7 +185,7 @@ def evaluate_grpo_model(
         )
         grpo_trainer = GRPOTrainer(
             model=finetuned_model,
-            reward_funcs=reward_funcs_callable,
+            reward_funcs=wrapped_reward_funcs,
             args=training_args,
             train_dataset=Dataset.from_dict({col: [] for col in eval_dataset.column_names}),
             eval_dataset=eval_dataset,
@@ -101,20 +194,26 @@ def evaluate_grpo_model(
         )
 
         results = grpo_trainer.evaluate()
-        return results
+        return results, grpo_trainer.reward_func_names
 
-    eval_results = evaluate_grpo_with_batch_size()
+    eval_results, actual_reward_func_names = evaluate_grpo_with_batch_size()
     logger.info(f"Final GRPO evaluation results: {eval_results}")
 
-    if "eval_reward" in eval_results:
-        evaluation_results = {
-            "eval_loss": eval_results["eval_reward"] - eval_results["eval_loss"],
-        }
-    else:
-        logger.warning("No eval_reward found in results. Using loss. This is just the KL * beta, we should not be hitting this")
-        evaluation_results = {
-            "eval_loss": eval_results["eval_loss"],
-        }
+    individual_rewards = {}
+    for i, name in enumerate(actual_reward_func_names):
+        reward_key = f"eval_rewards/{name}/mean"
+        if reward_key in eval_results:
+            individual_rewards[name] = eval_results[reward_key]
+        elif reward_func_names[i] in captured_rewards and captured_rewards[reward_func_names[i]]:
+            individual_rewards[name] = sum(captured_rewards[reward_func_names[i]]) / len(captured_rewards[reward_func_names[i]])
+        else:
+            individual_rewards[name] = 0.0
+
+    evaluation_results = {
+        "eval_loss": eval_results.get("eval_loss", 0.0),
+        "eval_reward": eval_results.get("eval_reward", 0.0),
+        "individual_rewards": individual_rewards
+    }
 
     return evaluation_results
 
@@ -123,15 +222,22 @@ def evaluate_finetuned_grpo_model(
     evaluation_args: EvaluationArgs,
     finetuned_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
+    model_name: str = None,
 ) -> dict[str, float]:
     evaluation_config = _load_and_update_evaluation_config(
         evaluation_args=evaluation_args,
         finetuned_model=finetuned_model,
         config_path=cst.VALI_CONFIG_PATH
     )
-    return evaluate_grpo_model(
+    results = evaluate_grpo_model(
         evaluation_config, finetuned_model, tokenizer, evaluation_args
     )
+
+    # Add model name if provided (used for multi-model comparison)
+    if model_name:
+        results["model_name"] = model_name
+
+    return results
 
 
 def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
@@ -139,8 +245,16 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
     results_dict = load_results_dict()
     repo = evaluation_args.repo
 
-    # Skip if duplicate
-    if repo in results_dict:
+    if "model_evaluations" not in results_dict:
+        results_dict["model_evaluations"] = []
+
+    if "normalized_evaluations" not in results_dict:
+        results_dict["normalized_evaluations"] = []
+
+    if "aggregate_scores" not in results_dict:
+        results_dict["aggregate_scores"] = []
+
+    if repo in results_dict and "individual_rewards" in results_dict[repo]:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
 
@@ -173,9 +287,39 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
             evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
             tokenizer=tokenizer,
+            model_name=repo,
         )
         results["is_finetune"] = is_finetune
+
         results_dict[repo] = results
+
+        if is_finetune and "individual_rewards" in results:
+            for reward_name, reward_value in results["individual_rewards"].items():
+                model_evaluation = {
+                    "model_name": repo,
+                    "reward_function": reward_name,
+                    "results": {
+                        "eval_reward": reward_value,
+                        "eval_loss": results.get("eval_loss", 0.0),
+                    }
+                }
+                results_dict["model_evaluations"].append(model_evaluation)
+
+            if len(set(eval_result["model_name"] for eval_result in results_dict["model_evaluations"])) > 1:
+                normalized_evals = normalize_and_score_models(results_dict["model_evaluations"])
+                results_dict["normalized_evaluations"] = normalized_evals
+
+                aggregate_scores = calculate_aggregate_scores(normalized_evals)
+                results_dict["aggregate_scores"] = aggregate_scores
+
+                for i, score in enumerate(aggregate_scores, 1):
+                    logger.info(f"Rank {i}: {score['model_name']} - Score: {score['aggregate_score']:.4f}")
+
+                for score in aggregate_scores:
+                    model_repo = score["model_name"]
+                    if model_repo in results_dict:
+                        results_dict[model_repo]["eval_loss"] = score["aggregate_score"]
+
     except Exception as e:
         logger.error(f"Error evaluating {repo}: {e}", exc_info=True)
         results_dict[repo] = str(e)
@@ -190,7 +334,7 @@ def main():
     original_model = os.environ.get("ORIGINAL_MODEL")
     dataset_type_str = os.environ.get("DATASET_TYPE", "")
     file_format_str = os.environ.get("FILE_FORMAT")
-    models_str = os.environ.get("MODELS", "")  # Comma-separated list of LoRA repos
+    models_str = os.environ.get("MODELS", "")
     if not all([dataset, original_model, file_format_str, models_str]):
         logger.error("Missing required environment variables.")
         exit(1)
