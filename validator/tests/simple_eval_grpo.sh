@@ -22,7 +22,7 @@ docker run --rm \
   -e DATASET="/workspace/input_data/dataset.json" \
   -e MODELS="robiual-awal/c621c6f1-40be-4a54-add1-38585b4e002f,Alphatao/3e05bf5e-0a8a-4c96-bf01-7a2d82bd333c" \
   -e ORIGINAL_MODEL="EleutherAI/pythia-70m" \
-  -e DATASET_TYPE='{"model_type":"GrpoDatasetType","field_prompt":"prompt","reward_functions":[{"name":"e_counter","reward_func":"def reward_func(completions, **kwargs):\n    return [text.count(\"e\") / (len(text) + 1) for text in completions]"},{"name":"length_scorer","reward_func":"def reward_func(completions, **kwargs):\n    return [min(len(text)/100, 1.0) for text in completions]"}]}' \
+  -e DATASET_TYPE='{"field_prompt":"prompt","reward_functions":[{"reward_func":"def reward_func(completions, **kwargs):\n    return [text.count(\"e\") / (len(text) + 1) for text in completions]","reward_weight":0.5},{"reward_func":"def reward_func(completions, **kwargs):\n    return [min(len(text)/100, 1.0) for text in completions]","reward_weight":0.5}]}' \
   -e FILE_FORMAT="json" \
   -v "$TEMP_DIR:/workspace/input_data:rw" \
   -v "$HOME/.cache/huggingface:/root/.cache/huggingface:rw" \
