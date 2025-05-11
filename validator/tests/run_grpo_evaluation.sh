@@ -52,6 +52,7 @@ docker run --rm \
   -v "$HOME/.cache/huggingface:/root/.cache/huggingface:rw" \
   --runtime nvidia \
   --gpus all \
+  -it \
   validator \
   python -m validator.evaluation.eval_grpo
 
