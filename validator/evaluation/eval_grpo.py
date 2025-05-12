@@ -57,7 +57,6 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
 
 def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
     """Calculate aggregate scores across all reward functions for each model."""
-
     evaluations_by_reward = {}
     for eval_result in model_evaluations:
         reward_func = eval_result['reward_function']
@@ -73,24 +72,15 @@ def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
             eval_result['raw_metrics'] = {'reward': reward, 'loss': loss}
 
         raw_rewards = [e['raw_metrics']['reward'] for e in evals]
-        raw_losses = [e['raw_metrics']['loss'] for e in evals]
-
         sum_rewards = sum(raw_rewards)
-        sum_losses = sum(raw_losses)
 
         for i, eval_result in enumerate(evals):
             norm_reward = raw_rewards[i] / sum_rewards if sum_rewards > 0 else 1.0 / len(evals)
+            raw_loss = eval_result['raw_metrics']['loss']
 
-            if sum_losses > 0:
-                inverse_losses = [1.0/max(0.0001, loss) for loss in raw_losses]
-                sum_inverse_losses = sum(inverse_losses)
-                norm_loss = inverse_losses[i] / sum_inverse_losses if sum_inverse_losses > 0 else 1.0 / len(evals)
-            else:
-                norm_loss = 1.0 / len(evals)
+            eval_result['normalized_metrics'] = {'reward': norm_reward, 'loss': raw_loss}
+            eval_result['grpo_score'] = norm_reward - raw_loss
 
-            eval_result['normalized_metrics'] = {'reward': norm_reward, 'loss': norm_loss}
-            # Use reward minus loss (KL penalty already beta-weighted)
-            eval_result['grpo_score'] = norm_reward - norm_loss
         evals.sort(key=lambda x: x['grpo_score'], reverse=True)
         all_normalized_evaluations.extend(evals)
 
