@@ -37,26 +37,20 @@ docker run --rm \
   weightswandering/tuning_vali:latest \
   python -m validator.evaluation.eval_grpo
 
-# Check for results in both temp directory and our mounted /aplp directory
-echo "Checking for result files..."
+# Check for results
+echo "Checking for results..."
 RESULTS_FILE=$(find "$TEMP_DIR" -type f -name "*evaluation_results.json" | head -n 1)
 
 if [ -z "$RESULTS_FILE" ]; then
-  # If not found in temp dir, check in the results dir
   RESULTS_FILE="$RESULTS_DIR/evaluation_results.json"
   if [ -f "$RESULTS_FILE" ]; then
-    echo "Evaluation results found in the mounted /aplp directory: $RESULTS_FILE"
+    echo "Evaluation results found: $RESULTS_FILE"
   else
-    echo "No evaluation results found in either location."
-    echo "Listing all files in both directories to debug:"
-    echo "TEMP_DIR contents:"
-    find "$TEMP_DIR" -type f | sort
-    echo "RESULTS_DIR contents:"
-    find "$RESULTS_DIR" -type f | sort
+    echo "No evaluation results found."
     exit 1
   fi
 else
-  echo "Evaluation results found in temp directory: $RESULTS_FILE"
+  echo "Evaluation results found: $RESULTS_FILE"
 fi
 
 echo "Results content:"
@@ -153,7 +147,6 @@ else
   echo "No results file found to analyze."
 fi
 
-# Cleanup temporary directories but keep our results files
+# Cleanup temp directory
 rm -rf "$TEMP_DIR"
-# We don't remove $RESULTS_DIR since it contains useful output files
-echo "Temporary files cleaned up. Results directory at: $RESULTS_DIR"
+echo "Evaluation complete. Results stored in: $RESULTS_DIR"
