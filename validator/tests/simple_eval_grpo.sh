@@ -12,11 +12,8 @@ curl -L -o "$DATASET_FILE" "https://gradients.s3.eu-north-1.amazonaws.com/13abfd
 echo "Dataset downloaded to $DATASET_FILE"
 echo "Dataset size: $(wc -c < "$DATASET_FILE") bytes"
 
-# Create tiny dataset with just 5 examples for ultra-fast testing
-cat "$DATASET_FILE" | head -n 5 > "$TEMP_DIR/tiny_dataset.json"
-DATASET_FILE="$TEMP_DIR/tiny_dataset.json"
-echo "Using tiny dataset with 5 examples for ultra-fast testing"
-echo "Small dataset size: $(wc -c < "$DATASET_FILE") bytes"
+# Display dataset info
+echo "Dataset size: $(wc -c < "$DATASET_FILE") bytes"
 
 # Print first few lines of dataset
 echo "Dataset preview:"
