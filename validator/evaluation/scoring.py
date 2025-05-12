@@ -668,7 +668,7 @@ async def process_miners_pool(
                 if len(repo_parts) >= 2:
                     submitted_name = repo_parts[-1]
 
-                    if expected_name and submitted_name \!= expected_name:
+                    if expected_name and submitted_name != expected_name:
                         logger.warning(
                             f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
                             f"but expected {expected_name}. Marking as failed."
