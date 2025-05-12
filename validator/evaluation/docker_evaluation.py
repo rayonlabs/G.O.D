@@ -61,11 +61,30 @@ def process_evaluation_results(results: dict, is_image: bool = False) -> DockerE
         if isinstance(result, str) and not isinstance(result, dict):
             processed_results[repo] = Exception(result)
         else:
-            if is_image:
-                result["is_finetune"] = True
-                processed_results[repo] = EvaluationResultImage.model_validate(result)
+            # Handle when result is a list (GRPO specific issue)
+            if isinstance(result, list):
+                logger.warning(f"Converting list result to proper format for repo {repo}: {result}")
+
+                # Extract the score from the list format
+                if len(result) > 0 and isinstance(result[0], dict):
+                    # Find our key-value pair in the first dict of the list
+                    for key, value in result[0].items():
+                        if repo in key:
+                            processed_results[repo] = EvaluationResultText.model_validate({
+                                "is_finetune": True,
+                                "eval_loss": value
+                            })
+                            break
+                    else:
+                        processed_results[repo] = Exception(f"Could not extract eval_loss from list result: {result}")
+                else:
+                    processed_results[repo] = Exception(f"Invalid result format: {result}")
             else:
-                processed_results[repo] = EvaluationResultText.model_validate(result)
+                if is_image:
+                    result["is_finetune"] = True
+                    processed_results[repo] = EvaluationResultImage.model_validate(result)
+                else:
+                    processed_results[repo] = EvaluationResultText.model_validate(result)
 
     return DockerEvaluationResults(
         results=processed_results,
