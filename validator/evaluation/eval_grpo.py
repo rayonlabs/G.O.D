@@ -339,7 +339,16 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
 
         results_dict[repo] = results
 
-        if is_finetune and "individual_rewards" in results:
+        # Log the model results to see what's available
+        logger.info(f"Results keys for {repo}: {list(results.keys())}")
+
+        # Check if individual rewards are present
+        has_rewards = "individual_rewards" in results
+        logger.info(f"Has individual rewards: {has_rewards}")
+
+        if is_finetune and has_rewards:
+            logger.info(f"Processing individual rewards for {repo}: {results['individual_rewards']}")
+
             for reward_name, reward_value in results["individual_rewards"].items():
                 model_evaluation = {
                     "model_name": repo,
@@ -351,7 +360,15 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
                 }
                 results_dict["model_evaluations"].append(model_evaluation)
 
-            if len(set(eval_result["model_name"] for eval_result in results_dict["model_evaluations"])) > 1:
+            logger.info(f"Model evaluations count: {len(results_dict['model_evaluations'])}")
+            logger.info(f"Unique models: {set(eval_result['model_name'] for eval_result in results_dict['model_evaluations'])}")
+
+            # Check if we have multiple models
+            unique_models = set(eval_result["model_name"] for eval_result in results_dict["model_evaluations"])
+            logger.info(f"Number of unique models: {len(unique_models)}")
+
+            if len(unique_models) > 1:
+                logger.info(f"Normalizing scores across models")
                 normalized_evals = normalize_and_score_models(results_dict["model_evaluations"])
                 results_dict["normalized_evaluations"] = normalized_evals
 
