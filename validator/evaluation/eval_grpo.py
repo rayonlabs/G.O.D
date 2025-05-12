@@ -79,7 +79,7 @@ def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
             raw_loss = eval_result['raw_metrics']['loss']
 
             eval_result['normalized_metrics'] = {'reward': norm_reward, 'loss': raw_loss}
-            eval_result['grpo_score'] = norm_reward - raw_loss
+            eval_result['grpo_score'] = norm_reward # - raw_loss
 
         evals.sort(key=lambda x: x['grpo_score'], reverse=True)
         all_normalized_evaluations.extend(evals)
