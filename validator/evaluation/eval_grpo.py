@@ -56,9 +56,8 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
 
 
 def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
-    """Calculate normalized scores using z-score normalization."""
-    logger.info(f"Starting normalization of {len(model_evaluations)} evaluation results")
-    logger.info(f"Model evaluation keys: {[list(e.keys()) for e in model_evaluations[:2]]}")
+    """Calculate scores using raw rewards."""
+    logger.info(f"Processing {len(model_evaluations)} evaluation results")
 
     evaluations_by_reward = {}
     for eval_result in model_evaluations:
@@ -67,37 +66,28 @@ def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
             evaluations_by_reward[reward_func] = []
         evaluations_by_reward[reward_func].append(eval_result)
 
-    logger.info(f"Grouped by reward functions: {list(evaluations_by_reward.keys())}")
-
     all_normalized_evaluations = []
     for reward_func, evals in evaluations_by_reward.items():
-        logger.info(f"Processing reward function: {reward_func} with {len(evals)} evaluations")
 
         for eval_result in evals:
             reward = eval_result['results'].get('eval_reward', 0.0)
             loss = max(0.0001, eval_result['results'].get('eval_loss', 0.0))
             eval_result['raw_metrics'] = {'reward': reward, 'loss': loss}
-            logger.info(f"Model {eval_result['model_name']} raw metrics: reward={reward}, loss={loss}")
 
         raw_rewards = [e['raw_metrics']['reward'] for e in evals]
-        logger.info(f"Raw rewards for {reward_func}: {raw_rewards}")
 
-        # Calculate mean and standard deviation for z-score normalization
+        # Calculate mean/std for reference (not used with raw rewards)
         mean_reward = np.mean(raw_rewards)
         std_reward = np.std(raw_rewards) if np.std(raw_rewards) > 0 else 1.0
-        logger.info(f"Mean: {mean_reward}, Std: {std_reward}")
 
         for i, eval_result in enumerate(evals):
-            # Z-score normalization: (x - mean) / std
-            norm_reward = (raw_rewards[i] - mean_reward) / std_reward
+            norm_reward = raw_rewards[i]
             raw_loss = eval_result['raw_metrics']['loss']
 
             eval_result['normalized_metrics'] = {'reward': norm_reward, 'loss': raw_loss}
             eval_result['grpo_score'] = norm_reward
-            logger.info(f"Model {eval_result['model_name']} normalized score: {norm_reward}")
 
         evals.sort(key=lambda x: x['grpo_score'], reverse=True)
-        logger.info(f"Sorted models: {[e['model_name'] for e in evals]}")
         all_normalized_evaluations.extend(evals)
 
     return all_normalized_evaluations
