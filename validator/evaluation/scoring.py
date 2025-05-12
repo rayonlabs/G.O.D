@@ -495,7 +495,7 @@ async def _evaluate_submissions(
             synth_results = await run_evaluation_docker_text(
                 dataset=synthetic_data_filepath,
                 models=top_4_repos,
-                **{k: v for k, v in evaluation_params.items() if k \!= "models"},
+                **{k: v for k, v in evaluation_params.items() if k != "models"},
             )
 
             try:
