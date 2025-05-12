@@ -105,27 +105,27 @@ for rank, (model, score) in enumerate(models_scores, 1):
     print(f"\nRank {rank}: {model}")
     print(f"  GRPO Score: {score:.4f}")
     print(f"  Validator Score: {validator_score}")
-    print(f"  Reason: {reason}")
 
-# Print reward function breakdown
-print("\n=== REWARD FUNCTION BREAKDOWN ===")
-for model_name, model_data in scored_results.items():
-    model_info = results[model_name]
-    print(f"\nModel: {model_name}")
-    print(f"  Rank: {model_data['rank']}")
-    print(f"  Validator Score: {model_data['validator_score']}")
+# Print reward breakdown (just for the top model)
+if models_scores:
+    top_model = models_scores[0][0]
+    model_info = results[top_model]
+    print(f"\nScoring Details (Top Model: {top_model})")
 
-    # Print raw rewards for each function
+    # Raw rewards
     if "raw_rewards" in model_info:
-        print("  Raw Rewards:")
+        print("  Raw Rewards (not directly used in final scoring):")
         for func_name, value in model_info["raw_rewards"].items():
             weight = model_info.get("reward_weights", {}).get(func_name, "?")
             print(f"    {func_name}: {value:.4f} (weight: {weight})")
 
-    # Print aggregate reward score
+    # Aggregate reward
     if "individual_rewards" in model_info and "wrapper" in model_info["individual_rewards"]:
         reward = model_info["individual_rewards"]["wrapper"]
-        print(f"  Total Reward: {reward:.4f}")
+        print(f"  Combined Reward: {reward:.4f}")
+
+    print(f"  GRPO Score (used for ranking): {model_info['eval_loss']:.4f}")
+    print(f"  Validator Score: {FIRST_PLACE_SCORE} (top model only)")
 ENDPYTHON
 
 else
