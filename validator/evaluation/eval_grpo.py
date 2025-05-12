@@ -200,9 +200,11 @@ def evaluate_grpo_model(
 
     @find_executable_batch_size(starting_batch_size=cst.GRPO_INITIAL_BATCH_SIZE)
     def evaluate_grpo_with_batch_size(batch_size):
-        num_generations = cst.GRPO_DEFAULT_NUM_GENERATIONS
-        while batch_size < num_generations:
+        num_generations = max(2, cst.GRPO_DEFAULT_NUM_GENERATIONS)  # Ensure minimum of 2
+        # Reduce generations if needed, but never below 2
+        while batch_size < num_generations and num_generations > 2:
             num_generations = num_generations // 2
+        logger.info(f"Using {num_generations} generations per prompt")
         training_args = GRPOConfig(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
