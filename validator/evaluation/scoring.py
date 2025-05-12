@@ -234,31 +234,48 @@ def calculate_miner_ranking_and_scores(
         return miner_results
 
     is_dpo_task = False
+    is_grpo_task = False
     if valid_results and isinstance(valid_results[0], MinerResultsText):
         is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
+        is_grpo_task = valid_results[0].task_type == TaskType.GRPOTASK
         if is_dpo_task:
             logger.info("Processing DPO task with max(test_loss, synth_loss) approach")
-    
+        if is_grpo_task:
+            logger.info("Processing GRPO task - higher loss is better")
+
     use_weighted_loss = is_dpo_task or _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
         if is_dpo_task:
             logger.info("Using ratio-adjusted loss for DPO task ranking")
         else:
             logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
-            
+
         ranked_results = []
         for result in valid_results:
             adjusted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss, is_dpo=is_dpo_task)
             ranked_results.append((result, adjusted_loss))
             logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
-        
-        ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-        ranking_type = "dpo_ratio_adjusted_loss" if is_dpo_task else "weighted_loss"
+
+        if is_grpo_task:
+            # For GRPO, sort in reverse order (higher loss is better)
+            ranked_results.sort(key=lambda x: float("-inf") if math.isnan(x[1]) else -x[1])
+            ranking_type = "GRPO loss (bigger is better)"
+        else:
+            # For other tasks, sort normally (lower loss is better)
+            ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
+            ranking_type = "DPO loss (max test, synth)" if is_dpo_task else "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
-        ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-        ranking_type = "test_loss_only"
+
+        if is_grpo_task:
+            # For GRPO, sort in reverse order (higher loss is better)
+            ranked_results.sort(key=lambda x: float("-inf") if math.isnan(x[1]) else -x[1])
+            ranking_type = "GRPO loss (bigger is better)"
+        else:
+            # For other tasks, sort normally (lower loss is better)
+            ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
+            ranking_type = "test_loss_only"
 
     if ranked_results:
         top_result, top_metric = ranked_results[0]
