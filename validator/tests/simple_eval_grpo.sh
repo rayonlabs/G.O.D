@@ -27,7 +27,8 @@ docker run --rm \
   -v "$TEMP_DIR:/workspace/input_data:rw" \
   -v "$HOME/.cache/huggingface:/root/.cache/huggingface:rw" \
   --runtime nvidia \
-  --gpus all \
+  -e CUDA_VISIBLE_DEVICES=0 \
+  --gpus '"device=0"' \
   weightswandering/tuning_vali:latest \
   python -m validator.evaluation.eval_grpo
 
