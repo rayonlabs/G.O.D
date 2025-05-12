@@ -1,7 +1,5 @@
 import os
 import subprocess
-import math
-import numpy as np
 
 from accelerate.utils import find_executable_batch_size
 from axolotl.utils.dict import DictDefault
@@ -204,35 +202,19 @@ def evaluate_grpo_model(
         )
 
         results = grpo_trainer.evaluate()
-        return results, grpo_trainer.reward_func_names
+        return results
 
-    eval_results, actual_reward_func_names = evaluate_grpo_with_batch_size()
+    eval_results = evaluate_grpo_with_batch_size()
     logger.info(f"Final GRPO evaluation results: {eval_results}")
 
-    individual_rewards = {}
-    for i, name in enumerate(actual_reward_func_names):
-        reward_key = f"eval_rewards/{name}/mean"
-        if reward_key in eval_results:
-            individual_rewards[name] = eval_results[reward_key]
-        elif i < len(reward_func_names) and reward_func_names[i] in captured_rewards and captured_rewards[reward_func_names[i]]:
-            individual_rewards[name] = sum(captured_rewards[reward_func_names[i]]) / len(captured_rewards[reward_func_names[i]])
-        else:
-            individual_rewards[name] = 0.0
-
-    # Also add raw (unweighted) rewards if available
-    raw_individual_rewards = {}
-    for name, rewards_list in raw_rewards.items():
-        if rewards_list:
-            raw_individual_rewards[name] = sum(rewards_list) / len(rewards_list)
+    final_weighted_rewards = {}
+    for name, captured_reward_list in captured_rewards.items():
+        if captured_reward_list:
+            final_weighted_rewards[name] = sum(captured_reward_list) / len(captured_reward_list)
 
     evaluation_results = {
-        "eval_loss": eval_results.get("eval_loss", 0.0),
-        "eval_reward": eval_results.get("eval_reward", 0.0),
-        "individual_rewards": individual_rewards,
-        "raw_rewards": raw_individual_rewards,
-        "reward_weights": dict(zip(reward_func_names, reward_weights))
+        "eval_loss": sum(final_weighted_rewards.values()) - eval_results.get("eval_loss", 0.0),
     }
-
     return evaluation_results
 
 
