@@ -56,7 +56,7 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
 
 
 def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
-    """Calculate aggregate scores across all reward functions for each model."""
+    """Calculate normalized scores using z-score normalization."""
     evaluations_by_reward = {}
     for eval_result in model_evaluations:
         reward_func = eval_result['reward_function']
@@ -72,14 +72,18 @@ def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
             eval_result['raw_metrics'] = {'reward': reward, 'loss': loss}
 
         raw_rewards = [e['raw_metrics']['reward'] for e in evals]
-        sum_rewards = sum(raw_rewards)
+
+        # Calculate mean and standard deviation for z-score normalization
+        mean_reward = np.mean(raw_rewards)
+        std_reward = np.std(raw_rewards) if np.std(raw_rewards) > 0 else 1.0
 
         for i, eval_result in enumerate(evals):
-            norm_reward = raw_rewards[i] / sum_rewards if sum_rewards > 0 else 1.0 / len(evals)
+            # Z-score normalization: (x - mean) / std
+            norm_reward = (raw_rewards[i] - mean_reward) / std_reward
             raw_loss = eval_result['raw_metrics']['loss']
 
             eval_result['normalized_metrics'] = {'reward': norm_reward, 'loss': raw_loss}
-            eval_result['grpo_score'] = norm_reward - raw_loss
+            eval_result['grpo_score'] = norm_reward
 
         evals.sort(key=lambda x: x['grpo_score'], reverse=True)
         all_normalized_evaluations.extend(evals)
