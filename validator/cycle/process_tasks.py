@@ -483,7 +483,9 @@ def compute_required_gpus(task: RawTask) -> int:
     num_params = task.model_params_count
     if not num_params:
         num_params = get_model_num_params(model)
-    if num_params and num_params > cst.MODEL_SIZE_REQUIRING_2_GPUS:
+    if num_params and num_params > cst.MODEL_SIZE_REQUIRING_3_GPUS:
+        return 3
+    elif num_params and num_params > cst.MODEL_SIZE_REQUIRING_2_GPUS:
         return 2
     return 1
 

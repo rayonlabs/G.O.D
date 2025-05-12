@@ -130,6 +130,7 @@ MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
 MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
+MODEL_SIZE_REQUIRING_3_GPUS = 68 * 10**9  # 68B params
 
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
@@ -160,10 +161,10 @@ PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT = 0.2
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE = 0.5
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.15
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO = (
-    1 - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
+    1
+    - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
     - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE
     - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
-
 )
 PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = (
     0.5  # person synth chance is 1 minus this (only for sdxl models, flux is always person)
