@@ -423,7 +423,7 @@ async def _evaluate_submissions(
     dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | None = None,
 ) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
     unique_repos = list(set(submission_repos))
-    if len(unique_repos) \!= len(submission_repos):
+    if len(unique_repos) != len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
 
     if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
