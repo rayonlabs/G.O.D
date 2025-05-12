@@ -147,28 +147,48 @@ def evaluate_grpo_model(
 
     reward_funcs_callable = []
     reward_func_names = []
+    reward_weights = []
+
+    total_weight = sum(rf.reward_weight for rf in evaluation_args.dataset_type.reward_functions)
+    if total_weight <= 0:
+        equal_weight = 1.0 / len(evaluation_args.dataset_type.reward_functions)
+        normalized_weights = [equal_weight] * len(evaluation_args.dataset_type.reward_functions)
+        logger.warning(f"Invalid total weight, using equal weights: {equal_weight}")
+    else:
+        normalized_weights = [rf.reward_weight / total_weight for rf in evaluation_args.dataset_type.reward_functions]
+
     for i, reward_function in enumerate(evaluation_args.dataset_type.reward_functions):
         reward_func_str = reward_function.reward_func
         is_valid, error_msg, reward_func_callable = validate_reward_function(reward_func_str)
         if not is_valid:
             logger.error(f"Invalid reward function:\n{reward_func_str}")
             raise ValueError(f"Invalid reward function: {error_msg}")
+
+        reward_weight = normalized_weights[i]
         reward_funcs_callable.append(reward_func_callable)
-        reward_func_names.append(f"reward_func_{i}")
+
+        func_name = getattr(reward_function, 'name', f"reward_func_{i}")
+        weighted_name = f"{func_name}_weight_{reward_weight:.2f}"
+        reward_func_names.append(weighted_name)
+        reward_weights.append(reward_weight)
+
+        logger.info(f"Using reward function {i}: {func_name} with weight {reward_weight:.4f}")
 
     captured_rewards = {name: [] for name in reward_func_names}
+    raw_rewards = {name: [] for name in reward_func_names}
     wrapped_reward_funcs = []
-    for i, original_func in enumerate(reward_funcs_callable):
-        func_name = reward_func_names[i]
 
-        def create_wrapper(original_func, func_name):
+    for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
+        def create_wrapper(original_func, func_name, weight):
             def wrapper(completions, **kwargs):
-                rewards = original_func(completions, **kwargs)
-                captured_rewards[func_name].extend(rewards)
-                return rewards
+                raw_results = original_func(completions, **kwargs)
+                raw_rewards[func_name].extend(raw_results)
+                weighted_results = [r * weight for r in raw_results]
+                captured_rewards[func_name].extend(weighted_results)
+                return weighted_results
             return wrapper
 
-        wrapped_reward_funcs.append(create_wrapper(original_func, func_name))
+        wrapped_reward_funcs.append(create_wrapper(original_func, func_name, weight))
 
     @find_executable_batch_size(starting_batch_size=cst.GRPO_INITIAL_BATCH_SIZE)
     def evaluate_grpo_with_batch_size(batch_size):
@@ -204,15 +224,23 @@ def evaluate_grpo_model(
         reward_key = f"eval_rewards/{name}/mean"
         if reward_key in eval_results:
             individual_rewards[name] = eval_results[reward_key]
-        elif reward_func_names[i] in captured_rewards and captured_rewards[reward_func_names[i]]:
+        elif i < len(reward_func_names) and reward_func_names[i] in captured_rewards and captured_rewards[reward_func_names[i]]:
             individual_rewards[name] = sum(captured_rewards[reward_func_names[i]]) / len(captured_rewards[reward_func_names[i]])
         else:
             individual_rewards[name] = 0.0
 
+    # Also add raw (unweighted) rewards if available
+    raw_individual_rewards = {}
+    for name, rewards_list in raw_rewards.items():
+        if rewards_list:
+            raw_individual_rewards[name] = sum(rewards_list) / len(rewards_list)
+
     evaluation_results = {
         "eval_loss": eval_results.get("eval_loss", 0.0),
         "eval_reward": eval_results.get("eval_reward", 0.0),
-        "individual_rewards": individual_rewards
+        "individual_rewards": individual_rewards,
+        "raw_rewards": raw_individual_rewards,
+        "reward_weights": dict(zip(reward_func_names, reward_weights))
     }
 
     return evaluation_results
