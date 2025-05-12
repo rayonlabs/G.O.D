@@ -76,15 +76,10 @@ def score_models(model_evaluations: list[dict]) -> list[dict]:
 
         raw_rewards = [e['raw_metrics']['reward'] for e in evals]
 
-        # Calculate mean/std for reference (not used with raw rewards)
-        mean_reward = np.mean(raw_rewards)
-        std_reward = np.std(raw_rewards) if np.std(raw_rewards) > 0 else 1.0
-
         for i, eval_result in enumerate(evals):
             norm_reward = raw_rewards[i]
             raw_loss = eval_result['raw_metrics']['loss']
 
-            # Use the same BETA_GRPO value that's used in training for weighting the loss
             combined_score = norm_reward - cst.BETA_GRPO * raw_loss
 
             eval_result['metrics'] = {'reward': norm_reward, 'loss': raw_loss}
