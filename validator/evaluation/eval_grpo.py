@@ -57,6 +57,9 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
 
 def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
     """Calculate normalized scores using z-score normalization."""
+    logger.info(f"Starting normalize_and_score_models with {len(model_evaluations)} evaluations")
+    logger.info(f"Model evaluations keys: {[list(e.keys()) for e in model_evaluations[:2]]}")
+
     evaluations_by_reward = {}
     for eval_result in model_evaluations:
         reward_func = eval_result['reward_function']
@@ -64,18 +67,25 @@ def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
             evaluations_by_reward[reward_func] = []
         evaluations_by_reward[reward_func].append(eval_result)
 
+    logger.info(f"Grouped by reward function: {list(evaluations_by_reward.keys())}")
+
     all_normalized_evaluations = []
     for reward_func, evals in evaluations_by_reward.items():
+        logger.info(f"Processing reward function: {reward_func} with {len(evals)} models")
+
         for eval_result in evals:
             reward = eval_result['results'].get('eval_reward', 0.0)
             loss = max(0.0001, eval_result['results'].get('eval_loss', 0.0))
             eval_result['raw_metrics'] = {'reward': reward, 'loss': loss}
+            logger.info(f"Model {eval_result['model_name']} raw metrics: reward={reward}, loss={loss}")
 
         raw_rewards = [e['raw_metrics']['reward'] for e in evals]
+        logger.info(f"Raw rewards for {reward_func}: {raw_rewards}")
 
         # Calculate mean and standard deviation for z-score normalization
         mean_reward = np.mean(raw_rewards)
         std_reward = np.std(raw_rewards) if np.std(raw_rewards) > 0 else 1.0
+        logger.info(f"Mean reward: {mean_reward}, Std reward: {std_reward}")
 
         for i, eval_result in enumerate(evals):
             # Z-score normalization: (x - mean) / std
@@ -83,11 +93,14 @@ def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
             raw_loss = eval_result['raw_metrics']['loss']
 
             eval_result['normalized_metrics'] = {'reward': norm_reward, 'loss': raw_loss}
-            eval_result['grpo_score'] = norm_reward # - raw_loss
+            eval_result['grpo_score'] = norm_reward  # - raw_loss
+            logger.info(f"Model {eval_result['model_name']} normalized score: {norm_reward}")
 
         evals.sort(key=lambda x: x['grpo_score'], reverse=True)
+        logger.info(f"Sorted models for {reward_func}: {[e['model_name'] for e in evals]}")
         all_normalized_evaluations.extend(evals)
 
+    logger.info(f"Returning {len(all_normalized_evaluations)} normalized evaluations")
     return all_normalized_evaluations
 
 
@@ -212,15 +225,27 @@ def evaluate_grpo_model(
     eval_results, actual_reward_func_names = evaluate_grpo_with_batch_size()
     logger.info(f"Final GRPO evaluation results: {eval_results}")
 
+    logger.info(f"Getting individual rewards from actual_reward_func_names: {actual_reward_func_names}")
+    logger.info(f"Reward func names: {reward_func_names}")
+    logger.info(f"Available eval_results keys: {list(eval_results.keys())}")
+    logger.info(f"Captured rewards keys: {list(captured_rewards.keys())}")
+
     individual_rewards = {}
     for i, name in enumerate(actual_reward_func_names):
         reward_key = f"eval_rewards/{name}/mean"
+        logger.info(f"Looking for reward key: {reward_key}")
+
         if reward_key in eval_results:
             individual_rewards[name] = eval_results[reward_key]
+            logger.info(f"Found direct reward for {name}: {eval_results[reward_key]}")
         elif i < len(reward_func_names) and reward_func_names[i] in captured_rewards and captured_rewards[reward_func_names[i]]:
             individual_rewards[name] = sum(captured_rewards[reward_func_names[i]]) / len(captured_rewards[reward_func_names[i]])
+            logger.info(f"Using captured reward for {name}: {individual_rewards[name]}")
         else:
             individual_rewards[name] = 0.0
+            logger.info(f"No reward found for {name}, using 0.0")
+
+    logger.info(f"Final individual_rewards: {individual_rewards}")
 
     # Also add raw (unweighted) rewards if available
     raw_individual_rewards = {}
