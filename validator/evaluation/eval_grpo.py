@@ -55,8 +55,8 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
     return dataset
 
 
-def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
-    """Calculate scores using raw rewards."""
+def score_models(model_evaluations: list[dict]) -> list[dict]:
+    """Calculate scores using reward and scaled loss values."""
     logger.info(f"Processing {len(model_evaluations)} evaluation results")
 
     evaluations_by_reward = {}
@@ -66,7 +66,7 @@ def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
             evaluations_by_reward[reward_func] = []
         evaluations_by_reward[reward_func].append(eval_result)
 
-    all_normalized_evaluations = []
+    all_scored_evaluations = []
     for reward_func, evals in evaluations_by_reward.items():
 
         for eval_result in evals:
@@ -87,42 +87,37 @@ def normalize_and_score_models(model_evaluations: list[dict]) -> list[dict]:
             # Use the same BETA_GRPO value that's used in training for weighting the loss
             combined_score = norm_reward - cst.BETA_GRPO * raw_loss
 
-            eval_result['normalized_metrics'] = {'reward': norm_reward, 'loss': raw_loss}
+            eval_result['metrics'] = {'reward': norm_reward, 'loss': raw_loss}
             eval_result['grpo_score'] = combined_score
 
         evals.sort(key=lambda x: x['grpo_score'], reverse=True)
-        all_normalized_evaluations.extend(evals)
+        all_scored_evaluations.extend(evals)
 
-    return all_normalized_evaluations
+    return all_scored_evaluations
 
 
-def calculate_aggregate_scores(normalized_evaluations: list[dict]) -> list[dict]:
+def calculate_aggregate_scores(scored_evaluations: list[dict]) -> list[dict]:
     """Calculate aggregate scores across all reward functions for each model."""
     scores_by_model = {}
-    for eval_result in normalized_evaluations:
+    for eval_result in scored_evaluations:
         model_name = eval_result['model_name']
         if model_name not in scores_by_model:
             scores_by_model[model_name] = {
-                'scores': [], 'raw_rewards': [], 'raw_losses': [],
-                'norm_rewards': [], 'norm_losses': []
+                'scores': [], 'rewards': [], 'losses': []
             }
 
         data = scores_by_model[model_name]
         data['scores'].append(eval_result['grpo_score'])
-        data['raw_rewards'].append(eval_result['raw_metrics']['reward'])
-        data['raw_losses'].append(eval_result['raw_metrics']['loss'])
-        data['norm_rewards'].append(eval_result['normalized_metrics']['reward'])
-        data['norm_losses'].append(eval_result['normalized_metrics']['loss'])
+        data['rewards'].append(eval_result['raw_metrics']['reward'])
+        data['losses'].append(eval_result['raw_metrics']['loss'])
 
     aggregate_results = []
     for model_name, data in scores_by_model.items():
         aggregate_results.append({
             'model_name': model_name,
             'aggregate_score': sum(data['scores']) / len(data['scores']),
-            'avg_raw_reward': sum(data['raw_rewards']) / len(data['raw_rewards']),
-            'avg_raw_loss': sum(data['raw_losses']) / len(data['raw_losses']),
-            'avg_norm_reward': sum(data['norm_rewards']) / len(data['norm_rewards']),
-            'avg_norm_loss': sum(data['norm_losses']) / len(data['norm_losses'])
+            'avg_reward': sum(data['rewards']) / len(data['rewards']),
+            'avg_loss': sum(data['losses']) / len(data['losses'])
         })
 
     aggregate_results.sort(key=lambda x: x['aggregate_score'], reverse=True)
@@ -337,10 +332,10 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
             unique_models = set(eval_result["model_name"] for eval_result in results_dict["model_evaluations"])
 
             if len(unique_models) > 1:
-                normalized_evals = normalize_and_score_models(results_dict["model_evaluations"])
-                results_dict["normalized_evaluations"] = normalized_evals
+                scored_evals = score_models(results_dict["model_evaluations"])
+                results_dict["normalized_evaluations"] = scored_evals
 
-                aggregate_scores = calculate_aggregate_scores(normalized_evals)
+                aggregate_scores = calculate_aggregate_scores(scored_evals)
                 results_dict["aggregate_scores"] = aggregate_scores
 
                 for i, score in enumerate(aggregate_scores, 1):
