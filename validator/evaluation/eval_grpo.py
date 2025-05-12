@@ -149,13 +149,21 @@ def evaluate_grpo_model(
     reward_func_names = []
     reward_weights = []
 
-    total_weight = sum(rf.reward_weight for rf in evaluation_args.dataset_type.reward_functions)
+    logger.info(f"Processing {len(evaluation_args.dataset_type.reward_functions)} reward functions")
+
+    # Extract original weights
+    original_weights = [rf.reward_weight for rf in evaluation_args.dataset_type.reward_functions]
+    total_weight = sum(original_weights)
+
+    logger.info(f"Original weights: {original_weights}, total: {total_weight}")
+
     if total_weight <= 0:
         equal_weight = 1.0 / len(evaluation_args.dataset_type.reward_functions)
         normalized_weights = [equal_weight] * len(evaluation_args.dataset_type.reward_functions)
         logger.warning(f"Invalid total weight, using equal weights: {equal_weight}")
     else:
         normalized_weights = [rf.reward_weight / total_weight for rf in evaluation_args.dataset_type.reward_functions]
+        logger.info(f"Normalized weights: {normalized_weights}, sum: {sum(normalized_weights):.5f}")
 
     for i, reward_function in enumerate(evaluation_args.dataset_type.reward_functions):
         reward_func_str = reward_function.reward_func
