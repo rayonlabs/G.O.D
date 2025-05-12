@@ -69,9 +69,9 @@ echo "Results copied to current directory"
 echo "Evaluation complete"
 
 # Run the scoring simulation
-if [ -f "./grpo_eval_results_"*".json" ]; then
-  RESULTS_FILE=$(ls -t ./grpo_eval_results_*.json | head -1)
-
+LATEST_RESULTS=$(ls -t ./grpo_eval_results_*.json 2>/dev/null | head -1)
+if [ -n "$LATEST_RESULTS" ]; then
+  RESULTS_FILE="$LATEST_RESULTS"
   echo ""
   echo "=== VALIDATOR SCORING SIMULATION ==="
   echo "Running scoring analysis on: $RESULTS_FILE"
@@ -153,5 +153,7 @@ else
   echo "No results file found to analyze."
 fi
 
-# Cleanup
+# Cleanup temporary directories but keep our results files
 rm -rf "$TEMP_DIR"
+# We don't remove $RESULTS_DIR since it contains useful output files
+echo "Temporary files cleaned up. Results directory at: $RESULTS_DIR"
