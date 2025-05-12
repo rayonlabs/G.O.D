@@ -161,7 +161,7 @@ def evaluate_grpo_model(
             logger.error(f"Invalid reward function:\n{reward_func_str}")
             raise ValueError(f"Invalid reward function: {error_msg}")
 
-        reward_weight = normalized_weights[i]
+        reward_weight = reward_weights_list[i]
         reward_funcs_callable.append(reward_func_callable)
 
         func_name = getattr(reward_function, 'name', f"reward_func_{i}")

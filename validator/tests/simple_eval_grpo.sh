@@ -46,5 +46,91 @@ else
 fi
 
 echo "Evaluation complete"
+
+# Run the scoring simulation
+if [ -f "./grpo_eval_results_"*".json" ]; then
+  RESULTS_FILE=$(ls -t ./grpo_eval_results_*.json | head -1)
+
+  echo ""
+  echo "=== VALIDATOR SCORING SIMULATION ==="
+  echo "Running scoring analysis on: $RESULTS_FILE"
+
+  # Simple Python script to analyze results
+  python3 - "$RESULTS_FILE" << 'ENDPYTHON'
+import json
+import sys
+
+# Constants from validator's core/constants.py
+FIRST_PLACE_SCORE = 3.0  # Top model gets this score
+SCORE_PENALTY = -1.0     # Bottom 25% get this (when > 8 models)
+
+# Load results
+with open(sys.argv[1], 'r') as f:
+    results = json.load(f)
+
+# Get models and their scores
+models_scores = []
+for model_name in results:
+    if isinstance(results[model_name], dict) and "eval_loss" in results[model_name]:
+        model_data = results[model_name]
+        if model_data.get("is_finetune", False):
+            # For GRPO, we use the eval_loss field which contains the aggregated score
+            grpo_score = model_data["eval_loss"]
+            models_scores.append((model_name, grpo_score))
+
+# Sort by GRPO score (higher is better)
+models_scores.sort(key=lambda x: -x[1])
+
+print(f"\nFound {len(models_scores)} valid models")
+
+# Assign scores based on ranking
+scored_results = {}
+for rank, (model, score) in enumerate(models_scores, 1):
+    if rank == 1:
+        validator_score = FIRST_PLACE_SCORE
+        reason = "Ranked 1st (GRPO score)"
+    else:
+        validator_score = 0.0
+        reason = "Ranked below top"
+
+    # Store scores
+    scored_results[model] = {
+        "validator_score": validator_score,
+        "reason": reason,
+        "grpo_score": score,
+        "rank": rank
+    }
+
+    # Print ranking info
+    print(f"\nRank {rank}: {model}")
+    print(f"  GRPO Score: {score:.4f}")
+    print(f"  Validator Score: {validator_score}")
+    print(f"  Reason: {reason}")
+
+# Print reward function breakdown
+print("\n=== REWARD FUNCTION BREAKDOWN ===")
+for model_name, model_data in scored_results.items():
+    model_info = results[model_name]
+    print(f"\nModel: {model_name}")
+    print(f"  Rank: {model_data['rank']}")
+    print(f"  Validator Score: {model_data['validator_score']}")
+
+    # Print raw rewards for each function
+    if "raw_rewards" in model_info:
+        print("  Raw Rewards:")
+        for func_name, value in model_info["raw_rewards"].items():
+            weight = model_info.get("reward_weights", {}).get(func_name, "?")
+            print(f"    {func_name}: {value:.4f} (weight: {weight})")
+
+    # Print aggregate reward score
+    if "individual_rewards" in model_info and "wrapper" in model_info["individual_rewards"]:
+        reward = model_info["individual_rewards"]["wrapper"]
+        print(f"  Total Reward: {reward:.4f}")
+ENDPYTHON
+
+else
+  echo "No results file found to analyze."
+fi
+
 # Cleanup
 rm -rf "$TEMP_DIR"
