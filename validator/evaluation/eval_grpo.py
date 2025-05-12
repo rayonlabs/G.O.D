@@ -53,70 +53,6 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
     return dataset
 
 
-def score_models(model_evaluations: list[dict]) -> list[dict]:
-    """Calculate scores using reward and scaled loss values."""
-    logger.info(f"Processing {len(model_evaluations)} evaluation results")
-
-    evaluations_by_reward = {}
-    for eval_result in model_evaluations:
-        reward_func = eval_result['reward_function']
-        if reward_func not in evaluations_by_reward:
-            evaluations_by_reward[reward_func] = []
-        evaluations_by_reward[reward_func].append(eval_result)
-
-    all_scored_evaluations = []
-    for reward_func, evals in evaluations_by_reward.items():
-
-        for eval_result in evals:
-            reward = eval_result['results'].get('eval_reward', 0.0)
-            loss = max(0.0001, eval_result['results'].get('eval_loss', 0.0))
-            eval_result['raw_metrics'] = {'reward': reward, 'loss': loss}
-
-        raw_rewards = [e['raw_metrics']['reward'] for e in evals]
-
-        for i, eval_result in enumerate(evals):
-            norm_reward = raw_rewards[i]
-            raw_loss = eval_result['raw_metrics']['loss']
-
-            combined_score = norm_reward - cst.BETA_GRPO * raw_loss
-
-            eval_result['metrics'] = {'reward': norm_reward, 'loss': raw_loss}
-            eval_result['grpo_score'] = combined_score
-
-        evals.sort(key=lambda x: x['grpo_score'], reverse=True)
-        all_scored_evaluations.extend(evals)
-
-    return all_scored_evaluations
-
-
-def calculate_aggregate_scores(scored_evaluations: list[dict]) -> list[dict]:
-    """Calculate aggregate scores across all reward functions for each model."""
-    scores_by_model = {}
-    for eval_result in scored_evaluations:
-        model_name = eval_result['model_name']
-        if model_name not in scores_by_model:
-            scores_by_model[model_name] = {
-                'scores': [], 'rewards': [], 'losses': []
-            }
-
-        data = scores_by_model[model_name]
-        data['scores'].append(eval_result['grpo_score'])
-        data['rewards'].append(eval_result['raw_metrics']['reward'])
-        data['losses'].append(eval_result['raw_metrics']['loss'])
-
-    aggregate_results = []
-    for model_name, data in scores_by_model.items():
-        aggregate_results.append({
-            'model_name': model_name,
-            'aggregate_score': sum(data['scores']) / len(data['scores']),
-            'avg_reward': sum(data['rewards']) / len(data['rewards']),
-            'avg_loss': sum(data['losses']) / len(data['losses'])
-        })
-
-    aggregate_results.sort(key=lambda x: x['aggregate_score'], reverse=True)
-    return aggregate_results
-
-
 def evaluate_grpo_model(
     evaluation_config: DictDefault,
     finetuned_model: AutoModelForCausalLM,
@@ -222,22 +158,13 @@ def evaluate_finetuned_grpo_model(
     evaluation_args: EvaluationArgs,
     finetuned_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
-    model_name: str = None,
 ) -> dict[str, float]:
     evaluation_config = _load_and_update_evaluation_config(
         evaluation_args=evaluation_args,
         finetuned_model=finetuned_model,
         config_path=cst.VALI_CONFIG_PATH
     )
-    results = evaluate_grpo_model(
-        evaluation_config, finetuned_model, tokenizer, evaluation_args
-    )
-
-    # Add model name if provided (used for multi-model comparison)
-    if model_name:
-        results["model_name"] = model_name
-
-    return results
+    return evaluate_grpo_model(evaluation_config, finetuned_model, tokenizer, evaluation_args)
 
 
 def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
@@ -245,16 +172,8 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
     results_dict = load_results_dict()
     repo = evaluation_args.repo
 
-    if "model_evaluations" not in results_dict:
-        results_dict["model_evaluations"] = []
-
-    if "normalized_evaluations" not in results_dict:
-        results_dict["normalized_evaluations"] = []
-
-    if "aggregate_scores" not in results_dict:
-        results_dict["aggregate_scores"] = []
-
-    if repo in results_dict and "individual_rewards" in results_dict[repo]:
+    # Skip if duplicate
+    if repo in results_dict:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
 
@@ -287,42 +206,9 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
             evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
             tokenizer=tokenizer,
-            model_name=repo,
         )
         results["is_finetune"] = is_finetune
-
         results_dict[repo] = results
-
-        if is_finetune and "individual_rewards" in results:
-            for reward_name, reward_value in results["individual_rewards"].items():
-                model_evaluation = {
-                    "model_name": repo,
-                    "reward_function": reward_name,
-                    "results": {
-                        "eval_reward": reward_value,
-                        "eval_loss": results.get("eval_loss", 0.0),
-                    }
-                }
-                results_dict["model_evaluations"].append(model_evaluation)
-
-            # Check if multiple models were evaluated
-            unique_models = set(eval_result["model_name"] for eval_result in results_dict["model_evaluations"])
-
-            if len(unique_models) > 1:
-                scored_evals = score_models(results_dict["model_evaluations"])
-                results_dict["normalized_evaluations"] = scored_evals
-
-                aggregate_scores = calculate_aggregate_scores(scored_evals)
-                results_dict["aggregate_scores"] = aggregate_scores
-
-                for i, score in enumerate(aggregate_scores, 1):
-                    logger.info(f"Rank {i}: {score['model_name']} - Score: {score['aggregate_score']:.4f}")
-
-                for score in aggregate_scores:
-                    model_repo = score["model_name"]
-                    if model_repo in results_dict:
-                        results_dict[model_repo]["eval_loss"] = score["aggregate_score"]
-
     except Exception as e:
         logger.error(f"Error evaluating {repo}: {e}", exc_info=True)
         results_dict[repo] = str(e)
