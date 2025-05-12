@@ -16,7 +16,11 @@ echo "Dataset size: $(wc -c < "$DATASET_FILE") bytes"
 echo "Dataset preview:"
 head -n 5 "$DATASET_FILE"
 
-# Run Docker container
+# Create a directory for results
+RESULTS_DIR="$PWD/grpo_results"
+mkdir -p "$RESULTS_DIR"
+
+# Run Docker container with added mount for /aplp directory
 echo "Starting GRPO evaluation..."
 docker run --rm \
   -e DATASET="/workspace/input_data/dataset.json" \
@@ -26,24 +30,41 @@ docker run --rm \
   -e FILE_FORMAT="json" \
   -v "$TEMP_DIR:/workspace/input_data:rw" \
   -v "$HOME/.cache/huggingface:/root/.cache/huggingface:rw" \
+  -v "$RESULTS_DIR:/aplp:rw" \
   --runtime nvidia \
   -e CUDA_VISIBLE_DEVICES=0 \
   --gpus '"device=0"' \
   weightswandering/tuning_vali:latest \
   python -m validator.evaluation.eval_grpo
 
-# Check for results
+# Check for results in both temp directory and our mounted /aplp directory
+echo "Checking for result files..."
 RESULTS_FILE=$(find "$TEMP_DIR" -type f -name "*evaluation_results.json" | head -n 1)
-if [ -n "$RESULTS_FILE" ]; then
-  echo "Evaluation results found: $RESULTS_FILE"
-  echo "Results content:"
-  cat "$RESULTS_FILE" 
-  # Copy results to current directory
-  cp "$RESULTS_FILE" "./grpo_eval_results_$(date +%s).json"
-  echo "Results copied to current directory"
+
+if [ -z "$RESULTS_FILE" ]; then
+  # If not found in temp dir, check in the results dir
+  RESULTS_FILE="$RESULTS_DIR/evaluation_results.json"
+  if [ -f "$RESULTS_FILE" ]; then
+    echo "Evaluation results found in the mounted /aplp directory: $RESULTS_FILE"
+  else
+    echo "No evaluation results found in either location."
+    echo "Listing all files in both directories to debug:"
+    echo "TEMP_DIR contents:"
+    find "$TEMP_DIR" -type f | sort
+    echo "RESULTS_DIR contents:"
+    find "$RESULTS_DIR" -type f | sort
+    exit 1
+  fi
 else
-  echo "No evaluation results found in the temp directory"
+  echo "Evaluation results found in temp directory: $RESULTS_FILE"
 fi
+
+echo "Results content:"
+cat "$RESULTS_FILE"
+
+# Copy results to current directory with timestamp
+cp "$RESULTS_FILE" "./grpo_eval_results_$(date +%s).json"
+echo "Results copied to current directory"
 
 echo "Evaluation complete"
 
