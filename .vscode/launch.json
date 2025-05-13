@@ -62,7 +62,7 @@
             "name": "Python Debugger: eval instruct text",
             "type": "debugpy",
             "request": "launch",
-            "module": "validator.evaluation.single_eval_instruct_text",
+            "module": "validator.evaluation.eval_instruct_text",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {

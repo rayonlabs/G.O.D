@@ -2,7 +2,7 @@ datasets:
     path: 'path/to/your/test/dataset'
     type: 'your_dataset_type'
 
-sequence_len: 2048
+sequence_len: 4096
 batch_size: 1
 output_dir: 'outputs/'
 val_set_size: 0
