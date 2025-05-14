@@ -152,7 +152,6 @@ def load_finetuned_model(base_model, repo: str) -> AutoPeftModelForCausalLM:
     try:
         cache_dir = create_finetuned_cache_dir()
         return AutoPeftModelForCausalLM.from_pretrained(
-            base_model,
             repo,
             is_trainable=False,
             device_map="auto",
@@ -166,7 +165,6 @@ def load_finetuned_model(base_model, repo: str) -> AutoPeftModelForCausalLM:
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 return AutoPeftModelForCausalLM.from_pretrained(
-                    base_model,
                     repo,
                     is_trainable=False,
                     ignore_mismatched_sizes=True,
