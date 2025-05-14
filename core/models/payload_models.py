@@ -37,6 +37,8 @@ class MinerTaskOffer(BaseModel):
     task_type: TaskType
     model_params_count: int | None = None
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class TrainRequest(BaseModel):
     model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
@@ -66,6 +68,7 @@ class TrainRequestGrpo(TrainRequest):
 
 
 class TrainRequestImage(TrainRequest):
+    model_config = ConfigDict(protected_namespaces=())
     dataset_zip: str = Field(
         ...,
         description="Link to dataset zip file",
@@ -266,6 +269,7 @@ class NewTaskRequestGrpo(NewTaskRequest):
 
 
 class NewTaskRequestImage(NewTaskRequest):
+    model_config = ConfigDict(protected_namespaces=())
     model_repo: str = Field(..., description="The model repository to use")
     image_text_pairs: list[ImageTextPair] = Field(
         ...,
@@ -390,6 +394,8 @@ class ImageTaskDetails(TaskDetails):
     base_model_repository: str = Field(..., description="The repository for the model")
     model_type: ImageModelType = ImageModelType.SDXL
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class TaskListResponse(BaseModel):
     success: bool
@@ -406,9 +412,12 @@ class ImageModelInfo(BaseModel):
     model_id: str
     model_type: ImageModelType
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class ImageModelsResponse(BaseModel):
     models: list[ImageModelInfo]
+
 
 # Type alias for task details types
 AnyTypeTaskDetails = InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails

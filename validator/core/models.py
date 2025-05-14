@@ -7,6 +7,7 @@ from uuid import UUID
 from uuid import uuid4
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
@@ -35,7 +36,7 @@ class ModelConfig(BaseModel):
     model_type: str
     tokenizer_config: TokenizerConfig
 
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class DatasetData(BaseModel):
@@ -69,7 +70,7 @@ class ModelData(BaseModel):
     config: dict
     parameter_count: int | None = None
 
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class RawTask(BaseModel):
@@ -103,13 +104,14 @@ class RawTask(BaseModel):
     model_params_count: int = 0
 
     # Turn off protected namespace for model
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class DpoRawTask(RawTask):
     """
     DPO task data as stored in the database. It expand the RawTask with fields from the DpoTask table.
     """
+
     field_prompt: str
     field_system: str | None = None
     field_chosen: str
@@ -126,6 +128,7 @@ class GrpoRawTask(RawTask):
     """
     GRPO task data as stored in the database. It expand the RawTask with fields from the GrpoTask table.
     """
+
     field_prompt: str
     reward_functions: list[RewardFunction]
     file_format: FileFormat = FileFormat.HF
@@ -233,7 +236,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     model_params_count: int | None = 0
 
     # Turn off protected namespace for model
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class TaskResults(BaseModel):
@@ -277,6 +280,7 @@ class MinerResults(BaseModel):
 
 class MinerResultsText(MinerResults):
     task_type: TaskType
+
     @field_validator("task_type")
     def validate_task_type(cls, v):
         if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK}:
@@ -314,7 +318,7 @@ class NodeStats(BaseModel):
     workload_metrics: WorkloadMetrics
     model_metrics: ModelMetrics
 
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class AllNodeStats(BaseModel):
@@ -368,6 +372,8 @@ class Img2ImgPayload(BaseModel):
     prompt: str | None = None
     base_image: str | None = None
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class NetworkStats(BaseModel):
     number_of_jobs_training: int
@@ -412,8 +418,8 @@ class Dataset(BaseModel):
     num_bytes_parquet_files: int
     dpo_available: bool = False
     dpo_prompt_column: str | None = None
-    dpo_accepted_column:str | None = None
-    dpo_rejected_column:str | None = None
+    dpo_accepted_column: str | None = None
+    dpo_rejected_column: str | None = None
 
 
 class EvaluationArgs(BaseModel):
@@ -449,4 +455,6 @@ class EvaluationArgs(BaseModel):
 AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask
 AnyTypeRawTask = AnyTextTypeRawTask | ImageRawTask
 AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask
-AnyTypeTaskWithHotkeyDetails = InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails
+AnyTypeTaskWithHotkeyDetails = (
+    InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails
+)
