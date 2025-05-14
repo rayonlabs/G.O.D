@@ -25,6 +25,12 @@
 You can re-evaluate existing tasks on your own machine. Or you can run non-submitted models to check if they are good. 
 This works for tasks not older than 7 days.
 
+Make sure to build the latest docker images before running the evaluation.
+```bash
+docker build -f dockerfiles/validator.dockerfile -t weightswandering/tuning_vali:latest .
+docker build -f dockerfiles/validator-diffusion.dockerfile -t diagonalge/tuning_validator_diffusion:latest .
+```
+
 To see the available options, run:
 ```bash
 python -m utils.run_evaluation --help
