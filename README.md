@@ -18,3 +18,24 @@
 ## Miner Advice
 
 [Miner Advice](docs/miner_advice.md)
+
+
+
+## Running evaluations on your own
+You can re-evaluate existing tasks on your own machine. Or you can run non-submitted models to check if they are good. 
+This works for tasks not older than 7 days.
+
+To see the available options, run:
+```bash
+python -m utils.run_evaluation --help
+```
+
+To re-evaluate a task, run:
+```bash
+python -m utils.run_evaluation --task_id <task_id>
+```
+
+To run a non-submitted model, run:
+```bash
+python -m utils.run_evaluation --task_id <task_id> --models <model_name>
+```
