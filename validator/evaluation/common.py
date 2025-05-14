@@ -9,7 +9,7 @@ import torch
 import yaml
 from axolotl.utils.dict import DictDefault
 from datasets import Dataset
-from peft import PeftModel
+from peft import AutoPeftModelForCausalLM
 from requests.exceptions import HTTPError
 from tenacity import retry
 from tenacity import retry_if_exception
@@ -151,7 +151,7 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
 def load_finetuned_model(base_model, repo: str) -> PeftModel:
     try:
         cache_dir = create_finetuned_cache_dir()
-        return PeftModel.from_pretrained(
+        return AutoPeftModelForCausalLM.from_pretrained(
             base_model,
             repo,
             is_trainable=False,
@@ -165,7 +165,7 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
             pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
-                return PeftModel.from_pretrained(
+                return AutoPeftModelForCausalLM.from_pretrained(
                     base_model,
                     repo,
                     is_trainable=False,
