@@ -76,7 +76,7 @@ SYNTH_GEN_BATCH_SIZE = 30
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
-PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.1
+PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.05
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
