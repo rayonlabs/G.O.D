@@ -6,7 +6,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from loguru import logger  # noqa
 
-from core.models.utility_models import TaskType
+from core.models.utility_models import RewardFunction, TaskType
 from validator.core.config import Config
 from validator.core.dependencies import get_config
 from validator.core.models import AnyTypeTask
@@ -217,7 +217,27 @@ async def _process_task_batch(
         """
         rows = await connection.fetch(query, *grpo_task_ids)
         grpo_task_data = {str(row[cst.TASK_ID]): dict(row) for row in rows}
-
+        
+        # Fetch reward functions for each GRPO task
+        for task_id in grpo_task_ids:
+            reward_functions_query = f"""
+                SELECT rf.{cst.REWARD_FUNC}, rf.{cst.FUNC_HASH}, rf.{cst.IS_GENERIC}, gtf.{cst.REWARD_WEIGHT}
+                FROM {cst.REWARD_FUNCTIONS_TABLE} rf
+                JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
+                WHERE gtf.{cst.TASK_ID} = $1
+            """
+            reward_rows = await connection.fetch(reward_functions_query, task_id)
+            reward_functions = [
+                RewardFunction(
+                    reward_func=row[cst.REWARD_FUNC],
+                    func_hash=row[cst.FUNC_HASH],
+                    is_generic=row[cst.IS_GENERIC],
+                    reward_weight=row[cst.REWARD_WEIGHT]
+                ) for row in reward_rows
+            ]
+            
+            if task_id in grpo_task_data:
+                grpo_task_data[task_id]["reward_functions"] = reward_functions
 
     # Step 6: Assemble final results
     for task_id in task_ids:
