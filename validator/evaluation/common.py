@@ -76,7 +76,7 @@ class ProgressLoggerCallback(TrainerCallback):
         return control
 
 
-def has_status_code_5xx(e):
+def should_retry_model_loading_on_exception(e):
     while e is not None:
         if isinstance(e, HTTPError):
             if e.response is None:
@@ -84,6 +84,9 @@ def has_status_code_5xx(e):
                 return True
             elif 500 <= e.response.status_code < 600:
                 return True
+        # Retry when model files not found, this is an inconsistent OS error
+        if str(e).find("does not appear to have a file named") != -1:
+            return True
         e = e.__cause__
     return False
 
@@ -92,7 +95,7 @@ def retry_on_5xx():
     return retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=2.5, min=30, max=600),
-        retry=retry_if_exception(has_status_code_5xx),
+        retry=retry_if_exception(should_retry_model_loading_on_exception),
         reraise=True,
     )
 
