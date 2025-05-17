@@ -119,9 +119,14 @@ NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
 # Task Stuff
 MINIMUM_MINER_POOL = 1
 
-
+# General miner pool sizes
 MIN_IDEAL_NUM_MINERS_IN_POOL = 8
 MAX_IDEAL_NUM_MINERS_IN_POOL = 15
+
+# Image-specific miner pool sizes 
+MIN_IDEAL_NUM_MINERS_IN_IMAGE_POOL = 15
+MAX_IDEAL_NUM_MINERS_IN_IMAGE_POOL = 25
+
 MIN_IMAGE_COMPETITION_HOURS = 1
 MAX_IMAGE_COMPETITION_HOURS = 2
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request

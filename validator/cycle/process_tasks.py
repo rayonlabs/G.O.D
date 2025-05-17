@@ -157,7 +157,11 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, nodes: list[N
         await tasks_sql.update_task(task, config.psql_db)
         return task
 
-    num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
+    # Use image-specific pool sizes for image tasks
+    if task.task_type == TaskType.IMAGETASK:
+        num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_IMAGE_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_IMAGE_POOL)
+    else:
+        num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
     nodes_to_try_for = await _weighted_random_shuffle(available_nodes, config.psql_db)
 
     # TODO: Improve by selecting high score miners first, then lower score miners, etc
