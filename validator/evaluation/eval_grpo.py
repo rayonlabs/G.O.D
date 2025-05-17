@@ -17,7 +17,6 @@ from validator.evaluation.common import ProgressLoggerCallback
 from validator.evaluation.common import _load_and_update_evaluation_config
 from validator.evaluation.common import _log_dataset_and_model_info
 from validator.evaluation.common import check_and_log_base_model_size
-from validator.evaluation.common import count_model_parameters
 from validator.evaluation.common import load_finetuned_model
 from validator.evaluation.common import load_model
 from validator.evaluation.common import load_results_dict
@@ -185,10 +184,7 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
     try:
         if check_for_lora(repo):
             logger.info("LoRA adapter detected. Loading as with Peft")
-            base_model = load_model(evaluation_args.original_model, is_base_model=True)
-            if "model_params_count" not in results_dict:
-                results_dict["model_params_count"] = count_model_parameters(base_model)
-            finetuned_model = load_finetuned_model(base_model, repo)
+            finetuned_model = load_finetuned_model(repo)
             is_finetune = True
         else:
             logger.info("No LoRA adapter detected. Loading full model")

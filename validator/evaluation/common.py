@@ -151,7 +151,7 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
 
 
 @retry_on_5xx()
-def load_finetuned_model(base_model, repo: str) -> AutoPeftModelForCausalLM:
+def load_finetuned_model(repo: str) -> AutoPeftModelForCausalLM:
     try:
         cache_dir = create_finetuned_cache_dir()
         return AutoPeftModelForCausalLM.from_pretrained(
