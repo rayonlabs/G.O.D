@@ -291,7 +291,7 @@ async def _process_task_batch(
         elif task_type == TaskType.GRPOTASK.value:
             task_fields = {k: v for k, v in task_data.items() if k in GrpoTask.model_fields}
             task = GrpoTask(**task_fields)
-            task = _check_if_task_has_finished(task)
+            task = hide_sensitive_data_till_finished(task)
             tasks_with_details.append(GrpoTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
 
     return tasks_with_details
