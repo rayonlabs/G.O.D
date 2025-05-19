@@ -91,7 +91,9 @@ async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> Mi
     endpoint = cst.TASK_OFFER_IMAGE_ENDPOINT if request.task_type == TaskType.IMAGETASK else cst.TASK_OFFER_ENDPOINT
     try:
         response = await process_non_stream_fiber(endpoint, config, node, request.model_dump(), timeout=3)
-        logger.info(f"The response from make {request.task_type} offer for node {node.node_id} was {response}")
+        logger.info(
+            f"The response from make {request.task_type} offer for node {node.node_id}, hotkey {node.hotkey} was {response}"
+            )
         if response is None or not isinstance(response, dict):
             logger.warning(f"Received invalid response format from node {node.node_id}: {response}")
             response = {}
