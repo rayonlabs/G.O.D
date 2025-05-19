@@ -204,19 +204,29 @@ async def download_and_load_dataset(
 
 
 def change_to_json_format(dataset: Dataset, columns: list[str]):
-    try:
-        result = []
-        for row in dataset:
-            row_dict = {}
-            for col in columns:
-                if col in row:
-                    value = row[col]
-                    row_dict[col] = str(value) if value is not None else ""
-            result.append(row_dict)
-        return result
-    except Exception as e:
-        logger.error(f"Error converting to JSON format: {str(e)}")
-        return []
+    result = []
+    total_rows = 0
+    fully_empty_rows = 0
+
+    for row in dataset:
+        row_dict = {}
+        is_row_empty = True
+        for col in columns:
+            if col in row:
+                value = row[col]
+                str_value = str(value) if value is not None else ""
+                row_dict[col] = str_value
+                if str_value != "":
+                    is_row_empty = False
+        result.append(row_dict)
+        total_rows += 1
+        if is_row_empty:
+            fully_empty_rows += 1
+
+    if total_rows > 0 and (fully_empty_rows / total_rows) > 0.8:
+        raise ValueError(f"More than 80% of rows are fully empty ({fully_empty_rows}/{total_rows} rows)")
+
+    return result
 
 
 def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = False):
@@ -224,16 +234,16 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
         raise TypeError("train_dataset must be an instance of datasets.Dataset")
     if len(train_dataset) == 0:
         raise ValueError("Cannot split an empty dataset")
-    
+
     try:
         dataset_length = len(train_dataset)
-        
+
         if is_dpo:
             test_size = min(cst.MAX_TEST_DATA_POINTS, int(len(train_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE))
             num_synthetic_samples = test_size
             synthetic_dataset = train_dataset.shuffle(seed=42).select(range(num_synthetic_samples))
             remaining_train_dataset = train_dataset
-            
+
             logger.info(
                 f"DPO task: Sampling {num_synthetic_samples} examples WITH REPLACEMENT from train set. "
                 f"Original train size: {dataset_length}, "
@@ -248,7 +258,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
             split_index = dataset_length - num_synthetic_samples
             synthetic_dataset = train_dataset.select(range(split_index, dataset_length))
             remaining_train_dataset = train_dataset.select(range(split_index))
-            
+
             logger.info(
                 f"Taking {num_synthetic_samples} samples from the train set to be synthetic data. "
                 f"Original size: {dataset_length}, "
