@@ -123,7 +123,7 @@ MINIMUM_MINER_POOL = 1
 MIN_IDEAL_NUM_MINERS_IN_POOL = 8
 MAX_IDEAL_NUM_MINERS_IN_POOL = 15
 
-# Image-specific miner pool sizes 
+# Image-specific miner pool sizes
 MIN_IDEAL_NUM_MINERS_IN_IMAGE_POOL = 15
 MAX_IDEAL_NUM_MINERS_IN_IMAGE_POOL = 25
 
@@ -135,8 +135,6 @@ MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
 MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
-MODEL_SIZE_REQUIRING_3_GPUS = 68 * 10**9  # 68B params
-
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
