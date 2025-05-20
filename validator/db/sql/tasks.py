@@ -490,28 +490,23 @@ async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
             next_training_end=row["next_training_end"],
         )
         
-        for type_row in type_rows:
-            task_type = type_row[cst.TASK_TYPE]
-            if task_type == TaskType.INSTRUCTTEXTTASK.value:
-                stats.instruct_training = type_row["training_count"]
-                stats.instruct_preevaluation = type_row["preevaluation_count"]
-                stats.instruct_evaluating = type_row["evaluating_count"]
-                stats.instruct_success = type_row["success_count"]
-            elif task_type == TaskType.DPOTASK.value:
-                stats.dpo_training = type_row["training_count"]
-                stats.dpo_preevaluation = type_row["preevaluation_count"]
-                stats.dpo_evaluating = type_row["evaluating_count"]
-                stats.dpo_success = type_row["success_count"]
-            elif task_type == TaskType.GRPOTASK.value:
-                stats.grpo_training = type_row["training_count"]
-                stats.grpo_preevaluation = type_row["preevaluation_count"]
-                stats.grpo_evaluating = type_row["evaluating_count"]
-                stats.grpo_success = type_row["success_count"]
-            elif task_type == TaskType.IMAGETASK.value:
-                stats.image_training = type_row["training_count"]
-                stats.image_preevaluation = type_row["preevaluation_count"]
-                stats.image_evaluating = type_row["evaluating_count"]
-                stats.image_success = type_row["success_count"]
+        type_mapping = {
+            TaskType.INSTRUCTTEXTTASK.value: "instruct",
+            TaskType.DPOTASK.value: "dpo",
+            TaskType.GRPOTASK.value: "grpo",
+            TaskType.IMAGETASK.value: "image"
+        }
+        
+        for row in type_rows:
+            prefix = type_mapping.get(row[cst.TASK_TYPE])
+            if prefix:
+                for status, count in {
+                    "training": row["training_count"],
+                    "preevaluation": row["preevaluation_count"],
+                    "evaluating": row["evaluating_count"],
+                    "success": row["success_count"]
+                }.items():
+                    setattr(stats, f"{prefix}_{status}", count)
         
         return stats
 
