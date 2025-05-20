@@ -14,6 +14,9 @@ from datasets import concatenate_datasets
 from datasets import load_dataset
 from fiber import Keypair
 
+from validator.augmentation.augmentation import generate_dpo_reformulation
+from validator.augmentation.augmentation import load_prompts
+
 import validator.core.constants as cst
 from core.models.payload_models import DpoDatasetColumnsResponse
 from core.models.payload_models import ImageTextPair
