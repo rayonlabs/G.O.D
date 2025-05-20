@@ -10,6 +10,7 @@ from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.models import AnyTypeRawTask
 from validator.core.models import AnyTypeTask
+from validator.core.models import DetailedNetworkStats
 from validator.core.models import DpoRawTask
 from validator.core.models import DpoTask
 from validator.core.models import GrpoRawTask
