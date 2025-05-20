@@ -379,7 +379,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     prompt_field = task.field_prompt
     logger.info(f"Generating synthetic DPO data from the field {prompt_field}")
     
-    num_samples = min(cst.DPO_SYNTHETIC_TOTAL_SIZE * 2, len(dataset))  # Sample more to have backup prompts
+    num_samples = min(cst.DPO_SYNTHETIC_TOTAL_SIZE * 2, len(dataset))
     
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
     prompts = sampled_data[prompt_field]
@@ -400,23 +400,19 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     total_batches = (len(prompts_for_gen) + cst.SYNTH_GEN_BATCH_SIZE - 1) // cst.SYNTH_GEN_BATCH_SIZE
     batch_idx = 0
     
-    # Continue processing batches until we have enough samples or run out of prompts
     while len(synthetic_dataset) < cst.DPO_SYNTHETIC_TOTAL_SIZE and batch_idx < len(prompts_for_gen):
         end_idx = min(batch_idx + cst.SYNTH_GEN_BATCH_SIZE, len(prompts_for_gen))
         batch = prompts_for_gen[batch_idx: end_idx]
         current_batch = (batch_idx // cst.SYNTH_GEN_BATCH_SIZE) + 1
         
-        # Try this batch up to max_batch_retries times
         for retry in range(max_batch_retries):
             if retry > 0:
                 logger.info(f"Retrying batch {current_batch}/{total_batches} (attempt {retry+1}/{max_batch_retries})")
             
             logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
             
-            # Allow retries for individual prompts
             batch_tasks = []
             for prompt in batch:
-                # Create a retry wrapper for each prompt
                 async def process_with_retry(p):
                     for attempt in range(max_retry_attempts):
                         try:
@@ -427,7 +423,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
                                 logger.info(f"Retrying prompt after error: {e}")
                             else:
                                 raise
-                    return None  # Should never reach here but added for completeness
+                    return None
                 
                 batch_tasks.append(process_with_retry(prompt))
             
@@ -447,7 +443,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
                     
                     if consecutive_errors >= max_consecutive_errors:
                         logger.error(f"Maximum consecutive errors reached when generating synthetic DPO dataset. Error: {result}")
-                        consecutive_errors = 0  # Reset to allow continued processing
+                        consecutive_errors = 0
                 else:
                     if current_batch == 1 and idx < 5:
                         logger.info(f"Sample input: {batch[idx]}")
@@ -465,13 +461,10 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
                     f"Generated {len(batch_results)}/{len(batch)} samples successfully"
                 )
                 
-                # If we got enough successful results or had few errors, no need to retry
                 if len(batch_results) >= len(batch) * 0.7 or batch_error_count < 3:
                     break
         
         batch_idx = end_idx
-        
-        # Log progress towards goal
         logger.info(f"Progress: {len(synthetic_dataset)}/{cst.DPO_SYNTHETIC_TOTAL_SIZE} synthetic samples generated")
     
     logger.info(
@@ -479,7 +472,6 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
         f"JSON errors: {json_errors}, Other errors: {generic_errors}"
     )
     
-    # If we still don't have enough samples, supplement with samples from training data
     if len(synthetic_dataset) < cst.DPO_SYNTHETIC_TOTAL_SIZE:
         missing_samples = cst.DPO_SYNTHETIC_TOTAL_SIZE - len(synthetic_dataset)
         logger.warning(
@@ -487,8 +479,6 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
             f"synthetic samples. Adding {missing_samples} samples from training data."
         )
         
-        # Get additional samples from the dataset (different from the ones we used for prompts)
-        # Use a different seed to ensure we get different samples
         additional_train_samples = dataset.shuffle(seed=84).select(range(missing_samples))
         additional_train_list = [sample for sample in additional_train_samples]
         
