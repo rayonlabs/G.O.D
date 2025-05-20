@@ -19,10 +19,10 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> list[Node]:
     
     Includes nodes that either:
     a) Do not have any entries in the task_nodes table (new nodes with no scores)
-    b) Have at least one entry with quality_score > 0
+    b) Have at least one positive quality_score within the last 7 days
     c) Have entries but all scores are NULL (not yet evaluated)
     """
-    logger.info("Getting eligible nodes (new nodes, nodes with NULL scores, or nodes with positive scores)")
+    logger.info("Getting eligible nodes (new nodes, nodes with NULL scores, or nodes with positive scores in the last 7 days)")
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -35,11 +35,13 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> list[Node]:
                     WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
                 )
                 OR
-                -- Condition b: At least one entry with quality_score > 0
+                -- Condition b: At least one positive quality_score within the last 7 days
                 EXISTS (
                     SELECT 1 FROM {dcst.TASK_NODES_TABLE} tn
+                    JOIN {dcst.TASKS_TABLE} t ON tn.{dcst.TASK_ID} = t.{dcst.TASK_ID}
                     WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
                     AND tn.{dcst.TASK_NODE_QUALITY_SCORE} > 0
+                    AND t.{dcst.CREATED_AT} >= NOW() - INTERVAL '7 days'
                 )
                 OR
                 -- Condition c: Has entries but all scores are NULL
