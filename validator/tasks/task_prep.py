@@ -533,20 +533,16 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
                 synthetic_data_list = await generate_synthetic_dpo_data(train_ds, keypair, task)
                 
                 if synthetic_data_list and len(synthetic_data_list) >= cst.DPO_SYNTHETIC_TOTAL_SIZE:
-                    # Split synthetic data for training and evaluation
                     synth_for_training = synthetic_data_list[:cst.DPO_SYNTHETIC_FOR_TRAINING]
                     synth_for_eval = synthetic_data_list[cst.DPO_SYNTHETIC_FOR_TRAINING:]
                     
-                    # Add synthetic data to training set
                     synth_train_dataset = Dataset.from_list(synth_for_training)
                     train_ds = concatenate_datasets([train_ds, synth_train_dataset])
                     logger.info(f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}")
                     
-                    # Sample additional examples from train set with replacement for synth eval
                     train_samples = train_ds.shuffle(seed=42).select(range(cst.DPO_SYNTH_EXAMPLES_FROM_TRAIN))
                     train_samples_list = [sample for sample in train_samples]
                     
-                    # Combine synthetic eval data with sampled train data
                     synthetic_ds = synth_for_eval + train_samples_list
                     logger.info(f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data")
                 else:
