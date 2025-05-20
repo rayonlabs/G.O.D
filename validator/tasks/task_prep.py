@@ -379,7 +379,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     prompt_field = task.field_prompt
     logger.info(f"Generating synthetic DPO data from the field {prompt_field}")
     
-    num_samples = min(cst.DPO_SYNTHETIC_TOTAL_SIZE, len(dataset))
+    num_samples = min(cst.DPO_SYNTHETIC_TOTAL_SIZE * 2, len(dataset))  # Sample more to have backup prompts
     
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
     prompts = sampled_data[prompt_field]
@@ -387,56 +387,105 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     prompts_for_gen = [{prompt_field: prompt} for prompt in prompts]
     
     prompts_obj = load_prompts()
-    logger.info(f"Generating {len(prompts_for_gen)} synthetic DPO samples")
+    logger.info(f"Attempting to generate {cst.DPO_SYNTHETIC_TOTAL_SIZE} synthetic DPO samples")
     
     synthetic_dataset = []
     json_errors = 0
     generic_errors = 0
     consecutive_errors = 0
     max_consecutive_errors = 10
+    max_retry_attempts = 3
+    max_batch_retries = 2
 
     total_batches = (len(prompts_for_gen) + cst.SYNTH_GEN_BATCH_SIZE - 1) // cst.SYNTH_GEN_BATCH_SIZE
-    for batch_idx in range(0, len(prompts_for_gen), cst.SYNTH_GEN_BATCH_SIZE):
-        batch = prompts_for_gen[batch_idx: batch_idx + cst.SYNTH_GEN_BATCH_SIZE]
+    batch_idx = 0
+    
+    # Continue processing batches until we have enough samples or run out of prompts
+    while len(synthetic_dataset) < cst.DPO_SYNTHETIC_TOTAL_SIZE and batch_idx < len(prompts_for_gen):
+        end_idx = min(batch_idx + cst.SYNTH_GEN_BATCH_SIZE, len(prompts_for_gen))
+        batch = prompts_for_gen[batch_idx: end_idx]
         current_batch = (batch_idx // cst.SYNTH_GEN_BATCH_SIZE) + 1
-        logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
-
-        tasks = [generate_dpo_reformulation(prompt, prompts_obj, keypair) for prompt in batch]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        batch_results = []
-        for idx, result in enumerate(results):
-            if isinstance(result, Exception):
-                if isinstance(result, json.JSONDecodeError):
-                    json_errors += 1
-                else:
-                    generic_errors += 1
-                consecutive_errors += 1
-                if consecutive_errors >= max_consecutive_errors:
-                    logger.error(f"Maximum consecutive errors reached when generating synthetic DPO dataset. Here is one result {result}")
-                    return None
-            else:
-                if batch_idx == 0 and idx < 5:
-                    logger.info(f"Sample input: {batch[idx]}")
-                    logger.info(f"Sample output: {result}")
-                consecutive_errors = 0
+        
+        # Try this batch up to max_batch_retries times
+        for retry in range(max_batch_retries):
+            if retry > 0:
+                logger.info(f"Retrying batch {current_batch}/{total_batches} (attempt {retry+1}/{max_batch_retries})")
+            
+            logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
+            
+            # Allow retries for individual prompts
+            batch_tasks = []
+            for prompt in batch:
+                # Create a retry wrapper for each prompt
+                async def process_with_retry(p):
+                    for attempt in range(max_retry_attempts):
+                        try:
+                            result = await generate_dpo_reformulation(p, prompts_obj, keypair)
+                            return result
+                        except Exception as e:
+                            if attempt < max_retry_attempts - 1:
+                                logger.info(f"Retrying prompt after error: {e}")
+                            else:
+                                raise
+                    return None  # Should never reach here but added for completeness
                 
-                dpo_item = validate_and_transform_dpo(result, task)
-                batch_results.append(dpo_item)
-
-        synthetic_dataset.extend(batch_results)
-
-        if batch_results:
-            logger.info(
-                f"Batch {current_batch}/{total_batches} complete. "
-                f"Generated {len(batch_results)}/{len(batch)} samples successfully"
-            )
-
+                batch_tasks.append(process_with_retry(prompt))
+            
+            results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+            
+            batch_results = []
+            batch_error_count = 0
+            
+            for idx, result in enumerate(results):
+                if isinstance(result, Exception):
+                    if isinstance(result, json.JSONDecodeError):
+                        json_errors += 1
+                    else:
+                        generic_errors += 1
+                    consecutive_errors += 1
+                    batch_error_count += 1
+                    
+                    if consecutive_errors >= max_consecutive_errors:
+                        logger.error(f"Maximum consecutive errors reached when generating synthetic DPO dataset. Error: {result}")
+                        consecutive_errors = 0  # Reset to allow continued processing
+                else:
+                    if current_batch == 1 and idx < 5:
+                        logger.info(f"Sample input: {batch[idx]}")
+                        logger.info(f"Sample output: {result}")
+                    consecutive_errors = 0
+                    
+                    dpo_item = validate_and_transform_dpo(result, task)
+                    batch_results.append(dpo_item)
+            
+            synthetic_dataset.extend(batch_results)
+            
+            if batch_results:
+                logger.info(
+                    f"Batch {current_batch}/{total_batches} complete. "
+                    f"Generated {len(batch_results)}/{len(batch)} samples successfully"
+                )
+                
+                # If we got enough successful results or had few errors, no need to retry
+                if len(batch_results) >= len(batch) * 0.7 or batch_error_count < 3:
+                    break
+        
+        batch_idx = end_idx
+        
+        # Log progress towards goal
+        logger.info(f"Progress: {len(synthetic_dataset)}/{cst.DPO_SYNTHETIC_TOTAL_SIZE} synthetic samples generated")
+    
     logger.info(
-        f"Finished processing all batches. Generated {len(synthetic_dataset)} samples total. "
+        f"Finished generating synthetic data. Got {len(synthetic_dataset)} samples total. "
         f"JSON errors: {json_errors}, Other errors: {generic_errors}"
     )
-
+    
+    # If we still don't have enough samples, log a warning but return what we have
+    if len(synthetic_dataset) < cst.DPO_SYNTHETIC_TOTAL_SIZE:
+        logger.warning(
+            f"Could only generate {len(synthetic_dataset)}/{cst.DPO_SYNTHETIC_TOTAL_SIZE} "
+            f"synthetic samples after exhausting all available prompts"
+        )
+    
     return synthetic_dataset
 
 
