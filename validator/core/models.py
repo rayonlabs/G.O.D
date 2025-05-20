@@ -382,7 +382,9 @@ class NetworkStats(BaseModel):
     number_of_jobs_success: int
     next_training_end: datetime | None
     job_can_be_made: bool = True
-    
+
+
+class DetailedNetworkStats(NetworkStats):
     instruct_training: int = 0
     instruct_preevaluation: int = 0
     instruct_evaluating: int = 0

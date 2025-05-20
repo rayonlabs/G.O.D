@@ -464,6 +464,34 @@ async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
             TaskStatus.SUCCESS.value,
         )
         
+        return NetworkStats(
+            number_of_jobs_training=row["number_of_jobs_training"],
+            number_of_jobs_preevaluation=row["number_of_jobs_preevaluation"],
+            number_of_jobs_evaluating=row["number_of_jobs_evaluating"],
+            number_of_jobs_success=row["number_of_jobs_success"],
+            next_training_end=row["next_training_end"],
+        )
+
+
+async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $1) as number_of_jobs_training,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $2) as number_of_jobs_preevaluation,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $3) as number_of_jobs_evaluating,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $4) as number_of_jobs_success,
+                MIN(termination_at) FILTER (WHERE {cst.STATUS} = $1) as next_training_end
+            FROM {cst.TASKS_TABLE}
+        """
+        row = await connection.fetchrow(
+            query,
+            TaskStatus.TRAINING.value,
+            TaskStatus.PREEVALUATION.value,
+            TaskStatus.EVALUATING.value,
+            TaskStatus.SUCCESS.value,
+        )
+        
         type_query = f"""
             SELECT
                 {cst.TASK_TYPE},
@@ -482,7 +510,7 @@ async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
             TaskStatus.SUCCESS.value,
         )
         
-        stats = NetworkStats(
+        stats = DetailedNetworkStats(
             number_of_jobs_training=row["number_of_jobs_training"],
             number_of_jobs_preevaluation=row["number_of_jobs_preevaluation"],
             number_of_jobs_evaluating=row["number_of_jobs_evaluating"],

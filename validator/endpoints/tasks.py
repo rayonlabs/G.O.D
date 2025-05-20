@@ -33,6 +33,7 @@ from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import NetworkStats
+from validator.core.models import DetailedNetworkStats
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
@@ -60,6 +61,7 @@ GET_NODE_RESULTS_ENDPOINT = "/v1/tasks/node_results/{hotkey}"
 DELETE_TASK_ENDPOINT = "/v1/tasks/delete/{task_id}"
 LEADERBOARD_ENDPOINT = "/v1/leaderboard"
 COMPLETED_ORGANIC_TASKS_ENDPOINT = "/v1/tasks/organic/completed"
+GET_NETWORK_DETAILED_STATUS = "/v1/network/detailed_status"
 UPDATE_TRAINING_REPO_BACKUP_ENDPOINT = "/v1/tasks/{task_id}/training_repo_backup"
 UPDATE_RESULT_MODEL_NAME_ENDPOINT = "/v1/tasks/{task_id}/result_model_name"
 
@@ -424,6 +426,20 @@ async def get_network_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def get_network_detailed_status(
+    config: Config = Depends(get_config),
+) -> DetailedNetworkStats:
+    try:
+        logger.debug("IN get network detailed status")
+        detailed_stats = await task_sql.get_detailed_task_stats(config.psql_db)
+        if detailed_stats.number_of_jobs_training >= MAX_CONCURRENT_JOBS:
+            detailed_stats.job_can_be_made = False
+        return detailed_stats
+    except Exception as e:
+        logger.info(f"There was an issue with getting detailed status {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 async def get_completed_organic_tasks(
     hours: int | None = Query(default=None, description="Number of hours to look back for completed organic tasks", ge=1),
     task_type: TaskType | None = Query(
@@ -493,6 +509,7 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_TASKS_BY_ACCOUNT_ENDPOINT, get_task_details_by_account, methods=["GET"])
     router.add_api_route(LEADERBOARD_ENDPOINT, get_leaderboard, methods=["GET"])
     router.add_api_route(GET_NETWORK_STATUS, get_network_status, methods=["GET"])
+    router.add_api_route(GET_NETWORK_DETAILED_STATUS, get_network_detailed_status, methods=["GET"])
     router.add_api_route(COMPLETED_ORGANIC_TASKS_ENDPOINT, get_completed_organic_tasks, methods=["GET"])
     router.add_api_route(UPDATE_TRAINING_REPO_BACKUP_ENDPOINT, update_training_repo_backup, methods=["PUT"])
     router.add_api_route(UPDATE_RESULT_MODEL_NAME_ENDPOINT, update_result_model_name, methods=["PUT"])
