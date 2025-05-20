@@ -737,7 +737,9 @@ async def process_miners_pool(
                     if isinstance(eval_result, Exception):
                         logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
                         results.append(
-                            _create_failed_miner_result(miner.hotkey, score_reason="Evaluation failed", task_type=task.task_type)
+                            _create_failed_miner_result(
+                                miner.hotkey, score_reason=f"Evaluation failed: {str(eval_result)}", task_type=task.task_type
+                                )
                         )
                         continue
                     elif task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
@@ -785,7 +787,9 @@ async def process_miners_pool(
             logger.error(f"Error during batch evaluation: {e}", exc_info=True)
             results.extend(
                 [
-                    _create_failed_miner_result(miner.hotkey, score_reason="Evaluation failed", task_type=task.task_type)
+                    _create_failed_miner_result(
+                        miner.hotkey, score_reason=f"Evaluation failed: {str(e)}", task_type=task.task_type
+                        )
                     for miner in miners
                     if miner.hotkey not in [r.hotkey for r in results]
                 ]
