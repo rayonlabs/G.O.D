@@ -447,10 +447,8 @@ async def get_synthetic_set_for_task(task_id: str, psql_db: PSQLDB):
 
 async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
     async with await psql_db.connection() as connection:
-        connection: Connection
         query = f"""
             SELECT
-
                 COUNT(*) FILTER (WHERE {cst.STATUS} = $1) as number_of_jobs_training,
                 COUNT(*) FILTER (WHERE {cst.STATUS} = $2) as number_of_jobs_preevaluation,
                 COUNT(*) FILTER (WHERE {cst.STATUS} = $3) as number_of_jobs_evaluating,
@@ -465,13 +463,57 @@ async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
             TaskStatus.EVALUATING.value,
             TaskStatus.SUCCESS.value,
         )
-        return NetworkStats(
+        
+        type_query = f"""
+            SELECT
+                {cst.TASK_TYPE},
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $1) as training_count,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $2) as preevaluation_count,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $3) as evaluating_count,
+                COUNT(*) FILTER (WHERE {cst.STATUS} = $4) as success_count
+            FROM {cst.TASKS_TABLE}
+            GROUP BY {cst.TASK_TYPE}
+        """
+        type_rows = await connection.fetch(
+            type_query,
+            TaskStatus.TRAINING.value,
+            TaskStatus.PREEVALUATION.value,
+            TaskStatus.EVALUATING.value,
+            TaskStatus.SUCCESS.value,
+        )
+        
+        stats = NetworkStats(
             number_of_jobs_training=row["number_of_jobs_training"],
             number_of_jobs_preevaluation=row["number_of_jobs_preevaluation"],
             number_of_jobs_evaluating=row["number_of_jobs_evaluating"],
             number_of_jobs_success=row["number_of_jobs_success"],
             next_training_end=row["next_training_end"],
         )
+        
+        for type_row in type_rows:
+            task_type = type_row[cst.TASK_TYPE]
+            if task_type == TaskType.INSTRUCTTEXTTASK.value:
+                stats.instruct_training = type_row["training_count"]
+                stats.instruct_preevaluation = type_row["preevaluation_count"]
+                stats.instruct_evaluating = type_row["evaluating_count"]
+                stats.instruct_success = type_row["success_count"]
+            elif task_type == TaskType.DPOTASK.value:
+                stats.dpo_training = type_row["training_count"]
+                stats.dpo_preevaluation = type_row["preevaluation_count"]
+                stats.dpo_evaluating = type_row["evaluating_count"]
+                stats.dpo_success = type_row["success_count"]
+            elif task_type == TaskType.GRPOTASK.value:
+                stats.grpo_training = type_row["training_count"]
+                stats.grpo_preevaluation = type_row["preevaluation_count"]
+                stats.grpo_evaluating = type_row["evaluating_count"]
+                stats.grpo_success = type_row["success_count"]
+            elif task_type == TaskType.IMAGETASK.value:
+                stats.image_training = type_row["training_count"]
+                stats.image_preevaluation = type_row["preevaluation_count"]
+                stats.image_evaluating = type_row["evaluating_count"]
+                stats.image_success = type_row["success_count"]
+        
+        return stats
 
 
 async def get_tasks_ready_to_evaluate(psql_db: PSQLDB) -> list[RawTask]:
