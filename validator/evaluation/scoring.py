@@ -164,15 +164,15 @@ def get_period_scores_from_results(task_results: list[TaskResults], weight_multi
 def calculate_weighted_loss(test_loss: float, synth_loss: float, is_dpo: bool = False) -> float:
     assert not np.isnan(test_loss), "Test loss cannot be NaN"
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
-    
+
     if is_dpo:
         adjusted_loss = max(test_loss, synth_loss)
-        
+
         if test_loss >= synth_loss:
             logger.info(f"DPO using test_loss: test={test_loss:.6f} >= synth={synth_loss:.6f}")
         else:
             logger.info(f"DPO using synth_loss: test={test_loss:.6f} < synth={synth_loss:.6f}, adjusted={adjusted_loss:.6f}")
-            
+
         return adjusted_loss
     else:
         return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
@@ -216,12 +216,16 @@ def calculate_miner_ranking_and_scores(
 ) -> list[MinerResultsText | MinerResultsImage]:
     logger.info("Beginning score calculation...")
 
+    valid_results = []
     # Initialize all scores to 0.0 and set appropriate reasons
     for result in miner_results:
         with LogContext(miner_hotkey=result.hotkey):
             result.score = 0.0
-
-            if not result.is_finetune:
+            # atp, we only set score_reason in these cases (all are invalid and is_finetune == False):
+            # "Invalid/No repo submitted", "Evaluation failed", "Duplicated submission"
+            if result.score_reason:
+                continue
+            elif not result.is_finetune:
                 result.score_reason = "Non-finetuned submission"
                 logger.info(f"Miner {result.hotkey}: Non-finetuned, score initialized to 0.0")
             elif np.isnan(result.test_loss):
@@ -230,9 +234,9 @@ def calculate_miner_ranking_and_scores(
             elif result.synth_loss == 1000.0:
                 result.score_reason = "Outside of top-4 test doesn't get scored."
                 logger.info(f"Miner {result.hotkey}: Outside of top-4")
+            else:
+                valid_results.append(result)
 
-    # Filter to only include valid results for ranking
-    valid_results = [result for result in miner_results if result.is_finetune and not np.isnan(result.test_loss)]
     if not valid_results:
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
@@ -382,7 +386,7 @@ def _get_dataset_type(task: AnyTypeRawTask) -> InstructTextDatasetType | DpoData
         raise ValueError(f"Unknown task type: {task.task_type}")
 
 
-def _create_failed_miner_result(hotkey: str, reason: str, task_type: TaskType) -> MinerResults:
+def _create_failed_miner_result(hotkey: str, score_reason: str, task_type: TaskType) -> MinerResults:
     """Create a result object for failed miner submissions with initial score of 0.0.
     The score may later be adjusted to a penalty if valid submissions exist."""
     if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
@@ -392,12 +396,12 @@ def _create_failed_miner_result(hotkey: str, reason: str, task_type: TaskType) -
             synth_loss=np.nan,
             is_finetune=False,
             score=0.0,
-            score_reason=reason,
+            score_reason=score_reason,
             task_type=task_type,
         )
     else:
         return MinerResultsImage(
-            hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason
+            hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=score_reason
         )
 
 
@@ -711,7 +715,7 @@ async def process_miners_pool(
             logger.info(f"Found repo {repo} for miner {miner.hotkey}")
 
     results = [
-        _create_failed_miner_result(miner.hotkey, reason="No repo submitted", task_type=task.task_type)
+        _create_failed_miner_result(miner.hotkey, score_reason="Invalid/No repo submitted", task_type=task.task_type)
         for miner in miners
         if miner.hotkey not in miner_repos
     ]
@@ -733,7 +737,7 @@ async def process_miners_pool(
                     if isinstance(eval_result, Exception):
                         logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
                         results.append(
-                            _create_failed_miner_result(miner.hotkey, reason="Evaluation failed", task_type=task.task_type)
+                            _create_failed_miner_result(miner.hotkey, score_reason="Evaluation failed", task_type=task.task_type)
                         )
                         continue
                     elif task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
@@ -781,7 +785,7 @@ async def process_miners_pool(
             logger.error(f"Error during batch evaluation: {e}", exc_info=True)
             results.extend(
                 [
-                    _create_failed_miner_result(miner.hotkey, reason="Evaluation failed", task_type=task.task_type)
+                    _create_failed_miner_result(miner.hotkey, score_reason="Evaluation failed", task_type=task.task_type)
                     for miner in miners
                     if miner.hotkey not in [r.hotkey for r in results]
                 ]
