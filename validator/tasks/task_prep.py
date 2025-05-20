@@ -479,12 +479,21 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
         f"JSON errors: {json_errors}, Other errors: {generic_errors}"
     )
     
-    # If we still don't have enough samples, log a warning but return what we have
+    # If we still don't have enough samples, supplement with samples from training data
     if len(synthetic_dataset) < cst.DPO_SYNTHETIC_TOTAL_SIZE:
+        missing_samples = cst.DPO_SYNTHETIC_TOTAL_SIZE - len(synthetic_dataset)
         logger.warning(
             f"Could only generate {len(synthetic_dataset)}/{cst.DPO_SYNTHETIC_TOTAL_SIZE} "
-            f"synthetic samples after exhausting all available prompts"
+            f"synthetic samples. Adding {missing_samples} samples from training data."
         )
+        
+        # Get additional samples from the dataset (different from the ones we used for prompts)
+        # Use a different seed to ensure we get different samples
+        additional_train_samples = dataset.shuffle(seed=84).select(range(missing_samples))
+        additional_train_list = [sample for sample in additional_train_samples]
+        
+        logger.info(f"Added {len(additional_train_list)} samples from training data to supplement synthetic dataset")
+        synthetic_dataset.extend(additional_train_list)
     
     return synthetic_dataset
 
