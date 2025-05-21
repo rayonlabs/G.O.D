@@ -77,6 +77,11 @@ class ProgressLoggerCallback(TrainerCallback):
 
 
 def should_retry_model_loading_on_exception(e):
+    ephemeral_error_patterns = [
+        "does not appear to have a file named",
+        "does not appear to have files named"
+    ]
+
     while e is not None:
         if isinstance(e, HTTPError):
             if e.response is None:
@@ -84,8 +89,7 @@ def should_retry_model_loading_on_exception(e):
                 return True
             elif 500 <= e.response.status_code < 600:
                 return True
-        # Retry when model files not found, this is an inconsistent OS error
-        if str(e).find("does not appear to have a file named") != -1:
+        if any(pattern in str(e) for pattern in ephemeral_error_patterns):
             return True
         e = e.__cause__
     return False
