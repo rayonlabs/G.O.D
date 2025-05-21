@@ -445,11 +445,9 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
                         logger.error(f"Maximum consecutive errors reached when generating synthetic DPO dataset. Error: {result}")
                         consecutive_errors = 0
                 else:
-                    # Print one example from each batch 
-                    if idx == 0:  # First result from each batch
+                    if idx == 0:
                         logger.info(f"Batch {current_batch} example - Input: {batch[idx]}")
                         logger.info(f"Batch {current_batch} example - Output: {result}")
-                        # Print specific fields for DPO examples
                         logger.info(f"DPO Fields - prompt: '{result.field_prompt[:100]}...'")
                         logger.info(f"DPO Fields - chosen: '{result.field_chosen[:100]}...'") 
                         logger.info(f"DPO Fields - rejected: '{result.field_rejected[:100]}...'")

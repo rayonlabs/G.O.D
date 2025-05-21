@@ -177,7 +177,6 @@ async def generate_augmented_text_dataset(
                     logger.error(f"Maximum consecutive errors reached when generating the augmented dataset. Here is one result {result}")
                     return None
             else:
-                # Print one example from each batch to show progress
                 if idx == 0:  # First result from each batch
                     logger.info(f"Batch {current_batch} example - Input: {batch[idx]}")
                     logger.info(f"Batch {current_batch} example - Output: {result}")
