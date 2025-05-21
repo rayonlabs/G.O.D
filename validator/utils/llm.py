@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 
 def convert_to_nineteen_payload(
-    messages: list[Message], model: str, temperature: float, max_tokens: int = 1000, stream: bool = False
+    messages: list[Message], model: str, temperature: float, max_tokens: int = 5000, stream: bool = False
 ) -> dict:
     return {
         "messages": [message.model_dump() for message in messages],
