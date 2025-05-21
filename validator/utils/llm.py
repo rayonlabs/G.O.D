@@ -25,13 +25,30 @@ def convert_to_nineteen_payload(
 
 
 def remove_reasoning_part(content: str, end_of_reasoning_tag: str) -> str:
+    if not content or not isinstance(content, str):
+        logger.warning(f"Invalid content received: {content}")
+        return ""
+    
+    # Check if there's a thinking tag format: <think>...</think>
+    think_match = re.search(r'<think>([\s\S]*?)</think>', content)
+    if think_match:
+        # If there's content after the </think> tag, extract it
+        after_tag = content.split('</think>', 1)
+        if len(after_tag) > 1 and after_tag[1].strip():
+            return after_tag[1].strip()
+        
+        # If there's no content after the tag, extract content inside the tag
+        thinking_content = think_match.group(1).strip()
+        return thinking_content
+        
+    # Use the old method as fallback
     if end_of_reasoning_tag and end_of_reasoning_tag in content:
         content = content.split(end_of_reasoning_tag)[1].strip()
         return content
-    else:
-        logger.warning(f"No end of reasoning tag found in content: {content}")
-        logger.warning("Returning empty string")
-        return ""
+    
+    # Return the original content if no tags found
+    logger.warning(f"No thinking tags found in content, returning as is")
+    return content
 
 
 def extract_json_from_response(response: str) -> dict:
