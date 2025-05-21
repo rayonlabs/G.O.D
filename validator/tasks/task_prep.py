@@ -445,9 +445,14 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
                         logger.error(f"Maximum consecutive errors reached when generating synthetic DPO dataset. Error: {result}")
                         consecutive_errors = 0
                 else:
-                    if current_batch == 1 and idx < 5:
-                        logger.info(f"Sample input: {batch[idx]}")
-                        logger.info(f"Sample output: {result}")
+                    # Print one example from each batch 
+                    if idx == 0:  # First result from each batch
+                        logger.info(f"Batch {current_batch} example - Input: {batch[idx]}")
+                        logger.info(f"Batch {current_batch} example - Output: {result}")
+                        # Print specific fields for DPO examples
+                        logger.info(f"DPO Fields - prompt: '{result.field_prompt[:100]}...'")
+                        logger.info(f"DPO Fields - chosen: '{result.field_chosen[:100]}...'") 
+                        logger.info(f"DPO Fields - rejected: '{result.field_rejected[:100]}...'")
                     consecutive_errors = 0
                     
                     dpo_item = validate_and_transform_dpo(result, task)
@@ -551,7 +556,13 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
             elif isinstance(task, InstructTextRawTask):
                 logger.info("INSTRUCT TEXT task: Using same approach as DPO for synthetic data")
                 # For instruct text tasks, use the same pattern as DPO tasks
+                logger.info("Generating synthetic data for instruct text task")
                 synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
+                
+                # Print an example from synthetic data for inspection
+                if synthetic_ds and len(synthetic_ds) > 0:
+                    example = synthetic_ds[0]
+                    logger.info(f"Example synthetic data point for INSTRUCT task: {example}")
                 
                 if synthetic_ds and len(synthetic_ds) >= cst.SYNTHETIC_TOTAL_SIZE:
                     # Split synthetic data into training and evaluation sets
