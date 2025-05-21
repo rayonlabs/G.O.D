@@ -96,46 +96,14 @@ async def process_non_stream_fiber(
 
     return response.json()
 
-
 async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> str | None:
     response = await _post_to_nineteen_ai(PROMPT_GEN_ENDPOINT, payload, keypair)
+    response_json = response.json()
     try:
-        # Get raw response JSON
-        raw_response = response.json()
-        
-        # Case 1: Direct standard format {"choices": [...]}
-        if "choices" in raw_response and isinstance(raw_response["choices"], list) and len(raw_response["choices"]) > 0:
-            if "message" in raw_response["choices"][0] and "content" in raw_response["choices"][0]["message"]:
-                return raw_response["choices"][0]["message"]["content"]
-        
-        # Case 2: Nested format with content field {"type": "JSONResponse", "content": "{"choices": [...]}"
-        if isinstance(raw_response, dict) and "content" in raw_response:
-            content = raw_response["content"]
-            # If content is already a dict, try to extract from it
-            if isinstance(content, dict) and "choices" in content:
-                if len(content["choices"]) > 0 and "message" in content["choices"][0]:
-                    return content["choices"][0]["message"]["content"]
-            
-            # If content is a string, parse it as JSON
-            elif isinstance(content, str):
-                try:
-                    content_json = json.loads(content)
-                    if "choices" in content_json and len(content_json["choices"]) > 0:
-                        if "message" in content_json["choices"][0]:
-                            return content_json["choices"][0]["message"]["content"]
-                except json.JSONDecodeError:
-                    logger.error("Failed to parse nested JSON in content field")
-        
-        # If we got here, we couldn't extract the content properly
-        logger.error("Could not extract content from response with unexpected format")
-        
-        # Last resort: If raw_response is a string itself, just return it
-        if isinstance(raw_response, str):
-            return raw_response
-            
-        return None
-    except Exception as e:
-        logger.error(f"Error processing nineteen ai chat response: {e}")
+        return response_json["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        logger.error(f"Error in nineteen ai chat response: {response_json}")
+        logger.exception(e)
         return None
 
 
