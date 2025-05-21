@@ -102,7 +102,6 @@ async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> st
     try:
         # Get raw response JSON
         raw_response = response.json()
-        logger.debug(f"Raw nineteen.ai response: {raw_response}")
         
         # Case 1: Direct standard format {"choices": [...]}
         if "choices" in raw_response and isinstance(raw_response["choices"], list) and len(raw_response["choices"]) > 0:
@@ -125,10 +124,10 @@ async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> st
                         if "message" in content_json["choices"][0]:
                             return content_json["choices"][0]["message"]["content"]
                 except json.JSONDecodeError:
-                    logger.error(f"Failed to parse nested JSON in content field: {content[:100]}...")
+                    logger.error("Failed to parse nested JSON in content field")
         
         # If we got here, we couldn't extract the content properly
-        logger.error(f"Could not extract content from response with unexpected format: {raw_response}")
+        logger.error("Could not extract content from response with unexpected format")
         
         # Last resort: If raw_response is a string itself, just return it
         if isinstance(raw_response, str):
@@ -137,7 +136,6 @@ async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> st
         return None
     except Exception as e:
         logger.error(f"Error processing nineteen ai chat response: {e}")
-        logger.error(f"Original response: {response.text if hasattr(response, 'text') else 'No text available'}")
         return None
 
 
