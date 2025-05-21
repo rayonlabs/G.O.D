@@ -161,15 +161,8 @@ async def generate_augmented_text_dataset(
         batch = sampled_data[batch_idx : batch_idx + SYNTH_GEN_BATCH_SIZE]
         current_batch = (batch_idx // SYNTH_GEN_BATCH_SIZE) + 1
         logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
-
-        # Process rows with a slight delay between each request to avoid rate limiting
-        results = []
-        for row in batch:
-            task_result = await process_row(row, prompts, keypair, task_type)
-            results.append(task_result)
-            # Add a small 0.1 second delay between requests
-            await asyncio.sleep(0.1)
-
+        tasks = [process_row(row, prompts, keypair, task_type) for row in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         batch_results = []
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
