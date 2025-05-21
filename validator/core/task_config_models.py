@@ -10,8 +10,8 @@ from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
+from validator.cycle.util_functions import get_fake_text_dataset_size
 from validator.cycle.util_functions import get_total_image_dataset_size
-from validator.cycle.util_functions import get_total_text_dataset_size
 from validator.cycle.util_functions import prepare_image_task_request
 from validator.cycle.util_functions import prepare_text_task_request
 from validator.cycle.util_functions import run_image_task_prep
@@ -42,7 +42,7 @@ class ImageTaskConfig(TaskConfig):
 
 class InstructTextTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.INSTRUCTTEXTTASK
-    data_size_function: Callable = get_total_text_dataset_size
+    data_size_function: Callable = get_fake_text_dataset_size
     task_prep_function: Callable = run_text_task_prep
     task_request_prepare_function: Callable = prepare_text_task_request
     start_training_endpoint: str = cst.START_TRAINING_ENDPOINT
@@ -50,7 +50,7 @@ class InstructTextTaskConfig(TaskConfig):
 
 class DpoTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.DPOTASK
-    data_size_function: Callable = get_total_text_dataset_size
+    data_size_function: Callable = get_fake_text_dataset_size
     task_prep_function: Callable = run_text_task_prep
     task_request_prepare_function: Callable = prepare_text_task_request
     start_training_endpoint: str = cst.START_TRAINING_ENDPOINT
@@ -58,7 +58,7 @@ class DpoTaskConfig(TaskConfig):
 
 class GrpoTaskConfig(TaskConfig):
     task_type: TaskType = TaskType.GRPOTASK
-    data_size_function: Callable = get_total_text_dataset_size
+    data_size_function: Callable = get_fake_text_dataset_size
     task_prep_function: Callable = run_text_task_prep
     task_request_prepare_function: Callable = prepare_text_task_request
     start_training_endpoint: str = cst.START_TRAINING_GRPO_ENDPOINT

@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 
 class MinerTaskOffer(BaseModel):
-    ds_size: int
+    ds_size: int | None = None
     model: str
     hours_to_complete: int
     task_id: str

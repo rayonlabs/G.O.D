@@ -27,6 +27,10 @@ logger = get_logger(__name__)
 hf_api = HfApi()
 
 
+async def get_fake_text_dataset_size(task: AnyTextTypeRawTask) -> int:
+    return 100_000
+
+
 async def get_total_text_dataset_size(task: AnyTextTypeRawTask) -> int:
     if task.file_format == FileFormat.S3:
         if not task.training_data:
@@ -135,5 +139,5 @@ def prepare_image_task_request(task: ImageRawTask) -> TrainRequestImage:
         task_id=str(task.task_id),
         hours_to_complete=task.hours_to_complete,
         dataset_zip=task.training_data,
-        model_type=task.model_type
+        model_type=task.model_type,
     )
