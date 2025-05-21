@@ -161,17 +161,17 @@ def get_period_scores_from_results(task_results: list[TaskResults], weight_multi
     return final_scores
 
 
-def calculate_weighted_loss(test_loss: float, synth_loss: float, is_dpo: bool = False) -> float:
+def calculate_weighted_loss(test_loss: float, synth_loss: float, use_max_of_synth_test: bool = False) -> float:
     assert not np.isnan(test_loss), "Test loss cannot be NaN"
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
 
-    if is_dpo:
+    if use_max_of_synth_test:
         adjusted_loss = max(test_loss, synth_loss)
 
         if test_loss >= synth_loss:
-            logger.info(f"DPO using test_loss: test={test_loss:.6f} >= synth={synth_loss:.6f}")
+            logger.info(f"Using test_loss: test={test_loss:.6f} >= synth={synth_loss:.6f}")
         else:
-            logger.info(f"DPO using synth_loss: test={test_loss:.6f} < synth={synth_loss:.6f}, adjusted={adjusted_loss:.6f}")
+            logger.info(f"Using synth_loss: test={test_loss:.6f} < synth={synth_loss:.6f}, adjusted={adjusted_loss:.6f}")
 
         return adjusted_loss
     else:
@@ -243,24 +243,41 @@ def calculate_miner_ranking_and_scores(
 
     is_dpo_task = False
     is_grpo_task = False
+    is_instruct_task = False
+    use_max_approach = False
+    
     if valid_results and isinstance(valid_results[0], MinerResultsText):
         is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
         is_grpo_task = valid_results[0].task_type == TaskType.GRPOTASK
+        is_instruct_task = valid_results[0].task_type == TaskType.INSTRUCTTEXTTASK
+        
+        # For both DPO and Instruct Text tasks, use max(synth, test)
+        use_max_approach = is_dpo_task or is_instruct_task
+        
         if is_dpo_task:
             logger.info("Processing DPO task with max(test_loss, synth_loss) approach")
+        if is_instruct_task:
+            logger.info("Processing INSTRUCT task with max(test_loss, synth_loss) approach")
         if is_grpo_task:
             logger.info("Processing GRPO task - higher loss is better")
 
-    use_weighted_loss = is_dpo_task or _is_synth_loss_valid_for_group(valid_results)
+    use_weighted_loss = use_max_approach or _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
-        if is_dpo_task:
-            logger.info("Using ratio-adjusted loss for DPO task ranking")
+        if use_max_approach:
+            if is_dpo_task:
+                logger.info("Using max(test, synth) loss for DPO task ranking")
+            elif is_instruct_task:
+                logger.info("Using max(test, synth) loss for INSTRUCT task ranking")
         else:
             logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
 
         ranked_results = []
         for result in valid_results:
-            adjusted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss, is_dpo=is_dpo_task)
+            adjusted_loss = calculate_weighted_loss(
+                result.test_loss, 
+                result.synth_loss, 
+                use_max_of_synth_test=use_max_approach
+            )
             ranked_results.append((result, adjusted_loss))
             logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
 

@@ -244,13 +244,13 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
         dataset_length = len(train_dataset)
 
         if is_dpo:
-            test_size = min(cst.MAX_TEST_DATA_POINTS, int(len(train_dataset) * cst.TRAIN_TEST_SPLIT_PERCENTAGE))
-            num_synthetic_samples = test_size
+            # For both DPO and instruct text tasks, use SYNTH_EXAMPLES_FROM_TRAIN constant
+            num_synthetic_samples = cst.SYNTH_EXAMPLES_FROM_TRAIN
             synthetic_dataset = train_dataset.shuffle(seed=42).select(range(num_synthetic_samples))
             remaining_train_dataset = train_dataset
 
             logger.info(
-                f"DPO task: Sampling {num_synthetic_samples} examples WITH REPLACEMENT from train set. "
+                f"Using max(synth,test) approach: Sampling {num_synthetic_samples} examples WITH REPLACEMENT from train set. "
                 f"Original train size: {dataset_length}, "
                 f"Training size (unchanged): {len(remaining_train_dataset)}, "
                 f"Synthetic size: {len(synthetic_dataset)}"
@@ -379,7 +379,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     prompt_field = task.field_prompt
     logger.info(f"Generating synthetic DPO data from the field {prompt_field}")
     
-    num_samples = min(cst.DPO_SYNTHETIC_TOTAL_SIZE * 2, len(dataset))
+    num_samples = min(cst.SYNTHETIC_TOTAL_SIZE * 2, len(dataset))
     
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
     prompts = sampled_data[prompt_field]
@@ -387,7 +387,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     prompts_for_gen = [{prompt_field: prompt} for prompt in prompts]
     
     prompts_obj = load_prompts()
-    logger.info(f"Attempting to generate {cst.DPO_SYNTHETIC_TOTAL_SIZE} synthetic DPO samples")
+    logger.info(f"Attempting to generate {cst.SYNTHETIC_TOTAL_SIZE} synthetic DPO samples")
     
     synthetic_dataset = []
     json_errors = 0
@@ -400,7 +400,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     total_batches = (len(prompts_for_gen) + cst.SYNTH_GEN_BATCH_SIZE - 1) // cst.SYNTH_GEN_BATCH_SIZE
     batch_idx = 0
     
-    while len(synthetic_dataset) < cst.DPO_SYNTHETIC_TOTAL_SIZE and batch_idx < len(prompts_for_gen):
+    while len(synthetic_dataset) < cst.SYNTHETIC_TOTAL_SIZE and batch_idx < len(prompts_for_gen):
         end_idx = min(batch_idx + cst.SYNTH_GEN_BATCH_SIZE, len(prompts_for_gen))
         batch = prompts_for_gen[batch_idx: end_idx]
         current_batch = (batch_idx // cst.SYNTH_GEN_BATCH_SIZE) + 1
@@ -465,17 +465,17 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
                     break
         
         batch_idx = end_idx
-        logger.info(f"Progress: {len(synthetic_dataset)}/{cst.DPO_SYNTHETIC_TOTAL_SIZE} synthetic samples generated")
+        logger.info(f"Progress: {len(synthetic_dataset)}/{cst.SYNTHETIC_TOTAL_SIZE} synthetic samples generated")
     
     logger.info(
         f"Finished generating synthetic data. Got {len(synthetic_dataset)} samples total. "
         f"JSON errors: {json_errors}, Other errors: {generic_errors}"
     )
     
-    if len(synthetic_dataset) < cst.DPO_SYNTHETIC_TOTAL_SIZE:
-        missing_samples = cst.DPO_SYNTHETIC_TOTAL_SIZE - len(synthetic_dataset)
+    if len(synthetic_dataset) < cst.SYNTHETIC_TOTAL_SIZE:
+        missing_samples = cst.SYNTHETIC_TOTAL_SIZE - len(synthetic_dataset)
         logger.warning(
-            f"Could only generate {len(synthetic_dataset)}/{cst.DPO_SYNTHETIC_TOTAL_SIZE} "
+            f"Could only generate {len(synthetic_dataset)}/{cst.SYNTHETIC_TOTAL_SIZE} "
             f"synthetic samples. Adding {missing_samples} samples from training data."
         )
         
@@ -532,15 +532,38 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
                 logger.info("DPO task: Generating synthetic dataset using TEXT_SYNTH_MODEL and TEXT_SYNTH_WEAKER_MODEL")
                 synthetic_data_list = await generate_synthetic_dpo_data(train_ds, keypair, task)
                 
-                if synthetic_data_list and len(synthetic_data_list) >= cst.DPO_SYNTHETIC_TOTAL_SIZE:
-                    synth_for_training = synthetic_data_list[:cst.DPO_SYNTHETIC_FOR_TRAINING]
-                    synth_for_eval = synthetic_data_list[cst.DPO_SYNTHETIC_FOR_TRAINING:]
+                if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_TOTAL_SIZE:
+                    synth_for_training = synthetic_data_list[:cst.SYNTHETIC_FOR_TRAINING]
+                    synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING:]
                     
                     synth_train_dataset = Dataset.from_list(synth_for_training)
                     train_ds = concatenate_datasets([train_ds, synth_train_dataset])
                     logger.info(f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}")
                     
-                    train_samples = train_ds.shuffle(seed=42).select(range(cst.DPO_SYNTH_EXAMPLES_FROM_TRAIN))
+                    train_samples = train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
+                    train_samples_list = [sample for sample in train_samples]
+                    
+                    synthetic_ds = synth_for_eval + train_samples_list
+                    logger.info(f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data")
+                else:
+                    logger.info("Not enough synthetic data generated, falling back to sampling from train")
+                    _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
+            elif isinstance(task, InstructTextRawTask):
+                logger.info("INSTRUCT TEXT task: Using same approach as DPO for synthetic data")
+                # For instruct text tasks, use the same pattern as DPO tasks
+                synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
+                
+                if synthetic_ds and len(synthetic_ds) >= cst.SYNTHETIC_TOTAL_SIZE:
+                    # Split synthetic data into training and evaluation sets
+                    synth_for_training = synthetic_ds[:cst.SYNTHETIC_FOR_TRAINING]
+                    synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING:]
+                    
+                    synth_train_dataset = Dataset.from_list(synth_for_training)
+                    train_ds = concatenate_datasets([train_ds, synth_train_dataset])
+                    logger.info(f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}")
+                    
+                    # Sample from training data for synthetic evaluation
+                    train_samples = train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
                     train_samples_list = [sample for sample in train_samples]
                     
                     synthetic_ds = synth_for_eval + train_samples_list
@@ -554,12 +577,12 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
             logger.info("Skipping synthetic data generation")
     except Exception as e:
         logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
-        is_dpo = isinstance(task, DpoRawTask)
+        is_dpo = isinstance(task, DpoRawTask) or isinstance(task, InstructTextRawTask)
         train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=is_dpo)
 
     if synthetic_ds is None:
         logger.info("There was not enough synthetic data created, using train samples instead")
-        is_dpo = isinstance(task, DpoRawTask)
+        is_dpo = isinstance(task, DpoRawTask) or isinstance(task, InstructTextRawTask)
         train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=is_dpo)
 
     return await _process_and_upload_datasets(
