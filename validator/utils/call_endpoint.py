@@ -101,6 +101,16 @@ async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> st
     response = await _post_to_nineteen_ai(PROMPT_GEN_ENDPOINT, payload, keypair)
     response_json = response.json()
     try:
+        # Handle the case where response has a nested JSON string in 'content'
+        if isinstance(response_json, dict) and 'content' in response_json and isinstance(response_json['content'], str):
+            try:
+                inner_json = json.loads(response_json['content'])
+                return inner_json["choices"][0]["message"]["content"]
+            except (json.JSONDecodeError, KeyError, IndexError) as inner_e:
+                logger.error(f"Error parsing nested JSON in nineteen ai response: {response_json['content']}")
+                logger.exception(inner_e)
+                
+        # Fall back to the original approach
         return response_json["choices"][0]["message"]["content"]
     except (KeyError, IndexError) as e:
         logger.error(f"Error in nineteen ai chat response: {response_json}")
