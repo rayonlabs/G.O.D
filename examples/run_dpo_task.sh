@@ -12,8 +12,7 @@ DATASET_TYPE='{
   "rejected_format":"{rejected}"
 }'
 
-# This is where we'd normally use an LLM to determine the dataset schema,
-# but for this example we're hardcoding it to ensure the correct mapping
+
 FILE_FORMAT="s3"
 HOURS_TO_COMPLETE=8
 HUGGINGFACE_TOKEN="your_huggingface_token_here"
