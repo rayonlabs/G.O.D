@@ -288,7 +288,12 @@ def calculate_miner_ranking_and_scores(
         else:
             # For other tasks, sort normally (lower loss is better)
             ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-            ranking_type = "DPO loss (max test, synth)" if is_dpo_task else "weighted_loss"
+            if is_dpo_task:
+                ranking_type = "DPO loss (max test, synth + train)"
+            elif is_instruct_task:
+                ranking_type = "INSTRUCT loss (max test, synth + train)"
+            else:
+                ranking_type = "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
