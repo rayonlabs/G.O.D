@@ -15,7 +15,7 @@ import argparse
 import pandas as pd
 from pathlib import Path
 
-# Add project root to python path to import modules
+
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
@@ -152,7 +152,6 @@ def run_training(config_path):
 
 
 async def main():
-    """Main entry point for the text trainer script."""
     parser = argparse.ArgumentParser(description="Text Model Training Script")
     parser.add_argument("--task-id", required=True, help="Task ID")
     parser.add_argument("--model", required=True, help="Model name or path")
