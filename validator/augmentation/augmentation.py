@@ -269,21 +269,27 @@ def get_task_columns(task: AnyTextTypeRawTask) -> list[str]:
     return columns
 
 
-def create_temp_task_from_mapping(column_mapping: dict[str, str], is_instruct: bool):
+def create_temp_task_from_mapping(column_mapping: dict[str, str], task_type):
     """Create a temporary task object with column mappings."""
-    if is_instruct:
+    from validator.core.models import TaskType
+    
+    if task_type == TaskType.INSTRUCTTEXTTASK:
         return type('obj', (object,), {
             'field_instruction': column_mapping.get("instruction", "instruction"),
             'field_output': column_mapping.get("output", "output"),
             'field_input': column_mapping.get("input"),
             'field_system': column_mapping.get("system")
         })
-    else:  # DPO
+    elif task_type == TaskType.DPOTASK:
         return type('obj', (object,), {
             'field_prompt': column_mapping.get("prompt", "prompt"),
             'field_chosen': column_mapping.get("chosen", "chosen"),
             'field_rejected': column_mapping.get("rejected", "rejected"),
             'field_system': column_mapping.get("system")
+        })
+    elif task_type == TaskType.GRPOTASK:
+        return type('obj', (object,), {
+            'field_prompt': column_mapping.get("prompt", "prompt")
         })
 
 
