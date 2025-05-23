@@ -176,26 +176,41 @@ def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
 
 async def get_multiple_datasets(
     datasets_generator: AsyncGenerator[Dataset, None],
-    num_datasets: int | None = None
+    num_datasets: int | None = None,
+    task_type: TaskType | None = None,
+    keypair: Keypair | None = None
 ) -> list[Dataset]:
-    """Get multiple unique datasets from the generator."""
+    """Get multiple unique datasets from the generator, validating column availability."""
     if num_datasets is None:
         num_datasets = random.randint(MIN_DATASETS_FOR_AUGMENTATION, MAX_DATASETS_FOR_AUGMENTATION)
     
     selected_datasets = []
     selected_ids = set()
     
-    max_attempts = num_datasets * 3
+    max_attempts = num_datasets * 5  # Increased attempts since we're validating
     attempts = 0
     
     while len(selected_datasets) < num_datasets and attempts < max_attempts:
         dataset = await anext(datasets_generator)
         if dataset.dataset_id not in selected_ids:
+            # For non-primary datasets, validate column mapping availability
+            if len(selected_datasets) > 0 and task_type and keypair:
+                try:
+                    # Test if we can get column suggestions for this dataset
+                    url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
+                    logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id}")
+                    await call_content_service(url, keypair)
+                    logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
+                except Exception as e:
+                    logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
+                    attempts += 1
+                    continue
+            
             selected_datasets.append(dataset)
             selected_ids.add(dataset.dataset_id)
         attempts += 1
     
-    logger.info(f"Selected {len(selected_datasets)} unique datasets for task")
+    logger.info(f"Selected {len(selected_datasets)} unique datasets for task (validated)")
     return selected_datasets
 
 
