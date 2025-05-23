@@ -245,15 +245,15 @@ def calculate_miner_ranking_and_scores(
     is_grpo_task = False
     is_instruct_task = False
     use_max_approach = False
-    
+
     if valid_results and isinstance(valid_results[0], MinerResultsText):
         is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
         is_grpo_task = valid_results[0].task_type == TaskType.GRPOTASK
         is_instruct_task = valid_results[0].task_type == TaskType.INSTRUCTTEXTTASK
-        
+
         # For both DPO and Instruct Text tasks, use max(synth, test)
         use_max_approach = is_dpo_task or is_instruct_task
-        
+
         if is_dpo_task:
             logger.info("Processing DPO task with max(test_loss, synth_loss) approach")
         if is_instruct_task:
@@ -274,8 +274,8 @@ def calculate_miner_ranking_and_scores(
         ranked_results = []
         for result in valid_results:
             adjusted_loss = calculate_weighted_loss(
-                result.test_loss, 
-                result.synth_loss, 
+                result.test_loss,
+                result.synth_loss,
                 use_max_of_synth_test=use_max_approach
             )
             ranked_results.append((result, adjusted_loss))
@@ -760,7 +760,9 @@ async def process_miners_pool(
                         logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
                         results.append(
                             _create_failed_miner_result(
-                                miner.hotkey, score_reason=f"Evaluation failed: {str(eval_result)}", task_type=task.task_type
+                                miner.hotkey,
+                                score_reason=f"Evaluation failed: {str(eval_result)[:350]}",
+                                task_type=task.task_type,
                                 )
                         )
                         continue
@@ -810,7 +812,7 @@ async def process_miners_pool(
             results.extend(
                 [
                     _create_failed_miner_result(
-                        miner.hotkey, score_reason=f"Evaluation failed: {str(e)}", task_type=task.task_type
+                        miner.hotkey, score_reason=f"Evaluation failed: {str(e)[:350]}", task_type=task.task_type
                         )
                     for miner in miners
                     if miner.hotkey not in [r.hotkey for r in results]
