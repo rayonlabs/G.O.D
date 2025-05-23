@@ -130,42 +130,39 @@ async def get_dataset_column_mapping(
 ) -> dict[str, str]:
     """Get column mapping for a specific dataset based on task type."""
     from validator.utils.call_endpoint import call_content_service
+    from validator.core.constants import CONTENT_BASE_URL
     
-    if task_type == TaskType.DPOTASK:
-        # For DPO, get dataset info to find DPO columns
-        params = {"dpo": True}
-        response = await call_content_service("/datasets/random", keypair, params=params)
-        
-        # Find this dataset in the response
-        for dataset_info in response:
-            if dataset_info.get("dataset_id") == dataset_id:
-                return {
-                    "prompt": dataset_info.get("dpo_prompt_column", "prompt"),
-                    "chosen": dataset_info.get("dpo_accepted_column", "chosen"),
-                    "rejected": dataset_info.get("dpo_rejected_column", "rejected")
-                }
-    else:
-        # For instruct/grpo, get column suggestions
-        from validator.core.constants import CONTENT_BASE_URL
-        url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
-        response = await call_content_service(url, keypair)
-        
-        if isinstance(response, dict):
-            column_mapping = {
-                "instruction": response.get("field_instruction", "instruction"),
-                "output": response.get("field_output", "output")
-            }
-            if response.get("field_input"):
-                column_mapping["input"] = response["field_input"]
-            if response.get("field_system"):
-                column_mapping["system"] = response["field_system"]
-            return column_mapping
+    # Get column suggestions from content service
+    url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
+    response = await call_content_service(url, keypair)
     
-    # Default mapping if not found
+    if not isinstance(response, dict):
+        raise ValueError(f"Invalid response from content service for dataset {dataset_id}")
+    
+    # Map the response fields to our standard columns based on task type
     if task_type == TaskType.DPOTASK:
-        return {"prompt": "prompt", "chosen": "chosen", "rejected": "rejected"}
+        return {
+            "prompt": response.get("field_prompt", "prompt"),
+            "chosen": response.get("field_chosen", "chosen"),
+            "rejected": response.get("field_rejected", "rejected")
+        }
+    elif task_type == TaskType.INSTRUCTTEXTTASK:
+        column_mapping = {
+            "instruction": response.get("field_instruction", "instruction"),
+            "output": response.get("field_output", "output")
+        }
+        if response.get("field_input"):
+            column_mapping["input"] = response["field_input"]
+        if response.get("field_system"):
+            column_mapping["system"] = response["field_system"]
+        return column_mapping
+    elif task_type == TaskType.GRPOTASK:
+        # GRPO uses the prompt field from the response
+        return {
+            "prompt": response.get("field_prompt", "prompt")
+        }
     else:
-        return {"instruction": "instruction", "output": "output"}
+        raise ValueError(f"Unsupported task type: {task_type}")
 
 
 def load_prompts() -> Prompts:
