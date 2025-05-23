@@ -19,6 +19,7 @@ from validator.core.constants import STANDARD_INPUT_COLUMN
 from validator.core.constants import STANDARD_INSTRUCT_COLUMN
 from validator.core.constants import STANDARD_OUTPUT_COLUMN
 from validator.core.constants import STANDARD_SYSTEM_COLUMN
+from validator.core.constants import STANDARD_GRPO_PROMPT_COLUMN
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
@@ -139,7 +140,8 @@ async def get_dataset_column_mapping(
                 }
     else:
         # For instruct/grpo, get column suggestions
-        url = f"/dataset/{dataset_id}/columns/suggest"
+        from validator.core.constants import CONTENT_BASE_URL
+        url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
         response = await call_content_service(url, keypair)
         
         if isinstance(response, dict):
@@ -224,14 +226,25 @@ def standardize_dpo_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     return std_sample
 
 
+def standardize_grpo_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
+    """Standardize a single GRPO sample to use standard column names."""
+    std_sample = {}
+    std_sample[STANDARD_GRPO_PROMPT_COLUMN] = sample.get(task.field_prompt, "")
+    return std_sample
+
+
 def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[dict]:
     """Standardize a list of samples based on task type."""
+    from validator.core.models import InstructTextRawTask, DpoRawTask, GrpoRawTask
+    
     standardized = []
     for sample in samples:
-        if hasattr(task, 'field_instruction'):  # InstructText/GRPO
+        if isinstance(task, InstructTextRawTask):
             standardized.append(standardize_instruct_sample(sample, task))
-        elif hasattr(task, 'field_prompt'):  # DPO
+        elif isinstance(task, DpoRawTask):
             standardized.append(standardize_dpo_sample(sample, task))
+        elif isinstance(task, GrpoRawTask):
+            standardized.append(standardize_grpo_sample(sample, task))
     return standardized
 
 
