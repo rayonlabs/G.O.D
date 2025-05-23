@@ -87,7 +87,8 @@ async def get_additional_datasets_for_augmentation(
                 }
             elif task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.GRPOTASK]:
                 # For instruct/grpo tasks, we need to get column info from the content service
-                url = f"/dataset/{dataset_id}/columns/suggest"
+                from validator.core.constants import CONTENT_BASE_URL
+                url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
                 try:
                     column_response = await call_content_service(url, keypair)
                     if isinstance(column_response, dict):
