@@ -214,14 +214,31 @@ def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[d
     """Standardize a list of samples based on task type."""
     from validator.core.models import InstructTextRawTask, DpoRawTask, GrpoRawTask
     
+    logger.info(f"Standardizing {len(samples)} samples with task type: {type(task).__name__}")
+    if hasattr(task, '__dict__'):
+        logger.info(f"Task fields: {vars(task)}")
+    
     standardized = []
-    for sample in samples:
-        if isinstance(task, InstructTextRawTask):
-            standardized.append(standardize_instruct_sample(sample, task))
-        elif isinstance(task, DpoRawTask):
-            standardized.append(standardize_dpo_sample(sample, task))
-        elif isinstance(task, GrpoRawTask):
-            standardized.append(standardize_grpo_sample(sample, task))
+    for i, sample in enumerate(samples):
+        try:
+            if isinstance(task, InstructTextRawTask):
+                result = standardize_instruct_sample(sample, task)
+            elif isinstance(task, DpoRawTask):
+                result = standardize_dpo_sample(sample, task)
+            elif isinstance(task, GrpoRawTask):
+                result = standardize_grpo_sample(sample, task)
+            else:
+                # Handle temp task objects that don't inherit from the models
+                result = standardize_instruct_sample(sample, task)
+            
+            if i == 0:  # Log first sample
+                logger.info(f"Sample {i}: {sample} -> {result}")
+            
+            standardized.append(result)
+        except Exception as e:
+            logger.error(f"Failed to standardize sample {i}: {sample}, error: {e}")
+    
+    logger.info(f"Standardization complete: {len(samples)} -> {len(standardized)} samples")
     return standardized
 
 
