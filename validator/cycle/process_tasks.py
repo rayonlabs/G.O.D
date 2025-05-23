@@ -485,14 +485,21 @@ async def evaluate_tasks_loop(config: Config):
 def compute_required_gpus(task: RawTask) -> int:
     model = task.model_id
     num_params = task.model_params_count
-    multiplier = 1
-    if task.task_type == TaskType.DPOTASK:
-        multiplier = 2
     if not num_params:
         num_params = get_model_num_params(model)
-    elif num_params and num_params > cst.MODEL_SIZE_REQUIRING_2_GPUS:
-        return 2 * multiplier
-    return 1 * multiplier
+    if not num_params:
+        return 1
+    if task.task_type == TaskType.DPOTASK:
+        num_params = num_params * 2
+
+    if num_params < cst.MODEL_SIZE_REQUIRING_2_GPUS:
+        return 1
+    elif num_params < cst.MODEL_SIZE_REQUIRING_3_GPUS:
+        return 2
+    elif num_params < cst.MODEL_SIZE_REQUIRING_4_GPUS:
+        return 3
+    else:
+        return 4
 
 
 async def process_completed_tasks(config: Config) -> None:

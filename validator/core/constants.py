@@ -141,6 +141,8 @@ MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
 MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
+MODEL_SIZE_REQUIRING_3_GPUS = 75 * 10**9
+MODEL_SIZE_REQUIRING_4_GPUS = 110 * 10**9
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
