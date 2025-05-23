@@ -35,9 +35,9 @@ input_reformulation_sys: >
   Guidelines:
   - Maintain the core meaning but maximize surface-level diversity
   - Vary between simple/complex, formal/casual, direct/indirect approaches
-  - Consider how different authors might express the same content
+  - Consider different ways to express the same content
   - Avoid mere synonym substitution - aim for structural and stylistic transformation
-  - The output should feel like a different person expressing the same idea
+  - The output should feel like a completely different expression of the same idea
 
   Analyze the input's core meaning, then create a significantly transformed version that preserves only the essential content.
 
