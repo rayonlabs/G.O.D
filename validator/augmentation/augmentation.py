@@ -247,27 +247,40 @@ def get_task_columns(task: AnyTextTypeRawTask) -> list[str]:
 
 
 def create_temp_task_from_mapping(column_mapping: dict[str, str], task_type):
-    """Create a temporary task object with column mappings."""
+    """Create a temporary task object with column mappings.
+    
+    column_mapping maps standard keys to actual dataset column names.
+    We need to create a task that maps those actual column names to standard names.
+    """
     from validator.core.models import TaskType
     
     if task_type == TaskType.INSTRUCTTEXTTASK:
-        return type('obj', (object,), {
-            'field_instruction': column_mapping.get("instruction", "instruction"),
-            'field_output': column_mapping.get("output", "output"),
-            'field_input': column_mapping.get("input"),
-            'field_system': column_mapping.get("system")
-        })
+        temp_task_dict = {}
+        if "instruction" in column_mapping:
+            temp_task_dict['field_instruction'] = column_mapping["instruction"]
+        if "output" in column_mapping:
+            temp_task_dict['field_output'] = column_mapping["output"]
+        if "input" in column_mapping:
+            temp_task_dict['field_input'] = column_mapping["input"]
+        if "system" in column_mapping:
+            temp_task_dict['field_system'] = column_mapping["system"]
+        return type('obj', (object,), temp_task_dict)
     elif task_type == TaskType.DPOTASK:
-        return type('obj', (object,), {
-            'field_prompt': column_mapping.get("prompt", "prompt"),
-            'field_chosen': column_mapping.get("chosen", "chosen"),
-            'field_rejected': column_mapping.get("rejected", "rejected"),
-            'field_system': column_mapping.get("system")
-        })
+        temp_task_dict = {}
+        if "prompt" in column_mapping:
+            temp_task_dict['field_prompt'] = column_mapping["prompt"]
+        if "chosen" in column_mapping:
+            temp_task_dict['field_chosen'] = column_mapping["chosen"]
+        if "rejected" in column_mapping:
+            temp_task_dict['field_rejected'] = column_mapping["rejected"]
+        if "system" in column_mapping:
+            temp_task_dict['field_system'] = column_mapping["system"]
+        return type('obj', (object,), temp_task_dict)
     elif task_type == TaskType.GRPOTASK:
-        return type('obj', (object,), {
-            'field_prompt': column_mapping.get("prompt", "prompt")
-        })
+        temp_task_dict = {}
+        if "prompt" in column_mapping:
+            temp_task_dict['field_prompt'] = column_mapping["prompt"]
+        return type('obj', (object,), temp_task_dict)
 
 
 async def load_and_merge_multiple_datasets(
@@ -317,16 +330,37 @@ async def load_and_merge_multiple_datasets(
                 columns = list(column_mapping.values())
                 config_name = get_default_dataset_config(dataset_id)
                 logger.info(f"Loading {dataset_id} with config {config_name} and columns {columns}")
+                logger.info(f"Column mapping: {column_mapping}")
                 
                 dataset = load_dataset(dataset_id, config_name, trust_remote_code=True)
                 if "train" in dataset:
                     dataset = dataset["train"]
                 
+                logger.info(f"Dataset {dataset_id} loaded with {len(dataset)} total samples")
+                logger.info(f"Available columns in dataset: {dataset.column_names}")
+                
+                # Check if all required columns exist
+                missing_columns = [col for col in columns if col not in dataset.column_names]
+                if missing_columns:
+                    logger.error(f"Missing columns in {dataset_id}: {missing_columns}")
+                    logger.error(f"Available columns: {dataset.column_names}")
+                    raise ValueError(f"Missing required columns: {missing_columns}")
+                
                 dataset = dataset.select_columns(columns)
                 samples = list(dataset)
+                logger.info(f"After column selection, {dataset_id} has {len(samples)} samples")
+                
+                if samples:
+                    logger.info(f"Sample data from {dataset_id}: {samples[0]}")
                 
                 temp_task = create_temp_task_from_mapping(column_mapping, task.task_type)
+                logger.info(f"Created temp task for {dataset_id}: {vars(temp_task)}")
+                
                 standardized = standardize_samples(samples, temp_task)
+                logger.info(f"After standardization, {dataset_id} has {len(standardized)} samples")
+                
+                if standardized:
+                    logger.info(f"Standardized sample from {dataset_id}: {standardized[0]}")
                 all_samples.extend(standardized)
                 dataset_sizes.append(len(samples))
                 logger.info(f"Successfully loaded {len(samples)} samples from {dataset_id}")
