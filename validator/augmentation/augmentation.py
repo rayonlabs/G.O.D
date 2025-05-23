@@ -30,6 +30,7 @@ from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import extract_json_from_response
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
+from validator.core.models import AnyTextTypeRawTask
 
 
 logger = get_logger(__name__)
@@ -198,7 +199,7 @@ def load_and_sample_dataset(dataset_name: str, columns_to_sample: list[str], num
     return sampled_data_list
 
 
-def standardize_instruct_sample(sample: dict, task: Any) -> dict:
+def standardize_instruct_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     """Standardize a single instruct/grpo sample to use standard column names."""
     std_sample = {}
     std_sample[STANDARD_INSTRUCT_COLUMN] = sample.get(task.field_instruction, "")
@@ -210,7 +211,7 @@ def standardize_instruct_sample(sample: dict, task: Any) -> dict:
     return std_sample
 
 
-def standardize_dpo_sample(sample: dict, task: Any) -> dict:
+def standardize_dpo_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     """Standardize a single DPO sample."""
     std_sample = {
         "prompt": sample.get(task.field_prompt, ""),
@@ -222,7 +223,7 @@ def standardize_dpo_sample(sample: dict, task: Any) -> dict:
     return std_sample
 
 
-def standardize_samples(samples: list[dict], task: Any) -> list[dict]:
+def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[dict]:
     """Standardize a list of samples based on task type."""
     standardized = []
     for sample in samples:
@@ -233,7 +234,7 @@ def standardize_samples(samples: list[dict], task: Any) -> list[dict]:
     return standardized
 
 
-def get_task_columns(task: Any) -> list[str]:
+def get_task_columns(task: AnyTextTypeRawTask) -> list[str]:
     """Extract column names from task based on task type."""
     if hasattr(task, 'field_instruction'):  # InstructText/GRPO
         columns = [task.field_instruction, task.field_output]
@@ -250,7 +251,7 @@ def get_task_columns(task: Any) -> list[str]:
     return columns
 
 
-def create_temp_task_from_mapping(column_mapping: dict[str, str], is_instruct: bool) -> Any:
+def create_temp_task_from_mapping(column_mapping: dict[str, str], is_instruct: bool):
     """Create a temporary task object with column mappings."""
     if is_instruct:
         return type('obj', (object,), {
@@ -270,7 +271,7 @@ def create_temp_task_from_mapping(column_mapping: dict[str, str], is_instruct: b
 
 async def load_and_merge_multiple_datasets(
     dataset_ids: list[str],
-    task: Any,
+    task: AnyTextTypeRawTask,
     keypair: Keypair
 ) -> list[dict]:
     """Load and merge multiple datasets, returning average size."""
@@ -333,8 +334,49 @@ async def load_and_merge_multiple_datasets(
     random.shuffle(all_samples)
     final_samples = all_samples[:avg_size]
     
+    # Convert back to task-specific column names
+    final_samples = unstandardize_samples_to_task_columns(final_samples, task)
+    
     logger.info(f"Merged {len(dataset_sizes)} datasets, returning {len(final_samples)} samples")
     return final_samples
+
+
+def unstandardize_samples_to_task_columns(samples: list[dict], task: AnyTextTypeRawTask) -> list[dict]:
+    """Convert standardized column names back to task-specific column names.
+    
+    For InstructText: Keep standard names (pipeline expects them)
+    For DPO/GRPO: Convert back to task field names
+    """
+    from validator.core.models import InstructTextRawTask, DpoRawTask, GrpoRawTask
+    
+    # InstructText uses standard columns throughout the pipeline
+    if isinstance(task, InstructTextRawTask):
+        return samples
+    
+    unstandardized = []
+    
+    for sample in samples:
+        new_sample = {}
+        
+        if isinstance(task, GrpoRawTask):
+            # GRPO: Map from standard instruction column to field_prompt
+            if STANDARD_INSTRUCT_COLUMN in sample:
+                new_sample[task.field_prompt] = sample[STANDARD_INSTRUCT_COLUMN]
+        
+        elif isinstance(task, DpoRawTask):
+            # DPO: Map from standard DPO columns back to task columns
+            if "prompt" in sample:
+                new_sample[task.field_prompt] = sample["prompt"]
+            if "chosen" in sample:
+                new_sample[task.field_chosen] = sample["chosen"]
+            if "rejected" in sample:
+                new_sample[task.field_rejected] = sample["rejected"]
+            if "system" in sample and hasattr(task, 'field_system') and task.field_system:
+                new_sample[task.field_system] = sample["system"]
+        
+        unstandardized.append(new_sample)
+    
+    return unstandardized
 
 
 def create_messages_for_input_generation(
