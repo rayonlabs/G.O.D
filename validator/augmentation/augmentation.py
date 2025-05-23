@@ -310,7 +310,7 @@ async def load_and_merge_multiple_datasets(
         
         standardized = standardize_samples(samples, task)
         all_samples.extend(standardized)
-        dataset_sizes.append(len(samples))
+        dataset_sizes.append(len(standardized))
         logger.info(f"Loaded {len(samples)} samples from primary dataset {primary_id}")
     except Exception as e:
         logger.error(f"Failed to load primary dataset {primary_id}: {e}")
@@ -362,7 +362,7 @@ async def load_and_merge_multiple_datasets(
                 if standardized:
                     logger.info(f"Standardized sample from {dataset_id}: {standardized[0]}")
                 all_samples.extend(standardized)
-                dataset_sizes.append(len(samples))
+                dataset_sizes.append(len(standardized))
                 logger.info(f"Successfully loaded {len(samples)} samples from {dataset_id}")
                 if standardized:
                     logger.info(f"Example from {dataset_id}: {standardized[0]}")
