@@ -12,6 +12,7 @@ from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskStatus
+from validator.core import constants as cst
 from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
@@ -90,6 +91,12 @@ async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair) -> AnyT
     task.status = TaskStatus.LOOKING_FOR_NODES
     task.synthetic_data = synth_data
     task.test_data = test_data
+    # normalize column names. It was already normalized in the data so we update the task object
+    if isinstance(task, InstructTextRawTask):
+        task.field_instruction = cst.STANDARD_INSTRUCT_COLUMN
+        task.field_input = cst.STANDARD_INPUT_COLUMN if task.field_input else None
+        task.field_output = cst.STANDARD_OUTPUT_COLUMN
+        task.field_system = cst.STANDARD_SYSTEM_COLUMN if task.field_system else None
     logger.info("Data creation is complete - now time to find some miners")
     return task
 

@@ -144,9 +144,7 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     return test_zip_path, train_zip_path
 
 
-def adapt_synthetic_columns(
-    synthetic_data: list[dict] | list[DpoDatasetColumnsResponse], task: AnyTextTypeRawTask
-    ) -> list[dict]:
+def adapt_synthetic_columns(synthetic_data: list[dict] | list[DpoDatasetColumnsResponse], task: AnyTextTypeRawTask) -> list[dict]:
     """
     Transform synthetic data based on task type.
 
@@ -355,13 +353,18 @@ def extract_grpo_extra_columns(task: GrpoRawTask) -> list[str]:
 
 def pick_columns_to_sample(task: AnyTextTypeRawTask) -> list[str]:
     if isinstance(task, InstructTextRawTask):
-        columns_to_sample = [
-            i for i in [task.field_system, task.field_instruction, task.field_input, task.field_output] if i is not None
-        ]
+        columns_to_sample = [cst.STANDARD_INSTRUCT_COLUMN, cst.STANDARD_OUTPUT_COLUMN]
+
+        if task.field_input:
+            columns_to_sample.append(cst.STANDARD_INPUT_COLUMN)
+        if task.field_system:
+            columns_to_sample.append(cst.STANDARD_SYSTEM_COLUMN)
+
+        return columns_to_sample
     elif isinstance(task, DpoRawTask):
         columns_to_sample = [
             i for i in [task.field_system, task.field_prompt, task.field_chosen, task.field_rejected] if i is not None
-            ]
+        ]
     elif isinstance(task, GrpoRawTask):
         columns_to_sample = [task.field_prompt] + extract_grpo_extra_columns(task)
     else:
@@ -401,17 +404,18 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
 
     while len(synthetic_dataset) < cst.SYNTHETIC_TOTAL_SIZE and batch_idx < len(prompts_for_gen):
         end_idx = min(batch_idx + cst.SYNTH_GEN_BATCH_SIZE, len(prompts_for_gen))
-        batch = prompts_for_gen[batch_idx: end_idx]
+        batch = prompts_for_gen[batch_idx:end_idx]
         current_batch = (batch_idx // cst.SYNTH_GEN_BATCH_SIZE) + 1
 
         for retry in range(max_batch_retries):
             if retry > 0:
-                logger.info(f"Retrying batch {current_batch}/{total_batches} (attempt {retry+1}/{max_batch_retries})")
+                logger.info(f"Retrying batch {current_batch}/{total_batches} (attempt {retry + 1}/{max_batch_retries})")
 
             logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
 
             batch_tasks = []
             for prompt in batch:
+
                 async def process_with_retry(p):
                     for attempt in range(max_retry_attempts):
                         try:
@@ -490,6 +494,38 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     return synthetic_dataset
 
 
+def standardize_column_names(dataset: Dataset, task: InstructTextRawTask) -> Dataset:
+    column_mapping = {}
+
+    if task.field_instruction in dataset.column_names:
+        column_mapping[task.field_instruction] = cst.STANDARD_INSTRUCT_COLUMN
+    else:
+        raise ValueError(f"Instruction column {task.field_instruction} not found in dataset")
+
+    if task.field_input:
+        if task.field_input in dataset.column_names:
+            column_mapping[task.field_input] = cst.STANDARD_INPUT_COLUMN
+        else:
+            raise ValueError(f"Input column {task.field_input} not found in dataset")
+
+    if task.field_output in dataset.column_names:
+        column_mapping[task.field_output] = cst.STANDARD_OUTPUT_COLUMN
+    else:
+        raise ValueError(f"Output column {task.field_output} not found in dataset")
+
+    if task.field_system:
+        if task.field_system in dataset.column_names:
+            column_mapping[task.field_system] = cst.STANDARD_SYSTEM_COLUMN
+        else:
+            raise ValueError(f"System column {task.field_system} not found in dataset")
+
+    for old_name, new_name in column_mapping.items():
+        if old_name != new_name:
+            dataset = dataset.rename_column(old_name, new_name)
+
+    return dataset
+
+
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
@@ -503,8 +539,11 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
         except Exception as e:
             logger.info(f"There was an issue loading the dataset: {e}")
             raise e
-        dataset_dict = await train_test_split(dataset)
 
+        if isinstance(task, InstructTextRawTask):
+            dataset = standardize_column_names(dataset, task)
+
+        dataset_dict = await train_test_split(dataset)
         train_ds = dataset_dict["train"]
         test_ds = dataset_dict["test"]
         should_reupload_train = True
@@ -514,6 +553,11 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
         try:
             train_ds = await download_and_load_dataset(task.training_data, task.file_format)
             test_ds = await download_and_load_dataset(task.test_data, task.file_format)
+
+            if isinstance(task, InstructTextRawTask):
+                train_ds = standardize_column_names(train_ds, task)
+                test_ds = standardize_column_names(test_ds, task)
+
         except Exception as e:
             logger.info(f"There was an issue loading the dataset: {e}")
             raise e
@@ -532,23 +576,24 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
             logger.info("Generating additional synthetic data")
             if isinstance(task, DpoRawTask):
                 logger.info("DPO task: Generating synthetic dataset using TEXT_SYNTH_MODEL and TEXT_SYNTH_WEAKER_MODEL")
-                synthetic_data_list = await asyncio.wait_for(
-                    generate_synthetic_dpo_data(train_ds, keypair, task),
-                    timeout=300
-                )
+                synthetic_data_list = await asyncio.wait_for(generate_synthetic_dpo_data(train_ds, keypair, task), timeout=300)
                 if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_TOTAL_SIZE:
-                    synth_for_training = synthetic_data_list[:cst.SYNTHETIC_FOR_TRAINING]
-                    synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING:]
+                    synth_for_training = synthetic_data_list[: cst.SYNTHETIC_FOR_TRAINING]
+                    synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING :]
 
                     synth_train_dataset = Dataset.from_list(synth_for_training)
                     train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-                    logger.info(f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}")
+                    logger.info(
+                        f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}"
+                    )
 
                     train_samples = train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
                     train_samples_list = [sample for sample in train_samples]
 
                     synthetic_ds = synth_for_eval + train_samples_list
-                    logger.info(f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data")
+                    logger.info(
+                        f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data"
+                    )
                 else:
                     logger.info("Not enough synthetic data generated, falling back to sampling from train")
                     _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
@@ -565,19 +610,23 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
 
                 if synthetic_ds and len(synthetic_ds) >= cst.SYNTHETIC_TOTAL_SIZE:
                     # Split synthetic data into training and evaluation sets
-                    synth_for_training = synthetic_ds[:cst.SYNTHETIC_FOR_TRAINING]
-                    synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING:]
+                    synth_for_training = synthetic_ds[: cst.SYNTHETIC_FOR_TRAINING]
+                    synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING :]
 
                     synth_train_dataset = Dataset.from_list(synth_for_training)
                     train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-                    logger.info(f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}")
+                    logger.info(
+                        f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}"
+                    )
 
                     # Sample from training data for synthetic evaluation
                     train_samples = train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
                     train_samples_list = [sample for sample in train_samples]
 
                     synthetic_ds = synth_for_eval + train_samples_list
-                    logger.info(f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data")
+                    logger.info(
+                        f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data"
+                    )
                 else:
                     logger.info("Not enough synthetic data generated, falling back to sampling from train")
                     _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
