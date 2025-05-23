@@ -304,15 +304,20 @@ async def load_and_merge_multiple_datasets(
     
     if len(dataset_ids) > 1:
         is_instruct = hasattr(task, 'field_instruction')
+        logger.info(f"Loading {len(dataset_ids) - 1} additional datasets")
         
         for dataset_id in dataset_ids[1:]:
             try:
+                logger.info(f"Loading additional dataset: {dataset_id}")
                 column_mapping = await get_dataset_column_mapping(
                     dataset_id, task.task_type, keypair
                 )
+                logger.info(f"Column mapping for {dataset_id}: {column_mapping}")
                 
                 columns = list(column_mapping.values())
                 config_name = get_default_dataset_config(dataset_id)
+                logger.info(f"Loading {dataset_id} with config {config_name} and columns {columns}")
+                
                 dataset = load_dataset(dataset_id, config_name, trust_remote_code=True)
                 if "train" in dataset:
                     dataset = dataset["train"]
@@ -324,9 +329,13 @@ async def load_and_merge_multiple_datasets(
                 standardized = standardize_samples(samples, temp_task)
                 all_samples.extend(standardized)
                 dataset_sizes.append(len(samples))
-                logger.info(f"Loaded {len(samples)} samples from {dataset_id}")
+                logger.info(f"Successfully loaded {len(samples)} samples from {dataset_id}")
+                if standardized:
+                    logger.info(f"Example from {dataset_id}: {standardized[0]}")
             except Exception as e:
-                logger.warning(f"Failed to load dataset {dataset_id}: {e}")
+                logger.error(f"CRITICAL: Failed to load dataset {dataset_id}: {e}")
+                logger.exception("Full traceback:")
+                raise ValueError(f"Failed to load additional dataset {dataset_id}: {e}")
     
     avg_size = sum(dataset_sizes) // len(dataset_sizes)
     max_size = max(dataset_sizes)
