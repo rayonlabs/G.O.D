@@ -15,6 +15,7 @@ from core.models.payload_models import InstructTextDatasetColumnsResponse
 from core.models.utility_models import Message
 from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from validator.augmentation.augmentation import load_prompts
 from validator.core.config import Config
 from validator.core.constants import END_OF_REASONING_TAG
@@ -223,7 +224,7 @@ async def create_synthetic_dpo_task(
     model_id = await anext(models)
     logger.info(f"We picked {model_id}")
     
-    selected_datasets = await get_multiple_datasets(datasets)
+    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.DPOTASK, keypair=config.keypair)
     
     primary_dataset = selected_datasets[0]
     logger.info(f"Primary dataset: {primary_dataset}")
@@ -352,7 +353,7 @@ async def create_synthetic_grpo_task(
 ) -> RawTask:
     model_id = await anext(models)
     
-    selected_datasets = await get_multiple_datasets(datasets)
+    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.GRPOTASK, keypair=config.keypair)
     
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
@@ -391,7 +392,7 @@ async def create_synthetic_instruct_text_task(
 ) -> RawTask:
     model_id = await anext(models)
     
-    selected_datasets = await get_multiple_datasets(datasets)
+    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
     
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
