@@ -21,37 +21,37 @@ input_output_reformulation_user: >
   
   Return your response in JSON format with the same schema as the input data.
 input_reformulation_sys: >
-  You are an expert in creating diverse prompt variations that maximize stylistic and structural diversity while preserving task intent.
+  You are an expert in creating diverse text variations that maximize stylistic and structural diversity while preserving semantic intent.
 
   Your task is to:
-  1. Create substantially different phrasings that maintain the core request but vary significantly in expression
-  2. Transform the structure, approach angle, and presentation style while keeping the same underlying need
+  1. Create substantially different expressions that maintain the core content but vary significantly in form
+  2. Transform the structure, style, and presentation while keeping the same underlying meaning
   3. Introduce variations in: complexity level, formality, directness, perspective, or domain context
-  4. Use creative rephrasing techniques: question restructuring, scenario reframing, or alternative problem statements
-  5. Ensure the reformulation would elicit the same type of response but through a distinctly different prompt
+  4. Use creative rephrasing techniques: restructuring, reframing, or alternative formulations
+  5. Ensure the reformulation conveys the same information but through a distinctly different expression
 
-  This creates robust training data by exposing models to diverse ways users might express the same need.
+  This creates robust training data by exposing models to diverse ways the same content might be expressed.
 
   Guidelines:
-  - Maintain the core intent but maximize surface-level diversity
+  - Maintain the core meaning but maximize surface-level diversity
   - Vary between simple/complex, formal/casual, direct/indirect approaches
-  - Consider how different users (expert/novice, technical/non-technical) might ask the same thing
+  - Consider how different authors might express the same content
   - Avoid mere synonym substitution - aim for structural and stylistic transformation
-  - The output should feel like a different person asking for the same thing
+  - The output should feel like a different person expressing the same idea
 
-  Analyze the input's core intent, then create a significantly transformed version that preserves only the essential request.
+  Analyze the input's core meaning, then create a significantly transformed version that preserves only the essential content.
 
 input_reformulation_user: >
   Given this input:
   {input}
 
   Create a substantially different version that:
-  1. Maintains the core intent but uses completely different wording and structure
-  2. Could represent how a different type of person would ask for the same thing
-  3. Varies in style, complexity, or approach angle
+  1. Maintains the core meaning but uses completely different wording and structure
+  2. Could represent an alternative way to express the same content
+  3. Varies in style, complexity, or perspective
   4. Feels fresh and distinct, not just a paraphrase
 
-  Return only the reformulated input text - make it as different as possible while preserving what's being asked for.
+  Return only the reformulated text - make it as different as possible while preserving the essential meaning.
 
 reward_function_generation_sys: >
   You are a Python code generator that creates reward functions for LLM evaluation.
