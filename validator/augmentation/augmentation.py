@@ -86,8 +86,8 @@ async def get_additional_datasets_for_augmentation(
                     "chosen": dataset_info.get("dpo_accepted_column", "chosen"), 
                     "rejected": dataset_info.get("dpo_rejected_column", "rejected")
                 }
-            elif task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.GRPOTASK]:
-                # For instruct/grpo tasks, we need to get column info from the content service
+            elif task_type == TaskType.INSTRUCTTEXTTASK:
+                # For instruct tasks, we need to get column info from the content service
                 from validator.core.constants import CONTENT_BASE_URL
                 url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
                 try:
@@ -106,6 +106,12 @@ async def get_additional_datasets_for_augmentation(
                 except Exception as e:
                     logger.warning(f"Failed to get columns for dataset {dataset_id}: {e}")
                     continue
+            elif task_type == TaskType.GRPOTASK:
+                # For GRPO tasks, we only need the prompt column
+                # Try to get the best prompt-like column from the dataset
+                column_mapping = {
+                    "prompt": "prompt"  # Will be mapped by content service or use default
+                }
             else:
                 continue
                 
