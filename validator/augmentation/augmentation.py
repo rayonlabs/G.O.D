@@ -329,10 +329,38 @@ async def load_and_merge_multiple_datasets(
                 logger.warning(f"Failed to load dataset {dataset_id}: {e}")
     
     avg_size = sum(dataset_sizes) // len(dataset_sizes)
-    logger.info(f"Average dataset size: {avg_size}")
+    max_size = max(dataset_sizes)
+    logger.info(f"Dataset sizes: {dataset_sizes}")
+    logger.info(f"Average dataset size: {avg_size}, Max dataset size: {max_size}")
+    logger.info(f"Using max size {max_size} for final dataset")
     
-    random.shuffle(all_samples)
-    final_samples = all_samples[:avg_size]
+    # Ensure equal representation from each dataset
+    samples_per_dataset = max_size // len(dataset_sizes)
+    remainder = max_size % len(dataset_sizes)
+    
+    logger.info(f"Taking {samples_per_dataset} samples from each dataset (with {remainder} extra distributed)")
+    
+    final_samples = []
+    start_idx = 0
+    
+    for i, size in enumerate(dataset_sizes):
+        end_idx = start_idx + size
+        dataset_samples = all_samples[start_idx:end_idx]
+        
+        # Shuffle samples from this dataset
+        random.shuffle(dataset_samples)
+        
+        # Take appropriate number of samples
+        num_to_take = samples_per_dataset + (1 if i < remainder else 0)
+        num_to_take = min(num_to_take, len(dataset_samples))
+        
+        logger.info(f"Dataset {i}: has {len(dataset_samples)} samples, taking {num_to_take}")
+        
+        final_samples.extend(dataset_samples[:num_to_take])
+        start_idx = end_idx
+    
+    # Final shuffle to mix samples from all datasets
+    random.shuffle(final_samples)
     
     # Convert back to task-specific column names
     final_samples = unstandardize_samples_to_task_columns(final_samples, task)
