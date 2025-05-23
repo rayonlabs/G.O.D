@@ -21,6 +21,8 @@ from validator.core.constants import END_OF_REASONING_TAG
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
 from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
+from validator.core.constants import MIN_DATASETS_FOR_AUGMENTATION
+from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
 from validator.core.models import Dataset
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
@@ -172,6 +174,31 @@ def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
     return random.randint(min_hours, max_hours)
 
 
+async def get_multiple_datasets(
+    datasets_generator: AsyncGenerator[Dataset, None],
+    num_datasets: int | None = None
+) -> list[Dataset]:
+    """Get multiple unique datasets from the generator."""
+    if num_datasets is None:
+        num_datasets = random.randint(MIN_DATASETS_FOR_AUGMENTATION, MAX_DATASETS_FOR_AUGMENTATION)
+    
+    selected_datasets = []
+    selected_ids = set()
+    
+    max_attempts = num_datasets * 3
+    attempts = 0
+    
+    while len(selected_datasets) < num_datasets and attempts < max_attempts:
+        dataset = await anext(datasets_generator)
+        if dataset.dataset_id not in selected_ids:
+            selected_datasets.append(dataset)
+            selected_ids.add(dataset.dataset_id)
+        attempts += 1
+    
+    logger.info(f"Selected {len(selected_datasets)} unique datasets for task")
+    return selected_datasets
+
+
 async def create_synthetic_dpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
@@ -180,23 +207,29 @@ async def create_synthetic_dpo_task(
     logger.info("DPO task")
     model_id = await anext(models)
     logger.info(f"We picked {model_id}")
-    dataset = await anext(datasets)
-    logger.info(f"And the dataset is  {dataset}")
-    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
-    assert dataset.dpo_rejected_column, "we should have a reject column"
-    assert dataset.dpo_accepted_column, "we should have a accepted column"
-    assert dataset.dpo_prompt_column, "we should have a prompt column"
+    
+    selected_datasets = await get_multiple_datasets(datasets)
+    
+    primary_dataset = selected_datasets[0]
+    logger.info(f"Primary dataset: {primary_dataset}")
+    
+    number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
+    assert primary_dataset.dpo_rejected_column, "we should have a reject column"
+    assert primary_dataset.dpo_accepted_column, "we should have a accepted column"
+    assert primary_dataset.dpo_prompt_column, "we should have a prompt column"
+    
+    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
 
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
     task = DpoRawTask(
         model_id=model_id,
-        ds=dataset.dataset_id,
+        ds=dataset_ids,
         field_system=None,
-        field_prompt=dataset.dpo_prompt_column,
-        field_chosen=dataset.dpo_accepted_column,
-        field_rejected=dataset.dpo_rejected_column,
+        field_prompt=primary_dataset.dpo_prompt_column,
+        field_chosen=primary_dataset.dpo_accepted_column,
+        field_rejected=primary_dataset.dpo_rejected_column,
         status=TaskStatus.PENDING,
         is_organic=False,
         created_at=current_time,
@@ -204,7 +237,7 @@ async def create_synthetic_dpo_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"New task created and added to the queue {task}")
+    logger.info(f"New DPO task created with {len(selected_datasets)} datasets")
 
     task = await add_task(task, config.psql_db)
 
@@ -303,9 +336,15 @@ async def create_synthetic_grpo_task(
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
-    dataset = await anext(datasets)
-    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
-    columns = await _get_columns_for_instruct_dataset(dataset.dataset_id, config.keypair)
+    
+    selected_datasets = await get_multiple_datasets(datasets)
+    
+    primary_dataset = selected_datasets[0]
+    number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
+    columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
+    
+    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
+    
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
@@ -313,7 +352,7 @@ async def create_synthetic_grpo_task(
 
     task = GrpoRawTask(
         model_id=model_id,
-        ds=dataset.dataset_id,
+        ds=dataset_ids,
         field_prompt=columns.field_instruction,
         reward_functions=reward_functions,
         status=TaskStatus.PENDING,
@@ -323,7 +362,7 @@ async def create_synthetic_grpo_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"New task created and added to the queue {task}")
+    logger.info(f"New GRPO task created with {len(selected_datasets)} datasets")
 
     task = await add_task(task, config.psql_db)
 
@@ -336,15 +375,21 @@ async def create_synthetic_instruct_text_task(
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
-    dataset = await anext(datasets)
-    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
-    columns = await _get_columns_for_instruct_dataset(dataset.dataset_id, config.keypair)
+    
+    selected_datasets = await get_multiple_datasets(datasets)
+    
+    primary_dataset = selected_datasets[0]
+    number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
+    columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
+    
+    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
+    
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
     task = InstructTextRawTask(
         model_id=model_id,
-        ds=dataset.dataset_id,
+        ds=dataset_ids,
         field_system=None,
         field_instruction=columns.field_instruction,
         field_input=columns.field_input,
@@ -356,7 +401,7 @@ async def create_synthetic_instruct_text_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"New task created and added to the queue {task}")
+    logger.info(f"New task created with {len(selected_datasets)} datasets: {task}")
 
     task = await add_task(task, config.psql_db)
 

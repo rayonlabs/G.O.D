@@ -11,8 +11,14 @@ from core.models.utility_models import Message
 from core.models.utility_models import Prompts
 from core.models.utility_models import Role
 from validator.core.constants import END_OF_REASONING_TAG
+from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
 from validator.core.constants import MAX_SYNTH_DATA_POINTS
+from validator.core.constants import MIN_DATASETS_FOR_AUGMENTATION
 from validator.core.constants import PROMPT_PATH
+from validator.core.constants import STANDARD_INPUT_COLUMN
+from validator.core.constants import STANDARD_INSTRUCT_COLUMN
+from validator.core.constants import STANDARD_OUTPUT_COLUMN
+from validator.core.constants import STANDARD_SYSTEM_COLUMN
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
@@ -29,13 +35,147 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+async def get_additional_datasets_for_augmentation(
+    task_type: TaskType,
+    primary_dataset_id: str,
+    keypair: Keypair,
+    num_additional: int = 2
+) -> list[tuple[str, dict[str, str]]]:
+    """
+    Get additional datasets for augmentation based on task type.
+    
+    Returns:
+        List of tuples containing (dataset_id, column_mapping)
+    """
+    from validator.utils.call_endpoint import call_content_service
+    import random
+    
+    additional_datasets = []
+    
+    try:
+        # Determine if we need DPO datasets based on task type
+        is_dpo = task_type == TaskType.DPOTASK
+        params = {"dpo": is_dpo}
+        
+        # Get random datasets from content service
+        response = await call_content_service(
+            "/datasets/random",  # This will be prefixed with CONTENT_BASE_URL
+            keypair,
+            params=params
+        )
+        
+        if not isinstance(response, list):
+            logger.error(f"Expected list from datasets endpoint, got {type(response)}")
+            return []
+            
+        # Filter out the primary dataset and randomly select additional ones
+        available_datasets = [d for d in response if d.get("dataset_id") != primary_dataset_id]
+        random.shuffle(available_datasets)
+        
+        for dataset_info in available_datasets[:num_additional]:
+            dataset_id = dataset_info.get("dataset_id")
+            if not dataset_id:
+                continue
+                
+            # Get column mapping based on task type
+            if task_type == TaskType.DPOTASK:
+                column_mapping = {
+                    "prompt": dataset_info.get("dpo_prompt_column", "prompt"),
+                    "chosen": dataset_info.get("dpo_accepted_column", "chosen"), 
+                    "rejected": dataset_info.get("dpo_rejected_column", "rejected")
+                }
+            elif task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.GRPOTASK]:
+                # For instruct/grpo tasks, we need to get column info from the content service
+                url = f"/dataset/{dataset_id}/columns/suggest"
+                try:
+                    column_response = await call_content_service(url, keypair)
+                    if isinstance(column_response, dict):
+                        column_mapping = {
+                            "instruction": column_response.get("field_instruction", "instruction"),
+                            "input": column_response.get("field_input"),
+                            "output": column_response.get("field_output", "output"),
+                            "system": column_response.get("field_system")
+                        }
+                        # Remove None values
+                        column_mapping = {k: v for k, v in column_mapping.items() if v is not None}
+                    else:
+                        continue
+                except Exception as e:
+                    logger.warning(f"Failed to get columns for dataset {dataset_id}: {e}")
+                    continue
+            else:
+                continue
+                
+            additional_datasets.append((dataset_id, column_mapping))
+            
+    except Exception as e:
+        logger.error(f"Failed to get additional datasets for augmentation: {e}")
+        
+    return additional_datasets
+
+
+async def get_dataset_column_mapping(
+    dataset_id: str,
+    task_type: TaskType,
+    keypair: Keypair
+) -> dict[str, str]:
+    """Get column mapping for a specific dataset based on task type."""
+    from validator.utils.call_endpoint import call_content_service
+    
+    if task_type == TaskType.DPOTASK:
+        # For DPO, get dataset info to find DPO columns
+        params = {"dpo": True}
+        response = await call_content_service("/datasets/random", keypair, params=params)
+        
+        # Find this dataset in the response
+        for dataset_info in response:
+            if dataset_info.get("dataset_id") == dataset_id:
+                return {
+                    "prompt": dataset_info.get("dpo_prompt_column", "prompt"),
+                    "chosen": dataset_info.get("dpo_accepted_column", "chosen"),
+                    "rejected": dataset_info.get("dpo_rejected_column", "rejected")
+                }
+    else:
+        # For instruct/grpo, get column suggestions
+        url = f"/dataset/{dataset_id}/columns/suggest"
+        response = await call_content_service(url, keypair)
+        
+        if isinstance(response, dict):
+            column_mapping = {
+                "instruction": response.get("field_instruction", "instruction"),
+                "output": response.get("field_output", "output")
+            }
+            if response.get("field_input"):
+                column_mapping["input"] = response["field_input"]
+            if response.get("field_system"):
+                column_mapping["system"] = response["field_system"]
+            return column_mapping
+    
+    # Default mapping if not found
+    if task_type == TaskType.DPOTASK:
+        return {"prompt": "prompt", "chosen": "chosen", "rejected": "rejected"}
+    else:
+        return {"instruction": "instruction", "output": "output"}
+
+
 def load_prompts() -> Prompts:
     with open(PROMPT_PATH, "r") as file:
         prompts_dict = yaml.safe_load(file)
     return Prompts(**prompts_dict)
 
 
-def load_and_sample_dataset(dataset_name: str, columns_to_sample: list[str]) -> list[dict]:
+def load_and_sample_dataset(dataset_name: str, columns_to_sample: list[str], num_samples: int | None = None) -> list[dict]:
+    """
+    Load and sample from a single dataset.
+    
+    Args:
+        dataset_name: Name of the dataset to load
+        columns_to_sample: List of column names to keep
+        num_samples: Number of samples to take (defaults to MAX_SYNTH_DATA_POINTS)
+    
+    Returns:
+        List of sampled data points
+    """
     try:
         config_name = get_default_dataset_config(dataset_name)
         dataset = load_dataset(dataset_name, config_name, trust_remote_code=True, streaming=True)
@@ -48,13 +188,153 @@ def load_and_sample_dataset(dataset_name: str, columns_to_sample: list[str]) -> 
 
     filtered_dataset = train_dataset.remove_columns([col for col in train_dataset.column_names if col not in columns_to_sample])
 
-    num_samples = MAX_SYNTH_DATA_POINTS
+    if num_samples is None:
+        num_samples = MAX_SYNTH_DATA_POINTS
     logger.info(f"Taking {num_samples} samples from {dataset_name}")
 
     sampled_data = filtered_dataset.shuffle(seed=42, buffer_size=1000).take(num_samples)
 
     sampled_data_list = [sample for sample in sampled_data]
     return sampled_data_list
+
+
+def standardize_instruct_sample(sample: dict, task: Any) -> dict:
+    """Standardize a single instruct/grpo sample to use standard column names."""
+    std_sample = {}
+    std_sample[STANDARD_INSTRUCT_COLUMN] = sample.get(task.field_instruction, "")
+    std_sample[STANDARD_OUTPUT_COLUMN] = sample.get(task.field_output, "")
+    if task.field_input:
+        std_sample[STANDARD_INPUT_COLUMN] = sample.get(task.field_input, "")
+    if task.field_system:
+        std_sample[STANDARD_SYSTEM_COLUMN] = sample.get(task.field_system, "")
+    return std_sample
+
+
+def standardize_dpo_sample(sample: dict, task: Any) -> dict:
+    """Standardize a single DPO sample."""
+    std_sample = {
+        "prompt": sample.get(task.field_prompt, ""),
+        "chosen": sample.get(task.field_chosen, ""),
+        "rejected": sample.get(task.field_rejected, "")
+    }
+    if hasattr(task, 'field_system') and task.field_system:
+        std_sample["system"] = sample.get(task.field_system, "")
+    return std_sample
+
+
+def standardize_samples(samples: list[dict], task: Any) -> list[dict]:
+    """Standardize a list of samples based on task type."""
+    standardized = []
+    for sample in samples:
+        if hasattr(task, 'field_instruction'):  # InstructText/GRPO
+            standardized.append(standardize_instruct_sample(sample, task))
+        elif hasattr(task, 'field_prompt'):  # DPO
+            standardized.append(standardize_dpo_sample(sample, task))
+    return standardized
+
+
+def get_task_columns(task: Any) -> list[str]:
+    """Extract column names from task based on task type."""
+    if hasattr(task, 'field_instruction'):  # InstructText/GRPO
+        columns = [task.field_instruction, task.field_output]
+        if task.field_input:
+            columns.append(task.field_input)
+        if task.field_system:
+            columns.append(task.field_system)
+    elif hasattr(task, 'field_prompt'):  # DPO
+        columns = [task.field_prompt, task.field_chosen, task.field_rejected]
+        if hasattr(task, 'field_system') and task.field_system:
+            columns.append(task.field_system)
+    else:
+        columns = []
+    return columns
+
+
+def create_temp_task_from_mapping(column_mapping: dict[str, str], is_instruct: bool) -> Any:
+    """Create a temporary task object with column mappings."""
+    if is_instruct:
+        return type('obj', (object,), {
+            'field_instruction': column_mapping.get("instruction", "instruction"),
+            'field_output': column_mapping.get("output", "output"),
+            'field_input': column_mapping.get("input"),
+            'field_system': column_mapping.get("system")
+        })
+    else:  # DPO
+        return type('obj', (object,), {
+            'field_prompt': column_mapping.get("prompt", "prompt"),
+            'field_chosen': column_mapping.get("chosen", "chosen"),
+            'field_rejected': column_mapping.get("rejected", "rejected"),
+            'field_system': column_mapping.get("system")
+        })
+
+
+async def load_and_merge_multiple_datasets(
+    dataset_ids: list[str],
+    task: Any,
+    keypair: Keypair
+) -> list[dict]:
+    """Load and merge multiple datasets, returning average size."""
+    import random
+    
+    logger.info(f"Loading and merging {len(dataset_ids)} datasets")
+    
+    all_samples = []
+    dataset_sizes = []
+    
+    primary_id = dataset_ids[0]
+    primary_columns = get_task_columns(task)
+    
+    try:
+        config_name = get_default_dataset_config(primary_id)
+        dataset = load_dataset(primary_id, config_name, trust_remote_code=True)
+        if "train" in dataset:
+            dataset = dataset["train"]
+        
+        dataset = dataset.select_columns(primary_columns)
+        samples = list(dataset)
+        
+        standardized = standardize_samples(samples, task)
+        all_samples.extend(standardized)
+        dataset_sizes.append(len(samples))
+        logger.info(f"Loaded {len(samples)} samples from primary dataset {primary_id}")
+    except Exception as e:
+        logger.error(f"Failed to load primary dataset {primary_id}: {e}")
+        raise e
+    
+    if len(dataset_ids) > 1:
+        is_instruct = hasattr(task, 'field_instruction')
+        
+        for dataset_id in dataset_ids[1:]:
+            try:
+                column_mapping = await get_dataset_column_mapping(
+                    dataset_id, task.task_type, keypair
+                )
+                
+                columns = list(column_mapping.values())
+                config_name = get_default_dataset_config(dataset_id)
+                dataset = load_dataset(dataset_id, config_name, trust_remote_code=True)
+                if "train" in dataset:
+                    dataset = dataset["train"]
+                
+                dataset = dataset.select_columns(columns)
+                samples = list(dataset)
+                
+                temp_task = create_temp_task_from_mapping(column_mapping, is_instruct)
+                standardized = standardize_samples(samples, temp_task)
+                all_samples.extend(standardized)
+                dataset_sizes.append(len(samples))
+                logger.info(f"Loaded {len(samples)} samples from {dataset_id}")
+            except Exception as e:
+                logger.warning(f"Failed to load dataset {dataset_id}: {e}")
+    
+    avg_size = sum(dataset_sizes) // len(dataset_sizes)
+    logger.info(f"Average dataset size: {avg_size}")
+    
+    random.shuffle(all_samples)
+    final_samples = all_samples[:avg_size]
+    
+    logger.info(f"Merged {len(dataset_sizes)} datasets, returning {len(final_samples)} samples")
+    return final_samples
 
 
 def create_messages_for_input_generation(

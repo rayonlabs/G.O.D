@@ -23,6 +23,7 @@ from core.models.utility_models import FileFormat
 from core.utils import download_s3_file
 from validator.augmentation.augmentation import generate_augmented_text_dataset
 from validator.augmentation.augmentation import generate_dpo_reformulation
+from validator.augmentation.augmentation import load_and_merge_multiple_datasets
 from validator.augmentation.augmentation import load_prompts
 from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import DpoRawTask
@@ -531,17 +532,30 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
 
     train_dataset_name = task.training_data if task.training_data else task.ds
+    
+    dataset_ids = [ds.strip() for ds in train_dataset_name.split(",")]
+    has_multiple_datasets = len(dataset_ids) > 1
 
     if not task.test_data:
         logger.info(f"Preparing {train_dataset_name}")
-        try:
-            dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
-        except Exception as e:
-            logger.info(f"There was an issue loading the dataset: {e}")
-            raise e
+        
+        if has_multiple_datasets:
+            merged_samples = await load_and_merge_multiple_datasets(
+                dataset_ids,
+                task,
+                keypair
+            )
+            from datasets import Dataset as HFDataset
+            dataset = HFDataset.from_list(merged_samples)
+        else:
+            try:
+                dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
+            except Exception as e:
+                logger.info(f"There was an issue loading the dataset: {e}")
+                raise e
 
-        if isinstance(task, InstructTextRawTask):
-            dataset = standardize_column_names(dataset, task)
+            if isinstance(task, InstructTextRawTask):
+                dataset = standardize_column_names(dataset, task)
 
         dataset_dict = await train_test_split(dataset)
         train_ds = dataset_dict["train"]
