@@ -414,9 +414,9 @@ def unstandardize_samples_to_task_columns(samples: list[dict], task: AnyTextType
         new_sample = {}
         
         if isinstance(task, GrpoRawTask):
-            # GRPO: Map from standard instruction column to field_prompt
-            if STANDARD_INSTRUCT_COLUMN in sample:
-                new_sample[task.field_prompt] = sample[STANDARD_INSTRUCT_COLUMN]
+            # GRPO: Map from standard GRPO prompt column back to field_prompt
+            if STANDARD_GRPO_PROMPT_COLUMN in sample:
+                new_sample[task.field_prompt] = sample[STANDARD_GRPO_PROMPT_COLUMN]
         
         elif isinstance(task, DpoRawTask):
             # DPO: Map from standard DPO columns back to task columns
