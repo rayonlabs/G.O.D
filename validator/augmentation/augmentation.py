@@ -327,7 +327,6 @@ async def load_and_merge_multiple_datasets(
         raise e
     
     if len(dataset_ids) > 1:
-        is_instruct = hasattr(task, 'field_instruction')
         logger.info(f"Loading {len(dataset_ids) - 1} additional datasets")
         
         for dataset_id in dataset_ids[1:]:
@@ -349,7 +348,7 @@ async def load_and_merge_multiple_datasets(
                 dataset = dataset.select_columns(columns)
                 samples = list(dataset)
                 
-                temp_task = create_temp_task_from_mapping(column_mapping, is_instruct)
+                temp_task = create_temp_task_from_mapping(column_mapping, task.task_type)
                 standardized = standardize_samples(samples, temp_task)
                 all_samples.extend(standardized)
                 dataset_sizes.append(len(samples))
