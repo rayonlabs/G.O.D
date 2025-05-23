@@ -109,18 +109,22 @@ async def get_dataset_column_mapping(
     if not isinstance(response, dict):
         raise ValueError(f"Invalid response from content service for dataset {dataset_id}")
     
-    # Map the response fields to our standard columns based on task type
+    # The content service returns the actual column names in the dataset
+    # We return a mapping from our standard keys to the actual column names
     if task_type == TaskType.DPOTASK:
+        # For DPO, map standard keys to dataset columns
         return {
             "prompt": response.get("field_prompt", "prompt"),
             "chosen": response.get("field_chosen", "chosen"),
             "rejected": response.get("field_rejected", "rejected")
         }
     elif task_type == TaskType.INSTRUCTTEXTTASK:
-        column_mapping = {
-            "instruction": response.get("field_instruction", "instruction"),
-            "output": response.get("field_output", "output")
-        }
+        # For InstructText, map standard keys to dataset columns
+        column_mapping = {}
+        if "field_instruction" in response:
+            column_mapping["instruction"] = response["field_instruction"]
+        if "field_output" in response:
+            column_mapping["output"] = response["field_output"]
         if response.get("field_input"):
             column_mapping["input"] = response["field_input"]
         if response.get("field_system"):
