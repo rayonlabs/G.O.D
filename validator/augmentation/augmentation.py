@@ -250,16 +250,20 @@ def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[d
 
 def get_task_columns(task: AnyTextTypeRawTask) -> list[str]:
     """Extract column names from task based on task type."""
-    if hasattr(task, 'field_instruction'):  # InstructText/GRPO
+    from validator.core.models import InstructTextRawTask, DpoRawTask, GrpoRawTask
+    
+    if isinstance(task, InstructTextRawTask):
         columns = [task.field_instruction, task.field_output]
         if task.field_input:
             columns.append(task.field_input)
         if task.field_system:
             columns.append(task.field_system)
-    elif hasattr(task, 'field_prompt'):  # DPO
+    elif isinstance(task, DpoRawTask):
         columns = [task.field_prompt, task.field_chosen, task.field_rejected]
         if hasattr(task, 'field_system') and task.field_system:
             columns.append(task.field_system)
+    elif isinstance(task, GrpoRawTask):
+        columns = [task.field_prompt]
     else:
         columns = []
     return columns
