@@ -1,5 +1,8 @@
 import json
 import os
+import zipfile
+import requests
+import uuid
 
 import numpy as np
 import safetensors.torch
@@ -8,9 +11,9 @@ from fiber.logging_utils import get_logger
 from huggingface_hub import HfApi
 from huggingface_hub import snapshot_download
 from PIL import Image
+from pathlib import Path
 
 from core.models.utility_models import ImageModelType
-
 from validator.core import constants as cst
 from validator.core.models import Img2ImgPayload
 from validator.evaluation.utils import adjust_image_size
@@ -24,6 +27,27 @@ from validator.utils import comfy_api_gate as api_gate
 
 logger = get_logger(__name__)
 hf_api = HfApi()
+
+def unzip_from_url(zip_file_url: str) -> str:
+    random_tmp_id = uuid.uuid4()
+    tmp_dir = f"{cst.TEMP_PATH_FOR_IMAGES}/{random_tmp_id}"
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    temp_zip_path = f"{tmp_dir}/archive.zip"
+
+    response = requests.get(zip_file_url, stream=True)
+    response.raise_for_status() 
+
+    with open(temp_zip_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+    with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
+        zip_ref.extractall(tmp_dir)
+
+    os.remove(temp_zip_path)
+
+    return tmp_dir
 
 
 def load_comfy_workflows(model_type: str):
@@ -220,22 +244,13 @@ def _count_model_parameters(model_path: str, is_safetensors: bool) -> int:
         return 0
 
 
-def main():
-    test_dataset_path = os.environ.get("DATASET")
-    base_model_repo = os.environ.get("ORIGINAL_MODEL_REPO")
-    trained_lora_model_repos = os.environ.get("MODELS", "")
-    model_type = os.environ.get("MODEL_TYPE")
-    if not all([test_dataset_path, base_model_repo, trained_lora_model_repos, model_type]):
-        logger.error("Missing required environment variables.")
-        exit(1)
-
+def evaluate(test_dataset_zip: str, base_model_repo: str, trained_lora_model_repos: list[str], model_type: str):
+    test_dataset_path = unzip_from_url(test_dataset_zip)
     is_safetensors, safetensors_filename = is_safetensors_available(base_model_repo, model_type)
     # Base model download
     logger.info("Downloading base model")
     model_name_or_path, model_path = download_base_model(base_model_repo, model_type=model_type, safetensors_filename=safetensors_filename)
     logger.info("Base model downloaded")
-
-    lora_repos = [m.strip() for m in trained_lora_model_repos.split(",") if m.strip()]
 
     test_dataset_path = validate_dataset_path(test_dataset_path)
 
@@ -246,7 +261,7 @@ def main():
 
     generation_params = cst.EVAL_DEFAULTS.get(model_type, cst.EVAL_DEFAULTS[ImageModelType.SDXL.value])
 
-    for repo_id in lora_repos:
+    for repo_id in trained_lora_model_repos:
         try:
             lora_local_path = download_lora(repo_id)
             img2img_payload = Img2ImgPayload(
@@ -269,19 +284,8 @@ def main():
             logger.error(f"Error evaluating repo {repo_id}: {str(e)}")
             results[repo_id] = str(e)
 
-    output_file = "/aplp/evaluation_results.json"
-    output_dir = os.path.dirname(output_file)
-
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    with open(output_file, "w") as f:
-        json.dump(results, f)
-
-    logger.info(f"Evaluation results saved to {output_file}")
-
     logger.info(json.dumps(results))
 
+    return results
 
-if __name__ == "__main__":
-    main()
+    

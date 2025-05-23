@@ -25,7 +25,7 @@ RUN wget -O /app/validator/evaluation/ComfyUI/models/text_encoders/clip_l.safete
     wget -O /app/validator/evaluation/ComfyUI/models/vae/ae.safetensors \
     https://huggingface.co/Albert-zp/flux-vaesft/resolve/main/fluxVaeSft_aeSft.sft
 
-RUN pip install docker diffusers
+RUN pip install docker diffusers runpod
 
 WORKDIR /app
 COPY . .
@@ -34,6 +34,6 @@ RUN pip install -r validator/requirements.txt
 
 RUN echo '#!/bin/bash\n\
 python /app/validator/evaluation/ComfyUI/main.py &\n\
-python -m validator.evaluation.eval_diffusion' > /app/start.sh && chmod +x /app/start.sh
+python -m validator.evaluation.runpod_wrapper' > /app/start.sh && chmod +x /app/start.sh
 
 CMD ["/app/start.sh"]

@@ -43,6 +43,7 @@ dependencies = [
     "sentencepiece==0.2.0",
     "peft",
     "Pillow==11.1.0",
+    "runpod==1.7.9"
 ]
 
 [project.optional-dependencies]
