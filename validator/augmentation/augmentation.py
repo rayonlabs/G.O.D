@@ -79,43 +79,13 @@ async def get_additional_datasets_for_augmentation(
             if not dataset_id:
                 continue
                 
-            # Get column mapping based on task type
-            if task_type == TaskType.DPOTASK:
-                column_mapping = {
-                    "prompt": dataset_info.get("dpo_prompt_column", "prompt"),
-                    "chosen": dataset_info.get("dpo_accepted_column", "chosen"), 
-                    "rejected": dataset_info.get("dpo_rejected_column", "rejected")
-                }
-            elif task_type == TaskType.INSTRUCTTEXTTASK:
-                # For instruct tasks, we need to get column info from the content service
-                from validator.core.constants import CONTENT_BASE_URL
-                url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
-                try:
-                    column_response = await call_content_service(url, keypair)
-                    if isinstance(column_response, dict):
-                        column_mapping = {
-                            "instruction": column_response.get("field_instruction", "instruction"),
-                            "input": column_response.get("field_input"),
-                            "output": column_response.get("field_output", "output"),
-                            "system": column_response.get("field_system")
-                        }
-                        # Remove None values
-                        column_mapping = {k: v for k, v in column_mapping.items() if v is not None}
-                    else:
-                        continue
-                except Exception as e:
-                    logger.warning(f"Failed to get columns for dataset {dataset_id}: {e}")
-                    continue
-            elif task_type == TaskType.GRPOTASK:
-                # For GRPO tasks, we only need the prompt column
-                # Try to get the best prompt-like column from the dataset
-                column_mapping = {
-                    "prompt": "prompt"  # Will be mapped by content service or use default
-                }
-            else:
+            try:
+                # Get column mapping for this dataset
+                column_mapping = await get_dataset_column_mapping(dataset_id, task_type, keypair)
+                additional_datasets.append((dataset_id, column_mapping))
+            except Exception as e:
+                logger.warning(f"Failed to get column mapping for dataset {dataset_id}: {e}")
                 continue
-                
-            additional_datasets.append((dataset_id, column_mapping))
             
     except Exception as e:
         logger.error(f"Failed to get additional datasets for augmentation: {e}")
