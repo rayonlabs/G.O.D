@@ -103,7 +103,12 @@ def calculate_node_quality_scores(
 
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
         std_score = float(np.std(node_agg.task_raw_scores))
-        score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
+        
+        if node_agg.average_raw_score < 0:
+            score = 0.0
+        else:
+            score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
+        
         node_agg.quality_score = score
 
         final_scores.append(
