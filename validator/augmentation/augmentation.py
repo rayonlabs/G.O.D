@@ -102,41 +102,52 @@ async def get_dataset_column_mapping(
     from validator.utils.call_endpoint import call_content_service
     from validator.core.constants import CONTENT_BASE_URL
     
-    # Get column suggestions from content service
-    url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
-    response = await call_content_service(url, keypair)
+    max_attempts = 3
+    last_error = None
     
-    if not isinstance(response, dict):
-        raise ValueError(f"Invalid response from content service for dataset {dataset_id}")
+    for attempt in range(max_attempts):
+        try:
+            url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
+            response = await call_content_service(url, keypair)
+            
+            if not isinstance(response, dict):
+                raise ValueError(f"Invalid response from content service for dataset {dataset_id}")
+            
+            if task_type == TaskType.DPOTASK:
+                return {
+                    "prompt": response.get("field_prompt", "prompt"),
+                    "chosen": response.get("field_chosen", "chosen"),
+                    "rejected": response.get("field_rejected", "rejected")
+                }
+            elif task_type == TaskType.INSTRUCTTEXTTASK:
+                column_mapping = {}
+                if "field_instruction" in response:
+                    column_mapping["instruction"] = response["field_instruction"]
+                if "field_output" in response:
+                    column_mapping["output"] = response["field_output"]
+                if response.get("field_input"):
+                    column_mapping["input"] = response["field_input"]
+                if response.get("field_system"):
+                    column_mapping["system"] = response["field_system"]
+                return column_mapping
+            elif task_type == TaskType.GRPOTASK:
+                return {
+                    "prompt": response.get("field_prompt", "prompt")
+                }
+            else:
+                raise ValueError(f"Unsupported task type: {task_type}")
+                
+        except Exception as e:
+            last_error = e
+            if "LLM failed to generate" in str(e) and attempt < max_attempts - 1:
+                wait_time = 2 ** (attempt + 1)
+                logger.warning(f"LLM column mapping failed for {dataset_id} (attempt {attempt + 1}/{max_attempts}), retrying in {wait_time}s: {e}")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"Failed to get column mapping for {dataset_id} after {attempt + 1} attempts: {e}")
+                raise
     
-    # The content service returns the actual column names in the dataset
-    # We return a mapping from our standard keys to the actual column names
-    if task_type == TaskType.DPOTASK:
-        # For DPO, map standard keys to dataset columns
-        return {
-            "prompt": response.get("field_prompt", "prompt"),
-            "chosen": response.get("field_chosen", "chosen"),
-            "rejected": response.get("field_rejected", "rejected")
-        }
-    elif task_type == TaskType.INSTRUCTTEXTTASK:
-        # For InstructText, map standard keys to dataset columns
-        column_mapping = {}
-        if "field_instruction" in response:
-            column_mapping["instruction"] = response["field_instruction"]
-        if "field_output" in response:
-            column_mapping["output"] = response["field_output"]
-        if response.get("field_input"):
-            column_mapping["input"] = response["field_input"]
-        if response.get("field_system"):
-            column_mapping["system"] = response["field_system"]
-        return column_mapping
-    elif task_type == TaskType.GRPOTASK:
-        # GRPO uses the prompt field from the response
-        return {
-            "prompt": response.get("field_prompt", "prompt")
-        }
-    else:
-        raise ValueError(f"Unsupported task type: {task_type}")
+    raise last_error if last_error else ValueError(f"Failed to get column mapping for {dataset_id}")
 
 
 def load_prompts() -> Prompts:
@@ -380,13 +391,15 @@ async def load_and_merge_multiple_datasets(
                         raise ValueError(f"DatasetDict is empty for {dataset_id}")
                 
                 logger.info(f"Dataset {dataset_id} loaded with {len(dataset)} total samples")
-                logger.info(f"Available columns in dataset: {dataset.column_names}")
+                logger.info(f"Available columns in dataset: {dataset.column_names if hasattr(dataset, 'column_names') else 'No column_names attribute'}")
                 
                 # Check if all required columns exist
-                missing_columns = [col for col in columns if col not in dataset.column_names]
+                dataset_columns = dataset.column_names if hasattr(dataset, 'column_names') else []
+                missing_columns = [col for col in columns if col not in dataset_columns]
                 if missing_columns:
                     logger.error(f"Missing columns in {dataset_id}: {missing_columns}")
-                    logger.error(f"Available columns: {dataset.column_names}")
+                    logger.error(f"Available columns: {dataset_columns}")
+                    logger.error(f"Required columns from mapping: {columns}")
                     raise ValueError(f"Missing required columns: {missing_columns}")
                 
                 dataset = dataset.select_columns(columns)
