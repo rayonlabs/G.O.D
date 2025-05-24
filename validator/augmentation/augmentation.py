@@ -194,9 +194,9 @@ def standardize_instruct_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     std_sample = {}
     std_sample[STANDARD_INSTRUCT_COLUMN] = sample.get(task.field_instruction, "")
     std_sample[STANDARD_OUTPUT_COLUMN] = sample.get(task.field_output, "")
-    if task.field_input:
+    if hasattr(task, 'field_input') and task.field_input:
         std_sample[STANDARD_INPUT_COLUMN] = sample.get(task.field_input, "")
-    if task.field_system:
+    if hasattr(task, 'field_system') and task.field_system:
         std_sample[STANDARD_SYSTEM_COLUMN] = sample.get(task.field_system, "")
     return std_sample
 
