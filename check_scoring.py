@@ -105,10 +105,20 @@ async def check_hotkey_scoring(hotkey: str):
                 positive = sum(1 for s in type_scores if s > 0)
                 negative = sum(1 for s in type_scores if s < 0)
                 
+                # Collect task IDs
+                task_ids = []
+                for task_result in task_results:
+                    if task_result.task.created_at > cutoff and str(task_result.task.task_type) == f"TaskType.{task_type}":
+                        for node_score in task_result.node_scores:
+                            if node_score.hotkey == hotkey:
+                                task_ids.append(str(task_result.task.task_id))
+                                break
+                
                 print(f"    {task_type} (weight: {type_weight:.1%}):")
                 print(f"      Tasks: {len(type_scores)} ({len(organic_scores)} organic, {len(synthetic_scores)} synthetic)")
                 print(f"      Scores: {positive} positive, {negative} negative")
                 print(f"      Average: {avg_score:.3f}")
+                print(f"      Task IDs: {task_ids}")
         
         if not period_has_tasks:
             print(f"    No tasks found")
