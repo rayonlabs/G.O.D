@@ -82,8 +82,8 @@ SYNTH_GEN_BATCH_SIZE = 30
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 
 # Multi-dataset augmentation
-MIN_DATASETS_FOR_AUGMENTATION = 1
-MAX_DATASETS_FOR_AUGMENTATION = 5
+MIN_DATASETS_FOR_AUGMENTATION = 2
+MAX_DATASETS_FOR_AUGMENTATION = 8
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
 PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.05
