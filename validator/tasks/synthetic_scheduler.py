@@ -149,10 +149,11 @@ async def _get_columns_for_instruct_dataset(
     dataset_id: str,
     keypair: Keypair,
 ) -> InstructTextDatasetColumnsResponse:
+    from validator.utils.call_endpoint import call_content_service_fast
     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
     logger.info(f"Getting columns for dataset {dataset_id}")
 
-    response = await call_content_service(url, keypair)
+    response = await call_content_service_fast(url, keypair)
     if not isinstance(response, dict):
         raise TypeError(f"Expected dictionary response, got {type(response)}")
     try:
