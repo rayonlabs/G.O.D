@@ -373,10 +373,10 @@ async def load_and_merge_multiple_datasets(
                 dataset = load_dataset(dataset_id, config_name, trust_remote_code=True)
                 
                 # Handle DatasetDict vs Dataset
-                if hasattr(dataset, 'column_names'):
+                if hasattr(dataset, 'column_names') and not isinstance(dataset, dict):
                     # It's already a Dataset
                     pass
-                elif isinstance(dataset, dict):
+                else:
                     # It's a DatasetDict - try to get the best split
                     if "train" in dataset:
                         dataset = dataset["train"]
@@ -391,14 +391,13 @@ async def load_and_merge_multiple_datasets(
                         raise ValueError(f"DatasetDict is empty for {dataset_id}")
                 
                 logger.info(f"Dataset {dataset_id} loaded with {len(dataset)} total samples")
-                logger.info(f"Available columns in dataset: {dataset.column_names if hasattr(dataset, 'column_names') else 'No column_names attribute'}")
+                logger.info(f"Available columns in dataset: {dataset.column_names}")
                 
                 # Check if all required columns exist
-                dataset_columns = dataset.column_names if hasattr(dataset, 'column_names') else []
-                missing_columns = [col for col in columns if col not in dataset_columns]
+                missing_columns = [col for col in columns if col not in dataset.column_names]
                 if missing_columns:
                     logger.error(f"Missing columns in {dataset_id}: {missing_columns}")
-                    logger.error(f"Available columns: {dataset_columns}")
+                    logger.error(f"Available columns: {dataset.column_names}")
                     logger.error(f"Required columns from mapping: {columns}")
                     raise ValueError(f"Missing required columns: {missing_columns}")
                 
