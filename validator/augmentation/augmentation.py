@@ -20,6 +20,9 @@ from validator.core.constants import STANDARD_INSTRUCT_COLUMN
 from validator.core.constants import STANDARD_OUTPUT_COLUMN
 from validator.core.constants import STANDARD_SYSTEM_COLUMN
 from validator.core.constants import STANDARD_GRPO_PROMPT_COLUMN
+from validator.core.constants import STANDARD_DPO_PROMPT_COLUMN
+from validator.core.constants import STANDARD_DPO_CHOSEN_COLUMN
+from validator.core.constants import STANDARD_DPO_REJECTED_COLUMN
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
@@ -204,12 +207,12 @@ def standardize_instruct_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
 def standardize_dpo_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     """Standardize a single DPO sample."""
     std_sample = {
-        "prompt": sample.get(task.field_prompt, ""),
-        "chosen": sample.get(task.field_chosen, ""),
-        "rejected": sample.get(task.field_rejected, "")
+        STANDARD_DPO_PROMPT_COLUMN: sample.get(task.field_prompt, ""),
+        STANDARD_DPO_CHOSEN_COLUMN: sample.get(task.field_chosen, ""),
+        STANDARD_DPO_REJECTED_COLUMN: sample.get(task.field_rejected, "")
     }
     if hasattr(task, 'field_system') and task.field_system:
-        std_sample["system"] = sample.get(task.field_system, "")
+        std_sample[STANDARD_SYSTEM_COLUMN] = sample.get(task.field_system, "")
     return std_sample
 
 

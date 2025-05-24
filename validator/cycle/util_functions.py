@@ -91,12 +91,19 @@ async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair) -> AnyT
     task.status = TaskStatus.LOOKING_FOR_NODES
     task.synthetic_data = synth_data
     task.test_data = test_data
-    # normalize column names. It was already normalized in the data so we update the task object
+    
     if isinstance(task, InstructTextRawTask):
         task.field_instruction = cst.STANDARD_INSTRUCT_COLUMN
-        task.field_input = cst.STANDARD_INPUT_COLUMN if task.field_input else None
         task.field_output = cst.STANDARD_OUTPUT_COLUMN
+        task.field_input = cst.STANDARD_INPUT_COLUMN if task.field_input else None
         task.field_system = cst.STANDARD_SYSTEM_COLUMN if task.field_system else None
+    elif isinstance(task, DpoRawTask):
+        task.field_prompt = cst.STANDARD_DPO_PROMPT_COLUMN
+        task.field_chosen = cst.STANDARD_DPO_CHOSEN_COLUMN
+        task.field_rejected = cst.STANDARD_DPO_REJECTED_COLUMN
+        task.field_system = cst.STANDARD_SYSTEM_COLUMN if task.field_system else None
+    elif isinstance(task, GrpoRawTask):
+        task.field_prompt = cst.STANDARD_GRPO_PROMPT_COLUMN
     logger.info("Data creation is complete - now time to find some miners")
     return task
 
