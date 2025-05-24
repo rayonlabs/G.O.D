@@ -78,16 +78,16 @@ async def check_hotkey_scoring(hotkey: str):
     
     # Show some task results for this hotkey
     print(f"\nRecent task results:")
-    hotkey_tasks = [tr for tr in task_results if any(r.hotkey == hotkey for r in tr.results)]
+    hotkey_tasks = [tr for tr in task_results if any(ns.hotkey == hotkey for ns in tr.node_scores)]
     
     for task_result in hotkey_tasks[-10:]:  # Last 10 tasks
-        for result in task_result.results:
-            if result.hotkey == hotkey:
+        for node_score in task_result.node_scores:
+            if node_score.hotkey == hotkey:
                 print(f"  Task {task_result.task.task_id}: "
                       f"Type={task_result.task.task_type}, "
                       f"Organic={task_result.task.is_organic}, "
-                      f"Score={result.score}, "
-                      f"Reason={result.score_reason}")
+                      f"Score={node_score.score}, "
+                      f"Reason={node_score.score_reason}")
 
 async def main():
     if len(sys.argv) < 2:
