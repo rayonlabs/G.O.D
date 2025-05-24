@@ -229,7 +229,17 @@ def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[d
                 result = standardize_grpo_sample(sample, task)
             else:
                 # Handle temp task objects that don't inherit from the models
-                result = standardize_instruct_sample(sample, task)
+                if hasattr(task, 'task_type'):
+                    from validator.core.models import TaskType
+                    if task.task_type == TaskType.GRPOTASK:
+                        result = standardize_grpo_sample(sample, task)
+                    elif task.task_type == TaskType.DPOTASK:
+                        result = standardize_dpo_sample(sample, task)
+                    else:
+                        result = standardize_instruct_sample(sample, task)
+                else:
+                    # Fallback for old behavior
+                    result = standardize_instruct_sample(sample, task)
             
             if i == 0:  # Log first sample
                 logger.info(f"Sample {i}: {sample} -> {result}")
@@ -272,7 +282,7 @@ def create_temp_task_from_mapping(column_mapping: dict[str, str], task_type):
     from validator.core.models import TaskType
     
     if task_type == TaskType.INSTRUCTTEXTTASK:
-        temp_task_dict = {}
+        temp_task_dict = {'task_type': task_type}
         if "instruction" in column_mapping:
             temp_task_dict['field_instruction'] = column_mapping["instruction"]
         if "output" in column_mapping:
@@ -283,7 +293,7 @@ def create_temp_task_from_mapping(column_mapping: dict[str, str], task_type):
             temp_task_dict['field_system'] = column_mapping["system"]
         return type('obj', (object,), temp_task_dict)
     elif task_type == TaskType.DPOTASK:
-        temp_task_dict = {}
+        temp_task_dict = {'task_type': task_type}
         if "prompt" in column_mapping:
             temp_task_dict['field_prompt'] = column_mapping["prompt"]
         if "chosen" in column_mapping:
@@ -294,7 +304,7 @@ def create_temp_task_from_mapping(column_mapping: dict[str, str], task_type):
             temp_task_dict['field_system'] = column_mapping["system"]
         return type('obj', (object,), temp_task_dict)
     elif task_type == TaskType.GRPOTASK:
-        temp_task_dict = {}
+        temp_task_dict = {'task_type': task_type}
         if "prompt" in column_mapping:
             temp_task_dict['field_prompt'] = column_mapping["prompt"]
         return type('obj', (object,), temp_task_dict)
