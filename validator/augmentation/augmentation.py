@@ -50,6 +50,7 @@ async def get_additional_datasets_for_augmentation(
         List of tuples containing (dataset_id, column_mapping)
     """
     from validator.utils.call_endpoint import call_content_service
+    from validator.core.models import Dataset
     import random
     
     additional_datasets = []
@@ -80,11 +81,22 @@ async def get_additional_datasets_for_augmentation(
                 continue
                 
             try:
-                # Get column mapping for this dataset
-                column_mapping = await get_dataset_column_mapping(dataset_id, task_type, keypair)
-                additional_datasets.append((dataset_id, column_mapping))
+                if is_dpo:
+                    dataset = Dataset.model_validate(dataset_info)
+                    if dataset.dpo_prompt_column and dataset.dpo_accepted_column and dataset.dpo_rejected_column:
+                        column_mapping = {
+                            "prompt": dataset.dpo_prompt_column,
+                            "chosen": dataset.dpo_accepted_column,
+                            "rejected": dataset.dpo_rejected_column
+                        }
+                        additional_datasets.append((dataset_id, column_mapping))
+                    else:
+                        logger.warning(f"Dataset {dataset_id} missing DPO columns, skipping")
+                else:
+                    column_mapping = await get_dataset_column_mapping(dataset_id, task_type, keypair)
+                    additional_datasets.append((dataset_id, column_mapping))
             except Exception as e:
-                logger.warning(f"Failed to get column mapping for dataset {dataset_id}: {e}")
+                logger.warning(f"Failed to process dataset {dataset_id}: {e}")
                 continue
             
     except Exception as e:
@@ -111,11 +123,13 @@ async def get_dataset_column_mapping(
         raise ValueError(f"Invalid response from content service for dataset {dataset_id}")
     
     if task_type == TaskType.DPOTASK:
-        return {
+        mapping = {
             "prompt": response.get("field_prompt", "prompt"),
             "chosen": response.get("field_chosen", "chosen"),
             "rejected": response.get("field_rejected", "rejected")
         }
+        logger.info(f"DPO column mapping for {dataset_id}: response={response}, mapping={mapping}")
+        return mapping
     elif task_type == TaskType.INSTRUCTTEXTTASK:
         column_mapping = {}
         if "field_instruction" in response:
