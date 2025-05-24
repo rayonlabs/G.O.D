@@ -194,12 +194,11 @@ async def get_multiple_datasets(
     
     while len(selected_datasets) < num_datasets and attempts < max_attempts:
         dataset = await anext(datasets_generator)
+        attempts += 1
+        
         if dataset.dataset_id not in selected_ids:
-            # For non-primary datasets, validate column mapping availability
-            # Skip validation for DPO tasks since we use the dataset's own column info
             if len(selected_datasets) > 0 and task_type and keypair and task_type != TaskType.DPOTASK:
                 try:
-                    # Test if we can get column suggestions for this dataset
                     from validator.utils.call_endpoint import call_content_service_fast
                     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
                     logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id}")
@@ -207,12 +206,10 @@ async def get_multiple_datasets(
                     logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
                 except Exception as e:
                     logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
-                    attempts += 1
                     continue
             
             selected_datasets.append(dataset)
             selected_ids.add(dataset.dataset_id)
-        attempts += 1
     
     logger.info(f"Selected {len(selected_datasets)} unique datasets for task (validated)")
     return selected_datasets
