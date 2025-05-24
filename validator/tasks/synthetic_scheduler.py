@@ -188,28 +188,28 @@ async def get_multiple_datasets(
     
     selected_datasets = []
     selected_ids = set()
+    failed_ids = set()
     
-    max_attempts = num_datasets * 5  # Increased attempts since we're validating
-    attempts = 0
-    
-    while len(selected_datasets) < num_datasets and attempts < max_attempts:
+    while len(selected_datasets) < num_datasets:
         dataset = await anext(datasets_generator)
-        attempts += 1
         
-        if dataset.dataset_id not in selected_ids:
-            if task_type and keypair and task_type != TaskType.DPOTASK:
-                try:
-                    from validator.utils.call_endpoint import call_content_service_fast
-                    url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
-                    logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id}")
-                    await call_content_service_fast(url, keypair)
-                    logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
-                except Exception as e:
-                    logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
-                    continue
+        if dataset.dataset_id in selected_ids or dataset.dataset_id in failed_ids:
+            continue
             
-            selected_datasets.append(dataset)
-            selected_ids.add(dataset.dataset_id)
+        if task_type and keypair and task_type != TaskType.DPOTASK:
+            try:
+                from validator.utils.call_endpoint import call_content_service_fast
+                url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
+                logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id}")
+                await call_content_service_fast(url, keypair)
+                logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
+            except Exception as e:
+                logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
+                failed_ids.add(dataset.dataset_id)
+                continue
+        
+        selected_datasets.append(dataset)
+        selected_ids.add(dataset.dataset_id)
     
     logger.info(f"Selected {len(selected_datasets)} unique datasets for task (validated)")
     return selected_datasets
