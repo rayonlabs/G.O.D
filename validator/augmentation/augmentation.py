@@ -345,10 +345,14 @@ async def load_and_merge_multiple_datasets(
         for dataset_id in dataset_ids[1:]:
             try:
                 logger.info(f"Loading additional dataset: {dataset_id}")
-                column_mapping = await get_dataset_column_mapping(
-                    dataset_id, task.task_type, keypair
-                )
-                logger.info(f"Column mapping for {dataset_id}: {column_mapping}")
+                try:
+                    column_mapping = await get_dataset_column_mapping(
+                        dataset_id, task.task_type, keypair
+                    )
+                    logger.info(f"Column mapping for {dataset_id}: {column_mapping}")
+                except Exception as e:
+                    logger.error(f"Failed to get column mapping for {dataset_id}: {e}")
+                    raise
                 
                 columns = list(column_mapping.values())
                 config_name = get_default_dataset_config(dataset_id)
