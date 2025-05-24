@@ -140,7 +140,7 @@ async def get_dataset_column_mapping(
         except Exception as e:
             last_error = e
             if "LLM failed to generate" in str(e) and attempt < max_attempts - 1:
-                wait_time = 2 ** (attempt + 1)
+                wait_time = min(1.0, 0.1 * (2 ** (attempt + 1)))  # 0.2s, 0.4s, 0.8s (max 1s)
                 logger.warning(f"LLM column mapping failed for {dataset_id} (attempt {attempt + 1}/{max_attempts}), retrying in {wait_time}s: {e}")
                 await asyncio.sleep(wait_time)
             else:
