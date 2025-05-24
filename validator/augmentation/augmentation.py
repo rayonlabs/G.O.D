@@ -107,42 +107,30 @@ async def get_dataset_column_mapping(
     
     if not isinstance(response, dict):
         raise ValueError(f"Invalid response from content service for dataset {dataset_id}")
-            
-            if task_type == TaskType.DPOTASK:
-                return {
-                    "prompt": response.get("field_prompt", "prompt"),
-                    "chosen": response.get("field_chosen", "chosen"),
-                    "rejected": response.get("field_rejected", "rejected")
-                }
-            elif task_type == TaskType.INSTRUCTTEXTTASK:
-                column_mapping = {}
-                if "field_instruction" in response:
-                    column_mapping["instruction"] = response["field_instruction"]
-                if "field_output" in response:
-                    column_mapping["output"] = response["field_output"]
-                if response.get("field_input"):
-                    column_mapping["input"] = response["field_input"]
-                if response.get("field_system"):
-                    column_mapping["system"] = response["field_system"]
-                return column_mapping
-            elif task_type == TaskType.GRPOTASK:
-                return {
-                    "prompt": response.get("field_prompt", "prompt")
-                }
-            else:
-                raise ValueError(f"Unsupported task type: {task_type}")
-                
-        except Exception as e:
-            last_error = e
-            if "LLM failed to generate" in str(e) and attempt < max_attempts - 1:
-                wait_time = min(1.0, 0.1 * (2 ** (attempt + 1)))  # 0.2s, 0.4s, 0.8s (max 1s)
-                logger.warning(f"LLM column mapping failed for {dataset_id} (attempt {attempt + 1}/{max_attempts}), retrying in {wait_time}s: {e}")
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error(f"Failed to get column mapping for {dataset_id} after {attempt + 1} attempts: {e}")
-                raise
     
-    raise last_error if last_error else ValueError(f"Failed to get column mapping for {dataset_id}")
+    if task_type == TaskType.DPOTASK:
+        return {
+            "prompt": response.get("field_prompt", "prompt"),
+            "chosen": response.get("field_chosen", "chosen"),
+            "rejected": response.get("field_rejected", "rejected")
+        }
+    elif task_type == TaskType.INSTRUCTTEXTTASK:
+        column_mapping = {}
+        if "field_instruction" in response:
+            column_mapping["instruction"] = response["field_instruction"]
+        if "field_output" in response:
+            column_mapping["output"] = response["field_output"]
+        if response.get("field_input"):
+            column_mapping["input"] = response["field_input"]
+        if response.get("field_system"):
+            column_mapping["system"] = response["field_system"]
+        return column_mapping
+    elif task_type == TaskType.GRPOTASK:
+        return {
+            "prompt": response.get("field_prompt", "prompt")
+        }
+    else:
+        raise ValueError(f"Unsupported task type: {task_type}")
 
 
 def load_prompts() -> Prompts:
