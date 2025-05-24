@@ -360,8 +360,24 @@ async def load_and_merge_multiple_datasets(
                 logger.info(f"Column mapping: {column_mapping}")
                 
                 dataset = load_dataset(dataset_id, config_name, trust_remote_code=True)
-                if "train" in dataset:
-                    dataset = dataset["train"]
+                
+                # Handle DatasetDict vs Dataset
+                if hasattr(dataset, 'column_names'):
+                    # It's already a Dataset
+                    pass
+                elif isinstance(dataset, dict):
+                    # It's a DatasetDict - try to get the best split
+                    if "train" in dataset:
+                        dataset = dataset["train"]
+                    elif "train_prefs" in dataset:
+                        dataset = dataset["train_prefs"]
+                    elif list(dataset.keys()):
+                        # Take the first available split
+                        first_split = list(dataset.keys())[0]
+                        logger.info(f"Using split '{first_split}' from DatasetDict")
+                        dataset = dataset[first_split]
+                    else:
+                        raise ValueError(f"DatasetDict is empty for {dataset_id}")
                 
                 logger.info(f"Dataset {dataset_id} loaded with {len(dataset)} total samples")
                 logger.info(f"Available columns in dataset: {dataset.column_names}")

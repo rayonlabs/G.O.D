@@ -556,6 +556,17 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
 
             if isinstance(task, InstructTextRawTask):
                 dataset = standardize_column_names(dataset, task)
+            
+            # Subsample when using only a single dataset (50-100% of original size)
+            original_size = len(dataset)
+            subsample_percentage = random.uniform(0.5, 1.0)
+            subsample_size = int(original_size * subsample_percentage)
+            
+            if subsample_size < original_size:
+                logger.info(f"Subsampling single dataset from {original_size} to {subsample_size} rows ({subsample_percentage:.1%})")
+                dataset = dataset.shuffle(seed=42).select(range(subsample_size))
+            else:
+                logger.info(f"Using full dataset size of {original_size} rows")
 
         dataset_dict = await train_test_split(dataset)
         train_ds = dataset_dict["train"]
