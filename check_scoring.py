@@ -86,8 +86,7 @@ async def check_hotkey_scoring(hotkey: str):
                 print(f"  Task {task_result.task.task_id}: "
                       f"Type={task_result.task.task_type}, "
                       f"Organic={task_result.task.is_organic}, "
-                      f"Score={node_score.score}, "
-                      f"Reason={node_score.score_reason}")
+                      f"Quality Score={node_score.quality_score:.3f}")
 
 async def main():
     if len(sys.argv) < 2:
