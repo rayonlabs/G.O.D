@@ -203,9 +203,10 @@ async def get_multiple_datasets(
                 while validation_attempts < max_validation_attempts:
                     try:
                         # Test if we can get column suggestions for this dataset
+                        from validator.utils.call_endpoint import call_content_service_fast
                         url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
                         logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id} (attempt {validation_attempts + 1}/{max_validation_attempts})")
-                        await call_content_service(url, keypair)
+                        await call_content_service_fast(url, keypair)
                         logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
                         validation_succeeded = True
                         break
