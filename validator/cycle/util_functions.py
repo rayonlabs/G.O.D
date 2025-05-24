@@ -92,6 +92,13 @@ async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair) -> AnyT
     task.synthetic_data = synth_data
     task.test_data = test_data
     
+    # Update dataset name if multiple datasets were used
+    original_ds_name = task.training_data if hasattr(task, 'training_data') and task.training_data else task.ds
+    if original_ds_name and ',' in original_ds_name:
+        num_datasets = len([ds.strip() for ds in original_ds_name.split(',')])
+        task.ds = f"mix of {num_datasets} datasets"
+        logger.info(f"Updated dataset name to: {task.ds}")
+    
     if isinstance(task, InstructTextRawTask):
         task.field_instruction = cst.STANDARD_INSTRUCT_COLUMN
         task.field_output = cst.STANDARD_OUTPUT_COLUMN

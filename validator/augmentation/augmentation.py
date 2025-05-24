@@ -460,19 +460,40 @@ async def load_and_merge_multiple_datasets(
                 if standardized:
                     logger.info(f"Example from {dataset_id}: {standardized[0]}")
             except Exception as e:
-                logger.error(f"CRITICAL: Failed to load dataset {dataset_id}: {e}")
-                logger.exception("Full traceback:")
-                raise ValueError(f"Failed to load additional dataset {dataset_id}: {e}")
+                logger.error(f"Failed to load dataset {dataset_id}: {e}")
+                logger.info(f"Continuing with remaining datasets...")
+                continue
+    
+    # Ensure we have at least one dataset loaded
+    if not all_samples:
+        raise ValueError("Failed to load any datasets successfully")
+    
+    if len(dataset_sizes) == 0:
+        raise ValueError("No valid dataset sizes found")
     
     avg_size = sum(dataset_sizes) // len(dataset_sizes)
+    min_size = min(dataset_sizes)
     max_size = max(dataset_sizes)
+    total_available = sum(dataset_sizes)
     logger.info(f"Dataset sizes: {dataset_sizes}")
-    logger.info(f"Average dataset size: {avg_size}, Max dataset size: {max_size}")
-    logger.info(f"Using max size {max_size} for final dataset")
+    logger.info(f"Min size: {min_size}, Average size: {avg_size}, Max size: {max_size}, Total available: {total_available}")
     
-    # Ensure equal representation from each dataset
-    samples_per_dataset = max_size // len(dataset_sizes)
-    remainder = max_size % len(dataset_sizes)
+    # Calculate max samples per dataset (50% of total)
+    max_samples_per_dataset = total_available // 2
+    
+    # Calculate how many samples we can take from each dataset
+    available_per_dataset = []
+    for size in dataset_sizes:
+        available = min(size, max_samples_per_dataset)
+        available_per_dataset.append(available)
+    
+    total_available_balanced = sum(available_per_dataset)
+    logger.info(f"After applying 50% cap, available samples per dataset: {available_per_dataset}")
+    logger.info(f"Total available for balanced sampling: {total_available_balanced}")
+    
+    # Now calculate equal samples from what's available
+    samples_per_dataset = total_available_balanced // len(dataset_sizes)
+    remainder = total_available_balanced % len(dataset_sizes)
     
     logger.info(f"Taking {samples_per_dataset} samples from each dataset (with {remainder} extra distributed)")
     
@@ -480,17 +501,18 @@ async def load_and_merge_multiple_datasets(
     start_idx = 0
     
     for i, size in enumerate(dataset_sizes):
+        dataset_name = dataset_ids[i] if i < len(dataset_ids) else f"Dataset_{i}"
         end_idx = start_idx + size
         dataset_samples = all_samples[start_idx:end_idx]
         
         # Shuffle samples from this dataset
         random.shuffle(dataset_samples)
         
-        # Take appropriate number of samples
+        # Take appropriate number of samples (respecting both equal distribution and max cap)
         num_to_take = samples_per_dataset + (1 if i < remainder else 0)
-        num_to_take = min(num_to_take, len(dataset_samples))
+        num_to_take = min(num_to_take, len(dataset_samples), max_samples_per_dataset)
         
-        logger.info(f"Dataset {i}: has {len(dataset_samples)} samples, taking {num_to_take}")
+        logger.info(f"Dataset {i} ({dataset_name}): has {len(dataset_samples)} samples, taking {num_to_take}")
         
         final_samples.extend(dataset_samples[:num_to_take])
         start_idx = end_idx
