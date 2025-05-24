@@ -105,6 +105,8 @@ async def get_dataset_column_mapping(
     url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
     response = await call_content_service_fast(url, keypair)
     
+    logger.info(f"Raw response from content service for {dataset_id}: {response}")
+    
     if not isinstance(response, dict):
         raise ValueError(f"Invalid response from content service for dataset {dataset_id}")
     
