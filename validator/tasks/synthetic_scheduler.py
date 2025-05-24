@@ -197,7 +197,7 @@ async def get_multiple_datasets(
         attempts += 1
         
         if dataset.dataset_id not in selected_ids:
-            if len(selected_datasets) > 0 and task_type and keypair and task_type != TaskType.DPOTASK:
+            if task_type and keypair and task_type != TaskType.DPOTASK:
                 try:
                     from validator.utils.call_endpoint import call_content_service_fast
                     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
