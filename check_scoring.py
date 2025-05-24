@@ -55,7 +55,8 @@ async def check_hotkey_scoring(hotkey: str):
     
     # Display results
     print(f"\nNode ID: {target_node.node_id}")
-    print(f"Current chain weight: {target_node.incentive:.6f}")
+    print(f"Current chain weight (raw): {target_node.incentive}")
+    print(f"Current chain weight (normalized): {target_node.incentive / 65535:.6f}")
     
     # Show period scores breakdown
     print(f"\nPeriod scores for {hotkey}:")
