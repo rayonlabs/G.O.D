@@ -277,14 +277,25 @@ async def get_node_weights_from_period_scores(
 
     all_node_ids = [node.node_id for node in all_nodes]
     all_node_weights = [0.0 for _ in all_nodes]
+    
+    logger.info("=== NODE WEIGHT CALCULATIONS ===")
     for node_result in node_results:
         if node_result.normalised_score is not None:
             node_id = hotkey_to_node_id.get(node_result.hotkey)
             if node_id is not None:
-                all_node_weights[node_id] = (
-                    all_node_weights[node_id] + node_result.normalised_score * node_result.weight_multiplier
-                )
-
+                contribution = node_result.normalised_score * node_result.weight_multiplier
+                all_node_weights[node_id] = all_node_weights[node_id] + contribution
+                logger.info(f"Node ID {node_id} (hotkey: {node_result.hotkey[:8]}...): "
+                           f"normalized_score={node_result.normalised_score:.6f}, "
+                           f"weight_multiplier={node_result.weight_multiplier:.6f}, "
+                           f"contribution={contribution:.6f}, "
+                           f"total_weight={all_node_weights[node_id]:.6f}")
+    
+    logger.info("=== FINAL NODE WEIGHTS ===")
+    for node_id, weight in enumerate(all_node_weights):
+        if weight > 0:
+            logger.info(f"Node ID {node_id}: final_weight={weight:.6f}")
+    
     logger.info(f"Node ids: {all_node_ids}")
     logger.info(f"Node weights: {all_node_weights}")
     logger.info(f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}")

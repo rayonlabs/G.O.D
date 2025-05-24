@@ -1,49 +1,57 @@
 input_output_reformulation_sys: >
-  You are an expert in paraphrasing and reformulating text for LLM datasets while preserving meaning.
+  You are an expert in creating diverse training data variations that enhance model robustness while maintaining task fidelity.
   You will receive a data point with either one or multiple columns.
   Your task is to:
-  1. Create a paraphrased version of each existing column while preserving the meaning
-  2. Keep the style of the original text
-  3. Try to understand the underlying task the dataset is meant for, and make sure the paraphrased text is consistent with that task.
+  1. Create a meaningfully different version that preserves the core task objective and key information
+  2. Vary the expression style, complexity, and structure while ensuring semantic equivalence
+  3. Introduce moderate variations such as: different phrasing approaches, alternative examples, varied detail levels, or shifted perspectives
+  4. Go beyond simple synonym replacement to create genuine diversity, but avoid changing the fundamental nature of the task
+  5. Ensure the output would train the model on the same skill but through reasonably different expressions
 
 
 input_output_reformulation_user: >
   Given this data point:
   {data}
 
-  Create a paraphrased version by following the instructions above.
+  Create a diverse variation that:
+  - Uses different vocabulary, sentence structures, and expression patterns
+  - Maintains the same core information and task requirements
+  - Could involve different contexts, examples, or perspectives
+  - Should feel distinctly different while training the same capability
+  
   Return your response in JSON format with the same schema as the input data.
 input_reformulation_sys: >
-  You are an expert in reformulating and paraphrasing inputs for LLM datasets while preserving their intent and meaning.
+  You are an expert in creating diverse text variations that maximize stylistic and structural diversity while preserving semantic intent.
 
   Your task is to:
-  1. Create alternative phrasings of inputs that maintain the original request's intent
-  2. Preserve the core information needs and requirements in the original input
-  3. Vary vocabulary, sentence structure, and phrasing styles while keeping the same level of formality
-  4. Maintain any specific constraints, parameters, or contextual elements from the original input
+  1. Create substantially different expressions that maintain the core content but vary significantly in form
+  2. Transform the structure, style, and presentation while keeping the same underlying meaning
+  3. Introduce variations in: complexity level, formality, directness, perspective, or domain context
+  4. Use creative rephrasing techniques: restructuring, reframing, or alternative formulations
+  5. Ensure the reformulation conveys the same information but through a distinctly different expression
 
-  This task helps create diverse training examples that improve model robustness by teaching it to recognize the same request expressed in different ways.
+  This creates robust training data by exposing models to diverse ways the same content might be expressed.
 
   Guidelines:
-  - Maintain the original intent and information needs
-  - Keep the same level of detail and specificity
-  - Preserve any key terminology, technical terms, or proper nouns
-  - Retain the same tone and level of formality
-  - Introduce natural language variations that humans might use
+  - Maintain the core meaning but maximize surface-level diversity
+  - Vary between simple/complex, formal/casual, direct/indirect approaches
+  - Consider different ways to express the same content
+  - Avoid mere synonym substitution - aim for structural and stylistic transformation
+  - The output should feel like a completely different expression of the same idea
 
-  For each input, analyze the intended task, then create a reformulated version that preserves the meaning while varying the expression.
+  Analyze the input's core meaning, then create a significantly transformed version that preserves only the essential content.
 
 input_reformulation_user: >
   Given this input:
   {input}
 
-  Please create a reformulated version while following these guidelines:
-  1. Preserve the core intent and meaning of the original input
-  2. Vary vocabulary, sentence structure, and phrasing
-  3. Keep the same level of formality and specificity
-  4. Give just the reformulated version as your output, and only one please.
+  Create a substantially different version that:
+  1. Maintains the core meaning but uses completely different wording and structure
+  2. Could represent an alternative way to express the same content
+  3. Varies in style, complexity, or perspective
+  4. Feels fresh and distinct, not just a paraphrase
 
-  Return your response as a single reformulated input text.
+  Return only the reformulated text - make it as different as possible while preserving the essential meaning.
 
 reward_function_generation_sys: >
   You are a Python code generator that creates reward functions for LLM evaluation.

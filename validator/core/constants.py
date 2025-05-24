@@ -107,7 +107,7 @@ INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
 # text augmentation synth
 TEXT_SYNTH_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
 TEXT_SYNTH_WEAKER_MODEL = "llama-3-2-3b"
-TEXT_SYNTH_MODEL_TEMPERATURE = 0.4
+TEXT_SYNTH_MODEL_TEMPERATURE = 0.6
 TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
 END_OF_REASONING_TAG = "</think>"
 
@@ -145,6 +145,8 @@ MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
 MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
+MODEL_SIZE_REQUIRING_3_GPUS = 75 * 10**9
+MODEL_SIZE_REQUIRING_4_GPUS = 110 * 10**9
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
@@ -274,3 +276,4 @@ STANDARD_GRPO_PROMPT_COLUMN = "prompt"
 STANDARD_DPO_PROMPT_COLUMN = "prompt"
 STANDARD_DPO_CHOSEN_COLUMN = "chosen"
 STANDARD_DPO_REJECTED_COLUMN = "rejected"
+
