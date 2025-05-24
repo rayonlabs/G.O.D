@@ -74,8 +74,12 @@ async def check_hotkey_scoring(hotkey: str):
     
     print(f"\nTotal weighted score: {total_weighted_score:.6f}")
     print(f"Calculated weight: {calculated_weight:.6f}")
-    print(f"Current chain weight: {target_node.incentive:.6f}")
-    print(f"Difference: {(calculated_weight - target_node.incentive):.6f}")
+    
+    # Convert chain weight from raw to normalized
+    chain_weight_normalized = target_node.incentive / 65535
+    print(f"Current chain weight (raw): {target_node.incentive}")
+    print(f"Current chain weight (normalized): {chain_weight_normalized:.6f}")
+    print(f"Difference: {(calculated_weight - chain_weight_normalized):.6f} ({((calculated_weight - chain_weight_normalized)/chain_weight_normalized*100 if chain_weight_normalized > 0 else 0):+.1f}%)")
     
     # Show some task results for this hotkey
     print(f"\nRecent task results:")
