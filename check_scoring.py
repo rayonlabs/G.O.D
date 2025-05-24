@@ -58,11 +58,18 @@ async def check_hotkey_scoring(hotkey: str):
     print(f"Current chain weight (raw): {target_node.incentive}")
     print(f"Current chain weight (normalized): {target_node.incentive / 65535:.6f}")
     
-    # Show period scores breakdown
-    print(f"\nPeriod scores for {hotkey}:")
-    total_weighted_score = 0
+    # Analyze task results by period and type
+    print(f"\nTask breakdown by period and type for {hotkey}:")
     
-    # Group scores by task type and period
+    from datetime import datetime, timedelta, timezone
+    from collections import defaultdict
+    
+    periods = {
+        "7-day": (datetime.now(timezone.utc) - timedelta(days=7), 0.4),
+        "3-day": (datetime.now(timezone.utc) - timedelta(days=3), 0.3),
+        "1-day": (datetime.now(timezone.utc) - timedelta(days=1), 0.3)
+    }
+    
     task_type_weights = {
         'INSTRUCTTEXTTASK': 0.2,
         'IMAGETASK': 0.325,
@@ -70,32 +77,51 @@ async def check_hotkey_scoring(hotkey: str):
         'GRPOTASK': 0.25
     }
     
-    period_weights = {
-        7: 0.4,
-        3: 0.3,
-        1: 0.3
-    }
-    
-    # Analyze each period
-    for period_days, period_weight in period_weights.items():
-        print(f"\n  {period_days}-day period (weight: {period_weight:.1%}):")
+    # Collect scores by period and task type
+    for period_name, (cutoff, period_weight) in periods.items():
+        print(f"\n  {period_name} (weight: {period_weight:.0%}):")
         
+        period_has_tasks = False
         for task_type, type_weight in task_type_weights.items():
-            # Find matching scores for this period/type combination
-            for score in hotkey_scores:
-                # Calculate what the weight multiplier should be for this combination
-                expected_multiplier = period_weight * type_weight
+            # Find tasks for this period and type
+            type_scores = []
+            organic_scores = []
+            synthetic_scores = []
+            
+            for task_result in task_results:
+                if task_result.task.created_at > cutoff and str(task_result.task.task_type) == f"TaskType.{task_type}":
+                    for node_score in task_result.node_scores:
+                        if node_score.hotkey == hotkey:
+                            type_scores.append(node_score.quality_score)
+                            if task_result.task.is_organic:
+                                organic_scores.append(node_score.quality_score)
+                            else:
+                                synthetic_scores.append(node_score.quality_score)
+                            break
+            
+            if type_scores:
+                period_has_tasks = True
+                avg_score = sum(type_scores) / len(type_scores)
+                positive = sum(1 for s in type_scores if s > 0)
+                negative = sum(1 for s in type_scores if s < 0)
                 
-                # Check if this score matches (within small tolerance for float comparison)
-                if abs(score.weight_multiplier - expected_multiplier) < 0.001:
-                    weighted = score.normalised_score * score.weight_multiplier if score.normalised_score else 0
-                    total_weighted_score += weighted
-                    
-                    norm_str = f"{score.normalised_score:.3f}" if score.normalised_score is not None else "None"
-                    print(f"    {task_type}: avg={score.average_score:.3f}, "
-                          f"norm={norm_str}, "
-                          f"mult={score.weight_multiplier:.3f}, "
-                          f"contrib={weighted:.6f}")
+                print(f"    {task_type} (weight: {type_weight:.1%}):")
+                print(f"      Tasks: {len(type_scores)} ({len(organic_scores)} organic, {len(synthetic_scores)} synthetic)")
+                print(f"      Scores: {positive} positive, {negative} negative")
+                print(f"      Average: {avg_score:.3f}")
+        
+        if not period_has_tasks:
+            print(f"    No tasks found")
+    
+    # Show the normalized scores
+    print(f"\nNormalized period scores (from weight calculation):")
+    total_weighted_score = 0
+    for i, score in enumerate(hotkey_scores):
+        weighted = score.normalised_score * score.weight_multiplier if score.normalised_score else 0
+        total_weighted_score += weighted
+        
+        norm_str = f"{score.normalised_score:.3f}" if score.normalised_score is not None else "None"
+        print(f"  Score {i+1}: avg={score.average_score:6.3f}, norm={norm_str}, mult={score.weight_multiplier:.4f}, contrib={weighted:.6f}")
     
     # Get calculated weight
     calculated_weight = all_node_weights[target_node.node_id]
