@@ -86,17 +86,38 @@ async def check_hotkey_scoring(hotkey: str):
     print(f"Current chain weight (normalized): {chain_weight_normalized:.6f}")
     print(f"Difference: {(calculated_weight - chain_weight_normalized):.6f} ({((calculated_weight - chain_weight_normalized)/chain_weight_normalized*100 if chain_weight_normalized > 0 else 0):+.1f}%)")
     
-    # Show some task results for this hotkey
-    print(f"\nRecent task results:")
+    # Show some task results for this hotkey with ranking info
+    print(f"\nRecent task results with rankings:")
     hotkey_tasks = [tr for tr in task_results if any(ns.hotkey == hotkey for ns in tr.node_scores)]
     
     for task_result in hotkey_tasks[-10:]:  # Last 10 tasks
-        for node_score in task_result.node_scores:
-            if node_score.hotkey == hotkey:
-                print(f"  Task {task_result.task.task_id}: "
-                      f"Type={task_result.task.task_type}, "
-                      f"Organic={task_result.task.is_organic}, "
-                      f"Quality Score={node_score.quality_score:.3f}")
+        # Get all scores for this task
+        task_scores = [(ns.hotkey, ns.quality_score) for ns in task_result.node_scores]
+        # Sort by score descending
+        task_scores_sorted = sorted(task_scores, key=lambda x: x[1], reverse=True)
+        
+        # Find our node's position
+        for i, (h, score) in enumerate(task_scores_sorted):
+            if h == hotkey:
+                rank = i + 1
+                total_participants = len(task_scores_sorted)
+                
+                # Count scores by category
+                positive_scores = sum(1 for _, s in task_scores_sorted if s > 0)
+                zero_scores = sum(1 for _, s in task_scores_sorted if s == 0)
+                negative_scores = sum(1 for _, s in task_scores_sorted if s < 0)
+                
+                print(f"\n  Task {task_result.task.task_id}:")
+                print(f"    Type: {task_result.task.task_type}, Organic: {task_result.task.is_organic}")
+                print(f"    Your Score: {score:.3f} (Rank: {rank}/{total_participants})")
+                print(f"    Score distribution: {positive_scores} positive, {zero_scores} zero, {negative_scores} negative")
+                
+                # Show top 3 and bottom 3 if relevant
+                if total_participants > 3:
+                    print(f"    Top 3 scores: {task_scores_sorted[0][1]:.1f}, {task_scores_sorted[1][1]:.1f}, {task_scores_sorted[2][1]:.1f}")
+                    if rank > 3:
+                        print(f"    Bottom 3 scores: {task_scores_sorted[-3][1]:.1f}, {task_scores_sorted[-2][1]:.1f}, {task_scores_sorted[-1][1]:.1f}")
+                break
 
 async def main():
     if len(sys.argv) < 2:
