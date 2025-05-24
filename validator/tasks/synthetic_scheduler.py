@@ -196,31 +196,15 @@ async def get_multiple_datasets(
         if dataset.dataset_id not in selected_ids:
             # For non-primary datasets, validate column mapping availability
             if len(selected_datasets) > 0 and task_type and keypair:
-                validation_attempts = 0
-                max_validation_attempts = 3
-                validation_succeeded = False
-                
-                while validation_attempts < max_validation_attempts:
-                    try:
-                        # Test if we can get column suggestions for this dataset
-                        from validator.utils.call_endpoint import call_content_service_fast
-                        url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
-                        logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id} (attempt {validation_attempts + 1}/{max_validation_attempts})")
-                        await call_content_service_fast(url, keypair)
-                        logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
-                        validation_succeeded = True
-                        break
-                    except Exception as e:
-                        validation_attempts += 1
-                        if "LLM failed to generate" in str(e) and validation_attempts < max_validation_attempts:
-                            wait_time = min(1.0, 0.1 * (2 ** validation_attempts))  # 0.2s, 0.4s, 0.8s (max 1s)
-                            logger.warning(f"Dataset {dataset.dataset_id} LLM column validation failed (attempt {validation_attempts}/{max_validation_attempts}), retrying in {wait_time}s: {e}")
-                            await asyncio.sleep(wait_time)
-                        else:
-                            logger.warning(f"Dataset {dataset.dataset_id} failed column validation after {validation_attempts} attempts, skipping: {e}")
-                            break
-                
-                if not validation_succeeded:
+                try:
+                    # Test if we can get column suggestions for this dataset
+                    from validator.utils.call_endpoint import call_content_service_fast
+                    url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
+                    logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id}")
+                    await call_content_service_fast(url, keypair)
+                    logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
+                except Exception as e:
+                    logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
                     attempts += 1
                     continue
             
