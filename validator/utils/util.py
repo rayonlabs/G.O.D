@@ -38,6 +38,13 @@ retry_with_backoff = retry(
     reraise=True,
 )
 
+retry_http_fast = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=0.2, min=0.1, max=1),
+    retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.RequestError)),
+    reraise=True,
+)
+
 
 async def try_db_connections(config: Config) -> None:
     logger.info("Attempting to connect to PostgreSQL...")

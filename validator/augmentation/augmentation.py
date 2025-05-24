@@ -99,16 +99,11 @@ async def get_dataset_column_mapping(
     keypair: Keypair
 ) -> dict[str, str]:
     """Get column mapping for a specific dataset based on task type."""
-    from validator.utils.call_endpoint import call_content_service
+    from validator.utils.call_endpoint import call_content_service_fast
     from validator.core.constants import CONTENT_BASE_URL
     
-    max_attempts = 3
-    last_error = None
-    
-    for attempt in range(max_attempts):
-        try:
-            url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
-            response = await call_content_service(url, keypair)
+    url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/columns/suggest"
+    response = await call_content_service_fast(url, keypair)
             
             if not isinstance(response, dict):
                 raise ValueError(f"Invalid response from content service for dataset {dataset_id}")

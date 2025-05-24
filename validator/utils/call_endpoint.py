@@ -273,3 +273,20 @@ async def call_content_service(endpoint: str, keypair: Keypair, params: dict = N
             logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")
             response.raise_for_status()
         return response.json()
+
+
+async def call_content_service_fast(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any] | list[dict[str, Any]]:
+    """Make a signed request to the content service with fast retries for LLM endpoints."""
+    from validator.utils.util import retry_http_fast
+    
+    @retry_http_fast
+    async def _make_request():
+        headers = _get_headers_for_signed_https_request(keypair)
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(url=endpoint, headers=headers, params=params)
+            if response.status_code != 200:
+                logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")
+                response.raise_for_status()
+            return response.json()
+    
+    return await _make_request()
