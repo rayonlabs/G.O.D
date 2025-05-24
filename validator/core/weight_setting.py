@@ -278,7 +278,6 @@ async def get_node_weights_from_period_scores(
     all_node_ids = [node.node_id for node in all_nodes]
     all_node_weights = [0.0 for _ in all_nodes]
     
-    # Log individual node scores
     logger.info("=== NODE WEIGHT CALCULATIONS ===")
     for node_result in node_results:
         if node_result.normalised_score is not None:
@@ -292,7 +291,6 @@ async def get_node_weights_from_period_scores(
                            f"contribution={contribution:.6f}, "
                            f"total_weight={all_node_weights[node_id]:.6f}")
     
-    # Log final results for all nodes
     logger.info("=== FINAL NODE WEIGHTS ===")
     for node_id, weight in enumerate(all_node_weights):
         if weight > 0:
