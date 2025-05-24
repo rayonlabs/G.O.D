@@ -72,8 +72,13 @@ async def check_hotkey_scoring(hotkey: str):
     # Get calculated weight
     calculated_weight = all_node_weights[target_node.node_id]
     
+    # Calculate sum of all weights
+    total_weight_sum = sum(all_node_weights)
+    
     print(f"\nTotal weighted score: {total_weighted_score:.6f}")
     print(f"Calculated weight: {calculated_weight:.6f}")
+    print(f"Sum of ALL node weights: {total_weight_sum:.6f}")
+    print(f"This node's share: {calculated_weight/total_weight_sum:.6f} ({calculated_weight/total_weight_sum*100:.2f}%)")
     
     # Convert chain weight from raw to normalized
     chain_weight_normalized = target_node.incentive / 65535
