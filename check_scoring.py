@@ -91,8 +91,9 @@ async def check_hotkey_scoring(hotkey: str):
                     weighted = score.normalised_score * score.weight_multiplier if score.normalised_score else 0
                     total_weighted_score += weighted
                     
+                    norm_str = f"{score.normalised_score:.3f}" if score.normalised_score is not None else "None"
                     print(f"    {task_type}: avg={score.average_score:.3f}, "
-                          f"norm={score.normalised_score:.3f if score.normalised_score else 0:.3f}, "
+                          f"norm={norm_str}, "
                           f"mult={score.weight_multiplier:.3f}, "
                           f"contrib={weighted:.6f}")
     
