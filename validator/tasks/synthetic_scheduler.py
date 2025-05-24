@@ -212,7 +212,7 @@ async def get_multiple_datasets(
                     except Exception as e:
                         validation_attempts += 1
                         if "LLM failed to generate" in str(e) and validation_attempts < max_validation_attempts:
-                            wait_time = 2 ** validation_attempts  # Exponential backoff: 2, 4, 8 seconds
+                            wait_time = min(1.0, 0.1 * (2 ** validation_attempts))  # 0.2s, 0.4s, 0.8s (max 1s)
                             logger.warning(f"Dataset {dataset.dataset_id} LLM column validation failed (attempt {validation_attempts}/{max_validation_attempts}), retrying in {wait_time}s: {e}")
                             await asyncio.sleep(wait_time)
                         else:
