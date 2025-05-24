@@ -61,13 +61,40 @@ async def check_hotkey_scoring(hotkey: str):
     # Show period scores breakdown
     print(f"\nPeriod scores for {hotkey}:")
     total_weighted_score = 0
-    for score in hotkey_scores:
-        weighted = score.normalised_score * score.weight_multiplier if score.normalised_score else 0
-        total_weighted_score += weighted
-        print(f"  Average: {score.average_score:.3f}, "
-              f"Normalized: {score.normalised_score:.3f} if score.normalised_score else 'None', "
-              f"Weight multiplier: {score.weight_multiplier:.3f}, "
-              f"Weighted contribution: {weighted:.6f}")
+    
+    # Group scores by task type and period
+    task_type_weights = {
+        'INSTRUCTTEXTTASK': 0.2,
+        'IMAGETASK': 0.325,
+        'DPOTASK': 0.225,
+        'GRPOTASK': 0.25
+    }
+    
+    period_weights = {
+        7: 0.4,
+        3: 0.3,
+        1: 0.3
+    }
+    
+    # Analyze each period
+    for period_days, period_weight in period_weights.items():
+        print(f"\n  {period_days}-day period (weight: {period_weight:.1%}):")
+        
+        for task_type, type_weight in task_type_weights.items():
+            # Find matching scores for this period/type combination
+            for score in hotkey_scores:
+                # Calculate what the weight multiplier should be for this combination
+                expected_multiplier = period_weight * type_weight
+                
+                # Check if this score matches (within small tolerance for float comparison)
+                if abs(score.weight_multiplier - expected_multiplier) < 0.001:
+                    weighted = score.normalised_score * score.weight_multiplier if score.normalised_score else 0
+                    total_weighted_score += weighted
+                    
+                    print(f"    {task_type}: avg={score.average_score:.3f}, "
+                          f"norm={score.normalised_score:.3f if score.normalised_score else 0:.3f}, "
+                          f"mult={score.weight_multiplier:.3f}, "
+                          f"contrib={weighted:.6f}")
     
     # Get calculated weight
     calculated_weight = all_node_weights[target_node.node_id]
