@@ -339,8 +339,16 @@ async def load_and_merge_multiple_datasets(
     try:
         config_name = get_default_dataset_config(primary_id)
         dataset = load_dataset(primary_id, config_name, trust_remote_code=True)
-        if "train" in dataset:
-            dataset = dataset["train"]
+        
+        if isinstance(dataset, dict):
+            if "train" in dataset:
+                dataset = dataset["train"]
+            elif len(dataset) > 0:
+                first_split = list(dataset.keys())[0]
+                logger.info(f"Using split '{first_split}' from primary dataset {primary_id}")
+                dataset = dataset[first_split]
+            else:
+                raise ValueError(f"No valid splits found in dataset {primary_id}")
         
         dataset = dataset.select_columns(primary_columns)
         samples = list(dataset)
