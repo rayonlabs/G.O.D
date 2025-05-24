@@ -359,14 +359,38 @@ async def load_and_merge_multiple_datasets(
         for dataset_id in dataset_ids[1:]:
             try:
                 logger.info(f"Loading additional dataset: {dataset_id}")
-                try:
-                    column_mapping = await get_dataset_column_mapping(
-                        dataset_id, task.task_type, keypair
-                    )
-                    logger.info(f"Column mapping for {dataset_id}: {column_mapping}")
-                except Exception as e:
-                    logger.error(f"Failed to get column mapping for {dataset_id}: {e}")
-                    raise
+                
+                # For DPO tasks, use the detectcolumns endpoint to get proper column mapping
+                if task.task_type == TaskType.DPOTASK:
+                    try:
+                        from validator.utils.call_endpoint import call_content_service_fast
+                        from validator.core.constants import CONTENT_BASE_URL
+                        
+                        url = f"{CONTENT_BASE_URL}/dataset/{dataset_id}/detectcolumns"
+                        response = await call_content_service_fast(url, keypair)
+                        
+                        if response.get("is_dpo") and response.get("columns"):
+                            columns = response["columns"]
+                            column_mapping = {
+                                "prompt": columns.get("prompt", "prompt"),
+                                "chosen": columns.get("accepted", "chosen"),
+                                "rejected": columns.get("rejected", "rejected")
+                            }
+                            logger.info(f"DPO column mapping from detectcolumns for {dataset_id}: {column_mapping}")
+                        else:
+                            raise ValueError(f"Dataset {dataset_id} is not DPO compatible")
+                    except Exception as e:
+                        logger.error(f"Failed to get DPO column mapping for {dataset_id}: {e}")
+                        raise
+                else:
+                    try:
+                        column_mapping = await get_dataset_column_mapping(
+                            dataset_id, task.task_type, keypair
+                        )
+                        logger.info(f"Column mapping for {dataset_id}: {column_mapping}")
+                    except Exception as e:
+                        logger.error(f"Failed to get column mapping for {dataset_id}: {e}")
+                        raise
                 
                 columns = list(column_mapping.values())
                 config_name = get_default_dataset_config(dataset_id)
