@@ -196,7 +196,8 @@ async def get_multiple_datasets(
         dataset = await anext(datasets_generator)
         if dataset.dataset_id not in selected_ids:
             # For non-primary datasets, validate column mapping availability
-            if len(selected_datasets) > 0 and task_type and keypair:
+            # Skip validation for DPO tasks since we use the dataset's own column info
+            if len(selected_datasets) > 0 and task_type and keypair and task_type != TaskType.DPOTASK:
                 try:
                     # Test if we can get column suggestions for this dataset
                     from validator.utils.call_endpoint import call_content_service_fast
