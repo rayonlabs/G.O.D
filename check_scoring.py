@@ -12,6 +12,7 @@ from validator.core.weight_setting import _get_weights_to_set, get_node_weights_
 from validator.db.sql.nodes import get_all_nodes
 from fiber.chain import fetch_nodes
 from validator.utils.logging import get_logger
+from validator.utils.util import try_db_connections
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,9 @@ async def check_hotkey_scoring(hotkey: str):
     
     # Load config
     config = load_config()
+    
+    # Connect to database
+    await try_db_connections(config)
     
     print(f"\nChecking scoring for hotkey: {hotkey}")
     print("="*80)
