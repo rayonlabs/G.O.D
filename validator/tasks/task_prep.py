@@ -367,7 +367,7 @@ def pick_columns_to_sample(task: AnyTextTypeRawTask) -> list[str]:
         if task.field_system:
             columns_to_sample.append(cst.STANDARD_SYSTEM_COLUMN)
     elif isinstance(task, GrpoRawTask):
-        columns_to_sample = [task.field_prompt] + extract_grpo_extra_columns(task)
+        columns_to_sample = [cst.STANDARD_GRPO_PROMPT_COLUMN] + extract_grpo_extra_columns(task)
     else:
         raise ValueError(f"Unsupported task type: {task.task_type}")
     return columns_to_sample
@@ -559,6 +559,21 @@ def standardize_dpo_column_names(dataset: Dataset, task: DpoRawTask) -> Dataset:
     return dataset
 
 
+def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Dataset:
+    column_mapping = {}
+
+    if task.field_prompt in dataset.column_names:
+        column_mapping[task.field_prompt] = cst.STANDARD_GRPO_PROMPT_COLUMN
+    else:
+        raise ValueError(f"Prompt column {task.field_prompt} not found in dataset")
+
+    for old_name, new_name in column_mapping.items():
+        if old_name != new_name:
+            dataset = dataset.rename_column(old_name, new_name)
+
+    return dataset
+
+
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
@@ -590,6 +605,8 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
                 dataset = standardize_column_names(dataset, task)
             elif isinstance(task, DpoRawTask):
                 dataset = standardize_dpo_column_names(dataset, task)
+            elif isinstance(task, GrpoRawTask):
+                dataset = standardize_grpo_column_names(dataset, task)
             
             # Subsample when using only a single dataset (50-100% of original size)
             original_size = len(dataset)
@@ -619,6 +636,9 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
             elif isinstance(task, DpoRawTask):
                 train_ds = standardize_dpo_column_names(train_ds, task)
                 test_ds = standardize_dpo_column_names(test_ds, task)
+            elif isinstance(task, GrpoRawTask):
+                train_ds = standardize_grpo_column_names(train_ds, task)
+                test_ds = standardize_grpo_column_names(test_ds, task)
 
         except Exception as e:
             logger.info(f"There was an issue loading the dataset: {e}")

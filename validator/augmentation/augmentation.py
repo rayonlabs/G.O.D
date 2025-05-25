@@ -520,9 +520,6 @@ async def load_and_merge_multiple_datasets(
     # Final shuffle to mix samples from all datasets
     random.shuffle(final_samples)
     
-    # Convert back to task-specific column names
-    final_samples = unstandardize_samples_to_task_columns(final_samples, task)
-    
     logger.info(f"Merged {len(dataset_sizes)} datasets, returning {len(final_samples)} samples")
     return final_samples
 
