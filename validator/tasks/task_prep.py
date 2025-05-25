@@ -594,6 +594,13 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
             )
             from datasets import Dataset as HFDataset
             dataset = HFDataset.from_list(merged_samples)
+            
+            # For merged datasets, update task fields based on what columns actually exist
+            if isinstance(task, InstructTextRawTask):
+                if cst.STANDARD_INPUT_COLUMN not in dataset.column_names:
+                    task.field_input = None
+                if cst.STANDARD_SYSTEM_COLUMN not in dataset.column_names:
+                    task.field_system = None
         else:
             try:
                 dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
@@ -648,7 +655,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
     total_size = len(train_ds) + len(test_ds)
     check_ds_num_rows(total_size)
 
-    columns_to_sample = pick_columns_to_sample(task)
+    columns_to_sample = pick_columns_to_sample(task, train_ds)
 
     if any(col not in train_ds.column_names for col in columns_to_sample):
         raise ValueError(f"Column {columns_to_sample} not found in train dataset")
