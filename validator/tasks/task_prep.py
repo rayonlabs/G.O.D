@@ -615,6 +615,9 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
             if isinstance(task, InstructTextRawTask):
                 train_ds = standardize_column_names(train_ds, task)
                 test_ds = standardize_column_names(test_ds, task)
+            elif isinstance(task, DpoRawTask):
+                train_ds = standardize_dpo_column_names(train_ds, task)
+                test_ds = standardize_dpo_column_names(test_ds, task)
 
         except Exception as e:
             logger.info(f"There was an issue loading the dataset: {e}")
