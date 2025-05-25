@@ -379,8 +379,8 @@ def validate_and_transform_dpo(data: DpoDatasetColumnsResponse, task: DpoRawTask
 
 
 async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: DpoRawTask) -> list[dict]:
-    prompt_field = task.field_prompt
-    logger.info(f"Generating synthetic DPO data from the field {prompt_field}")
+    prompt_field = cst.STANDARD_DPO_PROMPT_COLUMN
+    logger.info(f"Generating synthetic DPO data from the standardized field {prompt_field}")
 
     num_samples = min(cst.SYNTHETIC_TOTAL_SIZE * 2, len(dataset))
 
