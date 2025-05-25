@@ -375,7 +375,7 @@ def pick_columns_to_sample(task: AnyTextTypeRawTask) -> list[str]:
 
 def validate_and_transform_dpo(data: DpoDatasetColumnsResponse, task: DpoRawTask) -> dict:
     assert isinstance(data, DpoDatasetColumnsResponse)
-    return {task.field_prompt: data.field_prompt, task.field_chosen: data.field_chosen, task.field_rejected: data.field_rejected}
+    return {cst.STANDARD_DPO_PROMPT_COLUMN: data.field_prompt, cst.STANDARD_DPO_CHOSEN_COLUMN: data.field_chosen, cst.STANDARD_DPO_REJECTED_COLUMN: data.field_rejected}
 
 
 async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: DpoRawTask) -> list[dict]:
