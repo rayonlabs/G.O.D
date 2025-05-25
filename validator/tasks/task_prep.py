@@ -527,6 +527,37 @@ def standardize_column_names(dataset: Dataset, task: InstructTextRawTask) -> Dat
     return dataset
 
 
+def standardize_dpo_column_names(dataset: Dataset, task: DpoRawTask) -> Dataset:
+    column_mapping = {}
+
+    if task.field_prompt in dataset.column_names:
+        column_mapping[task.field_prompt] = cst.STANDARD_DPO_PROMPT_COLUMN
+    else:
+        raise ValueError(f"Prompt column {task.field_prompt} not found in dataset")
+
+    if task.field_chosen in dataset.column_names:
+        column_mapping[task.field_chosen] = cst.STANDARD_DPO_CHOSEN_COLUMN
+    else:
+        raise ValueError(f"Chosen column {task.field_chosen} not found in dataset")
+
+    if task.field_rejected in dataset.column_names:
+        column_mapping[task.field_rejected] = cst.STANDARD_DPO_REJECTED_COLUMN
+    else:
+        raise ValueError(f"Rejected column {task.field_rejected} not found in dataset")
+
+    if task.field_system:
+        if task.field_system in dataset.column_names:
+            column_mapping[task.field_system] = cst.STANDARD_SYSTEM_COLUMN
+        else:
+            raise ValueError(f"System column {task.field_system} not found in dataset")
+
+    for old_name, new_name in column_mapping.items():
+        if old_name != new_name:
+            dataset = dataset.rename_column(old_name, new_name)
+
+    return dataset
+
+
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
