@@ -607,6 +607,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
                 dataset = standardize_dpo_column_names(dataset, task)
             elif isinstance(task, GrpoRawTask):
                 dataset = standardize_grpo_column_names(dataset, task)
+
             
             # Subsample when using only a single dataset (50-100% of original size)
             original_size = len(dataset)

@@ -494,6 +494,7 @@ async def load_and_merge_multiple_datasets(
     # Now calculate equal samples from what's available
     samples_per_dataset = total_available_balanced // len(dataset_sizes)
     remainder = total_available_balanced % len(dataset_sizes)
+
     
     logger.info(f"Taking {samples_per_dataset} samples from each dataset (with {remainder} extra distributed)")
     
@@ -513,6 +514,13 @@ async def load_and_merge_multiple_datasets(
         num_to_take = min(num_to_take, len(dataset_samples), max_samples_per_dataset)
         
         logger.info(f"Dataset {i} ({dataset_name}): has {len(dataset_samples)} samples, taking {num_to_take}")
+        
+        # Take appropriate number of samples
+        num_to_take = samples_per_dataset + (1 if i < remainder else 0)
+        num_to_take = min(num_to_take, len(dataset_samples))
+        
+        logger.info(f"Dataset {i}: has {len(dataset_samples)} samples, taking {num_to_take}")
+
         
         final_samples.extend(dataset_samples[:num_to_take])
         start_idx = end_idx
