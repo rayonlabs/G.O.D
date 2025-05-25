@@ -363,9 +363,9 @@ def pick_columns_to_sample(task: AnyTextTypeRawTask) -> list[str]:
 
         return columns_to_sample
     elif isinstance(task, DpoRawTask):
-        columns_to_sample = [
-            i for i in [task.field_system, task.field_prompt, task.field_chosen, task.field_rejected] if i is not None
-        ]
+        columns_to_sample = [cst.STANDARD_DPO_PROMPT_COLUMN, cst.STANDARD_DPO_CHOSEN_COLUMN, cst.STANDARD_DPO_REJECTED_COLUMN]
+        if task.field_system:
+            columns_to_sample.append(cst.STANDARD_SYSTEM_COLUMN)
     elif isinstance(task, GrpoRawTask):
         columns_to_sample = [task.field_prompt] + extract_grpo_extra_columns(task)
     else:
