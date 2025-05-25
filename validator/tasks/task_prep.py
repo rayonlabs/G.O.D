@@ -387,7 +387,8 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
     prompts = sampled_data[prompt_field]
 
-    prompts_for_gen = [{prompt_field: prompt} for prompt in prompts]
+    # Create dict with standardized key for generate_dpo_reformulation
+    prompts_for_gen = [{cst.STANDARD_DPO_PROMPT_COLUMN: prompt} for prompt in prompts]
 
     prompts_obj = load_prompts()
     logger.info(f"Attempting to generate {cst.SYNTHETIC_TOTAL_SIZE} synthetic DPO samples")
