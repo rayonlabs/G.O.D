@@ -352,13 +352,13 @@ def extract_grpo_extra_columns(task: GrpoRawTask) -> list[str]:
     return list(all_args - {task.field_prompt, "completions"})
 
 
-def pick_columns_to_sample(task: AnyTextTypeRawTask) -> list[str]:
+def pick_columns_to_sample(task: AnyTextTypeRawTask, dataset: Dataset = None) -> list[str]:
     if isinstance(task, InstructTextRawTask):
         columns_to_sample = [cst.STANDARD_INSTRUCT_COLUMN, cst.STANDARD_OUTPUT_COLUMN]
 
-        if task.field_input:
+        if task.field_input and (dataset is None or cst.STANDARD_INPUT_COLUMN in dataset.column_names):
             columns_to_sample.append(cst.STANDARD_INPUT_COLUMN)
-        if task.field_system:
+        if task.field_system and (dataset is None or cst.STANDARD_SYSTEM_COLUMN in dataset.column_names):
             columns_to_sample.append(cst.STANDARD_SYSTEM_COLUMN)
 
         return columns_to_sample
