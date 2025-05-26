@@ -48,6 +48,17 @@
             ]
         },
         {
+            "name": "Python Debugger: Manually Store Reward Functions",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.db.sql.manually_add_grpo_rewards",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
             "name": "Python Debugger: Docker Evaluation",
             "type": "debugpy",
             "request": "launch",

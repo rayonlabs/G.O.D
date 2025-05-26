@@ -100,6 +100,7 @@ REWARD_ID = "reward_id"
 REWARD_FUNC = "reward_func"
 FUNC_HASH = "func_hash"
 IS_GENERIC = "is_generic"
+IS_MANUAL = "is_manual"
 
 # GRPO Task Functions Table Columns
 REWARD_WEIGHT = "reward_weight"
