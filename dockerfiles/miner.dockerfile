@@ -1,6 +1,6 @@
 FROM axolotlai/axolotl:main-py3.11-cu124-2.5.1
 
-RUN pip install mlflow
+RUN pip install mlflow textstat==0.7.7 langcheck==0.9.0
 
 WORKDIR /workspace/axolotl
 RUN mkdir -p /workspace/axolotl/configs \
