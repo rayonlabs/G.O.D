@@ -354,6 +354,73 @@ async def verify_emission_rate(config: Config):
     return None
 
 
+async def generate_epoch_steps_with_missing_window(config: Config, start_date: datetime, end_date: datetime, 
+                                                   missing_start: datetime, missing_duration_hours: float,
+                                                   output_file: str = "epoch_steps.csv"):
+    """Generate epoch steps CSV with a specific missing window to simulate 24 missing epochs."""
+    from fiber.chain.chain_utils import query_substrate
+    
+    logger.info(f"Generating epoch steps from {start_date} to {end_date}")
+    logger.info(f"With missing window from {missing_start} for {missing_duration_hours} hours")
+    
+    # Get current block
+    substrate, current_block = query_substrate(config.substrate, "System", "Number", [], return_value=True)
+    
+    # Constants
+    seconds_per_block = 12
+    blocks_per_epoch = 360
+    seconds_per_epoch = blocks_per_epoch * seconds_per_block  # 4320 seconds = 72 minutes
+    
+    # Calculate block numbers
+    current_time = datetime.now()
+    seconds_from_start = (current_time - start_date).total_seconds()
+    start_block = int(current_block - (seconds_from_start / seconds_per_block))
+    
+    # Generate all epoch steps
+    epoch_steps = []
+    current_block_num = start_block
+    block_time = start_date
+    
+    # Calculate missing window
+    missing_end = missing_start + timedelta(hours=missing_duration_hours)
+    
+    while block_time <= end_date:
+        # Only add epoch if it's outside the missing window
+        if block_time < missing_start or block_time >= missing_end:
+            epoch_steps.append({
+                'block_number': current_block_num,
+                'timestamp': block_time.strftime('%Y-%m-%d %H:%M:%S.%f+00'),
+                'netuid': config.netuid,
+                'blocks_since_last_step': 0  # Will be recalculated
+            })
+        
+        current_block_num += blocks_per_epoch
+        block_time += timedelta(seconds=seconds_per_epoch)
+    
+    # Recalculate blocks_since_last_step
+    for i in range(len(epoch_steps)):
+        if i > 0:
+            epoch_steps[i]['blocks_since_last_step'] = epoch_steps[i]['block_number'] - epoch_steps[i-1]['block_number']
+        else:
+            epoch_steps[i]['blocks_since_last_step'] = 0
+    
+    # Write to CSV
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=['block_number', 'timestamp', 'netuid', 'blocks_since_last_step'])
+        writer.writeheader()
+        writer.writerows(epoch_steps)
+    
+    # Calculate missing epochs
+    total_epochs = int((end_date - start_date).total_seconds() / seconds_per_epoch)
+    recorded_epochs = len(epoch_steps)
+    missing_epochs = total_epochs - recorded_epochs
+    
+    logger.info(f"Generated epoch steps file with {recorded_epochs} recorded epochs")
+    logger.info(f"Missing epochs in window: {missing_epochs}")
+    
+    return output_file
+
+
 async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_file: Optional[str] = None):
     # Load config
     config = load_config()
@@ -373,7 +440,28 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
         logger.info(f"Using default emission rate: {MINER_ALPHA_EMISSION_PER_EPOCH} alpha per epoch")
     
     try:
-        if epoch_steps_file:
+        if epoch_steps_file or (datetime_upper - datetime_lower).days <= 7:
+            # If epoch steps file is provided OR if the date range is 7 days or less,
+            # do per-epoch emission calculation
+            
+            if not epoch_steps_file:
+                # Auto-generate epoch steps with a missing window
+                logger.info("No epoch steps file provided, generating with missing epochs...")
+                
+                # For 24 missing epochs at 72 minutes each = 28.8 hours
+                # Let's put the missing window in the middle of the date range
+                total_duration = (datetime_upper - datetime_lower).total_seconds() / 3600  # hours
+                missing_duration_hours = 24 * 1.2  # 24 epochs * 1.2 hours/epoch = 28.8 hours
+                
+                # Place missing window starting 1/3 into the period
+                missing_start = datetime_lower + timedelta(hours=total_duration / 3)
+                
+                epoch_steps_file = await generate_epoch_steps_with_missing_window(
+                    config, datetime_lower, datetime_upper, 
+                    missing_start, missing_duration_hours,
+                    "generated_epoch_steps.csv"
+                )
+            
             emissions_owed, epoch_details = await calculate_missing_emissions(config, epoch_steps_file, actual_emission_per_epoch)
             
             logger.info("\n=== MISSING EMISSIONS SUMMARY ===")
