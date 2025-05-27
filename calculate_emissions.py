@@ -90,7 +90,7 @@ async def get_tasks_in_window(client: httpx.AsyncClient, start_time: datetime, e
         }
         
         try:
-            response = await client.get(f"{VALIDATOR_API_URL}v1/auditing/tasks", params=params)
+            response = await client.get(f"{VALIDATOR_API_URL}auditing/tasks", params=params)
             if response.status_code != 200:
                 logger.error(f"Failed to get tasks: {response.status_code} {response.text}")
                 break
@@ -115,7 +115,7 @@ async def get_tasks_in_window(client: httpx.AsyncClient, start_time: datetime, e
 async def get_task_details(client: httpx.AsyncClient, task_id: str) -> Optional[Dict]:
     """Get detailed information for a specific task."""
     try:
-        response = await client.get(f"{VALIDATOR_API_URL}v1/auditing/tasks/{task_id}")
+        response = await client.get(f"{VALIDATOR_API_URL}auditing/tasks/{task_id}")
         if response.status_code == 200:
             return response.json()
     except Exception as e:
