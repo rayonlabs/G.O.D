@@ -15,7 +15,7 @@ from typing import List, Optional, Dict
 
 from fiber.logging_utils import get_logger
 from core.constants import NETUID, DEFAULT_NETUID
-from validator.core.weight_setting import (
+from validator.core.constants import (
     ONE_DAY_SCORE_WEIGHT,
     THREE_DAY_SCORE_WEIGHT,
     SEVEN_DAY_SCORE_WEIGHT,
@@ -267,11 +267,11 @@ async def calculate_missing_emissions(client: httpx.AsyncClient, epoch_steps_fil
     epoch_steps = load_epoch_steps_csv(epoch_steps_file)
     
     # Filter for Gradients subnet
-    gradients_steps = [step for step in epoch_steps if step['netuid'] == PROD_NETUID]
+    gradients_steps = [step for step in epoch_steps if step['netuid'] == DEFAULT_NETUID]
     
     missing_windows = identify_missing_emission_windows(gradients_steps)
     
-    logger.info(f"Found {len(missing_windows)} missing emission windows for netuid {PROD_NETUID}")
+    logger.info(f"Found {len(missing_windows)} missing emission windows for netuid {DEFAULT_NETUID}")
     
     emissions_owed = {}
     
@@ -350,7 +350,7 @@ async def analyze_historical_weights(client: httpx.AsyncClient, datetime_lower: 
 async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_file: Optional[str] = None):
     logger.info(f"Gradients Subnet Weight Analysis")
     logger.info(f"API URL: {VALIDATOR_API_URL}")
-    logger.info(f"Subnet: {PROD_NETUID} (production)")
+    logger.info(f"Subnet: {NETUID}")
     logger.info("=" * 50)
     
     httpx_limits = httpx.Limits(max_connections=500, max_keepalive_connections=100)
@@ -375,7 +375,7 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
                 output_file = f"missing_emissions_gradients_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                 with open(output_file, 'w') as f:
                     json.dump({
-                        'netuid': PROD_NETUID,
+                        'netuid': NETUID,
                         'total_emissions_owed': total_emissions,
                         'miners_affected': len(emissions_owed),
                         'emissions_by_miner': emissions_owed,
