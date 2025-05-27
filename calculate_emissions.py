@@ -273,7 +273,7 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
         # Close database connections
         await config.psql_db.close()
         if hasattr(config, 'redis_db'):
-            await config.redis_db.close()
+            await config.redis_db.aclose()
 
 
 if __name__ == "__main__":
