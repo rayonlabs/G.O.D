@@ -109,79 +109,104 @@ async def calculate_weights_at_epoch(config: Config, epoch_time: datetime) -> Di
     logger.info(f"Calculating weights at epoch time: {epoch_time}")
     
     # Import necessary functions and constants
-    from validator.core.weight_setting import get_period_scores_from_task_results, get_node_weights_from_period_scores
-    from validator.core.constants import ONE_DAY_SCORE_WEIGHT, THREE_DAY_SCORE_WEIGHT, SEVEN_DAY_SCORE_WEIGHT
+    from validator.evaluation.scoring import get_period_scores_from_results
+    from validator.core.weight_setting import get_node_weights_from_period_scores
+    from validator.core.constants import (
+        ONE_DAY_SCORE_WEIGHT, THREE_DAY_SCORE_WEIGHT, SEVEN_DAY_SCORE_WEIGHT,
+        INSTRUCT_TEXT_TASK_SCORE_WEIGHT, IMAGE_TASK_SCORE_WEIGHT, 
+        DPO_TASK_SCORE_WEIGHT, GRPO_TASK_SCORE_WEIGHT
+    )
+    from core.models.utility_models import TaskType
     
-    # Get task results from 7 days before the epoch time (longest lookback period)
-    lookback_start = epoch_time - timedelta(days=7)
+    # Make epoch_time timezone-aware
+    if epoch_time.tzinfo is None:
+        epoch_time_aware = epoch_time.replace(tzinfo=timezone.utc)
+    else:
+        epoch_time_aware = epoch_time
+    
+    # Get task results from 7 days before the epoch time
+    lookback_start = epoch_time_aware - timedelta(days=7)
     task_results = await get_aggregate_scores_since(lookback_start, config.psql_db)
     
     if not task_results:
         logger.warning(f"No task results found for epoch at {epoch_time}")
         return {}
     
-    # Filter out any results that are after the epoch time (future results)
-    # Make epoch_time timezone-aware if it isn't already
-    if epoch_time.tzinfo is None:
-        epoch_time_aware = epoch_time.replace(tzinfo=timezone.utc)
-    else:
-        epoch_time_aware = epoch_time
-    
+    # Filter out any results that are after the epoch time
     task_results = [tr for tr in task_results if tr.task.created_at <= epoch_time_aware]
     
     logger.info(f"Found {len(task_results)} task results up to {epoch_time}")
     
-    # Monkey-patch datetime.now() to return our epoch_time for this calculation
-    import datetime as dt_module
-    original_now = dt_module.datetime.now
-    original_utcnow = dt_module.datetime.utcnow
+    # Manually calculate period scores for each time window
+    all_period_scores = []
     
-    def mock_now(tz=None):
-        if tz:
-            return epoch_time_aware.replace(tzinfo=tz)
-        return epoch_time_aware
+    # Define periods relative to epoch_time
+    periods = {
+        "one_day": {
+            "cutoff": epoch_time_aware - timedelta(days=1),
+            "weight": ONE_DAY_SCORE_WEIGHT
+        },
+        "three_day": {
+            "cutoff": epoch_time_aware - timedelta(days=3),
+            "weight": THREE_DAY_SCORE_WEIGHT
+        },
+        "seven_day": {
+            "cutoff": epoch_time_aware - timedelta(days=7),
+            "weight": SEVEN_DAY_SCORE_WEIGHT
+        }
+    }
     
-    def mock_utcnow():
-        return epoch_time_aware
+    # Task types and their weights
+    task_configs = [
+        {"type": TaskType.INSTRUCTTEXTTASK, "weight": INSTRUCT_TEXT_TASK_SCORE_WEIGHT},
+        {"type": TaskType.IMAGETASK, "weight": IMAGE_TASK_SCORE_WEIGHT},
+        {"type": TaskType.DPOTASK, "weight": DPO_TASK_SCORE_WEIGHT},
+        {"type": TaskType.GRPOTASK, "weight": GRPO_TASK_SCORE_WEIGHT},
+    ]
     
-    try:
-        # Replace datetime.now with our mock
-        dt_module.datetime.now = mock_now
-        dt_module.datetime.utcnow = mock_utcnow
+    for period_name, period_config in periods.items():
+        cutoff = period_config["cutoff"]
+        period_weight = period_config["weight"]
         
-        # Now get_period_scores_from_task_results will use our epoch_time as "now"
-        # This means it will calculate:
-        # - 1-day scores: tasks from (epoch_time - 1 day) to epoch_time
-        # - 3-day scores: tasks from (epoch_time - 3 days) to epoch_time  
-        # - 7-day scores: tasks from (epoch_time - 7 days) to epoch_time
-        all_period_scores = get_period_scores_from_task_results(task_results)
+        # Filter tasks for this period
+        period_tasks = [tr for tr in task_results if tr.task.created_at > cutoff]
         
-        # Calculate node weights
-        all_node_ids, all_node_weights = await get_node_weights_from_period_scores(
-            config.substrate, config.netuid, all_period_scores
-        )
-        
-        # Get all nodes to create hotkey mapping
-        all_nodes = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
-        node_id_to_hotkey = {node.node_id: node.hotkey for node in all_nodes}
-        
-        # Create weights dictionary with hotkeys
-        weights = {}
-        total_weight = sum(all_node_weights)
-        
-        for node_id, weight in enumerate(all_node_weights):
-            if weight > 0 and node_id in node_id_to_hotkey:
-                normalized_weight = weight / total_weight if total_weight > 0 else 0
-                weights[node_id_to_hotkey[node_id]] = normalized_weight
-        
-        logger.info(f"Calculated weights for {len(weights)} miners using 1/3/7-day lookbacks "
-                   f"(weights: {ONE_DAY_SCORE_WEIGHT}/{THREE_DAY_SCORE_WEIGHT}/{SEVEN_DAY_SCORE_WEIGHT})")
-        return weights
-        
-    finally:
-        # Restore original datetime functions
-        dt_module.datetime.now = original_now
-        dt_module.datetime.utcnow = original_utcnow
+        if period_tasks:
+            logger.info(f"  {period_name}: {len(period_tasks)} tasks")
+            
+            for task_config in task_configs:
+                task_type = task_config["type"]
+                task_weight = task_config["weight"]
+                
+                # Filter by task type
+                type_tasks = [tr for tr in period_tasks if tr.task.task_type == task_type]
+                
+                if type_tasks:
+                    # Get scores for this task type and period
+                    weight_multiplier = period_weight * task_weight
+                    scores = get_period_scores_from_results(type_tasks, weight_multiplier)
+                    all_period_scores.extend(scores)
+    
+    # Calculate node weights
+    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(
+        config.substrate, config.netuid, all_period_scores
+    )
+    
+    # Get all nodes to create hotkey mapping
+    all_nodes = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
+    node_id_to_hotkey = {node.node_id: node.hotkey for node in all_nodes}
+    
+    # Create weights dictionary with hotkeys
+    weights = {}
+    total_weight = sum(all_node_weights)
+    
+    for node_id, weight in enumerate(all_node_weights):
+        if weight > 0 and node_id in node_id_to_hotkey:
+            normalized_weight = weight / total_weight if total_weight > 0 else 0
+            weights[node_id_to_hotkey[node_id]] = normalized_weight
+    
+    logger.info(f"Calculated weights for {len(weights)} miners using 1/3/7-day lookbacks")
+    return weights
 
 
 async def calculate_missing_emissions(config: Config, epoch_steps_file: str, emission_per_epoch: float = None) -> Dict[str, float]:
