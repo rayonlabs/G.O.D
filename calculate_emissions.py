@@ -9,7 +9,7 @@ import os
 import json
 import argparse
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict
 
 # Import all the scoring logic from the codebase
@@ -121,7 +121,13 @@ async def calculate_weights_at_epoch(config: Config, epoch_time: datetime) -> Di
         return {}
     
     # Filter out any results that are after the epoch time (future results)
-    task_results = [tr for tr in task_results if tr.task.created_at <= epoch_time]
+    # Make epoch_time timezone-aware if it isn't already
+    if epoch_time.tzinfo is None:
+        epoch_time_aware = epoch_time.replace(tzinfo=timezone.utc)
+    else:
+        epoch_time_aware = epoch_time
+    
+    task_results = [tr for tr in task_results if tr.task.created_at <= epoch_time_aware]
     
     logger.info(f"Found {len(task_results)} task results up to {epoch_time}")
     
