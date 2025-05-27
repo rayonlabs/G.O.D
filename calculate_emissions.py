@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 
 from fiber.logging_utils import get_logger
-from core.constants import PROD_NETUID, TEST_NETUID
+from core.constants import NETUID, DEFAULT_NETUID
 from validator.core.weight_setting import (
     ONE_DAY_SCORE_WEIGHT,
     THREE_DAY_SCORE_WEIGHT,
