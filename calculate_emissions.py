@@ -104,6 +104,80 @@ async def calculate_weights_for_window(config: Config, start_time: datetime, end
     return weights
 
 
+async def calculate_weights_at_epoch(config: Config, epoch_time: datetime) -> Dict[str, float]:
+    """Calculate weights at a specific epoch time using proper 1-day, 3-day, and 7-day lookbacks."""
+    logger.info(f"Calculating weights at epoch time: {epoch_time}")
+    
+    # Import necessary functions and constants
+    from validator.core.weight_setting import get_period_scores_from_task_results, get_node_weights_from_period_scores
+    from validator.core.constants import ONE_DAY_SCORE_WEIGHT, THREE_DAY_SCORE_WEIGHT, SEVEN_DAY_SCORE_WEIGHT
+    
+    # Get task results from 7 days before the epoch time (longest lookback period)
+    lookback_start = epoch_time - timedelta(days=7)
+    task_results = await get_aggregate_scores_since(lookback_start, config.psql_db)
+    
+    if not task_results:
+        logger.warning(f"No task results found for epoch at {epoch_time}")
+        return {}
+    
+    # Filter out any results that are after the epoch time (future results)
+    task_results = [tr for tr in task_results if tr.task.created_at <= epoch_time]
+    
+    logger.info(f"Found {len(task_results)} task results up to {epoch_time}")
+    
+    # Monkey-patch datetime.now() to return our epoch_time for this calculation
+    import datetime as dt_module
+    original_now = dt_module.datetime.now
+    original_utcnow = dt_module.datetime.utcnow
+    
+    def mock_now(tz=None):
+        if tz:
+            return epoch_time.replace(tzinfo=tz)
+        return epoch_time
+    
+    def mock_utcnow():
+        return epoch_time
+    
+    try:
+        # Replace datetime.now with our mock
+        dt_module.datetime.now = mock_now
+        dt_module.datetime.utcnow = mock_utcnow
+        
+        # Now get_period_scores_from_task_results will use our epoch_time as "now"
+        # This means it will calculate:
+        # - 1-day scores: tasks from (epoch_time - 1 day) to epoch_time
+        # - 3-day scores: tasks from (epoch_time - 3 days) to epoch_time  
+        # - 7-day scores: tasks from (epoch_time - 7 days) to epoch_time
+        all_period_scores = get_period_scores_from_task_results(task_results)
+        
+        # Calculate node weights
+        all_node_ids, all_node_weights = await get_node_weights_from_period_scores(
+            config.substrate, config.netuid, all_period_scores
+        )
+        
+        # Get all nodes to create hotkey mapping
+        all_nodes = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
+        node_id_to_hotkey = {node.node_id: node.hotkey for node in all_nodes}
+        
+        # Create weights dictionary with hotkeys
+        weights = {}
+        total_weight = sum(all_node_weights)
+        
+        for node_id, weight in enumerate(all_node_weights):
+            if weight > 0 and node_id in node_id_to_hotkey:
+                normalized_weight = weight / total_weight if total_weight > 0 else 0
+                weights[node_id_to_hotkey[node_id]] = normalized_weight
+        
+        logger.info(f"Calculated weights for {len(weights)} miners using 1/3/7-day lookbacks "
+                   f"(weights: {ONE_DAY_SCORE_WEIGHT}/{THREE_DAY_SCORE_WEIGHT}/{SEVEN_DAY_SCORE_WEIGHT})")
+        return weights
+        
+    finally:
+        # Restore original datetime functions
+        dt_module.datetime.now = original_now
+        dt_module.datetime.utcnow = original_utcnow
+
+
 async def calculate_missing_emissions(config: Config, epoch_steps_file: str, emission_per_epoch: float = None) -> Dict[str, float]:
     """Calculate missing emissions for all miners based on epoch steps data."""
     epoch_steps = load_epoch_steps_csv(epoch_steps_file)
@@ -116,26 +190,53 @@ async def calculate_missing_emissions(config: Config, epoch_steps_file: str, emi
     logger.info(f"Found {len(missing_windows)} missing emission windows for netuid {config.netuid}")
     
     emissions_owed = {}
+    epoch_details = []
+    total_epochs = sum(window['missed_epochs'] for window in missing_windows)
+    epoch_num = 0
     
     for window in missing_windows:
         logger.info(f"\nProcessing missing window: {window['start']} to {window['end']} ({window['missed_epochs']} epochs)")
         
-        weights = await calculate_weights_for_window(config, window['start'], window['end'])
+        # Calculate time for each epoch in this window
+        window_duration = (window['end'] - window['start']).total_seconds()
+        time_per_epoch = window_duration / (window['missed_epochs'] + 1)  # +1 because we include both start and end
         
-        if not weights:
-            logger.warning(f"No weights found for window, skipping")
-            continue
-        
-        window_emissions = window['missed_epochs'] * (emission_per_epoch or MINER_ALPHA_EMISSION_PER_EPOCH)
-        
-        for hotkey, weight in weights.items():
-            if hotkey not in emissions_owed:
-                emissions_owed[hotkey] = 0
-            emissions_owed[hotkey] += weight * window_emissions
+        for i in range(window['missed_epochs']):
+            epoch_num += 1
+            # Calculate the approximate time of this epoch
+            epoch_time = window['start'] + timedelta(seconds=time_per_epoch * (i + 1))
             
-        logger.info(f"Distributed {window_emissions} alpha across {len(weights)} miners")
+            logger.info(f"\nEpoch {epoch_num}/{total_epochs} at {epoch_time}")
+            
+            # Get weights at this specific epoch time
+            weights = await calculate_weights_at_epoch(config, epoch_time)
+            
+            if not weights:
+                logger.warning(f"No weights found for epoch {epoch_num}, skipping")
+                continue
+            
+            # Distribute this epoch's emissions
+            epoch_emission = emission_per_epoch or MINER_ALPHA_EMISSION_PER_EPOCH
+            
+            epoch_distribution = {}
+            for hotkey, weight in weights.items():
+                amount = weight * epoch_emission
+                if hotkey not in emissions_owed:
+                    emissions_owed[hotkey] = 0
+                emissions_owed[hotkey] += amount
+                epoch_distribution[hotkey] = amount
+            
+            epoch_details.append({
+                'epoch_num': epoch_num,
+                'epoch_time': epoch_time.isoformat(),
+                'emission': epoch_emission,
+                'num_miners': len(weights),
+                'distribution': epoch_distribution
+            })
+            
+            logger.info(f"Distributed {epoch_emission} alpha across {len(weights)} miners")
     
-    return emissions_owed
+    return emissions_owed, epoch_details
 
 
 async def analyze_historical_weights(config: Config, datetime_lower: datetime, datetime_upper: datetime) -> Dict:
@@ -266,21 +367,63 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
     
     try:
         if epoch_steps_file:
-            emissions_owed = await calculate_missing_emissions(config, epoch_steps_file, actual_emission_per_epoch)
+            emissions_owed, epoch_details = await calculate_missing_emissions(config, epoch_steps_file, actual_emission_per_epoch)
             
             logger.info("\n=== MISSING EMISSIONS SUMMARY ===")
             total_emissions = sum(emissions_owed.values())
             logger.info(f"Total emissions owed: {total_emissions:.2f} alpha")
             logger.info(f"Number of miners affected: {len(emissions_owed)}")
             emission_rate = actual_emission_per_epoch or MINER_ALPHA_EMISSION_PER_EPOCH
-            logger.info(f"Expected total (24 epochs × {emission_rate:.2f}): {24 * emission_rate:.2f} alpha")
-            logger.info(f"Difference: {abs(total_emissions - (24 * emission_rate)):.6f} alpha")
+            expected_total = len(epoch_details) * emission_rate if epoch_details else 24 * emission_rate
+            logger.info(f"Expected total ({len(epoch_details)} epochs × {emission_rate:.2f}): {expected_total:.2f} alpha")
+            logger.info(f"Difference: {abs(total_emissions - expected_total):.6f} alpha")
+            
+            # Show epoch-by-epoch breakdown
+            if epoch_details:
+                logger.info("\n=== EPOCH-BY-EPOCH BREAKDOWN ===")
+                logger.info(f"{'Epoch':<6} {'Time':<20} {'Emission':<10} {'Miners':<8} {'Distributed':<12}")
+                logger.info("-" * 60)
+                
+                for detail in epoch_details[:10]:  # Show first 10 epochs
+                    epoch_time = datetime.fromisoformat(detail['epoch_time'])
+                    logger.info(f"{detail['epoch_num']:<6} {epoch_time.strftime('%Y-%m-%d %H:%M'):<20} "
+                              f"{detail['emission']:<10.2f} {detail['num_miners']:<8} "
+                              f"{sum(detail['distribution'].values()):<12.2f}")
+                
+                if len(epoch_details) > 10:
+                    logger.info(f"... and {len(epoch_details) - 10} more epochs")
+                
+                # Show weight stability analysis
+                logger.info("\n=== WEIGHT STABILITY ANALYSIS ===")
+                all_miners = set()
+                for detail in epoch_details:
+                    all_miners.update(detail['distribution'].keys())
+                
+                miner_epoch_counts = {}
+                for miner in all_miners:
+                    count = sum(1 for d in epoch_details if miner in d['distribution'] and d['distribution'][miner] > 0)
+                    miner_epoch_counts[miner] = count
+                
+                # Group by consistency
+                always_present = [m for m, c in miner_epoch_counts.items() if c == len(epoch_details)]
+                mostly_present = [m for m, c in miner_epoch_counts.items() if c >= len(epoch_details) * 0.75 and c < len(epoch_details)]
+                sometimes_present = [m for m, c in miner_epoch_counts.items() if c >= len(epoch_details) * 0.25 and c < len(epoch_details) * 0.75]
+                rarely_present = [m for m, c in miner_epoch_counts.items() if c < len(epoch_details) * 0.25]
+                
+                logger.info(f"Miners present in ALL {len(epoch_details)} epochs: {len(always_present)}")
+                logger.info(f"Miners present in 75%+ epochs: {len(mostly_present)}")
+                logger.info(f"Miners present in 25-75% epochs: {len(sometimes_present)}")
+                logger.info(f"Miners present in <25% epochs: {len(rarely_present)}")
             
             sorted_emissions = sorted(emissions_owed.items(), key=lambda x: x[1], reverse=True)
             
-            logger.info("\nTop 20 miners by emissions owed:")
+            logger.info("\n=== TOP MINERS BY TOTAL EMISSIONS OWED ===")
+            logger.info(f"{'Rank':<5} {'Hotkey':<50} {'Amount':<12} {'Epochs Present':<15}")
+            logger.info("-" * 85)
+            
             for i, (hotkey, amount) in enumerate(sorted_emissions[:20]):
-                logger.info(f"{i+1:2d}. {hotkey}: {amount:10.6f} alpha")
+                epochs_present = miner_epoch_counts.get(hotkey, 0) if epoch_details else 0
+                logger.info(f"{i+1:<5} {hotkey[:8]}...{hotkey[-8:]:<42} {amount:>10.6f} α  {epochs_present:>3}/{len(epoch_details) if epoch_details else 'N/A':<10}")
             
             output_file = f"missing_emissions_gradients_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             with open(output_file, 'w') as f:
@@ -288,7 +431,12 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
                     'netuid': config.netuid,
                     'total_emissions_owed': total_emissions,
                     'miners_affected': len(emissions_owed),
+                    'epochs_processed': len(epoch_details) if epoch_details else 0,
+                    'emission_per_epoch': emission_rate,
+                    'expected_total': expected_total,
+                    'difference': abs(total_emissions - expected_total),
                     'emissions_by_miner': emissions_owed,
+                    'epoch_details': epoch_details,
                     'calculation_time': datetime.now().isoformat()
                 }, f, indent=2)
             logger.info(f"\nDetailed results saved to {output_file}")
