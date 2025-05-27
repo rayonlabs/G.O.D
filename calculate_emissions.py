@@ -215,9 +215,9 @@ async def verify_emission_rate(config: Config):
     substrate, current_block = query_substrate(substrate, "System", "Number", [], return_value=True)
     
     logger.info(f"Current block: {current_block}")
-    logger.info(f"SubnetAlphaOutEmission: {alpha_out}")
-    logger.info(f"SubnetAlphaInEmission: {alpha_in}")
-    logger.info(f"SubnetTaoInEmission: {tao_in}")
+    logger.info(f"SubnetAlphaOutEmission: {alpha_out} (raw nano-alpha)")
+    logger.info(f"SubnetAlphaInEmission: {alpha_in} (raw nano-alpha)")
+    logger.info(f"SubnetTaoInEmission: {tao_in} (raw nano-TAO)")
     
     if alpha_out is not None:
         # Convert from nano-alpha to alpha (1 billion nano-alpha = 1 alpha)
