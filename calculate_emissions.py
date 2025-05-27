@@ -142,7 +142,7 @@ async def calculate_weights_at_epoch(config: Config, epoch_time: datetime) -> Di
         return epoch_time_aware
     
     def mock_utcnow():
-        return epoch_time
+        return epoch_time_aware
     
     try:
         # Replace datetime.now with our mock
