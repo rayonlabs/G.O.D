@@ -579,13 +579,13 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
 
     train_dataset_name = task.training_data if task.training_data else task.ds
-    
+
     dataset_ids = [ds.strip() for ds in train_dataset_name.split(",")]
     has_multiple_datasets = len(dataset_ids) > 1
 
     if not task.test_data:
         logger.info(f"Preparing {train_dataset_name}")
-        
+
         if has_multiple_datasets:
             merged_samples = await load_and_merge_multiple_datasets(
                 dataset_ids,
@@ -593,7 +593,14 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
                 keypair
             )
             from datasets import Dataset as HFDataset
-            dataset = HFDataset.from_list(merged_samples)
+            try:
+                dataset = HFDataset.from_list(merged_samples)
+            except Exception as e:
+                logger.error(f"Error details: {e}", exc_info=True)
+                random.shuffle(merged_samples)
+                for i in range(1000):
+                    logger.error(f"Sample {i}: {merged_samples[i]}")
+                raise e
         else:
             try:
                 dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
@@ -608,12 +615,12 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
             elif isinstance(task, GrpoRawTask):
                 dataset = standardize_grpo_column_names(dataset, task)
 
-            
+
             # Subsample when using only a single dataset (50-100% of original size)
             original_size = len(dataset)
             subsample_percentage = random.uniform(0.5, 1.0)
             subsample_size = int(original_size * subsample_percentage)
-            
+
             if subsample_size < original_size:
                 logger.info(f"Subsampling single dataset from {original_size} to {subsample_size} rows ({subsample_percentage:.1%})")
                 dataset = dataset.shuffle(seed=42).select(range(subsample_size))
