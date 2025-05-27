@@ -189,6 +189,25 @@ async def analyze_historical_weights(config: Config, datetime_lower: datetime, d
     }
 
 
+async def verify_emission_rate(config: Config):
+    """Verify the emission rate from the chain."""
+    from fiber.chain.chain_utils import query_substrate
+    
+    # Get current emission info for our subnet
+    substrate = config.substrate
+    
+    # Query SubnetAlphaOutEmission
+    substrate, alpha_out = query_substrate(
+        substrate, "SubtensorModule", "SubnetAlphaOutEmission", [config.netuid], return_value=True
+    )
+    
+    if alpha_out is not None:
+        logger.info(f"SubnetAlphaOutEmission for netuid {config.netuid}: {alpha_out} (per block)")
+        logger.info(f"Per epoch (360 blocks): {alpha_out * 360:.2f} alpha")
+        return alpha_out * 360
+    return None
+
+
 async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_file: Optional[str] = None):
     # Load config
     config = load_config()
@@ -199,6 +218,13 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
     logger.info(f"Gradients Subnet Weight Analysis (Direct DB Access)")
     logger.info(f"Subnet: {config.netuid}")
     logger.info("=" * 50)
+    
+    # Verify emission rate from chain
+    actual_emission_per_epoch = await verify_emission_rate(config)
+    if actual_emission_per_epoch:
+        logger.info(f"Verified emission rate from chain: {actual_emission_per_epoch:.2f} alpha per epoch")
+    else:
+        logger.info(f"Using default emission rate: {MINER_ALPHA_EMISSION_PER_EPOCH} alpha per epoch")
     
     try:
         if epoch_steps_file:
