@@ -220,16 +220,21 @@ async def verify_emission_rate(config: Config):
     logger.info(f"SubnetTaoInEmission: {tao_in}")
     
     if alpha_out is not None:
-        # This might be cumulative, let's see if we can figure out the rate
-        logger.info(f"\nIf SubnetAlphaOutEmission ({alpha_out}) is:")
-        logger.info(f"  - Cumulative total: {alpha_out / current_block:.6f} alpha per block average")
-        logger.info(f"  - Per block: {alpha_out} alpha per block (seems too high)")
-        logger.info(f"  - Per epoch: {alpha_out / 360:.6f} alpha per block")
+        # Convert from nano-alpha to alpha (1 billion nano-alpha = 1 alpha)
+        alpha_out_converted = alpha_out / 1_000_000_000
+        alpha_in_converted = alpha_in / 1_000_000_000 if alpha_in else 0
+        tao_in_converted = tao_in / 1_000_000_000 if tao_in else 0
         
-        # Let's assume it's cumulative and calculate average per block
-        if current_block > 0:
-            avg_per_block = alpha_out / current_block
-            return avg_per_block * 360  # Per epoch
+        logger.info(f"\nAfter converting from nano-alpha:")
+        logger.info(f"SubnetAlphaOutEmission: {alpha_out_converted:.6f} alpha per block")
+        logger.info(f"SubnetAlphaInEmission: {alpha_in_converted:.6f} alpha per block")
+        logger.info(f"SubnetTaoInEmission: {tao_in_converted:.6f} TAO per block")
+        
+        # SubnetAlphaOutEmission is alpha leaving subnet per block (to miners)
+        miner_per_epoch = alpha_out_converted * 360
+        logger.info(f"Miners receive per epoch: {miner_per_epoch:.2f} alpha")
+        
+        return miner_per_epoch
     
     logger.info(f"\nUsing default emission rate: {MINER_ALPHA_EMISSION_PER_EPOCH} alpha per epoch")
     return None
