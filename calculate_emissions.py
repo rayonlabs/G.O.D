@@ -104,7 +104,7 @@ async def calculate_weights_for_window(config: Config, start_time: datetime, end
     return weights
 
 
-async def calculate_missing_emissions(config: Config, epoch_steps_file: str) -> Dict[str, float]:
+async def calculate_missing_emissions(config: Config, epoch_steps_file: str, emission_per_epoch: float = None) -> Dict[str, float]:
     """Calculate missing emissions for all miners based on epoch steps data."""
     epoch_steps = load_epoch_steps_csv(epoch_steps_file)
     
@@ -126,7 +126,7 @@ async def calculate_missing_emissions(config: Config, epoch_steps_file: str) -> 
             logger.warning(f"No weights found for window, skipping")
             continue
         
-        window_emissions = window['missed_epochs'] * MINER_ALPHA_EMISSION_PER_EPOCH
+        window_emissions = window['missed_epochs'] * (emission_per_epoch or MINER_ALPHA_EMISSION_PER_EPOCH)
         
         for hotkey, weight in weights.items():
             if hotkey not in emissions_owed:
@@ -196,15 +196,42 @@ async def verify_emission_rate(config: Config):
     # Get current emission info for our subnet
     substrate = config.substrate
     
-    # Query SubnetAlphaOutEmission
+    logger.info(f"\n=== CHAIN EMISSION DATA FOR NETUID {config.netuid} ===")
+    
+    # Query all emission-related storage items
     substrate, alpha_out = query_substrate(
         substrate, "SubtensorModule", "SubnetAlphaOutEmission", [config.netuid], return_value=True
     )
     
+    substrate, alpha_in = query_substrate(
+        substrate, "SubtensorModule", "SubnetAlphaInEmission", [config.netuid], return_value=True
+    )
+    
+    substrate, tao_in = query_substrate(
+        substrate, "SubtensorModule", "SubnetTaoInEmission", [config.netuid], return_value=True
+    )
+    
+    # Get current block number to understand context
+    substrate, current_block = query_substrate(substrate, "System", "Number", [], return_value=True)
+    
+    logger.info(f"Current block: {current_block}")
+    logger.info(f"SubnetAlphaOutEmission: {alpha_out}")
+    logger.info(f"SubnetAlphaInEmission: {alpha_in}")
+    logger.info(f"SubnetTaoInEmission: {tao_in}")
+    
     if alpha_out is not None:
-        logger.info(f"SubnetAlphaOutEmission for netuid {config.netuid}: {alpha_out} (per block)")
-        logger.info(f"Per epoch (360 blocks): {alpha_out * 360:.2f} alpha")
-        return alpha_out * 360
+        # This might be cumulative, let's see if we can figure out the rate
+        logger.info(f"\nIf SubnetAlphaOutEmission ({alpha_out}) is:")
+        logger.info(f"  - Cumulative total: {alpha_out / current_block:.6f} alpha per block average")
+        logger.info(f"  - Per block: {alpha_out} alpha per block (seems too high)")
+        logger.info(f"  - Per epoch: {alpha_out / 360:.6f} alpha per block")
+        
+        # Let's assume it's cumulative and calculate average per block
+        if current_block > 0:
+            avg_per_block = alpha_out / current_block
+            return avg_per_block * 360  # Per epoch
+    
+    logger.info(f"\nUsing default emission rate: {MINER_ALPHA_EMISSION_PER_EPOCH} alpha per epoch")
     return None
 
 
@@ -228,14 +255,15 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
     
     try:
         if epoch_steps_file:
-            emissions_owed = await calculate_missing_emissions(config, epoch_steps_file)
+            emissions_owed = await calculate_missing_emissions(config, epoch_steps_file, actual_emission_per_epoch)
             
             logger.info("\n=== MISSING EMISSIONS SUMMARY ===")
             total_emissions = sum(emissions_owed.values())
             logger.info(f"Total emissions owed: {total_emissions:.2f} alpha")
             logger.info(f"Number of miners affected: {len(emissions_owed)}")
-            logger.info(f"Expected total (24 epochs × 147.6): {24 * 147.6:.2f} alpha")
-            logger.info(f"Difference: {abs(total_emissions - (24 * 147.6)):.6f} alpha")
+            emission_rate = actual_emission_per_epoch or MINER_ALPHA_EMISSION_PER_EPOCH
+            logger.info(f"Expected total (24 epochs × {emission_rate:.2f}): {24 * emission_rate:.2f} alpha")
+            logger.info(f"Difference: {abs(total_emissions - (24 * emission_rate)):.6f} alpha")
             
             sorted_emissions = sorted(emissions_owed.items(), key=lambda x: x[1], reverse=True)
             
