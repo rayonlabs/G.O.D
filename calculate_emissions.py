@@ -309,15 +309,42 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
             
             # Calculate alpha emissions based on average weights
             # This is a simulation - actual emissions depend on epoch timing
-            logger.info(f"\nIf 24 epochs were distributed based on these average weights:")
-            total_alpha = 24 * 147.6  # 3542.4 alpha
+            num_epochs = 24
+            alpha_per_epoch = actual_emission_per_epoch or 360.0
+            total_alpha = num_epochs * alpha_per_epoch
+            logger.info(f"\n=== EMISSION CALCULATION ===")
+            logger.info(f"Number of epochs: {num_epochs}")
+            logger.info(f"Alpha per epoch: {alpha_per_epoch:.2f}")
             logger.info(f"Total alpha to distribute: {total_alpha:.2f}")
             
-            alpha_sum = 0
-            for i, (hotkey, weight) in enumerate(sorted_avg[:20]):
+            logger.info(f"\n=== PER-MINER ALLOCATION ===")
+            logger.info(f"Rank | Hotkey | Weight | Alpha")
+            logger.info(f"-" * 80)
+            
+            alpha_allocations = {}
+            for hotkey, weight in sorted_avg:
                 alpha_amount = weight * total_alpha
-                alpha_sum += alpha_amount
-                logger.info(f"{i+1:2d}. {hotkey}: {weight:.6f} (≈ {alpha_amount:.2f} alpha)")
+                alpha_allocations[hotkey] = alpha_amount
+            
+            # Show top 20
+            for i, (hotkey, weight) in enumerate(sorted_avg[:20]):
+                alpha_amount = alpha_allocations[hotkey]
+                logger.info(f"{i+1:4d} | {hotkey[:8]}... | {weight:8.6f} | {alpha_amount:10.2f}")
+            
+            # Show totals
+            total_allocated = sum(alpha_allocations.values())
+            logger.info(f"-" * 80)
+            logger.info(f"Total miners: {len(alpha_allocations)}")
+            logger.info(f"Total alpha allocated: {total_allocated:.2f}")
+            logger.info(f"Verification (should be {total_alpha:.2f}): {'✓ PASS' if abs(total_allocated - total_alpha) < 0.01 else '✗ FAIL'}")
+            
+            # Add emission calculation to the analysis
+            analysis['emission_calculation'] = {
+                'num_epochs': num_epochs,
+                'alpha_per_epoch': alpha_per_epoch,
+                'total_alpha': total_alpha,
+                'alpha_allocations': alpha_allocations
+            }
             
             output_file = f"weight_analysis_gradients_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             with open(output_file, 'w') as f:
