@@ -208,6 +208,8 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
             total_emissions = sum(emissions_owed.values())
             logger.info(f"Total emissions owed: {total_emissions:.2f} alpha")
             logger.info(f"Number of miners affected: {len(emissions_owed)}")
+            logger.info(f"Expected total (24 epochs × 147.6): {24 * 147.6:.2f} alpha")
+            logger.info(f"Difference: {abs(total_emissions - (24 * 147.6)):.6f} alpha")
             
             sorted_emissions = sorted(emissions_owed.items(), key=lambda x: x[1], reverse=True)
             
@@ -243,8 +245,20 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
             # Show top miners by average weight
             sorted_avg = sorted(analysis['average_weights'].items(), key=lambda x: x[1], reverse=True)
             logger.info(f"\nTop 20 miners by average weight:")
+            total_weight = sum(analysis['average_weights'].values())
+            logger.info(f"Total weight sum: {total_weight:.6f}")
+            
+            # Calculate alpha emissions based on average weights
+            # This is a simulation - actual emissions depend on epoch timing
+            logger.info(f"\nIf 24 epochs were distributed based on these average weights:")
+            total_alpha = 24 * 147.6  # 3542.4 alpha
+            logger.info(f"Total alpha to distribute: {total_alpha:.2f}")
+            
+            alpha_sum = 0
             for i, (hotkey, weight) in enumerate(sorted_avg[:20]):
-                logger.info(f"{i+1:2d}. {hotkey}: {weight:.6f}")
+                alpha_amount = weight * total_alpha
+                alpha_sum += alpha_amount
+                logger.info(f"{i+1:2d}. {hotkey}: {weight:.6f} (≈ {alpha_amount:.2f} alpha)")
             
             output_file = f"weight_analysis_gradients_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             with open(output_file, 'w') as f:
