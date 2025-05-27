@@ -215,6 +215,13 @@ async def calculate_missing_emissions(config: Config, epoch_steps_file: str, emi
                 logger.warning(f"No weights found for epoch {epoch_num}, skipping")
                 continue
             
+            # Log top 5 miners to verify weights are changing
+            if weights:
+                top_5 = sorted(weights.items(), key=lambda x: x[1], reverse=True)[:5]
+                logger.info(f"Top 5 miners for epoch {epoch_num}:")
+                for rank, (hotkey, weight) in enumerate(top_5, 1):
+                    logger.info(f"  {rank}. {hotkey[:8]}...{hotkey[-8:]}: {weight:.6f}")
+            
             # Distribute this epoch's emissions
             epoch_emission = emission_per_epoch or MINER_ALPHA_EMISSION_PER_EPOCH
             
