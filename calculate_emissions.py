@@ -230,8 +230,14 @@ async def verify_emission_rate(config: Config):
         logger.info(f"SubnetAlphaInEmission: {alpha_in_converted:.6f} alpha per block")
         logger.info(f"SubnetTaoInEmission: {tao_in_converted:.6f} TAO per block")
         
-        # SubnetAlphaOutEmission is alpha leaving subnet per block (to miners)
-        miner_per_epoch = alpha_out_converted * 360
+        # SubnetAlphaOutEmission is total alpha leaving subnet per block
+        # Miners get 41% of this
+        total_per_epoch = alpha_out_converted * 360
+        miner_percentage = 0.41
+        miner_per_epoch = total_per_epoch * miner_percentage
+        
+        logger.info(f"Total subnet emission per epoch: {total_per_epoch:.2f} alpha")
+        logger.info(f"Miner percentage: {miner_percentage * 100:.0f}%")
         logger.info(f"Miners receive per epoch: {miner_per_epoch:.2f} alpha")
         
         return miner_per_epoch
@@ -310,7 +316,7 @@ async def main(datetime_lower: datetime, datetime_upper: datetime, epoch_steps_f
             # Calculate alpha emissions based on average weights
             # This is a simulation - actual emissions depend on epoch timing
             num_epochs = 24
-            alpha_per_epoch = actual_emission_per_epoch or 360.0
+            alpha_per_epoch = actual_emission_per_epoch or 147.6
             total_alpha = num_epochs * alpha_per_epoch
             logger.info(f"\n=== EMISSION CALCULATION ===")
             logger.info(f"Number of epochs: {num_epochs}")
