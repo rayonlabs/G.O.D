@@ -137,7 +137,8 @@ async def get_miner_details(
                     performance.average_score = sum(s.average_score for s in task_scores) / len(task_scores)
             
             # Calculate work scores for this task type
-            type_tasks = [tr for tr in task_results if tr.task.task_type == task_type]
+            current_task_type = list(task_type_map.keys())[list(task_type_map.values()).index((field_name, type_data["task_weight"]))]
+            type_tasks = [tr for tr in task_results if str(tr.task.task_type) == current_task_type]
             miner_type_tasks = [
                 tr for tr in type_tasks 
                 if any(ns.hotkey == hotkey for ns in tr.node_scores)
