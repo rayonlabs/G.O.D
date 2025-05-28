@@ -30,15 +30,19 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     logger.debug("Entering lifespan context manager")
     config = load_config()
-
     await try_db_connections(config)
-
-    logger.info("Starting up...")
+    
     app.state.config = config
-
+    
+    from validator.utils.miner_performance import miner_performance_cache_worker
+    cache_task = asyncio.create_task(miner_performance_cache_worker(config))
+    
+    logger.info("Starting up...")
+    
     yield
-
+    
     logger.info("Shutting down...")
+    cache_task.cancel()
     await config.psql_db.close()
     await config.redis_db.close()
 
