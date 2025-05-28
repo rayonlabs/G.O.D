@@ -81,20 +81,17 @@ async def get_miner_details(
     breakdown = get_miner_performance_breakdown(hotkey, task_results)
     
     task_type_map = {
-        str(TaskType.INSTRUCTTEXTTASK): "instruct_text",
-        str(TaskType.DPOTASK): "dpo",
-        str(TaskType.IMAGETASK): "image",
-        str(TaskType.GRPOTASK): "grpo"
+        str(TaskType.INSTRUCTTEXTTASK): ("instruct_text", TaskType.INSTRUCTTEXTTASK),
+        str(TaskType.DPOTASK): ("dpo", TaskType.DPOTASK),
+        str(TaskType.IMAGETASK): ("image", TaskType.IMAGETASK),
+        str(TaskType.GRPOTASK): ("grpo", TaskType.GRPOTASK)
     }
     
     task_type_breakdown = TaskTypeBreakdown()
     
-    for task_type_str, field_name in task_type_map.items():
+    for task_type_str, (field_name, task_type_enum) in task_type_map.items():
         if task_type_str in breakdown["task_types"]:
             type_data = breakdown["task_types"][task_type_str]
-            
-            # Get the actual TaskType enum for filtering
-            task_type_enum = next(tt for tt in TaskType if str(tt) == task_type_str)
             
             performance = TaskTypePerformance(
                 weight_contribution=type_data["task_weight"],
