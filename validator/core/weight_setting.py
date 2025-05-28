@@ -265,6 +265,101 @@ async def _upload_results_to_s3(config: Config, task_results: list[TaskResults])
     return presigned_url
 
 
+def get_miner_performance_breakdown(hotkey: str, task_results: list[TaskResults]) -> dict:
+    """Get detailed performance breakdown for a specific miner"""
+    
+    task_type_configs = [
+        {"type": TaskType.INSTRUCTTEXTTASK, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
+        {"type": TaskType.DPOTASK, "weight_key": "DPO_TASK_SCORE_WEIGHT"},
+        {"type": TaskType.IMAGETASK, "weight_key": "IMAGE_TASK_SCORE_WEIGHT"},
+        {"type": TaskType.GRPOTASK, "weight_key": "GRPO_TASK_SCORE_WEIGHT"},
+    ]
+    
+    periods = {
+        "one_day": {"cutoff": datetime.now(timezone.utc) - timedelta(days=1), "weight": cts.ONE_DAY_SCORE_WEIGHT},
+        "three_day": {"cutoff": datetime.now(timezone.utc) - timedelta(days=3), "weight": cts.THREE_DAY_SCORE_WEIGHT},
+        "seven_day": {"cutoff": datetime.now(timezone.utc) - timedelta(days=7), "weight": cts.SEVEN_DAY_SCORE_WEIGHT}
+    }
+    
+    organic_proportions = {}
+    suspicious_hotkeys = {}
+    
+    for task_config in task_type_configs:
+        task_type = task_config["type"]
+        task_type_str = str(task_type)
+        organic_proportions[task_type_str] = get_organic_proportion(task_results, task_type, days=7)
+        suspicious_hotkeys[task_type_str] = detect_suspicious_nodes(task_results, task_type, days=7)
+    
+    breakdown = {"task_types": {}, "period_totals": {}, "all_scores": []}
+    
+    for task_config in task_type_configs:
+        task_type = task_config["type"]
+        task_type_str = str(task_type)
+        task_weight = getattr(cts, task_config["weight_key"])
+        
+        organic_tasks = filter_tasks_by_type(task_results, task_type, is_organic=True)
+        synthetic_tasks = filter_tasks_by_type(task_results, task_type, is_organic=False)
+        
+        miner_organic_tasks = [tr for tr in organic_tasks if any(ns.hotkey == hotkey for ns in tr.node_scores)]
+        miner_synthetic_tasks = [tr for tr in synthetic_tasks if any(ns.hotkey == hotkey for ns in tr.node_scores)]
+        
+        type_data = {
+            "task_weight": task_weight,
+            "organic_proportion": organic_proportions[task_type_str],
+            "is_suspicious": hotkey in suspicious_hotkeys[task_type_str],
+            "periods": {}
+        }
+        
+        for period_name, period_config in periods.items():
+            period_weight = period_config["weight"]
+            cutoff = period_config["cutoff"]
+            
+            period_organic = filter_tasks_by_period(miner_organic_tasks, cutoff)
+            period_synthetic = filter_tasks_by_period(miner_synthetic_tasks, cutoff)
+            
+            organic_mult = period_weight * task_weight * organic_proportions[task_type_str]
+            synth_mult = period_weight * task_weight * (1 - organic_proportions[task_type_str])
+            
+            organic_scores = get_period_scores_from_results(period_organic, weight_multiplier=organic_mult) if period_organic else []
+            synth_scores = get_period_scores_from_results(period_synthetic, weight_multiplier=synth_mult) if period_synthetic else []
+            
+            miner_organic_score = next((s for s in organic_scores if s.hotkey == hotkey), None)
+            miner_synth_score = next((s for s in synth_scores if s.hotkey == hotkey), None)
+            
+            if miner_organic_score and hotkey in suspicious_hotkeys[task_type_str]:
+                miner_organic_score.weight_multiplier = 0.0
+            
+            type_data["periods"][period_name] = {
+                "organic": {
+                    "score": miner_organic_score,
+                    "task_count": len(period_organic),
+                    "weighted_contribution": (miner_organic_score.normalised_score * miner_organic_score.weight_multiplier) if miner_organic_score and miner_organic_score.normalised_score else 0
+                },
+                "synthetic": {
+                    "score": miner_synth_score,
+                    "task_count": len(period_synthetic),
+                    "weighted_contribution": (miner_synth_score.normalised_score * miner_synth_score.weight_multiplier) if miner_synth_score and miner_synth_score.normalised_score else 0
+                }
+            }
+            
+            breakdown["all_scores"].extend([s for s in [miner_organic_score, miner_synth_score] if s])
+        
+        type_data["total_organic_tasks"] = len(miner_organic_tasks)
+        type_data["total_synthetic_tasks"] = len(miner_synthetic_tasks)
+        
+        breakdown["task_types"][task_type_str] = type_data
+    
+    for period_name in periods:
+        total = sum(
+            breakdown["task_types"][tt]["periods"][period_name]["organic"]["weighted_contribution"] +
+            breakdown["task_types"][tt]["periods"][period_name]["synthetic"]["weighted_contribution"]
+            for tt in breakdown["task_types"]
+        )
+        breakdown["period_totals"][period_name] = total
+    
+    return breakdown
+
+
 async def get_node_weights_from_period_scores(
     substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore]
 ) -> tuple[list[int], list[float]]:
