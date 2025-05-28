@@ -352,13 +352,13 @@ def extract_grpo_extra_columns(task: GrpoRawTask) -> list[str]:
     return list(all_args - {task.field_prompt, "completions"})
 
 
-def pick_columns_to_sample(task: AnyTextTypeRawTask) -> list[str]:
+def pick_columns_to_sample(task: AnyTextTypeRawTask, dataset: Dataset = None) -> list[str]:
     if isinstance(task, InstructTextRawTask):
         columns_to_sample = [cst.STANDARD_INSTRUCT_COLUMN, cst.STANDARD_OUTPUT_COLUMN]
 
-        if task.field_input:
+        if task.field_input and (dataset is None or cst.STANDARD_INPUT_COLUMN in dataset.column_names):
             columns_to_sample.append(cst.STANDARD_INPUT_COLUMN)
-        if task.field_system:
+        if task.field_system and (dataset is None or cst.STANDARD_SYSTEM_COLUMN in dataset.column_names):
             columns_to_sample.append(cst.STANDARD_SYSTEM_COLUMN)
 
         return columns_to_sample
@@ -601,6 +601,13 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
                 for i in range(1000):
                     logger.error(f"Sample {i}: {merged_samples[i]}")
                 raise e
+
+            # For merged datasets, update task fields based on what columns actually exist
+            if isinstance(task, InstructTextRawTask):
+                if cst.STANDARD_INPUT_COLUMN not in dataset.column_names:
+                    task.field_input = None
+                if cst.STANDARD_SYSTEM_COLUMN not in dataset.column_names:
+                    task.field_system = None
         else:
             try:
                 dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
@@ -655,7 +662,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
     total_size = len(train_ds) + len(test_ds)
     check_ds_num_rows(total_size)
 
-    columns_to_sample = pick_columns_to_sample(task)
+    columns_to_sample = pick_columns_to_sample(task, train_ds)
 
     if any(col not in train_ds.column_names for col in columns_to_sample):
         raise ValueError(f"Column {columns_to_sample} not found in train dataset")
