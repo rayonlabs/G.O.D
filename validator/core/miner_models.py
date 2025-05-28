@@ -70,10 +70,10 @@ class TaskSubmissionResult(BaseModel):
     rank: int
     total_participants: int
     percentile: float
-    work_score: float
-    adjusted_score: float
-    hours_to_complete: int
-    model_size_billions: float
+    work_score: float = 0.0
+    adjusted_score: float = 0.0
+    hours_to_complete: int = 0
+    model_size_billions: float = 0.0
 
 
 class MinerPerformanceMetrics(BaseModel):
@@ -92,13 +92,23 @@ class MinerPerformanceMetrics(BaseModel):
     task_type_distribution: dict[str, float] = Field(default_factory=dict)
 
 
+class WeightingDetails(BaseModel):
+    one_day_weight: float
+    three_day_weight: float
+    seven_day_weight: float
+    instruct_text_weight: float
+    dpo_weight: float
+    image_weight: float
+    grpo_weight: float
+
+
 class MinerDetailsResponse(BaseModel):
     hotkey: str
     node_id: int | None = None
     
     current_incentive: OnChainIncentive
     
-    performance_weight: CalculatedPerformanceWeight
+    weighting_details: WeightingDetails
     
     task_type_breakdown: TaskTypeBreakdown
     

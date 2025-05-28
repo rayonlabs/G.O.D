@@ -11,12 +11,19 @@ from validator.core.constants import (
     MINER_PERFORMANCE_CACHE_KEY_PREFIX,
     DEFAULT_RECENT_SUBMISSIONS_LIMIT,
     CHAIN_WEIGHT_DIVISOR,
+    ONE_DAY_SCORE_WEIGHT,
+    THREE_DAY_SCORE_WEIGHT,
+    SEVEN_DAY_SCORE_WEIGHT,
+    INSTRUCT_TEXT_TASK_SCORE_WEIGHT,
+    DPO_TASK_SCORE_WEIGHT,
+    IMAGE_TASK_SCORE_WEIGHT,
+    GRPO_TASK_SCORE_WEIGHT,
 )
 from validator.core.dependencies import get_config
 from validator.core.miner_models import (
     MinerDetailsResponse,
     OnChainIncentive,
-    CalculatedPerformanceWeight,
+    WeightingDetails,
     TaskTypeBreakdown,
     TaskTypePerformance,
     PeriodScore,
@@ -60,9 +67,6 @@ async def get_miner_details(
         raise HTTPException(status_code=404, detail=f"Node not found for hotkey {hotkey}")
     
     period_scores, task_results = await _get_weights_to_set(config)
-    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(
-        config.substrate, config.netuid, period_scores
-    )
     
     total_incentive = sum(node.incentive for node in all_nodes)
     current_incentive = OnChainIncentive(
@@ -71,11 +75,14 @@ async def get_miner_details(
         network_share_percent=(target_node.incentive / total_incentive * 100) if total_incentive > 0 else 0
     )
     
-    calculated_weight = all_node_weights[target_node.node_id]
-    total_weight_sum = sum(all_node_weights)
-    performance_weight = CalculatedPerformanceWeight(
-        weight_value=calculated_weight,
-        network_share_percent=(calculated_weight / total_weight_sum * 100) if total_weight_sum > 0 else 0
+    weighting_details = WeightingDetails(
+        one_day_weight=ONE_DAY_SCORE_WEIGHT,
+        three_day_weight=THREE_DAY_SCORE_WEIGHT,
+        seven_day_weight=SEVEN_DAY_SCORE_WEIGHT,
+        instruct_text_weight=INSTRUCT_TEXT_TASK_SCORE_WEIGHT,
+        dpo_weight=DPO_TASK_SCORE_WEIGHT,
+        image_weight=IMAGE_TASK_SCORE_WEIGHT,
+        grpo_weight=GRPO_TASK_SCORE_WEIGHT
     )
     
     breakdown = get_miner_performance_breakdown(hotkey, task_results)
@@ -173,7 +180,7 @@ async def get_miner_details(
         hotkey=hotkey,
         node_id=target_node.node_id,
         current_incentive=current_incentive,
-        performance_weight=performance_weight,
+        weighting_details=weighting_details,
         task_type_breakdown=task_type_breakdown,
         period_totals=period_totals,
         recent_submissions=recent_submissions,
