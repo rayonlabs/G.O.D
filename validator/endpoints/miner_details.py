@@ -18,7 +18,7 @@ from validator.core.dependencies import get_config
 from validator.core.miner_models import MinerDetailsResponse, WeightingDetails
 from validator.core.weight_setting import _get_weights_to_set
 from validator.utils.logging import get_logger
-from validator.utils.miner_performance import build_miner_details_response
+from validator.utils.miner_analytics import build_miner_details_response
 
 logger = get_logger(__name__)
 
