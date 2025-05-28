@@ -41,6 +41,11 @@ class TaskTypePerformance(BaseModel):
     total_submissions: int = 0
     average_score: float = 0.0
     weight_contribution: float = 0.0
+    
+    average_work_score: float = 0.0
+    total_work_score: float = 0.0
+    average_adjusted_score: float = 0.0
+    total_adjusted_score: float = 0.0
 
 
 class TaskTypeBreakdown(BaseModel):

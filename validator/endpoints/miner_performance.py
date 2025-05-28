@@ -136,6 +136,27 @@ async def get_miner_details(
                 if task_scores:
                     performance.average_score = sum(s.average_score for s in task_scores) / len(task_scores)
             
+            # Calculate work scores for this task type
+            type_tasks = [tr for tr in task_results if tr.task.task_type == task_type]
+            miner_type_tasks = [
+                tr for tr in type_tasks 
+                if any(ns.hotkey == hotkey for ns in tr.node_scores)
+            ]
+            
+            if miner_type_tasks:
+                work_scores = [get_task_work_score(tr.task) for tr in miner_type_tasks]
+                adjusted_scores = []
+                
+                for tr in miner_type_tasks:
+                    work_score = get_task_work_score(tr.task)
+                    miner_score = next((ns.quality_score for ns in tr.node_scores if ns.hotkey == hotkey), 0)
+                    adjusted_scores.append(calculate_adjusted_task_score(miner_score, work_score))
+                
+                performance.average_work_score = sum(work_scores) / len(work_scores)
+                performance.total_work_score = sum(work_scores)
+                performance.average_adjusted_score = sum(adjusted_scores) / len(adjusted_scores)
+                performance.total_adjusted_score = sum(adjusted_scores)
+            
             setattr(task_type_breakdown, field_name, performance)
     
     period_totals = PeriodTotals(
