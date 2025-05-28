@@ -29,7 +29,6 @@ async def get_miner_details(
     hotkey: str,
     config: Config = Depends(get_config)
 ) -> MinerDetailsResponse:
-    """Get detailed information about a miner's performance and weights"""
     
     cache_key = f"{MINER_PERFORMANCE_CACHE_KEY_PREFIX}{hotkey}"
     
@@ -38,10 +37,8 @@ async def get_miner_details(
         logger.info(f"Returning cached data for hotkey {hotkey}")
         return MinerDetailsResponse.model_validate_json(cached_data)
     
-    all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
-    hotkey_to_node = {node.hotkey: node for node in all_nodes}
-    
-    target_node = hotkey_to_node.get(hotkey)
+    all_nodes = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
+    target_node = next((node for node in all_nodes if node.hotkey == hotkey), None)
     if not target_node:
         raise HTTPException(status_code=404, detail=f"Node not found for hotkey {hotkey}")
     

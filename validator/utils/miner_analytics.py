@@ -39,7 +39,7 @@ from core.models.utility_models import TaskType
 
 logger = get_logger(__name__)
 
-CACHE_UPDATE_INTERVAL = 3600
+CACHE_UPDATE_INTERVAL = 900
 
 
 async def build_miner_details_response(
@@ -49,7 +49,6 @@ async def build_miner_details_response(
     task_results: list,
     weighting_details: WeightingDetails
 ) -> MinerDetailsResponse:
-    """Build MinerDetailsResponse for a specific hotkey"""
     
     total_incentive = sum(node.incentive for node in all_nodes)
     current_incentive = OnChainIncentive(
@@ -117,7 +116,6 @@ async def build_miner_details_response(
                 if task_scores:
                     performance.average_score = sum(s.average_score for s in task_scores) / len(task_scores)
             
-            # Calculate work scores for this task type
             type_tasks = [tr for tr in task_results if tr.task.task_type == task_type_enum]
             miner_type_tasks = [
                 tr for tr in type_tasks 
@@ -162,14 +160,12 @@ async def build_miner_details_response(
 
 
 def get_recent_submissions(hotkey: str, task_results: list, limit: int = DEFAULT_RECENT_SUBMISSIONS_LIMIT) -> list[TaskSubmissionResult]:
-    """Get recent task submissions for the hotkey"""
     hotkey_tasks = [
         tr for tr in task_results 
         if any(ns.hotkey == hotkey for ns in tr.node_scores)
     ]
     
     hotkey_tasks.sort(key=lambda x: x.task.created_at, reverse=True)
-    
     submissions = []
     for task_result in hotkey_tasks[:limit]:
         task_scores = [(ns.hotkey, ns.quality_score) for ns in task_result.node_scores]
@@ -184,12 +180,11 @@ def get_recent_submissions(hotkey: str, task_results: list, limit: int = DEFAULT
                 work_score = get_task_work_score(task_result.task)
                 adjusted_score = calculate_adjusted_task_score(score, work_score)
                 
-                if getattr(task_result.task, "model_params_count", 0) > 0:
-                    model_size_billions = min(40, max(1, task_result.task.model_params_count // 1_000_000_000))
-                else:
-                    model = task_result.task.model_id
-                    model_size = re.search(r"(\d+)(?=[bB])", model)
-                    model_size_billions = min(8, int(model_size.group(1)) if model_size else 1)
+                model_size_billions = (
+                    min(40, max(1, task_result.task.model_params_count // 1_000_000_000))
+                    if getattr(task_result.task, "model_params_count", 0) > 0
+                    else min(8, int(model_size.group(1)) if (model_size := re.search(r"(\d+)(?=[bB])", task_result.task.model_id)) else 1)
+                )
                 
                 submissions.append(TaskSubmissionResult(
                     task_id=task_result.task.task_id,
@@ -206,12 +201,10 @@ def get_recent_submissions(hotkey: str, task_results: list, limit: int = DEFAULT
                     model_size_billions=float(model_size_billions)
                 ))
                 break
-    
     return submissions
 
 
 def calculate_performance_metrics(hotkey: str, task_results: list) -> MinerPerformanceMetrics:
-    """Calculate overall performance metrics"""
     hotkey_tasks = [
         tr for tr in task_results 
         if any(ns.hotkey == hotkey for ns in tr.node_scores)
@@ -280,7 +273,6 @@ def calculate_performance_metrics(hotkey: str, task_results: list) -> MinerPerfo
 
 
 async def cache_all_miner_performance(config: Config) -> None:
-    """Cache performance data for all active miners"""
     logger.info("Starting miner performance cache update")
     
     try:
@@ -321,7 +313,6 @@ async def cache_all_miner_performance(config: Config) -> None:
 
 
 async def miner_performance_cache_worker(config: Config) -> None:
-    """Background worker that updates miner performance cache every hour"""
     logger.info("Starting miner performance cache worker")
     
     while True:
