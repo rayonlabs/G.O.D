@@ -92,6 +92,10 @@ async def get_miner_details(
     for task_type_str, field_name in task_type_map.items():
         if task_type_str in breakdown["task_types"]:
             type_data = breakdown["task_types"][task_type_str]
+            
+            # Get the actual TaskType enum for filtering
+            task_type_enum = next(tt for tt in TaskType if str(tt) == task_type_str)
+            
             performance = TaskTypePerformance(
                 weight_contribution=type_data["task_weight"],
                 total_submissions=type_data["total_organic_tasks"] + type_data["total_synthetic_tasks"]
@@ -137,8 +141,7 @@ async def get_miner_details(
                     performance.average_score = sum(s.average_score for s in task_scores) / len(task_scores)
             
             # Calculate work scores for this task type
-            current_task_type = list(task_type_map.keys())[list(task_type_map.values()).index((field_name, type_data["task_weight"]))]
-            type_tasks = [tr for tr in task_results if str(tr.task.task_type) == current_task_type]
+            type_tasks = [tr for tr in task_results if tr.task.task_type == task_type_enum]
             miner_type_tasks = [
                 tr for tr in type_tasks 
                 if any(ns.hotkey == hotkey for ns in tr.node_scores)
