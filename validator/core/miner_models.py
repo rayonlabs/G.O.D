@@ -65,6 +65,10 @@ class TaskSubmissionResult(BaseModel):
     rank: int
     total_participants: int
     percentile: float
+    work_score: float
+    adjusted_score: float
+    hours_to_complete: int
+    model_size_billions: float
 
 
 class MinerPerformanceMetrics(BaseModel):
@@ -74,6 +78,11 @@ class MinerPerformanceMetrics(BaseModel):
     
     positive_score_rate: float = 0.0
     average_percentile_rank: float = 0.0
+    
+    average_work_score: float = 0.0
+    total_work_score: float = 0.0
+    average_adjusted_score: float = 0.0
+    total_adjusted_score: float = 0.0
     
     task_type_distribution: dict[str, float] = Field(default_factory=dict)
 

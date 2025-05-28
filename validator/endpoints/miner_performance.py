@@ -6,6 +6,12 @@ from fiber.chain import fetch_nodes
 from fiber.chain.models import Node
 
 from validator.core.config import Config
+from validator.core.constants import (
+    MINER_PERFORMANCE_CACHE_TTL,
+    MINER_PERFORMANCE_CACHE_KEY_PREFIX,
+    DEFAULT_RECENT_SUBMISSIONS_LIMIT,
+    CHAIN_WEIGHT_DIVISOR,
+)
 from validator.core.dependencies import get_config
 from validator.core.miner_models import (
     MinerDetailsResponse,
@@ -24,13 +30,13 @@ from validator.core.weight_setting import (
     get_node_weights_from_period_scores,
     get_miner_performance_breakdown
 )
+from validator.evaluation.scoring import get_task_work_score, calculate_adjusted_task_score
 from validator.utils.logging import get_logger
 from core.models.utility_models import TaskType
 
 logger = get_logger(__name__)
 
-CACHE_TTL = 3600  # 1 hour in seconds
-CACHE_KEY_PREFIX = "miner_performance:"
+MINER_DETAILS_ENDPOINT = "/miner/details/{hotkey}"
 
 
 async def get_miner_details(
@@ -39,7 +45,7 @@ async def get_miner_details(
 ) -> MinerDetailsResponse:
     """Get detailed information about a miner's performance and weights"""
     
-    cache_key = f"{CACHE_KEY_PREFIX}{hotkey}"
+    cache_key = f"{MINER_PERFORMANCE_CACHE_KEY_PREFIX}{hotkey}"
     
     cached_data = await config.redis_db.get(cache_key)
     if cached_data:
@@ -61,7 +67,7 @@ async def get_miner_details(
     total_incentive = sum(node.incentive for node in all_nodes)
     current_incentive = OnChainIncentive(
         raw_value=target_node.incentive,
-        normalized=target_node.incentive / 65535,
+        normalized=target_node.incentive / CHAIN_WEIGHT_DIVISOR,
         network_share_percent=(target_node.incentive / total_incentive * 100) if total_incentive > 0 else 0
     )
     
@@ -138,7 +144,7 @@ async def get_miner_details(
         seven_day_total=breakdown["period_totals"].get("seven_day", 0)
     )
     
-    recent_submissions = get_recent_submissions(hotkey, task_results, limit=20)
+    recent_submissions = get_recent_submissions(hotkey, task_results)
     performance_metrics = calculate_performance_metrics(hotkey, task_results)
     
     response = MinerDetailsResponse(
@@ -152,13 +158,13 @@ async def get_miner_details(
         performance_metrics=performance_metrics
     )
     
-    await config.redis_db.set(cache_key, response.model_dump_json(), ex=CACHE_TTL)
+    await config.redis_db.set(cache_key, response.model_dump_json(), ex=MINER_PERFORMANCE_CACHE_TTL)
     logger.info(f"Cached performance data for hotkey {hotkey}")
     
     return response
 
 
-def get_recent_submissions(hotkey: str, task_results: list, limit: int = 20) -> list[TaskSubmissionResult]:
+def get_recent_submissions(hotkey: str, task_results: list, limit: int = DEFAULT_RECENT_SUBMISSIONS_LIMIT) -> list[TaskSubmissionResult]:
     """Get recent task submissions for the hotkey"""
     hotkey_tasks = [
         tr for tr in task_results 
@@ -178,6 +184,18 @@ def get_recent_submissions(hotkey: str, task_results: list, limit: int = 20) -> 
                 total_participants = len(task_scores_sorted)
                 percentile = ((total_participants - rank) / total_participants * 100) if total_participants > 0 else 0
                 
+                work_score = get_task_work_score(task_result.task)
+                adjusted_score = calculate_adjusted_task_score(score, work_score)
+                
+                # Calculate model size from params or model name
+                if getattr(task_result.task, "model_params_count", 0) > 0:
+                    model_size_billions = min(40, max(1, task_result.task.model_params_count // 1_000_000_000))
+                else:
+                    import re
+                    model = task_result.task.model_id
+                    model_size = re.search(r"(\d+)(?=[bB])", model)
+                    model_size_billions = min(8, int(model_size.group(1)) if model_size else 1)
+                
                 submissions.append(TaskSubmissionResult(
                     task_id=task_result.task.task_id,
                     task_type=task_result.task.task_type,
@@ -186,7 +204,11 @@ def get_recent_submissions(hotkey: str, task_results: list, limit: int = 20) -> 
                     score=score,
                     rank=rank,
                     total_participants=total_participants,
-                    percentile=percentile
+                    percentile=percentile,
+                    work_score=work_score,
+                    adjusted_score=adjusted_score,
+                    hours_to_complete=task_result.task.hours_to_complete,
+                    model_size_billions=float(model_size_billions)
                 ))
                 break
     
@@ -212,19 +234,30 @@ def calculate_performance_metrics(hotkey: str, task_results: list) -> MinerPerfo
     positive_score_rate = (positive_scores / len(all_scores) * 100) if all_scores else 0
     
     percentiles = []
+    work_scores = []
+    adjusted_scores = []
+    
     for tr in hotkey_tasks:
         task_scores = [(ns.hotkey, ns.quality_score) for ns in tr.node_scores]
         task_scores_sorted = sorted(task_scores, key=lambda x: x[1], reverse=True)
         
-        for i, (h, _) in enumerate(task_scores_sorted):
+        work_score = get_task_work_score(tr.task)
+        work_scores.append(work_score)
+        
+        for i, (h, score) in enumerate(task_scores_sorted):
             if h == hotkey:
                 rank = i + 1
                 total = len(task_scores_sorted)
                 percentile = ((total - rank) / total * 100) if total > 0 else 0
                 percentiles.append(percentile)
+                adjusted_scores.append(calculate_adjusted_task_score(score, work_score))
                 break
     
     avg_percentile = sum(percentiles) / len(percentiles) if percentiles else 0
+    avg_work_score = sum(work_scores) / len(work_scores) if work_scores else 0
+    total_work_score = sum(work_scores)
+    avg_adjusted_score = sum(adjusted_scores) / len(adjusted_scores) if adjusted_scores else 0
+    total_adjusted_score = sum(adjusted_scores)
     
     task_counts = {}
     for task_type in TaskType:
@@ -243,6 +276,10 @@ def calculate_performance_metrics(hotkey: str, task_results: list) -> MinerPerfo
         tasks_last_7d=len(tasks_7d),
         positive_score_rate=positive_score_rate,
         average_percentile_rank=avg_percentile,
+        average_work_score=avg_work_score,
+        total_work_score=total_work_score,
+        average_adjusted_score=avg_adjusted_score,
+        total_adjusted_score=total_adjusted_score,
         task_type_distribution=task_distribution
     )
 
@@ -251,10 +288,10 @@ def factory_router() -> APIRouter:
     router = APIRouter()
     
     router.add_api_route(
-        "/miner/details/{hotkey}",
+        MINER_DETAILS_ENDPOINT,
         get_miner_details,
         response_model=MinerDetailsResponse,
-        tags=["miners"],
+        tags=["miner_performance"],
         methods=["GET"],
     )
     
