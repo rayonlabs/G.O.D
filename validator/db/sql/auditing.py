@@ -41,36 +41,34 @@ async def get_recent_tasks(
     hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
 ) -> list[AnyTypeTask]:
     full_tasks_list = []
-    if hotkeys is not None:
-        query = f"""
-            SELECT {cst.TASK_ID} FROM {cst.SUBMISSIONS_TABLE}
-            WHERE {cst.HOTKEY} = ANY($1)
-            ORDER BY {cst.CREATED_ON} DESC
-            LIMIT $2
-            OFFSET $3
-        """
-        async with await config.psql_db.connection() as connection:
-            connection: Connection
+    async with await config.psql_db.connection() as connection:
+        connection: Connection
+        if hotkeys is not None:
+            query = f"""
+                SELECT {cst.TASK_ID} FROM {cst.SUBMISSIONS_TABLE}
+                WHERE {cst.HOTKEY} = ANY($1)
+                ORDER BY {cst.CREATED_ON} DESC
+                LIMIT $2
+                OFFSET $3
+            """
             task_ids = await connection.fetch(query, hotkeys, limit, (page - 1) * limit)
 
-        for task_row in task_ids:
-            task = await tasks_sql.get_task_by_id(task_row[cst.TASK_ID], config.psql_db)
-            full_tasks_list.append(task)
+            for task_row in task_ids:
+                task = await tasks_sql.get_task_by_id(task_row[cst.TASK_ID], config.psql_db, connection)
+                full_tasks_list.append(task)
 
-    else:
-        query = f"""
-            SELECT {cst.TASK_ID} FROM {cst.TASKS_TABLE}
-            ORDER BY {cst.CREATED_AT} DESC
-            LIMIT $1
-            OFFSET $2
-        """
-        async with await config.psql_db.connection() as connection:
-            connection: Connection
+        else:
+            query = f"""
+                SELECT {cst.TASK_ID} FROM {cst.TASKS_TABLE}
+                ORDER BY {cst.CREATED_AT} DESC
+                LIMIT $1
+                OFFSET $2
+            """
             task_ids = await connection.fetch(query, limit, (page - 1) * limit)
 
-        for task_row in task_ids:
-            task = await tasks_sql.get_task_by_id(task_row[cst.TASK_ID], config.psql_db)
-            full_tasks_list.append(task)
+            for task_row in task_ids:
+                task = await tasks_sql.get_task_by_id(task_row[cst.TASK_ID], config.psql_db, connection)
+                full_tasks_list.append(task)
 
     tasks_processed = []
     for task in full_tasks_list:
