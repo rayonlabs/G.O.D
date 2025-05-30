@@ -464,7 +464,7 @@ async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
             TaskStatus.EVALUATING.value,
             TaskStatus.SUCCESS.value,
         )
-        
+
         return NetworkStats(
             number_of_jobs_training=row["number_of_jobs_training"],
             number_of_jobs_preevaluation=row["number_of_jobs_preevaluation"],
@@ -492,7 +492,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
             TaskStatus.EVALUATING.value,
             TaskStatus.SUCCESS.value,
         )
-        
+
         type_query = f"""
             SELECT
                 {cst.TASK_TYPE},
@@ -510,7 +510,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
             TaskStatus.EVALUATING.value,
             TaskStatus.SUCCESS.value,
         )
-        
+
         stats = DetailedNetworkStats(
             number_of_jobs_training=row["number_of_jobs_training"],
             number_of_jobs_preevaluation=row["number_of_jobs_preevaluation"],
@@ -518,14 +518,14 @@ async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
             number_of_jobs_success=row["number_of_jobs_success"],
             next_training_end=row["next_training_end"],
         )
-        
+
         type_mapping = {
             TaskType.INSTRUCTTEXTTASK.value: "instruct",
             TaskType.DPOTASK.value: "dpo",
             TaskType.GRPOTASK.value: "grpo",
             TaskType.IMAGETASK.value: "image"
         }
-        
+
         for row in type_rows:
             prefix = type_mapping.get(row[cst.TASK_TYPE])
             if prefix:
@@ -536,7 +536,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
                     "success": row["success_count"]
                 }.items():
                     setattr(stats, f"{prefix}_{status}", count)
-        
+
         return stats
 
 
@@ -1101,22 +1101,11 @@ async def get_reward_functions(task_id: UUID, psql_db: PSQLDB) -> list[RewardFun
 
 async def _get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: int) -> list[RewardFunction]:
     query = f"""
-        WITH distinct_funcs AS (
-            SELECT DISTINCT ON (rf.{cst.FUNC_HASH})
-                rf.{cst.FUNC_HASH},
-                rf.{cst.REWARD_FUNC},
-                rf.{cst.IS_GENERIC},
-                RANDOM() as random_num
-            FROM {cst.REWARD_FUNCTIONS_TABLE} rf
-            JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
-            JOIN {cst.TASKS_TABLE} t ON gtf.{cst.TASK_ID} = t.{cst.TASK_ID}
-            WHERE rf.{cst.IS_GENERIC} = true
-            AND t.{cst.STATUS} = '{TaskStatus.SUCCESS.value}'
-            LIMIT 300
-        )
         SELECT {cst.FUNC_HASH}, {cst.REWARD_FUNC}, {cst.IS_GENERIC}
-        FROM distinct_funcs
-        ORDER BY random_num
+        FROM {cst.REWARD_FUNCTIONS_TABLE}
+        WHERE {cst.IS_GENERIC} = true
+        AND {cst.IS_MANUAL} = true
+        ORDER BY RANDOM()
         LIMIT $1
     """
 

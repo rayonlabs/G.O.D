@@ -1,3 +1,4 @@
+import numbers
 from typing import Callable
 
 from validator.utils.logging import get_logger
@@ -27,7 +28,7 @@ def validate_reward_function(func_def: str) -> tuple[bool, str, Callable | None]
         assert len(test_rewards) == len(test_completions), (
             "The number of rewards should be the same as the number of completions."
         )
-        assert all(isinstance(reward, float) for reward in test_rewards), "All rewards should be floats."
+        assert all(isinstance(reward, numbers.Number) for reward in test_rewards), "All rewards should be numbers."
 
         return True, "", func
     except Exception as e:
