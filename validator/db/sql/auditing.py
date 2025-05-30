@@ -6,7 +6,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from loguru import logger  # noqa
 
-from core.models.utility_models import RewardFunction, TaskType
+from core.models.utility_models import ImageTextPair, RewardFunction, TaskType
 from validator.core.config import Config
 from validator.core.dependencies import get_config
 from validator.core.models import AnyTypeTask
@@ -40,42 +40,151 @@ def normalise_float(float: float | None) -> float | None:
 async def get_recent_tasks(
     hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
 ) -> list[AnyTypeTask]:
-    full_tasks_list = []
     async with await config.psql_db.connection() as connection:
         connection: Connection
-        if hotkeys is not None:
-            query = f"""
-                SELECT {cst.TASK_ID} FROM {cst.SUBMISSIONS_TABLE}
-                WHERE {cst.HOTKEY} = ANY($1)
-                ORDER BY {cst.CREATED_ON} DESC
-                LIMIT $2
-                OFFSET $3
-            """
-            task_ids = await connection.fetch(query, hotkeys, limit, (page - 1) * limit)
-
-            for task_row in task_ids:
-                task = await tasks_sql.get_task_by_id(task_row[cst.TASK_ID], config.psql_db, connection)
-                full_tasks_list.append(task)
-
-        else:
-            query = f"""
-                SELECT {cst.TASK_ID} FROM {cst.TASKS_TABLE}
+        base_query = f"""
+        WITH task_ids AS (
+            {
+                f'''
+                SELECT DISTINCT s.{cst.TASK_ID}
+                FROM {cst.SUBMISSIONS_TABLE} s
+                WHERE s.{cst.HOTKEY} = ANY($1)
+                ORDER BY s.{cst.CREATED_ON} DESC
+                LIMIT $2 OFFSET $3
+                '''
+                if hotkeys is not None else
+                f'''
+                SELECT {cst.TASK_ID}
+                FROM {cst.TASKS_TABLE}
                 ORDER BY {cst.CREATED_AT} DESC
-                LIMIT $1
-                OFFSET $2
-            """
-            task_ids = await connection.fetch(query, limit, (page - 1) * limit)
+                LIMIT $1 OFFSET $2
+                '''
+            }
+        ),
+        image_pairs AS (
+            SELECT 
+                itp.{cst.TASK_ID},
+                ARRAY_AGG(json_build_object(
+                    'image_url', itp.{cst.IMAGE_URL},
+                    'text_url', itp.{cst.TEXT_URL}
+                ) ORDER BY itp.{cst.ID}) as image_text_pairs
+            FROM task_ids
+            JOIN {cst.IMAGE_TEXT_PAIRS_TABLE} itp ON task_ids.{cst.TASK_ID} = itp.{cst.TASK_ID}
+            GROUP BY itp.{cst.TASK_ID}
+        ),
+        reward_functions AS (
+            SELECT 
+                gtf.{cst.TASK_ID},
+                ARRAY_AGG(json_build_object(
+                    'reward_func', rf.{cst.REWARD_FUNC},
+                    'func_hash', rf.{cst.FUNC_HASH},
+                    'is_generic', rf.{cst.IS_GENERIC},
+                    'reward_weight', gtf.{cst.REWARD_WEIGHT}
+                )::text) as reward_functions
+            FROM task_ids
+            JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON task_ids.{cst.TASK_ID} = gtf.{cst.TASK_ID}
+            JOIN {cst.REWARD_FUNCTIONS_TABLE} rf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
+            GROUP BY gtf.{cst.TASK_ID}
+        )
+        -- Main query joining all necessary tables
+        SELECT 
+            t.*,
+            itt.field_system as itt_field_system,
+            itt.field_instruction,
+            itt.field_input,
+            itt.field_output,
+            itt.format as itt_format,
+            itt.no_input_format,
+            itt.synthetic_data as itt_synthetic_data,
+            itt.file_format as itt_file_format,
+            it.model_type,
+            ip.image_text_pairs,
+            dt.field_prompt as dpo_field_prompt,
+            dt.field_chosen,
+            dt.field_rejected,
+            dt.prompt_format,
+            dt.chosen_format,
+            dt.rejected_format,
+            dt.synthetic_data as dpo_synthetic_data,
+            dt.file_format as dpo_file_format,
+            gt.field_prompt as grpo_field_prompt,
+            gt.synthetic_data as grpo_synthetic_data,
+            gt.file_format as grpo_file_format,
+            rf.reward_functions
+        FROM task_ids 
+        JOIN {cst.TASKS_TABLE} t ON t.{cst.TASK_ID} = task_ids.{cst.TASK_ID}
+        LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} itt ON t.{cst.TASK_ID} = itt.{cst.TASK_ID}
+        LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
+        LEFT JOIN image_pairs ip ON t.{cst.TASK_ID} = ip.{cst.TASK_ID}
+        LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
+        LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
+        LEFT JOIN reward_functions rf ON t.{cst.TASK_ID} = rf.{cst.TASK_ID}
+        """
 
-            for task_row in task_ids:
-                task = await tasks_sql.get_task_by_id(task_row[cst.TASK_ID], config.psql_db, connection)
-                full_tasks_list.append(task)
+        if hotkeys is not None:
+            rows = await connection.fetch(base_query, hotkeys, limit, (page - 1) * limit)
+        else:
+            rows = await connection.fetch(base_query, limit, (page - 1) * limit)
 
-    tasks_processed = []
-    for task in full_tasks_list:
-        task = hide_sensitive_data_till_finished(task)
-        tasks_processed.append(task)
+        tasks_processed = []
+        for row in rows:
+            task_data = dict(row)
+            task_type = task_data[cst.TASK_TYPE]
+            
+            if task_type == TaskType.INSTRUCTTEXTTASK.value:
+                task_data['field_system'] = task_data.pop('itt_field_system')
+                task_data['format'] = task_data.pop('itt_format')
+                task_data['synthetic_data'] = task_data.pop('itt_synthetic_data')
+                task_data['file_format'] = task_data.pop('itt_file_format')
+                task = InstructTextTask(**{k: v for k, v in task_data.items() if k in InstructTextTask.model_fields})
+            elif task_type == TaskType.IMAGETASK.value:
+                # The image_text_pairs come as strings from PostgreSQL, need to parse them
+                image_text_pairs = task_data.pop('image_text_pairs') or []
+                if isinstance(image_text_pairs, str):
+                    # If it's a single string, try to parse it
+                    try:
+                        image_text_pairs = json.loads(image_text_pairs)
+                    except json.JSONDecodeError:
+                        image_text_pairs = []
+                elif isinstance(image_text_pairs, list):
+                    # If it's a list of strings, parse each one
+                    try:
+                        image_text_pairs = [
+                            ImageTextPair(**pair) if isinstance(pair, dict) else ImageTextPair(**json.loads(pair))
+                            for pair in image_text_pairs
+                        ]
+                    except json.JSONDecodeError:
+                        image_text_pairs = []
+                
+                task = ImageTask(**{k: v for k, v in task_data.items() if k in ImageTask.model_fields}, 
+                               image_text_pairs=image_text_pairs)
+            elif task_type == TaskType.DPOTASK.value:
+                task_data['field_prompt'] = task_data.pop('dpo_field_prompt')
+                task_data['synthetic_data'] = task_data.pop('dpo_synthetic_data')
+                task_data['file_format'] = task_data.pop('dpo_file_format')
+                task = DpoTask(**{k: v for k, v in task_data.items() if k in DpoTask.model_fields})
+            elif task_type == TaskType.GRPOTASK.value:
+                task_data['field_prompt'] = task_data.pop('grpo_field_prompt')
+                task_data['synthetic_data'] = task_data.pop('grpo_synthetic_data')
+                task_data['file_format'] = task_data.pop('grpo_file_format')
+                
+                # Parse reward functions from the aggregated JSON array
+                reward_functions = []
+                if task_data.get('reward_functions'):
+                    for rf_str in task_data['reward_functions']:
+                        try:
+                            rf_dict = json.loads(rf_str)
+                            reward_functions.append(RewardFunction(**rf_dict))
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+                task_data['reward_functions'] = reward_functions
+                
+                task = GrpoTask(**{k: v for k, v in task_data.items() if k in GrpoTask.model_fields})
+            
+            task = hide_sensitive_data_till_finished(task)
+            tasks_processed.append(task)
 
-    return tasks_processed
+        return tasks_processed
 
 
 async def _process_task_batch(
