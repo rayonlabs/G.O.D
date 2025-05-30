@@ -138,16 +138,13 @@ async def get_recent_tasks(
                 task_data['file_format'] = task_data.pop('itt_file_format')
                 task = InstructTextTask(**{k: v for k, v in task_data.items() if k in InstructTextTask.model_fields})
             elif task_type == TaskType.IMAGETASK.value:
-                # The image_text_pairs come as strings from PostgreSQL, need to parse them
                 image_text_pairs = task_data.pop('image_text_pairs') or []
                 if isinstance(image_text_pairs, str):
-                    # If it's a single string, try to parse it
                     try:
                         image_text_pairs = json.loads(image_text_pairs)
                     except json.JSONDecodeError:
                         image_text_pairs = []
                 elif isinstance(image_text_pairs, list):
-                    # If it's a list of strings, parse each one
                     try:
                         image_text_pairs = [
                             ImageTextPair(**pair) if isinstance(pair, dict) else ImageTextPair(**json.loads(pair))
@@ -168,7 +165,6 @@ async def get_recent_tasks(
                 task_data['synthetic_data'] = task_data.pop('grpo_synthetic_data')
                 task_data['file_format'] = task_data.pop('grpo_file_format')
                 
-                # Parse reward functions from the aggregated JSON array
                 reward_functions = []
                 if task_data.get('reward_functions'):
                     for rf_str in task_data['reward_functions']:
