@@ -601,8 +601,8 @@ async def get_miners_for_task(task_id: UUID, psql_db: PSQLDB) -> list[Node]:
         return [Node(**dict(row)) for row in rows]
 
 
-async def get_task_by_id(task_id: UUID, psql_db: PSQLDB, connection: Connection | None = None) -> AnyTypeTask:
-    async def _get_task(conn: Connection) -> AnyTypeTask:
+async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None = None) -> AnyTypeTask:
+    async def _get_task_inner(conn: Connection) -> AnyTypeTask:
         base_query = f"""
             SELECT * FROM {cst.TASKS_TABLE} WHERE {cst.TASK_ID} = $1
         """
@@ -665,10 +665,10 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB, connection: Connection 
             return GrpoRawTask(**full_task_data, reward_functions=reward_functions)
 
     if connection is not None:
-        return await _get_task(connection)
+        return await _get_task_inner(connection)
     
     async with await psql_db.connection() as connection:
-        return await _get_task(connection)
+        return await _get_task_inner(connection)
 
 
 async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> list[dict]:
@@ -687,6 +687,105 @@ async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> li
         """
         rows = await connection.fetch(query, task_id)
         return [dict(row) for row in rows]
+
+async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
+    """Get a task by ID along with its winning submissions and task-specific details"""
+    async with await psql_db.connection() as connection:
+        connection: Connection
+
+        base_query = f"""
+            SELECT * FROM {cst.TASKS_TABLE} WHERE {cst.TASK_ID} = $1
+        """
+        base_row = await connection.fetchrow(base_query, task_id)
+
+        if not base_row:
+            return None
+
+        task_type = base_row[cst.TASK_TYPE]
+
+        victorious_repo_cte = f"""
+            WITH victorious_repo AS (
+                SELECT submissions.task_id, submissions.repo
+                FROM {cst.SUBMISSIONS_TABLE} submissions
+                JOIN {cst.TASK_NODES_TABLE} task_nodes
+                ON submissions.task_id = task_nodes.task_id
+                AND submissions.hotkey = task_nodes.hotkey
+                AND submissions.netuid = task_nodes.netuid
+                WHERE submissions.task_id = $1
+                AND task_nodes.quality_score IS NOT NULL
+                ORDER BY task_nodes.quality_score DESC
+                LIMIT 1
+            )
+        """
+
+        if task_type == TaskType.INSTRUCTTEXTTASK.value:
+            specific_query = f"""
+                {victorious_repo_cte}
+                SELECT
+                    tasks.*,
+                    tt.field_system, tt.field_instruction, tt.field_input, tt.field_output,
+                    tt.format, tt.no_input_format, tt.synthetic_data, tt.system_format, tt.file_format,
+                    COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
+                FROM {cst.TASKS_TABLE} tasks
+                LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON tasks.{cst.TASK_ID} = tt.{cst.TASK_ID}
+                LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
+                WHERE tasks.{cst.TASK_ID} = $1
+            """
+        elif task_type == TaskType.IMAGETASK.value:
+            specific_query = f"""
+                {victorious_repo_cte}
+                SELECT
+                    tasks.*,
+                    it.model_type,
+                    victorious_repo.repo as trained_model_repository
+                FROM {cst.TASKS_TABLE} tasks
+                LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON tasks.{cst.TASK_ID} = it.{cst.TASK_ID}
+                LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
+                WHERE tasks.{cst.TASK_ID} = $1
+            """
+        elif task_type == TaskType.DPOTASK.value:
+            specific_query = f"""
+                {victorious_repo_cte}
+                SELECT
+                    tasks.*,
+                    dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
+                    dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format,
+                    COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
+                FROM {cst.TASKS_TABLE} tasks
+                LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON tasks.{cst.TASK_ID} = dt.{cst.TASK_ID}
+                LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
+                WHERE tasks.{cst.TASK_ID} = $1
+            """
+        elif task_type == TaskType.GRPOTASK.value:
+            specific_query = f"""
+                {victorious_repo_cte}
+                SELECT
+                    tasks.*,
+                    gt.field_prompt, gt.synthetic_data, gt.file_format,
+                    COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
+                FROM {cst.TASKS_TABLE} tasks
+                LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON tasks.{cst.TASK_ID} = gt.{cst.TASK_ID}
+                LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
+                WHERE tasks.{cst.TASK_ID} = $1
+            """
+        else:
+            raise ValueError(f"Unsupported task type: {task_type}")
+
+        row = await connection.fetchrow(specific_query, task_id)
+        if not row:
+            return None
+
+        full_task_data = dict(row)
+        if task_type == TaskType.INSTRUCTTEXTTASK.value:
+            return InstructTextTask(**full_task_data)
+        elif task_type == TaskType.IMAGETASK.value:
+            image_text_pairs = await get_image_text_pairs(task_id, psql_db)
+            return ImageTask(**full_task_data, image_text_pairs=image_text_pairs)
+        elif task_type == TaskType.DPOTASK.value:
+            return DpoTask(**full_task_data)
+        elif task_type == TaskType.GRPOTASK.value:
+            reward_functions = await get_reward_functions(task_id, psql_db)
+            return GrpoTask(**full_task_data, reward_functions=reward_functions)
 
 
 async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> list[Task]:
