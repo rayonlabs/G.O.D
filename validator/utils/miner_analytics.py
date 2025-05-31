@@ -54,7 +54,7 @@ async def build_miner_details_response(
     current_incentive = OnChainIncentive(
         raw_value=target_node.incentive,
         normalized=target_node.incentive / CHAIN_WEIGHT_DIVISOR,
-        network_share_percent=(target_node.incentive / total_incentive * 100) if total_incentive > 0 else 0
+        network_share_percent=(target_node.incentive / total_incentive) if total_incentive > 0 else 0
     )
     
     breakdown = get_miner_performance_breakdown(hotkey, task_results)
@@ -168,14 +168,21 @@ def get_recent_submissions(hotkey: str, task_results: list, limit: int = DEFAULT
     hotkey_tasks.sort(key=lambda x: x.task.created_at, reverse=True)
     submissions = []
     for task_result in hotkey_tasks[:limit]:
-        task_scores = [(ns.hotkey, ns.quality_score) for ns in task_result.node_scores]
+        submitted_scores = {ns.hotkey: ns.quality_score for ns in task_result.node_scores}
+        
+        all_participants = []
+        if task_result.task.assigned_miners:
+            for node_id in task_result.task.assigned_miners:
+                pass
+        
+        task_scores = [(hotkey, score) for hotkey, score in submitted_scores.items()]
         task_scores_sorted = sorted(task_scores, key=lambda x: x[1], reverse=True)
         
         for i, (h, score) in enumerate(task_scores_sorted):
             if h == hotkey:
                 rank = i + 1
                 total_participants = len(task_scores_sorted)
-                percentile = ((total_participants - rank) / total_participants * 100) if total_participants > 0 else 0
+                percentile = ((total_participants - rank) / total_participants) if total_participants > 0 else 0
                 
                 work_score = get_task_work_score(task_result.task)
                 adjusted_score = calculate_adjusted_task_score(score, work_score)
@@ -218,15 +225,17 @@ def calculate_performance_metrics(hotkey: str, task_results: list) -> MinerPerfo
         ns.quality_score for tr in hotkey_tasks 
         for ns in tr.node_scores if ns.hotkey == hotkey
     ]
-    positive_scores = sum(1 for s in all_scores if s > 0)
-    positive_score_rate = (positive_scores / len(all_scores) * 100) if all_scores else 0
+    positive_scores = sum(1 for s in all_scores if s > -1)
+    positive_score_rate = (positive_scores / len(all_scores)) if all_scores else 0
     
     percentiles = []
     work_scores = []
     adjusted_scores = []
     
     for tr in hotkey_tasks:
-        task_scores = [(ns.hotkey, ns.quality_score) for ns in tr.node_scores]
+        submitted_scores = {ns.hotkey: ns.quality_score for ns in tr.node_scores}
+        
+        task_scores = [(hotkey, score) for hotkey, score in submitted_scores.items()]
         task_scores_sorted = sorted(task_scores, key=lambda x: x[1], reverse=True)
         
         work_score = get_task_work_score(tr.task)
@@ -236,7 +245,7 @@ def calculate_performance_metrics(hotkey: str, task_results: list) -> MinerPerfo
             if h == hotkey:
                 rank = i + 1
                 total = len(task_scores_sorted)
-                percentile = ((total - rank) / total * 100) if total > 0 else 0
+                percentile = ((total - rank) / total) if total > 0 else 0
                 percentiles.append(percentile)
                 adjusted_scores.append(calculate_adjusted_task_score(score, work_score))
                 break
