@@ -350,10 +350,10 @@ async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) 
             SELECT
                 COALESCE(AVG(tn.{cst.QUALITY_SCORE}), 0) as avg_quality_score,
                 COALESCE(COUNT(
-                    CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END
+                    CASE WHEN tn.{cst.QUALITY_SCORE} > -1 THEN 1 END
                 )::FLOAT / NULLIF(COUNT(*), 0), 0) as success_rate,
                 COALESCE(COUNT(
-                    CASE WHEN tn.{cst.QUALITY_SCORE} > 0.9 THEN 1 END
+                    CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END
                 )::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate,
                 COALESCE(COUNT(*), 0) as total_count,
                 COALESCE(SUM(tn.{cst.QUALITY_SCORE}), 0) as total_score,
