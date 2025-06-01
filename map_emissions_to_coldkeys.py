@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json
 import asyncio
-from validator.db.database import get_db
+from validator.db.database import PSQLDB
 from validator.db.sql.nodes import get_all_nodes_for_netuid
 
 # Your emissions data
@@ -78,7 +78,11 @@ emissions_data = {
 }
 
 async def main():
-    async with get_db() as db:
+    # Create database connection
+    db = PSQLDB(from_env=True)
+    await db.connect()
+    
+    try:
         # Get all nodes for netuid 56
         nodes = await get_all_nodes_for_netuid(db, 56)
         
@@ -136,6 +140,10 @@ async def main():
             json.dump(output, f, indent=2)
         
         print("\nResults saved to emissions_by_coldkey.json")
+    
+    finally:
+        # Close database connection
+        await db.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
