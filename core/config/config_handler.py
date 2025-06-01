@@ -11,6 +11,7 @@ from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 
 
 logger = get_logger(__name__)
@@ -18,11 +19,13 @@ logger = get_logger(__name__)
 
 def create_dataset_entry(
     dataset: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType,
     file_format: FileFormat,
     is_eval: bool = False,
 ) -> dict:
     dataset_entry = {"path": dataset}
+
+    logger.info(dataset_type)
 
     if file_format == FileFormat.JSON:
         if not is_eval:
@@ -37,6 +40,9 @@ def create_dataset_entry(
         dataset_entry.update(_process_dpo_dataset_fields(dataset_type))
     elif isinstance(dataset_type, GrpoDatasetType):
         dataset_entry.update(_process_grpo_dataset_fields(dataset_type))
+    elif isinstance(dataset_type, ChatTemplateDatasetType):
+        chat_template_type_dict = {key: value for key, value in dataset_type.model_dump().items() if value is not None}
+        dataset_entry.update(_process_chat_template_dataset_fields(chat_template_type_dict))
     else:
         raise ValueError("Invalid dataset_type provided.")
 
@@ -115,3 +121,19 @@ def _process_instruct_dataset_fields(instruct_type_dict: dict) -> dict:
         processed_dict.setdefault("format", "{instruction}")
 
     return {"format": "custom", "type": processed_dict}
+
+
+def _process_chat_template_dataset_fields(dataset_dict: dict) -> dict:
+    processed_dict = {}
+
+    processed_dict["chat_template"] = dataset_dict.get("chat_template", "chatml")
+    processed_dict["type"] = "chat_template"
+    processed_dict["field_messages"] = dataset_dict.get("chat_column", "conversations")
+    processed_dict["message_field_role"] = dataset_dict.get("chat_role_field", "from")
+    processed_dict["message_field_content"] = dataset_dict.get("chat_content_field", "value")
+    processed_dict["roles"] = {
+        "assistant": [dataset_dict.get("chat_assistant_reference", "assistant")],
+        "user": [dataset_dict.get("chat_user_reference", "user")],
+    }
+
+    return processed_dict

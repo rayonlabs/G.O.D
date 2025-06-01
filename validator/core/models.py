@@ -160,6 +160,22 @@ class InstructTextRawTask(RawTask):
     task_type: TaskType = TaskType.INSTRUCTTEXTTASK
 
 
+class ChatRawTask(RawTask):
+    """
+    Chat task data as stored in the database. It expand the RawTask with fields from the chat_tasks table.
+    """
+
+    chat_template: str | None = "chatml"
+    chat_column: str | None = "conversations"
+    chat_role_field: str | None = "from"
+    chat_content_field: str | None = "value"
+    chat_user_reference: str | None = "user"
+    chat_assistant_reference: str | None = "assistant"
+    synthetic_data: str | None = None
+    file_format: FileFormat = FileFormat.HF
+    task_type: TaskType = TaskType.CHATTASK
+
+
 class ImageRawTask(RawTask):
     """
     Image task data as stored in the database. It expand the RawTask with fields from the ImageTask table.
@@ -195,6 +211,10 @@ class DpoTask(DpoRawTask):
 
 
 class GrpoTask(GrpoRawTask):
+    trained_model_repository: str | None = None
+
+
+class ChatTask(ChatRawTask):
     trained_model_repository: str | None = None
 
 

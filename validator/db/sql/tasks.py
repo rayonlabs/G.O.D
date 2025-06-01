@@ -19,6 +19,8 @@ from validator.core.models import ImageRawTask
 from validator.core.models import ImageTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import InstructTextTask
+from validator.core.models import ChatRawTask
+from validator.core.models import ChatTask
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
 from validator.core.models import RewardFunction
@@ -88,6 +90,8 @@ async def _insert_task_specific_data(connection: Connection, task: AnyTypeRawTas
         await _insert_dpo_task(connection, task, task_record)
     elif isinstance(task, GrpoRawTask):
         await _insert_grpo_task(connection, task, task_record)
+    elif isinstance(task, ChatRawTask):
+        await _insert_chat_task(connection, task, task_record)
 
 async def _insert_instruct_text_task(connection: Connection, task: InstructTextRawTask, task_record: dict) -> None:
     query = f"""
@@ -108,6 +112,26 @@ async def _insert_instruct_text_task(connection: Connection, task: InstructTextR
         task.no_input_format,
         task.synthetic_data,
         task.file_format,
+    )
+
+
+async def _insert_chat_task(connection: Connection, task: ChatRawTask, task_record: dict) -> None:
+    query = f"""
+        INSERT INTO {cst.CHAT_TASKS_TABLE}
+        ({cst.TASK_ID}, {cst.CHAT_TEMPLATE}, {cst.CHAT_COLUMN},
+        {cst.CHAT_ROLE_FIELD}, {cst.CHAT_CONTENT_FIELD}, {cst.CHAT_USER_REFERENCE},
+        {cst.CHAT_ASSISTANT_REFERENCE})
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+    """
+    await connection.execute(
+        query,
+        task_record[cst.TASK_ID],
+        task.chat_template,
+        task.chat_column,
+        task.chat_role_field,
+        task.chat_content_field,
+        task.chat_user_reference,
+        task.chat_assistant_reference,
     )
 
 

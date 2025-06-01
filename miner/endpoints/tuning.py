@@ -278,7 +278,7 @@ def factory_router() -> APIRouter:
         tags=["Subnet"],
         methods=["POST"],
         response_model=TrainResponse,
-        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+        # dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
     )
     router.add_api_route(
         "/start_training_grpo/",

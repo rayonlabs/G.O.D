@@ -26,6 +26,7 @@ from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import TextJob
 from miner.utils import download_flux_unet
 
@@ -70,7 +71,7 @@ class DockerEnvironment:
 def _load_and_modify_config(
     dataset: str,
     model: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType,
     file_format: FileFormat,
     task_id: str,
     expected_repo_name: str | None,
@@ -78,7 +79,7 @@ def _load_and_modify_config(
     """
     Loads the config template and modifies it to create a new job config.
     """
-    if isinstance(dataset_type, InstructTextDatasetType | DpoDatasetType):
+    if isinstance(dataset_type, InstructTextDatasetType | DpoDatasetType | ChatTemplateDatasetType):
         config_path = cst.CONFIG_TEMPLATE_PATH
     elif isinstance(dataset_type, GrpoDatasetType):
         config_path = cst.CONFIG_TEMPLATE_PATH_GRPO
@@ -177,7 +178,7 @@ def create_job_text(
     job_id: str,
     dataset: str,
     model: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType,
     file_format: FileFormat,
     expected_repo_name: str | None,
 ):
