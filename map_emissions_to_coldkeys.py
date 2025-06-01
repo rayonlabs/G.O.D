@@ -94,7 +94,7 @@ async def main():
         # Create hotkey to coldkey mapping
         hotkey_to_coldkey = {}
         for node in nodes:
-            hotkey_to_coldkey[node['hotkey']] = node['coldkey']
+            hotkey_to_coldkey[node.hotkey] = node.coldkey
         
         # Map emissions to coldkeys
         coldkey_emissions = {}
