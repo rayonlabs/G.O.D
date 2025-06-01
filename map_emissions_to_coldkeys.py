@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 import json
 import asyncio
+import os
+from dotenv import load_dotenv
 from validator.db.database import PSQLDB
 from validator.db.sql.nodes import get_all_nodes
+
+# Load environment variables from .vali.env
+load_dotenv('.vali.env')
 
 # Your emissions data
 emissions_data = {
