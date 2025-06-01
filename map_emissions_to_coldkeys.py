@@ -2,7 +2,7 @@
 import json
 import asyncio
 from validator.db.database import PSQLDB
-from validator.db.sql.nodes import get_all_nodes_for_netuid
+from validator.db.sql.nodes import get_all_nodes
 
 # Your emissions data
 emissions_data = {
@@ -83,8 +83,8 @@ async def main():
     await db.connect()
     
     try:
-        # Get all nodes for netuid 56
-        nodes = await get_all_nodes_for_netuid(db, 56)
+        # Get all nodes (uses NETUID from environment/config)
+        nodes = await get_all_nodes(db)
         
         # Create hotkey to coldkey mapping
         hotkey_to_coldkey = {}
