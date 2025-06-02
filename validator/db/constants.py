@@ -10,6 +10,7 @@ NODES_TABLE = "nodes"
 NODES_HISTORY_TABLE = "nodes_history"
 TASKS_TABLE = "tasks"
 INSTRUCT_TEXT_TASKS_TABLE = "instruct_text_tasks"
+CHAT_TASKS_TABLE = "chat_tasks"
 IMAGE_TASKS_TABLE = "image_tasks"
 DPO_TASKS_TABLE = "dpo_tasks"
 TASK_NODES_TABLE = "task_nodes"
@@ -94,6 +95,14 @@ FIELD_REJECTED = "field_rejected"
 PROMPT_FORMAT = "prompt_format"
 CHOSEN_FORMAT = "chosen_format"
 REJECTED_FORMAT = "rejected_format"
+
+# Chat Tasks Table Columns
+CHAT_TEMPLATE = "chat_template"
+CHAT_COLUMN = "chat_column"
+CHAT_ROLE_FIELD = "chat_role_field"
+CHAT_CONTENT_FIELD = "chat_content_field"
+CHAT_USER_REFERENCE = "chat_user_reference"
+CHAT_ASSISTANT_REFERENCE = "chat_assistant_reference"
 
 # Reward Functions Table Columns
 REWARD_ID = "reward_id"

@@ -12,8 +12,10 @@ from pydantic import model_validator
 
 from core import constants as cst
 from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import TextDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructTextDatasetType
@@ -53,7 +55,7 @@ class TrainRequestText(TrainRequest):
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
+    dataset_type: TextDatasetType
     file_format: FileFormat
 
 
@@ -165,6 +167,32 @@ class NewTaskRequestInstructText(NewTaskRequest):
     @model_validator(mode="before")
     def convert_empty_strings(cls, values: dict) -> dict:
         string_fields = ["field_instruction", "field_input", "field_output", "field_system"]
+        for field in string_fields:
+            if field in values and isinstance(values[field], str):
+                values[field] = values[field].strip() or None
+        return values
+
+
+class NewTaskRequestChat(NewTaskRequest):
+    chat_template: str = Field(..., description="The chat template of the dataset", examples=["chatml"])
+    chat_column: str | None = Field(None, description="The column name containing the conversations", examples=["conversations"])
+    chat_role_field: str | None = Field(None, description="The column name for the role", examples=["from"])
+    chat_content_field: str | None = Field(None, description="The column name for the content", examples=["value"])
+    chat_user_reference: str | None = Field(None, description="The user reference", examples=["user"])
+    chat_assistant_reference: str | None = Field(None, description="The assistant reference", examples=["assistant"])
+
+    ds_repo: str = Field(..., description="The repository for the dataset", examples=["Magpie-Align/Magpie-Pro-300K-Filtered"])
+    file_format: FileFormat = Field(
+        FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
+    model_repo: str = Field(..., description="The repository for the model", examples=["Qwen/Qwen2.5-Coder-32B-Instruct"])
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
+    @model_validator(mode="before")
+    def convert_empty_strings(cls, values):
+        string_fields = ["chat_column", "chat_role_field", "chat_content_field", "chat_user_reference", "chat_assistant_reference"]
         for field in string_fields:
             if field in values and isinstance(values[field], str):
                 values[field] = values[field].strip() or None
