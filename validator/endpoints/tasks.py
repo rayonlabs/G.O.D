@@ -13,6 +13,7 @@ from core.models.payload_models import AnyTypeTaskDetails
 from core.models.payload_models import LeaderboardRow
 from core.models.payload_models import NewTaskRequestDPO
 from core.models.payload_models import NewTaskRequestGrpo
+from core.models.payload_models import NewTaskRequestChat
 from core.models.payload_models import NewTaskRequestImage
 from core.models.payload_models import NewTaskRequestInstructText
 from core.models.payload_models import NewTaskResponse
@@ -31,6 +32,7 @@ from validator.core.dependencies import get_config
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
+from validator.core.models import ChatRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import NetworkStats
 from validator.core.models import DetailedNetworkStats
@@ -133,6 +135,39 @@ async def create_task_grpo(
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
         task_type=TaskType.GRPOTASK,
+        result_model_name=request.result_model_name,
+    )
+
+    task = await task_sql.add_task(task, config.psql_db)
+
+    logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
+
+
+async def create_task_chat(
+    request: NewTaskRequestChat,
+    config: Config = Depends(get_config),
+) -> NewTaskResponse:
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
+
+    task = ChatRawTask(
+        model_id=request.model_repo,
+        ds=request.ds_repo,
+        file_format=request.file_format,
+        chat_template=request.chat_template,
+        chat_column=request.chat_column,
+        chat_role_field=request.chat_role_field,
+        chat_content_field=request.chat_content_field,
+        chat_user_reference=request.chat_user_reference,
+        chat_assistant_reference=request.chat_assistant_reference,
+        is_organic=True,
+        status=TaskStatus.PENDING,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=request.hours_to_complete,
+        account_id=request.account_id,
+        task_type=TaskType.CHATTASK,
         result_model_name=request.result_model_name,
     )
 

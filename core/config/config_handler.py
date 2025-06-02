@@ -7,6 +7,7 @@ from fiber.logging_utils import get_logger
 from transformers import AutoTokenizer
 
 import core.constants as cst
+from core.models.utility_models import TextDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
@@ -19,7 +20,7 @@ logger = get_logger(__name__)
 
 def create_dataset_entry(
     dataset: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType,
+    dataset_type: TextDatasetType,
     file_format: FileFormat,
     is_eval: bool = False,
 ) -> dict:
@@ -41,8 +42,7 @@ def create_dataset_entry(
     elif isinstance(dataset_type, GrpoDatasetType):
         dataset_entry.update(_process_grpo_dataset_fields(dataset_type))
     elif isinstance(dataset_type, ChatTemplateDatasetType):
-        chat_template_type_dict = {key: value for key, value in dataset_type.model_dump().items() if value is not None}
-        dataset_entry.update(_process_chat_template_dataset_fields(chat_template_type_dict))
+        dataset_entry.update(_process_chat_template_dataset_fields(dataset_type))
     else:
         raise ValueError("Invalid dataset_type provided.")
 
@@ -126,14 +126,14 @@ def _process_instruct_dataset_fields(instruct_type_dict: dict) -> dict:
 def _process_chat_template_dataset_fields(dataset_dict: dict) -> dict:
     processed_dict = {}
 
-    processed_dict["chat_template"] = dataset_dict.get("chat_template", "chatml")
+    processed_dict["chat_template"] = dataset_dict.chat_template
     processed_dict["type"] = "chat_template"
-    processed_dict["field_messages"] = dataset_dict.get("chat_column", "conversations")
-    processed_dict["message_field_role"] = dataset_dict.get("chat_role_field", "from")
-    processed_dict["message_field_content"] = dataset_dict.get("chat_content_field", "value")
+    processed_dict["field_messages"] = dataset_dict.chat_column
+    processed_dict["message_field_role"] = dataset_dict.chat_role_field
+    processed_dict["message_field_content"] = dataset_dict.chat_content_field
     processed_dict["roles"] = {
-        "assistant": [dataset_dict.get("chat_assistant_reference", "assistant")],
-        "user": [dataset_dict.get("chat_user_reference", "user")],
+        "assistant": [dataset_dict.chat_assistant_reference],
+        "user": [dataset_dict.chat_user_reference],
     }
 
     return processed_dict

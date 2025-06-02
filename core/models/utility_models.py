@@ -127,9 +127,12 @@ class Job(BaseModel):
     expected_repo_name: str | None = None
 
 
+TextDatasetType = InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType
+
+
 class TextJob(Job):
     dataset: str
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType
+    dataset_type: TextDatasetType
     file_format: FileFormat
 
 
@@ -177,3 +180,5 @@ class TaskType(str, Enum):
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")
     text_url: str = Field(..., description="Presigned URL for the text file")
+
+

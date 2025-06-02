@@ -12,6 +12,7 @@ from pydantic import model_validator
 
 from core import constants as cst
 from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import TextDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ChatTemplateDatasetType
@@ -54,7 +55,7 @@ class TrainRequestText(TrainRequest):
         description="Path to the dataset file or Hugging Face dataset name",
         min_length=1,
     )
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType
+    dataset_type: TextDatasetType
     file_format: FileFormat
 
 
@@ -180,7 +181,7 @@ class NewTaskRequestChat(NewTaskRequest):
     chat_user_reference: str | None = Field(None, description="The user reference", examples=["user"])
     chat_assistant_reference: str | None = Field(None, description="The assistant reference", examples=["assistant"])
 
-    ds_repo: str = Field(..., description="The repository for the dataset", examples=["yahma/alpaca-cleaned"])
+    ds_repo: str = Field(..., description="The repository for the dataset", examples=["Magpie-Align/Magpie-Pro-300K-Filtered"])
     file_format: FileFormat = Field(
         FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
     )
@@ -190,7 +191,7 @@ class NewTaskRequestChat(NewTaskRequest):
     model_config = ConfigDict(protected_namespaces=())
 
     @model_validator(mode="before")
-    def convert_empty_strings(cls, values: dict) -> dict:
+    def convert_empty_strings(cls, values):
         string_fields = ["chat_column", "chat_role_field", "chat_content_field", "chat_user_reference", "chat_assistant_reference"]
         for field in string_fields:
             if field in values and isinstance(values[field], str):

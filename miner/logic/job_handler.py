@@ -22,6 +22,7 @@ from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.docker_utils import stream_logs
 from core.models.utility_models import DiffusionJob
 from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import TextDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
@@ -71,7 +72,7 @@ class DockerEnvironment:
 def _load_and_modify_config(
     dataset: str,
     model: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType,
+    dataset_type: TextDatasetType,
     file_format: FileFormat,
     task_id: str,
     expected_repo_name: str | None,
@@ -178,7 +179,7 @@ def create_job_text(
     job_id: str,
     dataset: str,
     model: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType,
+    dataset_type: TextDatasetType,
     file_format: FileFormat,
     expected_repo_name: str | None,
 ):

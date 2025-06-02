@@ -494,7 +494,7 @@ class EvaluationArgs(BaseModel):
 
 
 # Type aliases for common task type groupings
-AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask
+AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask | ChatRawTask
 AnyTypeRawTask = AnyTextTypeRawTask | ImageRawTask
 AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask
 AnyTypeTaskWithHotkeyDetails = (
