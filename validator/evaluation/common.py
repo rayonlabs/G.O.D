@@ -79,7 +79,8 @@ class ProgressLoggerCallback(TrainerCallback):
 def should_retry_model_loading_on_exception(e):
     ephemeral_error_patterns = [
         "does not appear to have a file named",
-        "does not appear to have files named"
+        "does not appear to have files named",
+        "Too Many Requests for url",
     ]
 
     while e is not None:
