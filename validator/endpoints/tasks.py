@@ -53,6 +53,7 @@ CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT = (
     "/v1/tasks/create_custom_dataset_text"  # TODO: this is just for instruct text tasks
 )
 TASKS_CREATE_ENDPOINT_DPO = "/v1/tasks/create_dpo"
+TASKS_CREATE_ENDPOINT_CHAT = "/v1/tasks/create_chat"
 TASKS_CREATE_ENDPOINT_GRPO = "/v1/tasks/create_grpo"
 TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"  # TODO: this is just for instruct text tasks
 GET_TASKS_BY_ACCOUNT_ENDPOINT = "/v1/tasks/account/{account_id}"
@@ -534,6 +535,7 @@ def factory_router() -> APIRouter:
     router.add_api_route(TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT, create_task_instruct_text, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_IMAGE, create_task_image, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_DPO, create_task_dpo, methods=["POST"])
+    router.add_api_route(TASKS_CREATE_ENDPOINT_CHAT, create_task_chat, methods=["POST"])
     # router.add_api_route(TASKS_CREATE_ENDPOINT_GRPO, create_task_grpo, methods=["POST"])
     router.add_api_route(TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT, create_task_with_fixed_datasets, methods=["POST"])
     router.add_api_route(CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT, create_text_task_with_custom_dataset, methods=["POST"])

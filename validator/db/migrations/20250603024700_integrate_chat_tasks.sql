@@ -11,15 +11,15 @@ BEGIN
 END$$;
 
 CREATE TABLE IF NOT EXISTS chat_tasks (
-    id SERIAL PRIMARY KEY,
-    chat_template TEXT NOT NULL,
-    chat_column TEXT NOT NULL,
-    chat_role_field TEXT NOT NULL,
-    chat_content_field TEXT NOT NULL,
-    chat_user_reference TEXT NOT NULL,
-    chat_assistant_reference TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
+    task_id UUID PRIMARY KEY REFERENCES tasks(task_id) ON DELETE CASCADE,
+    chat_template TEXT,
+    chat_column TEXT,
+    chat_role_field TEXT,
+    chat_content_field TEXT,
+    chat_user_reference TEXT,
+    chat_assistant_reference TEXT,
+    synthetic_data TEXT,
+    file_format TEXT NOT NULL DEFAULT 'hf'
 );
 
 -- migrate:down
@@ -30,7 +30,7 @@ DELETE FROM tasks
   WHERE task_type = 'ChatTask';
 
 ALTER TYPE tasktype RENAME TO tasktype_temp;
-CREATE TYPE tasktype AS ENUM ('InstructTextTask', 'ImageTask', 'DpoTask');
+CREATE TYPE tasktype AS ENUM ('InstructTextTask', 'ImageTask', 'DpoTask', 'GrpoTask');
 
 ALTER TABLE tasks
   ALTER COLUMN task_type TYPE VARCHAR;

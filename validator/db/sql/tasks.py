@@ -288,6 +288,23 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
                     LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
                 """
+            elif task_type == TaskType.CHATTASK.value:
+                specific_query = f"""
+                    SELECT 
+                        t.*, 
+                        gt.synthetic_data, 
+                        gt.file_format,
+                        gt.chat_template,
+                        gt.chat_column,
+                        gt.chat_role_field,
+                        gt.chat_content_field,
+                        gt.chat_user_reference,
+                        gt.chat_assistant_reference
+                    FROM {cst.TASKS_TABLE} t
+                    LEFT JOIN {cst.CHAT_TASKS_TABLE} gt 
+                        ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
+                    WHERE t.{cst.TASK_ID} = $1
+                """
             else:
                 logger.warning(f"Unknown task type {task_type} for task_id {row[cst.TASK_ID]}")
                 continue
@@ -305,6 +322,8 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
                 elif task_type == TaskType.GRPOTASK.value:
                     reward_functions = await get_reward_functions(row[cst.TASK_ID], psql_db)
                     tasks.append(GrpoRawTask(**task_data, reward_functions=reward_functions))
+                elif task_type == TaskType.CHATTASK.value:
+                    tasks.append(ChatRawTask(**task_data))
 
         logger.info(f"Retrieved {len(tasks)} tasks with status {status.value}")
         return tasks
@@ -393,11 +412,27 @@ async def update_task(updated_task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeR
                         WHERE {cst.TASK_ID} = $1
                     """
                     await connection.execute(query, updated_task.task_id, *specific_values)
+
+            if updated_task.task_type == TaskType.CHATTASK:
+                chat_task_fields = await get_table_fields(cst.CHAT_TASKS_TABLE, connection)
+                chat_specific_fields = [f for f in chat_task_fields if f != cst.TASK_ID]
+                specific_updates = {k: v for k, v in updates.items() if k in chat_specific_fields}
+                if specific_updates:
+                    specific_clause = ", ".join([f"{column} = ${i + 2}" for i, column in enumerate(specific_updates.keys())])
+                    specific_values = list(specific_updates.values())
+                    query = f"""
+                        UPDATE {cst.CHAT_TASKS_TABLE}
+                        SET {specific_clause}
+                        WHERE {cst.TASK_ID} = $1
+                    """
+                    await connection.execute(query, updated_task.task_id, *specific_values)
+
             elif updated_task.task_type == TaskType.IMAGETASK:
                 if "image_text_pairs" in updates:
                     await delete_image_text_pairs(updated_task.task_id, psql_db)
                     pairs = [ImageTextPair(**pair) for pair in updates["image_text_pairs"]]
                     await add_image_text_pairs(updated_task.task_id, pairs, psql_db)
+
             elif updated_task.task_type == TaskType.DPOTASK:
                 dpo_fields = await get_table_fields(cst.DPO_TASKS_TABLE, connection)
                 dpo_specific_fields = [f for f in dpo_fields if f != cst.TASK_ID]
@@ -411,6 +446,7 @@ async def update_task(updated_task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeR
                         WHERE {cst.TASK_ID} = $1
                     """
                     await connection.execute(query, updated_task.task_id, *specific_values)
+
             elif updated_task.task_type == TaskType.GRPOTASK:
                 grpo_fields = await get_table_fields(cst.GRPO_TASKS_TABLE, connection)
                 grpo_specific_fields = [f for f in grpo_fields if f != cst.TASK_ID]
@@ -671,6 +707,23 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> AnyTypeRawTask | None:
                 LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
             """
+        elif task_type == TaskType.CHATTASK.value:
+            specific_query = f"""
+                SELECT 
+                    t.*, 
+                    gt.synthetic_data, 
+                    gt.file_format,
+                    gt.chat_template,
+                    gt.chat_column,
+                    gt.chat_role_field,
+                    gt.chat_content_field,
+                    gt.chat_user_reference,
+                    gt.chat_assistant_reference
+                FROM {cst.TASKS_TABLE} t
+                LEFT JOIN {cst.CHAT_TASKS_TABLE} gt 
+                    ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
+                WHERE t.{cst.TASK_ID} = $1
+            """
         else:
             raise ValueError(f"Unsupported task type: {task_type}")
 
@@ -690,7 +743,8 @@ async def get_task(task_id: UUID, psql_db: PSQLDB) -> AnyTypeRawTask | None:
         elif task_type == TaskType.GRPOTASK.value:
             reward_functions = await get_reward_functions(task_id, psql_db)
             return GrpoRawTask(**full_task_data, reward_functions=reward_functions)
-
+        elif task_type == TaskType.CHATTASK.value:
+            return ChatRawTask(**full_task_data)
 
 async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> list[dict]:
     """Retrieve the winning submission for a task based on the highest quality score in task_nodes."""
@@ -750,6 +804,26 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                     COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
                 LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON tasks.{cst.TASK_ID} = tt.{cst.TASK_ID}
+                LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
+                WHERE tasks.{cst.TASK_ID} = $1
+            """
+        elif task_type == TaskType.CHATTASK.value:
+            specific_query = f"""
+                {victorious_repo_cte}
+                SELECT 
+                    tasks.*, 
+                    tt.synthetic_data, 
+                    tt.file_format,
+                    tt.chat_template,
+                    tt.chat_column,
+                    tt.chat_role_field,
+                    tt.chat_content_field,
+                    tt.chat_user_reference,
+                    tt.chat_assistant_reference,
+                    COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
+                FROM {cst.TASKS_TABLE} tasks
+                LEFT JOIN {cst.CHAT_TASKS_TABLE} tt 
+                    ON tasks.{cst.TASK_ID} = tt.{cst.TASK_ID}
                 LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
                 WHERE tasks.{cst.TASK_ID} = $1
             """
@@ -886,6 +960,18 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
                 if instruct_text_row:
                     task_data.update(dict(instruct_text_row))
                 tasks.append(InstructTextTask(**task_data))
+
+            elif task_type == TaskType.CHATTASK.value:
+                chat_query = f"""
+                    SELECT chat_template, chat_column, chat_role_field, chat_content_field,
+                           chat_user_reference, chat_assistant_reference, synthetic_data
+                    FROM {cst.CHAT_TASKS_TABLE}
+                    WHERE {cst.TASK_ID} = $1
+                """
+                chat_row = await connection.fetchrow(chat_query, task_data[cst.TASK_ID])
+                if chat_row:
+                    task_data.update(dict(chat_row))
+                tasks.append(ChatTask(**task_data))
 
             elif task_type == TaskType.IMAGETASK.value:
                 image_query = f"""
