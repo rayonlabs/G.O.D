@@ -250,7 +250,7 @@ def main():
                     ], check=True, timeout=timeout_seconds)
                     logger.info(f"Subprocess completed for {repo}")
                     break
-                except subprocess.TimeoutExpired:
+                except subprocess.TimeoutExpired as e:
                     retry_count += 1
                     logger.warning(f"Subprocess timed out for {repo} (attempt {retry_count}/{max_retries})")
                     if retry_count == max_retries:
