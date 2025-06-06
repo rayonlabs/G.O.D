@@ -254,10 +254,6 @@ def main():
                     ], check=True, timeout=timeout_seconds)
                     elapsed = time.monotonic() - start_time
                     logger.info(f"Subprocess completed for {repo} in {elapsed:.2f} seconds")
-                    if not timeout_adjusted:
-                        timeout_seconds = int(elapsed * 2)
-                        timeout_adjusted = True
-                        logger.info(f"Timeout adjusted to {timeout_seconds} seconds for future runs")
                     break
                 except subprocess.TimeoutExpired as e:
                     retry_count += 1
