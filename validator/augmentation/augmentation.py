@@ -652,7 +652,7 @@ async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Key
 
 
 async def process_row(row, prompts, keypair, task_type: TaskType) -> dict | DpoDatasetColumnsResponse:
-    if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.GRPOTASK]:
+    if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.GRPOTASK, TaskType.CHATTASK]:
         json_synthetic_data_point = await generate_paraphrased_version(row, prompts, keypair)
 
         if check_the_synthetic_data(json_synthetic_data_point, row.keys()):
@@ -718,5 +718,7 @@ async def generate_augmented_text_dataset(
         f"Finished processing all batches. Generated {len(synthetic_dataset)} samples total. "
         f"JSON errors: {json_errors}, Other errors: {generic_errors}"
     )
+
+    logger.info(f"Final synthetic dataset example: {synthetic_dataset[0]}")
 
     return synthetic_dataset

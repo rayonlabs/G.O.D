@@ -1,6 +1,7 @@
 {
     "version": "2.0.0",
     "configurations": [
+        
         {
             "name": "Python Debugger: Validator Cycle",
             "type": "debugpy",

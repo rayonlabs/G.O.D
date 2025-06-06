@@ -120,8 +120,8 @@ async def _insert_chat_task(connection: Connection, task: ChatRawTask, task_reco
         INSERT INTO {cst.CHAT_TASKS_TABLE}
         ({cst.TASK_ID}, {cst.CHAT_TEMPLATE}, {cst.CHAT_COLUMN},
         {cst.CHAT_ROLE_FIELD}, {cst.CHAT_CONTENT_FIELD}, {cst.CHAT_USER_REFERENCE},
-        {cst.CHAT_ASSISTANT_REFERENCE})
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        {cst.CHAT_ASSISTANT_REFERENCE}, {cst.FILE_FORMAT})
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     """
     await connection.execute(
         query,
@@ -132,6 +132,7 @@ async def _insert_chat_task(connection: Connection, task: ChatRawTask, task_reco
         task.chat_content_field,
         task.chat_user_reference,
         task.chat_assistant_reference,
+        task.file_format
     )
 
 

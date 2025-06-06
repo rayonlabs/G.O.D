@@ -178,20 +178,16 @@ async def get_additional_synth_data(
     )
     logger.info(f"Generating {num_samples} additional synthetic data points")
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
-
     sampled_data = sampled_data.remove_columns([col for col in sampled_data.column_names if col not in columns_to_sample])
     # NOTE: Need to do something if errors, without trying to then generate synthetic data
     try:
         sampled_data_list = list(sampled_data)
-        logger.info(f"Sampled data TEST: {sampled_data_list[0]}")
     except Exception as e:
         logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
         return None
 
     synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair, task_type=task.task_type)
-    logger.info(f"Synthetic data TEST: {synthetic_data[0]}")
     synthetic_data = adapt_synthetic_columns(synthetic_data, task)
-    logger.info(f"Synthetic data TEST: {synthetic_data[0]}")
 
     return synthetic_data
 
