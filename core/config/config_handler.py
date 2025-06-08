@@ -136,4 +136,9 @@ def _process_chat_template_dataset_fields(dataset_dict: dict) -> dict:
         "user": [dataset_dict.chat_user_reference],
     }
 
+    processed_dict["message_property_mappings"] = {
+        "role": dataset_dict.chat_role_field,
+        "content": dataset_dict.chat_content_field
+    }
+
     return processed_dict

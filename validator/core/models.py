@@ -15,6 +15,7 @@ from pydantic import model_validator
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructTextDatasetType
@@ -467,7 +468,7 @@ class Dataset(BaseModel):
 class EvaluationArgs(BaseModel):
     dataset: str
     original_model: str
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType
     file_format: FileFormat
     repo: str
 

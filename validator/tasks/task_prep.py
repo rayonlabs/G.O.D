@@ -220,9 +220,14 @@ def change_to_json_format(dataset: Dataset, columns: list[str]):
         for col in columns:
             if col in row:
                 value = row[col]
-                str_value = str(value) if value is not None else ""
+                if isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
+                    try:
+                        value = json.loads(value)
+                    except json.JSONDecodeError:
+                        pass 
+                str_value = value if value is not None else ""
                 row_dict[col] = str_value
-                if str_value != "":
+                if str_value != "" and str_value != []:
                     is_row_empty = False
         result.append(row_dict)
         total_rows += 1

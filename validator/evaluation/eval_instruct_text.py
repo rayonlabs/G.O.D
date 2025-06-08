@@ -1,6 +1,7 @@
 import os
 import subprocess
 from pathlib import Path
+import yaml
 
 import torch
 from accelerate.utils import find_executable_batch_size
@@ -148,6 +149,7 @@ def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
         log_memory_stats()
         finetuned_model.eval()
 
+
         results = evaluate_finetuned_model(
             evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
@@ -170,6 +172,7 @@ def main():
     dataset_type_str = os.environ.get("DATASET_TYPE", "")
     file_format_str = os.environ.get("FILE_FORMAT")
     models_str = os.environ.get("MODELS", "")  # Comma-separated list of LoRA repos
+    
     if not all([dataset, original_model, file_format_str, models_str]):
         logger.error("Missing required environment variables.")
         exit(1)

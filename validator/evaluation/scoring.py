@@ -11,6 +11,8 @@ from core.models.payload_models import DiffusionLosses
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import TextDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
@@ -382,7 +384,7 @@ def calculate_miner_ranking_and_scores(
     return miner_results
 
 
-def _get_dataset_type(task: AnyTypeRawTask) -> InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | None:
+def _get_dataset_type(task: AnyTypeRawTask) -> TextDatasetType | None:
     if task.task_type == TaskType.INSTRUCTTEXTTASK:
         return InstructTextDatasetType(
             field_system=task.field_system,
@@ -408,6 +410,15 @@ def _get_dataset_type(task: AnyTypeRawTask) -> InstructTextDatasetType | DpoData
         return GrpoDatasetType(
             field_prompt=task.field_prompt,
             reward_functions=task.reward_functions,
+        )
+    elif task.task_type == TaskType.CHATTASK:
+        return ChatTemplateDatasetType(
+            chat_template=task.chat_template,
+            chat_column=task.chat_column,
+            chat_role_field=task.chat_role_field,
+            chat_content_field=task.chat_content_field,
+            chat_user_reference=task.chat_user_reference,
+            chat_assistant_reference=task.chat_assistant_reference,
         )
     else:
         raise ValueError(f"Unknown task type: {task.task_type}")
@@ -468,13 +479,13 @@ async def _evaluate_submissions(
     task: AnyTypeRawTask,
     submission_repos: list[str],
     gpu_ids: list[int],
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | None = None,
+    dataset_type: TextDatasetType | None = None,
 ) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
     unique_repos = list(set(submission_repos))
     if len(unique_repos) != len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
 
-    if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+    if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK]:
         results: dict[str, tuple[EvaluationResultText, EvaluationResultText] | Exception] = {}
         repos_to_evaluate = []
         for repo in unique_repos:
@@ -716,7 +727,7 @@ async def process_miners_pool(
     task: AnyTypeRawTask,
     config: Config,
     gpu_ids: list[int],
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | None = None,
+    dataset_type: TextDatasetType | None = None,
 ) -> list[MinerResultsText | MinerResultsImage]:
     assert task.task_id is not None, "We should have a task id when processing miners"
 
@@ -788,7 +799,7 @@ async def process_miners_pool(
                         updated_on=datetime.now(),
                     )
 
-                if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+                if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK]:
                     results.append(
                         MinerResultsText(
                             hotkey=miner.hotkey,
