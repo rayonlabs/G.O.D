@@ -218,6 +218,46 @@ async def _create_probability_based_text_tasks(round_data: KnockoutRound, config
     return tasks
 
 
+def _demo_task_creation(round_data: Round, is_final: bool = False):
+    """Demo function to show what task creation would look like"""
+    import uuid
+    
+    print("\n--- Task Creation Demo ---")
+    
+    # Demo text tournament
+    if isinstance(round_data, GroupRound):
+        print(f"Text Tournament: {len(round_data.groups)} groups")
+        for i, group in enumerate(round_data.groups):
+            print(f"  Group {i+1} ({len(group.member_ids)} members):")
+            print(f"    Instruct: {uuid.uuid4()} - Model: microsoft/DialoGPT-medium - Dataset: dataset_{i}_instruct")
+            print(f"    DPO: {uuid.uuid4()} - Model: microsoft/DialoGPT-small - Dataset: dataset_{i}_dpo") 
+            print(f"    GRPO: {uuid.uuid4()} - Model: microsoft/DialoGPT-small - Dataset: dataset_{i}_grpo")
+    else:
+        if is_final:
+            print("Text Tournament (FINAL):")
+            print(f"  Instruct (BIG): {uuid.uuid4()} - Model: microsoft/DialoGPT-large - Dataset: final_instruct")
+            print(f"  DPO: {uuid.uuid4()} - Model: microsoft/DialoGPT-small - Dataset: final_dpo")
+            print(f"  GRPO: {uuid.uuid4()} - Model: microsoft/DialoGPT-small - Dataset: final_grpo")
+        else:
+            print(f"Text Tournament: {len(round_data.pairs)} pairs (probability-based)")
+            task_types = ["Instruct", "DPO", "GRPO"]
+            for i, pair in enumerate(round_data.pairs):
+                task_type = random.choice(task_types)
+                print(f"  Pair {i+1} ({pair[0]} vs {pair[1]}):")
+                print(f"    {task_type}: {uuid.uuid4()} - Model: microsoft/DialoGPT-medium - Dataset: dataset_{i}_{task_type.lower()}")
+    
+    # Demo image tournament  
+    print(f"\nImage Tournament:")
+    if isinstance(round_data, GroupRound):
+        for i, group in enumerate(round_data.groups):
+            print(f"  Group {i+1} ({len(group.member_ids)} members):")
+            print(f"    Image: {uuid.uuid4()} - Model: stabilityai/stable-diffusion-xl-base-1.0")
+    else:
+        for i, pair in enumerate(round_data.pairs):
+            print(f"  Pair {i+1} ({pair[0]} vs {pair[1]}):")
+            print(f"    Image: {uuid.uuid4()} - Model: stabilityai/stable-diffusion-xl-base-1.0")
+
+
 if __name__ == "__main__":
     test_sizes = [250, 144, 37, 10, 5, 2, 1]
 
@@ -226,18 +266,7 @@ if __name__ == "__main__":
         result = organise_tournament_round(contestant_ids)
         summarise_result(result, size)
         
-        print("\n--- Task Creation Preview ---")
-        if isinstance(result, GroupRound):
-            num_groups = len(result.groups)
-            print(f"Text Tournament: {num_groups} groups × 3 tasks = {num_groups * 3} total text tasks")
-            print(f"Image Tournament: {num_groups} groups × 1 task = {num_groups} total image tasks")
-        else:
-            num_pairs = len(result.pairs)
-            is_final = size <= 2
-            if is_final:
-                print(f"Text Tournament (FINAL): 3 tasks (1 instruct big model + 1 DPO + 1 GRPO)")
-            else:
-                print(f"Text Tournament: {num_pairs} pairs × 1 task = {num_pairs} total text tasks (probability-based)")
-            print(f"Image Tournament: {num_pairs} pairs × 1 task = {num_pairs} total image tasks")
+        is_final = size <= 2
+        _demo_task_creation(result, is_final)
         print()
 
