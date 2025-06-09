@@ -183,3 +183,9 @@ class KnockoutRound(BaseModel):
 
 
 Round = GroupRound  | KnockoutRound
+
+
+class TournamentRound(BaseModel):
+    round_structure: Round
+    tasks: list[str] = Field(default_factory=list)
+    is_final_round: bool = False
