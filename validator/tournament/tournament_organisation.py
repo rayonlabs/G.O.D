@@ -218,55 +218,53 @@ async def _create_probability_based_text_tasks(round_data: KnockoutRound, config
     return tasks
 
 
-def _demo_task_creation(round_data: Round, is_final: bool = False):
-    """Demo function to show what task creation would look like"""
-    import uuid
+async def _real_task_creation_demo(round_data: Round, is_final: bool = False):
+    """Actually try to create real tasks to show what happens"""
+    import asyncio
+    from unittest.mock import Mock
     
-    print("\n--- Task Creation Demo ---")
+    print("\n--- REAL Task Creation Attempt ---")
     
-    # Demo text tournament
-    if isinstance(round_data, GroupRound):
-        print(f"Text Tournament: {len(round_data.groups)} groups")
-        for i, group in enumerate(round_data.groups):
-            print(f"  Group {i+1} ({len(group.member_ids)} members):")
-            print(f"    Instruct: {uuid.uuid4()} - Model: microsoft/DialoGPT-medium - Dataset: dataset_{i}_instruct")
-            print(f"    DPO: {uuid.uuid4()} - Model: microsoft/DialoGPT-small - Dataset: dataset_{i}_dpo") 
-            print(f"    GRPO: {uuid.uuid4()} - Model: microsoft/DialoGPT-small - Dataset: dataset_{i}_grpo")
-    else:
-        if is_final:
-            print("Text Tournament (FINAL):")
-            print(f"  Instruct (BIG): {uuid.uuid4()} - Model: microsoft/DialoGPT-large - Dataset: final_instruct")
-            print(f"  DPO: {uuid.uuid4()} - Model: microsoft/DialoGPT-small - Dataset: final_dpo")
-            print(f"  GRPO: {uuid.uuid4()} - Model: microsoft/DialoGPT-small - Dataset: final_grpo")
-        else:
-            print(f"Text Tournament: {len(round_data.pairs)} pairs (probability-based)")
-            task_types = ["Instruct", "DPO", "GRPO"]
-            for i, pair in enumerate(round_data.pairs):
-                task_type = random.choice(task_types)
-                print(f"  Pair {i+1} ({pair[0]} vs {pair[1]}):")
-                print(f"    {task_type}: {uuid.uuid4()} - Model: microsoft/DialoGPT-medium - Dataset: dataset_{i}_{task_type.lower()}")
+    # Create a mock config (this will likely fail but show real behavior)
+    mock_config = Mock()
+    mock_config.keypair = Mock()
+    mock_config.psql_db = Mock()
     
-    # Demo image tournament  
-    print(f"\nImage Tournament:")
-    if isinstance(round_data, GroupRound):
-        for i, group in enumerate(round_data.groups):
-            print(f"  Group {i+1} ({len(group.member_ids)} members):")
-            print(f"    Image: {uuid.uuid4()} - Model: stabilityai/stable-diffusion-xl-base-1.0")
-    else:
-        for i, pair in enumerate(round_data.pairs):
-            print(f"  Pair {i+1} ({pair[0]} vs {pair[1]}):")
-            print(f"    Image: {uuid.uuid4()} - Model: stabilityai/stable-diffusion-xl-base-1.0")
+    try:
+        # Try to create actual text tournament
+        print("Attempting to create text tournament...")
+        text_tournament = await create_text_tournament_round(round_data, mock_config, is_final)
+        print(f"✅ Text tournament created with {len(text_tournament.tasks)} tasks")
+        print(f"   Task IDs: {text_tournament.tasks}")
+    except Exception as e:
+        print(f"❌ Text tournament creation failed: {type(e).__name__}: {e}")
+    
+    try:
+        # Try to create actual image tournament  
+        print("\nAttempting to create image tournament...")
+        image_tournament = await create_image_tournament_round(round_data, mock_config)
+        print(f"✅ Image tournament created with {len(image_tournament.tasks)} tasks")
+        print(f"   Task IDs: {image_tournament.tasks}")
+    except Exception as e:
+        print(f"❌ Image tournament creation failed: {type(e).__name__}: {e}")
+    
+    print("\nNOTE: This attempts real task creation but will likely fail due to missing database/API connections.")
 
 
 if __name__ == "__main__":
-    test_sizes = [250, 144, 37, 10, 5, 2, 1]
-
-    for size in test_sizes:
-        contestant_ids = [f"player_{i}" for i in range(1, size + 1)]
-        result = organise_tournament_round(contestant_ids)
-        summarise_result(result, size)
-        
-        is_final = size <= 2
-        _demo_task_creation(result, is_final)
-        print()
+    import asyncio
+    test_sizes = [10, 5, 2]  # Just test smaller sizes for demo
+    
+    async def run_demo():
+        for size in test_sizes:
+            contestant_ids = [f"player_{i}" for i in range(1, size + 1)]
+            result = organise_tournament_round(contestant_ids)
+            summarise_result(result, size)
+            
+            is_final = size <= 2
+            await _real_task_creation_demo(result, is_final)
+            print()
+    
+    # Run the async demo
+    asyncio.run(run_demo())
 
