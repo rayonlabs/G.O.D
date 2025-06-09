@@ -6,19 +6,17 @@ import uuid
 
 from fiber.chain.models import Node
 
-from core.constants import IS_PROD_ENV
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
+from core.constants import IS_PROD_ENV
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
-from validator.core.models import DpoRawTask
-from validator.core.models import ImageRawTask
-from validator.core.models import InstructTextRawTask
+from validator.core.models import AnyTypeRawTask
 from validator.core.models import RawTask
 from validator.core.task_config_models import get_task_config
 from validator.cycle.util_functions import get_model_num_params
@@ -115,9 +113,7 @@ async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> Mi
         )
 
 
-async def _select_miner_pool_and_add_to_task(
-    task: InstructTextRawTask | DpoRawTask | ImageRawTask, nodes: list[Node], config: Config
-) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
+async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, nodes: list[Node], config: Config) -> AnyTypeRawTask:
     if len(nodes) < cst.MINIMUM_MINER_POOL:
         logger.warning(f"Not enough nodes available. Need at least {cst.MINIMUM_MINER_POOL}, but only have {len(nodes)}.")
         task = _attempt_delay_task(task)
@@ -161,7 +157,11 @@ async def _select_miner_pool_and_add_to_task(
         await tasks_sql.update_task(task, config.psql_db)
         return task
 
-    num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
+    # Use image-specific pool sizes for image tasks
+    if task.task_type == TaskType.IMAGETASK:
+        num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_IMAGE_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_IMAGE_POOL)
+    else:
+        num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
     nodes_to_try_for = await _weighted_random_shuffle(available_nodes, config.psql_db)
 
     # TODO: Improve by selecting high score miners first, then lower score miners, etc
@@ -199,9 +199,7 @@ async def _select_miner_pool_and_add_to_task(
         return task
 
 
-async def _let_miners_know_to_start_training(
-    task: ImageRawTask | DpoRawTask | InstructTextRawTask, nodes: list[Node], config: Config
-):
+async def _let_miners_know_to_start_training(task: AnyTypeRawTask, nodes: list[Node], config: Config):
     task_request_body = get_task_config(task).task_request_prepare_function(task)
     miner_endpoint = get_task_config(task).start_training_endpoint
 
@@ -217,7 +215,7 @@ async def _let_miners_know_to_start_training(
             logger.info(f"The response we got from {node.node_id} was {response}")
 
 
-async def _find_and_select_miners_for_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
+async def _find_and_select_miners_for_task(task: AnyTypeRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
             if IS_PROD_ENV:
@@ -236,7 +234,7 @@ async def _find_and_select_miners_for_task(task: InstructTextRawTask | DpoRawTas
             await tasks_sql.update_task(task, config.psql_db)
 
 
-def _attempt_delay_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask):
+def _attempt_delay_task(task: AnyTypeRawTask):
     assert task.created_at is not None and task.next_delay_at is not None and task.times_delayed is not None, (
         "We wanted to check delay vs created timestamps but they are missing"
     )
@@ -265,7 +263,7 @@ async def _find_miners_for_task(config: Config):
     )
 
 
-async def _prep_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
+async def _prep_task(task: AnyTypeRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
             task.status = TaskStatus.PREPARING_DATA
@@ -290,7 +288,7 @@ async def _processing_pending_tasks(config: Config):
     clean_all_hf_datasets_cache()
 
 
-async def _start_training_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config) -> None:
+async def _start_training_task(task: AnyTypeRawTask, config: Config) -> None:
     with LogContext(task_id=str(task.task_id)):
         task.started_at = datetime.datetime.now(datetime.timezone.utc)
         task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
@@ -315,7 +313,7 @@ async def _process_ready_to_train_tasks(config: Config):
         await asyncio.sleep(30)
 
 
-async def _evaluate_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, gpu_ids: list[int], config: Config):
+async def _evaluate_task(task: AnyTypeRawTask, gpu_ids: list[int], config: Config):
     gpu_ids_str = "," + ",".join(str(gpu_id) for gpu_id in gpu_ids) + ","
     with LogContext(task_id=str(task.task_id), gpu_ids=gpu_ids_str):
         try:
@@ -331,7 +329,7 @@ async def _evaluate_task(task: InstructTextRawTask | DpoRawTask | ImageRawTask, 
             await tasks_sql.update_task(task, config.psql_db)
 
 
-async def _move_back_to_looking_for_nodes(task: InstructTextRawTask | DpoRawTask | ImageRawTask, config: Config):
+async def _move_back_to_looking_for_nodes(task: AnyTypeRawTask, config: Config):
     logger.info("Moving back from delay to looking for nodes")
     task.status = TaskStatus.LOOKING_FOR_NODES
     add_context_tag("status", task.status.value)
@@ -368,7 +366,7 @@ async def _move_any_prep_data_to_pending(config):
     await asyncio.gather(*[_move_back_to_pending_status(task, config) for task in stopped_in_prep])
 
 
-async def _move_to_preevaluation(tasks: list[InstructTextRawTask | DpoRawTask | ImageRawTask], config: Config):
+async def _move_to_preevaluation(tasks: list[AnyTypeRawTask], config: Config):
     await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
 
 
@@ -489,9 +487,19 @@ def compute_required_gpus(task: RawTask) -> int:
     num_params = task.model_params_count
     if not num_params:
         num_params = get_model_num_params(model)
-    if num_params and num_params > cst.MODEL_SIZE_REQUIRING_2_GPUS:
+    if not num_params:
+        return 1
+    if task.task_type == TaskType.DPOTASK:
+        num_params = num_params * 2
+
+    if num_params < cst.MODEL_SIZE_REQUIRING_2_GPUS:
+        return 1
+    elif num_params < cst.MODEL_SIZE_REQUIRING_3_GPUS:
         return 2
-    return 1
+    elif num_params < cst.MODEL_SIZE_REQUIRING_4_GPUS:
+        return 3
+    else:
+        return 4
 
 
 async def process_completed_tasks(config: Config) -> None:

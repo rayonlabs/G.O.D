@@ -1,6 +1,4 @@
 import datetime
-from typing import List
-from typing import Optional
 
 from asyncpg.connection import Connection
 from fiber import SubstrateInterface
@@ -15,15 +13,16 @@ from validator.utils.query_substrate import query_substrate
 
 logger = get_logger(__name__)
 
-async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
+async def get_eligible_nodes(psql_db: PSQLDB) -> list[Node]:
     """
-    Get all nodes that either:
+    Get all nodes eligible for tasks.
+    
+    Includes nodes that either:
     a) Do not have any entries in the task_nodes table (new nodes with no scores)
-    b) Have at least one entry in the task_nodes table with a task_node_quality_score > 0
-    c) Have entries in task_nodes but all scores are NULL (not yet evaluated nodes)
-    This only excludes nodes that have been scored but ALL their non-NULL scores are ≤ 0
+    b) Have at least one positive quality_score within the last 7 days
+    c) Have entries but all scores are NULL (not yet evaluated)
     """
-    logger.info("Getting eligible nodes (new nodes, nodes with NULL scores, or nodes with positive scores)")
+    logger.info("Getting eligible nodes (new nodes, nodes with NULL scores, or nodes with positive scores in the last 7 days)")
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -36,11 +35,13 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
                     WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
                 )
                 OR
-                -- Condition b: At least one entry with quality_score > 0
+                -- Condition b: At least one positive quality_score within the last 7 days
                 EXISTS (
                     SELECT 1 FROM {dcst.TASK_NODES_TABLE} tn
+                    JOIN {dcst.TASKS_TABLE} t ON tn.{dcst.TASK_ID} = t.{dcst.TASK_ID}
                     WHERE tn.{dcst.HOTKEY} = n.{dcst.HOTKEY}
                     AND tn.{dcst.TASK_NODE_QUALITY_SCORE} > 0
+                    AND t.{dcst.CREATED_AT} >= NOW() - INTERVAL '7 days'
                 )
                 OR
                 -- Condition c: Has entries but all scores are NULL
@@ -62,7 +63,7 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> List[Node]:
         logger.info(f"Found {len(eligible_nodes)} eligible nodes")
         return eligible_nodes
 
-async def get_all_nodes(psql_db: PSQLDB) -> List[Node]:
+async def get_all_nodes(psql_db: PSQLDB) -> list[Node]:
     """Get all nodes for the current NETUID"""
     logger.info("Attempting to get all nodes")
     async with await psql_db.connection() as connection:
@@ -123,7 +124,7 @@ async def insert_nodes(connection: Connection, nodes: list[Node]) -> None:
     )
 
 
-async def get_node_by_hotkey(hotkey: str, psql_db: PSQLDB) -> Optional[Node]:
+async def get_node_by_hotkey(hotkey: str, psql_db: PSQLDB) -> Node | None:
     """Get node by hotkey for the current NETUID"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -242,3 +243,5 @@ async def get_node_id_by_hotkey(hotkey: str, psql_db: PSQLDB) -> int | None:
             WHERE {dcst.HOTKEY} = $1 AND {dcst.NETUID} = $2
         """
         return await connection.fetchval(query, hotkey, NETUID)
+        
+        

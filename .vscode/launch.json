@@ -48,6 +48,17 @@
             ]
         },
         {
+            "name": "Python Debugger: Manually Store Reward Functions",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.db.sql.manually_add_grpo_rewards",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
             "name": "Python Debugger: Docker Evaluation",
             "type": "debugpy",
             "request": "launch",
@@ -62,7 +73,7 @@
             "name": "Python Debugger: eval instruct text",
             "type": "debugpy",
             "request": "launch",
-            "module": "validator.evaluation.single_eval_instruct_text",
+            "module": "validator.evaluation.eval_instruct_text",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
@@ -74,6 +85,17 @@
             "type": "debugpy",
             "request": "launch",
             "module": "validator.evaluation.eval_dpo",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Python Debugger: eval grpo",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.evaluation.eval_grpo",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {

@@ -10,16 +10,15 @@ import validator.core.constants as cts
 from core.models.payload_models import DiffusionLosses
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from validator.core.config import Config
-from validator.core.models import DpoRawTask
-from validator.core.models import ImageRawTask
-from validator.core.models import InstructTextRawTask
+from validator.core.models import AnyTypeRawTask
 from validator.core.models import MinerResults
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
@@ -77,7 +76,7 @@ def calculate_adjusted_task_score(quality_score: float, task_work_score: float) 
 def update_node_aggregation(
     node_aggregations: dict[str, NodeAggregationResult], node_score: TaskNode, task_work_score: float
 ) -> None:
-    assert isinstance(node_score.hotkey, str), "hotkey is string"
+    assert isinstance(node_score.hotkey, str)
     assert not np.isnan(task_work_score), "Task work score cannot be NaN"
 
     if node_score.hotkey not in node_aggregations:
@@ -104,7 +103,12 @@ def calculate_node_quality_scores(
 
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
         std_score = float(np.std(node_agg.task_raw_scores))
-        score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
+        
+        if node_agg.average_raw_score < 0:
+            score = 0.0
+        else:
+            score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
+        
         node_agg.quality_score = score
 
         final_scores.append(
@@ -162,13 +166,24 @@ def get_period_scores_from_results(task_results: list[TaskResults], weight_multi
     return final_scores
 
 
-def calculate_weighted_loss(test_loss: float, synth_loss: float) -> float:
+def calculate_weighted_loss(test_loss: float, synth_loss: float, use_max_of_synth_test: bool = False) -> float:
     assert not np.isnan(test_loss), "Test loss cannot be NaN"
     assert not np.isnan(synth_loss), "Synthetic loss cannot be NaN"
-    return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
+
+    if use_max_of_synth_test:
+        adjusted_loss = max(test_loss, synth_loss)
+
+        if test_loss >= synth_loss:
+            logger.info(f"Using test_loss: test={test_loss:.6f} >= synth={synth_loss:.6f}")
+        else:
+            logger.info(f"Using synth_loss: test={test_loss:.6f} < synth={synth_loss:.6f}, adjusted={adjusted_loss:.6f}")
+
+        return adjusted_loss
+    else:
+        return cts.TEST_SCORE_WEIGHTING * test_loss + (1 - cts.TEST_SCORE_WEIGHTING) * synth_loss
 
 
-def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 2.0, threshold: float = 0.75) -> bool:
+def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio: float = 1.5, threshold: float = 0.4) -> bool:
     if all(np.isnan(result.synth_loss) for result in valid_results):
         logger.info("All synth losses are NaN, using test_loss only for ranking")
         return False
@@ -189,11 +204,13 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
     valid_miners = len(real_synth_miners)
     valid_ratios = 0
 
-    for result in real_synth_miners:
-        if result.test_loss > 0 and (result.synth_loss / result.test_loss) <= max_ratio:
-            logger.info(f"ratio between is {result.synth_loss / result.test_loss}")
-            valid_ratios += 1
+    miners_with_ratios = [
+        (result, result.synth_loss / result.test_loss)
+        for result in real_synth_miners
+        if result.test_loss > 0
+    ]
 
+    valid_ratios = sum(1 for _, ratio in miners_with_ratios if ratio <= max_ratio)
     ratio = valid_ratios / valid_miners if valid_miners > 0 else 0
     logger.info(f"Valid ratios: {valid_ratios}/{valid_miners} = {ratio:.3f}, threshold is {threshold}")
     return ratio >= threshold
@@ -203,35 +220,97 @@ def calculate_miner_ranking_and_scores(
     miner_results: list[MinerResultsText | MinerResultsImage],
 ) -> list[MinerResultsText | MinerResultsImage]:
     logger.info("Beginning score calculation...")
+
+    valid_results = []
+    # Initialize all scores to 0.0 and set appropriate reasons
     for result in miner_results:
         with LogContext(miner_hotkey=result.hotkey):
             result.score = 0.0
-            if not result.is_finetune:
+            # atp, we only set score_reason in these cases (all are invalid and is_finetune == False):
+            # "Invalid/No repo submitted", "Evaluation failed", "Duplicated submission"
+            if result.score_reason:
+                continue
+            elif not result.is_finetune:
                 result.score_reason = "Non-finetuned submission"
-                logger.info(f"Miner {result.hotkey}: Non-finetuned, score set to 0.0")
+                logger.info(f"Miner {result.hotkey}: Non-finetuned, score initialized to 0.0")
             elif np.isnan(result.test_loss):
                 result.score_reason = "Invalid test loss"
-                logger.info(f"Miner {result.hotkey}: Invalid test loss, score set to 0.0")
+                logger.info(f"Miner {result.hotkey}: Invalid test loss, score initialized to 0.0")
             elif result.synth_loss == 1000.0:
                 result.score_reason = "Outside of top-4 test doesn't get scored."
                 logger.info(f"Miner {result.hotkey}: Outside of top-4")
+            else:
+                valid_results.append(result)
 
-    valid_results = [result for result in miner_results if result.is_finetune and not np.isnan(result.test_loss)]
     if not valid_results:
         logger.warning("No valid finetuned submissions found. All scores set to 0.0")
         return miner_results
 
-    use_weighted_loss = _is_synth_loss_valid_for_group(valid_results)
+    is_dpo_task = False
+    is_grpo_task = False
+    is_instruct_task = False
+    use_max_approach = False
+
+    if valid_results and isinstance(valid_results[0], MinerResultsText):
+        is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
+        is_grpo_task = valid_results[0].task_type == TaskType.GRPOTASK
+        is_instruct_task = valid_results[0].task_type == TaskType.INSTRUCTTEXTTASK
+
+        # For both DPO and Instruct Text tasks, use max(synth, test)
+        use_max_approach = is_dpo_task or is_instruct_task
+
+        if is_dpo_task:
+            logger.info("Processing DPO task with max(test_loss, synth_loss) approach")
+        if is_instruct_task:
+            logger.info("Processing INSTRUCT task with max(test_loss, synth_loss) approach")
+        if is_grpo_task:
+            logger.info("Processing GRPO task - higher loss is better")
+
+    use_weighted_loss = use_max_approach or _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
-        logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
-        ranked_results = [(result, calculate_weighted_loss(result.test_loss, result.synth_loss)) for result in valid_results]
-        ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-        ranking_type = "weighted_loss"
+        if use_max_approach:
+            if is_dpo_task:
+                logger.info("Using max(test, synth) loss for DPO task ranking")
+            elif is_instruct_task:
+                logger.info("Using max(test, synth) loss for INSTRUCT task ranking")
+        else:
+            logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
+
+        ranked_results = []
+        for result in valid_results:
+            adjusted_loss = calculate_weighted_loss(
+                result.test_loss,
+                result.synth_loss,
+                use_max_of_synth_test=use_max_approach
+            )
+            ranked_results.append((result, adjusted_loss))
+            logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
+
+        if is_grpo_task:
+            # For GRPO, sort in reverse order (higher value is better)
+            ranked_results.sort(key=lambda x: float("-inf") if math.isnan(x[1]) else -x[1])
+            ranking_type = "GRPO score (bigger is better)"
+        else:
+            # For other tasks, sort normally (lower loss is better)
+            ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
+            if is_dpo_task:
+                ranking_type = "DPO loss (max test, synth + train)"
+            elif is_instruct_task:
+                ranking_type = "INSTRUCT loss (max test, synth + train)"
+            else:
+                ranking_type = "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
         ranked_results = [(result, result.test_loss) for result in valid_results]
-        ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-        ranking_type = "test_loss_only"
+
+        if is_grpo_task:
+            # For GRPO, sort in reverse order (higher value is better)
+            ranked_results.sort(key=lambda x: float("-inf") if math.isnan(x[1]) else -x[1])
+            ranking_type = "GRPO score (bigger is better)"
+        else:
+            # For other tasks, sort normally (lower loss is better)
+            ranked_results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
+            ranking_type = "test_loss_only"
 
     if ranked_results:
         top_result, top_metric = ranked_results[0]
@@ -289,12 +368,23 @@ def calculate_miner_ranking_and_scores(
                     f" score_reason={result.score_reason}"
                 )
 
+    # Apply penalty scores to failed submissions when valid submissions exist
+    if valid_results:
+        for result in miner_results:
+            # Find failed submissions that haven't been scored yet
+            if (not result.is_finetune or np.isnan(result.test_loss)) and result.score == 0.0:
+                result.score = cts.SCORE_PENALTY
+                logger.info(
+                    f"Miner {result.hotkey}: Failed submission ({result.score_reason}), "
+                    f"applying penalty score {cts.SCORE_PENALTY}"
+                )
+
     return miner_results
 
 
-def _get_dataset_type(task: InstructTextRawTask | DpoRawTask) -> InstructDatasetType | DPODatasetType:
+def _get_dataset_type(task: AnyTypeRawTask) -> InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | None:
     if task.task_type == TaskType.INSTRUCTTEXTTASK:
-        return InstructDatasetType(
+        return InstructTextDatasetType(
             field_system=task.field_system,
             field_instruction=task.field_instruction,
             field_input=task.field_input,
@@ -302,8 +392,10 @@ def _get_dataset_type(task: InstructTextRawTask | DpoRawTask) -> InstructDataset
             format=task.format,
             no_input_format=task.no_input_format,
         )
+    elif task.task_type == TaskType.IMAGETASK:
+        return None
     elif task.task_type == TaskType.DPOTASK:
-        return DPODatasetType(
+        return DpoDatasetType(
             field_prompt=task.field_prompt,
             field_system=task.field_system,
             field_chosen=task.field_chosen,
@@ -312,24 +404,31 @@ def _get_dataset_type(task: InstructTextRawTask | DpoRawTask) -> InstructDataset
             chosen_format=task.chosen_format,
             rejected_format=task.rejected_format,
         )
+    elif task.task_type == TaskType.GRPOTASK:
+        return GrpoDatasetType(
+            field_prompt=task.field_prompt,
+            reward_functions=task.reward_functions,
+        )
     else:
-        raise ValueError(f"Invalid task type: {task.task_type}")
+        raise ValueError(f"Unknown task type: {task.task_type}")
 
 
-def _create_failed_miner_result(hotkey: str, reason: str, task_type: TaskType) -> MinerResults:
-    if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+def _create_failed_miner_result(hotkey: str, score_reason: str, task_type: TaskType) -> MinerResults:
+    """Create a result object for failed miner submissions with initial score of 0.0.
+    The score may later be adjusted to a penalty if valid submissions exist."""
+    if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
         return MinerResultsText(
             hotkey=hotkey,
             test_loss=np.nan,
             synth_loss=np.nan,
             is_finetune=False,
             score=0.0,
-            score_reason=reason,
+            score_reason=score_reason,
             task_type=task_type,
         )
     else:
         return MinerResultsImage(
-            hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=reason
+            hotkey=hotkey, test_loss=np.nan, synth_loss=np.nan, is_finetune=False, score=0.0, score_reason=score_reason
         )
 
 
@@ -366,16 +465,16 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str
 
 
 async def _evaluate_submissions(
-    task: InstructTextRawTask | ImageRawTask | DpoRawTask,
+    task: AnyTypeRawTask,
     submission_repos: list[str],
     gpu_ids: list[int],
-    dataset_type: InstructDatasetType | DPODatasetType | None = None,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | None = None,
 ) -> dict[str, tuple[EvaluationResultText, EvaluationResultText] | EvaluationResultImage | Exception]:
     unique_repos = list(set(submission_repos))
     if len(unique_repos) != len(submission_repos):
         logger.warning(f"Found duplicate repos. Deduplicating {len(submission_repos)} repos to {len(unique_repos)} unique repos")
 
-    if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+    if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
         results: dict[str, tuple[EvaluationResultText, EvaluationResultText] | Exception] = {}
         repos_to_evaluate = []
         for repo in unique_repos:
@@ -510,7 +609,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
 
 
 async def _update_scores(
-    task: InstructTextRawTask | DpoRawTask | ImageRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
+    task: AnyTypeRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
 ) -> None:
     assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
@@ -578,8 +677,8 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
                 with LogContext(miner_hotkey=hotkey):
                     keep_submission[hotkey] = False
                     logger.warning(
-                        f"Setting score to 0 for node {hotkey} (repo: {repo}) "
-                        f"as it has identical losses to earlier submission "
+                        f"Marking duplicate submission for node {hotkey} (repo: {repo}) "
+                        f"as it has identical losses to another submission"
                     )
 
     return keep_submission
@@ -588,21 +687,36 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
 def zero_duplicate_scores(
     task_results: list[MinerResultsText | MinerResultsImage], keep_submission: dict[str, bool]
 ) -> list[MinerResultsText | MinerResultsImage]:
+    # Count remaining valid submissions after filtering duplicates
+    remaining_valid_count = sum(
+        1 for result in task_results
+        if result.is_finetune and not np.isnan(result.test_loss) and keep_submission.get(result.hotkey, False)
+    )
+
     for result in task_results:
         if not keep_submission[result.hotkey]:
             result.test_loss = np.nan
             result.synth_loss = np.nan
             result.is_finetune = False
             result.score_reason = result.score_reason or "Duplicated submission"
+
+            # Apply penalty only if valid submissions remain
+            if remaining_valid_count > 0:
+                result.score = cts.SCORE_PENALTY
+                logger.info(f"Miner {result.hotkey}: Duplicate submission, applying penalty score {cts.SCORE_PENALTY}")
+            else:
+                result.score = 0.0
+                logger.info(f"Miner {result.hotkey}: Duplicate submission but no valid submissions remain, score set to 0.0")
+
     return task_results
 
 
 async def process_miners_pool(
     miners: list[Node],
-    task: ImageRawTask | InstructTextRawTask | DpoRawTask,
+    task: AnyTypeRawTask,
     config: Config,
     gpu_ids: list[int],
-    dataset_type: InstructDatasetType | DPODatasetType | None = None,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | None = None,
 ) -> list[MinerResultsText | MinerResultsImage]:
     assert task.task_id is not None, "We should have a task id when processing miners"
 
@@ -624,11 +738,11 @@ async def process_miners_pool(
                         )
                         continue
 
-                miner_repos[miner.hotkey] = repo
+                    miner_repos[miner.hotkey] = repo
             logger.info(f"Found repo {repo} for miner {miner.hotkey}")
 
     results = [
-        _create_failed_miner_result(miner.hotkey, reason="No repo submitted", task_type=task.task_type)
+        _create_failed_miner_result(miner.hotkey, score_reason="Invalid/No repo submitted", task_type=task.task_type)
         for miner in miners
         if miner.hotkey not in miner_repos
     ]
@@ -650,10 +764,14 @@ async def process_miners_pool(
                     if isinstance(eval_result, Exception):
                         logger.error(f"Evaluation failed for miner {miner.hotkey}: {eval_result}")
                         results.append(
-                            _create_failed_miner_result(miner.hotkey, reason="Evaluation failed", task_type=task.task_type)
+                            _create_failed_miner_result(
+                                miner.hotkey,
+                                score_reason=f"Evaluation failed: {str(eval_result)[:350]}",
+                                task_type=task.task_type,
+                                )
                         )
                         continue
-                    elif task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+                    elif task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
                         synth_result, test_result = eval_result
                     elif task.task_type == TaskType.IMAGETASK:
                         test_result = eval_result
@@ -670,7 +788,7 @@ async def process_miners_pool(
                         updated_on=datetime.now(),
                     )
 
-                if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+                if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
                     results.append(
                         MinerResultsText(
                             hotkey=miner.hotkey,
@@ -698,7 +816,9 @@ async def process_miners_pool(
             logger.error(f"Error during batch evaluation: {e}", exc_info=True)
             results.extend(
                 [
-                    _create_failed_miner_result(miner.hotkey, reason="Evaluation failed", task_type=task.task_type)
+                    _create_failed_miner_result(
+                        miner.hotkey, score_reason=f"Evaluation failed: {str(e)[:350]}", task_type=task.task_type
+                        )
                     for miner in miners
                     if miner.hotkey not in [r.hotkey for r in results]
                 ]
@@ -707,19 +827,14 @@ async def process_miners_pool(
     return results
 
 
-async def evaluate_and_score(
-    task: InstructTextRawTask | DpoRawTask | ImageRawTask, gpu_ids: list[int], config: Config
-) -> InstructTextRawTask | DpoRawTask | ImageRawTask:
+
+
+async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: Config) -> AnyTypeRawTask:
     assert task.task_id is not None, "Task ID must be present"
     assert task.test_data is not None, "Test data must be present"
 
     miner_pool = await get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
-    if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
-        dataset_type = _get_dataset_type(task)
-    elif task.task_type == TaskType.IMAGETASK:
-        dataset_type = None
-    else:
-        raise ValueError(f"Unknown task type: {task.task_type}")
+    dataset_type = _get_dataset_type(task)
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
     task_results = await process_miners_pool(miner_pool, task, config, gpu_ids, dataset_type)
@@ -734,7 +849,7 @@ async def evaluate_and_score(
     all_scores_zero = all(result.score == 0.0 for result in task_results)
 
     if cts.DELETE_S3_AFTER_COMPLETE:
-        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
             files_to_delete = [task.training_data, task.test_data, task.synthetic_data]
         elif task.task_type == TaskType.IMAGETASK:
             files_to_delete = [task.training_data, task.test_data]

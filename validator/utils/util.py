@@ -8,13 +8,16 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
+from core.models.payload_models import AnyTypeTaskDetails
 from core.models.payload_models import DpoTaskDetails
+from core.models.payload_models import GrpoTaskDetails
 from core.models.payload_models import ImageTaskDetails
 from core.models.payload_models import InstructTextTaskDetails
+from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 from validator.core.config import Config
-from validator.core.models import DpoTask
-from validator.core.models import ImageTask
-from validator.core.models import InstructTextTask
+from validator.core.models import AnyTypeTask
+from validator.core.models import ImageTextPair
 from validator.core.models import TaskType
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
@@ -32,6 +35,13 @@ retry_http_with_backoff = retry(
 retry_with_backoff = retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=4, max=10),
+    reraise=True,
+)
+
+retry_http_fast = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=0.2, min=0.1, max=1),
+    retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.RequestError)),
     reraise=True,
 )
 
@@ -70,9 +80,7 @@ async def upload_file_to_minio(file_path: str, bucket_name: str, object_name: st
         return None
 
 
-def convert_task_to_task_details(
-    task: InstructTextTask | ImageTask | DpoTask,
-) -> InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails:
+def convert_task_to_task_details(task: AnyTypeTask) -> AnyTypeTaskDetails:
     if task.task_type == TaskType.INSTRUCTTEXTTASK:
         return InstructTextTaskDetails(
             id=task.task_id,
@@ -132,3 +140,43 @@ def convert_task_to_task_details(
             task_type=task.task_type,
             result_model_name=task.result_model_name,
         )
+    elif task.task_type == TaskType.GRPOTASK:
+        return GrpoTaskDetails(
+            id=task.task_id,
+            account_id=task.account_id,
+            status=task.status,
+            base_model_repository=task.model_id,
+            ds_repo=task.ds,
+            field_prompt=task.field_prompt,
+            reward_functions=task.reward_functions,
+            created_at=task.created_at,
+            started_at=task.started_at,
+            finished_at=task.termination_at,
+            hours_to_complete=task.hours_to_complete,
+            trained_model_repository=task.trained_model_repository,
+            task_type=task.task_type,
+            result_model_name=task.result_model_name,
+        )
+
+
+def is_task_in_flight(task: AnyTypeTask) -> bool:
+    return task.status not in [
+        TaskStatus.SUCCESS,
+        TaskStatus.FAILURE,
+        TaskStatus.FAILURE_FINDING_NODES,
+        TaskStatus.PREP_TASK_FAILURE,
+        TaskStatus.NODE_TRAINING_FAILURE,
+    ]
+
+
+def hide_sensitive_data_till_finished(task: AnyTypeTask) -> AnyTypeTask:
+    if is_task_in_flight(task):
+        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+            task.synthetic_data = None
+        if task.task_type == TaskType.IMAGETASK:
+            task.image_text_pairs = [ImageTextPair(image_url="hidden", text_url="hidden")]
+        task.test_data = None
+
+        task.training_data = None
+        task.ds = "Hidden"
+    return task

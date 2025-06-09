@@ -1,11 +1,13 @@
 import os
-import tempfile
 import shutil
+import tempfile
 
-from huggingface_hub import hf_api, hf_hub_download
 from fiber.logging_utils import get_logger
+from huggingface_hub import hf_api
+from huggingface_hub import hf_hub_download
 
 from core import constants as cst
+
 
 logger = get_logger(__name__)
 
@@ -36,5 +38,5 @@ def download_flux_unet(repo_id: str) -> str:
                 local_path = download_from_huggingface(repo_id, file_path, cst.CACHE_DIR)
     if not file_path:
         raise FileNotFoundError(f"No valid file found in root of repo '{repo_id}'.")
-    
+
     return local_path

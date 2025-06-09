@@ -1,6 +1,5 @@
 from datetime import datetime
 from datetime import timedelta
-from typing import Union
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -10,11 +9,10 @@ from fastapi import Query
 from fastapi import Response
 
 from core.models.payload_models import AllOfNodeResults
-from core.models.payload_models import DpoTaskDetails
-from core.models.payload_models import ImageTaskDetails
-from core.models.payload_models import InstructTextTaskDetails
+from core.models.payload_models import AnyTypeTaskDetails
 from core.models.payload_models import LeaderboardRow
 from core.models.payload_models import NewTaskRequestDPO
+from core.models.payload_models import NewTaskRequestGrpo
 from core.models.payload_models import NewTaskRequestImage
 from core.models.payload_models import NewTaskRequestInstructText
 from core.models.payload_models import NewTaskResponse
@@ -31,14 +29,17 @@ from validator.core.constants import MAX_CONCURRENT_JOBS
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.core.models import DpoRawTask
+from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import NetworkStats
+from validator.core.models import DetailedNetworkStats
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.utils.logging import get_logger
 from validator.utils.util import convert_task_to_task_details
+from validator.utils.util import hide_sensitive_data_till_finished
 
 
 logger = get_logger(__name__)
@@ -50,6 +51,7 @@ CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT = (
     "/v1/tasks/create_custom_dataset_text"  # TODO: this is just for instruct text tasks
 )
 TASKS_CREATE_ENDPOINT_DPO = "/v1/tasks/create_dpo"
+TASKS_CREATE_ENDPOINT_GRPO = "/v1/tasks/create_grpo"
 TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"  # TODO: this is just for instruct text tasks
 GET_TASKS_BY_ACCOUNT_ENDPOINT = "/v1/tasks/account/{account_id}"
 GET_TASK_DETAILS_ENDPOINT = "/v1/tasks/{task_id}"
@@ -59,6 +61,7 @@ GET_NODE_RESULTS_ENDPOINT = "/v1/tasks/node_results/{hotkey}"
 DELETE_TASK_ENDPOINT = "/v1/tasks/delete/{task_id}"
 LEADERBOARD_ENDPOINT = "/v1/leaderboard"
 COMPLETED_ORGANIC_TASKS_ENDPOINT = "/v1/tasks/organic/completed"
+GET_NETWORK_DETAILED_STATUS = "/v1/network/detailed_status"
 UPDATE_TRAINING_REPO_BACKUP_ENDPOINT = "/v1/tasks/{task_id}/training_repo_backup"
 UPDATE_RESULT_MODEL_NAME_ENDPOINT = "/v1/tasks/{task_id}/result_model_name"
 
@@ -101,6 +104,35 @@ async def create_task_dpo(
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
         task_type=TaskType.DPOTASK,
+        result_model_name=request.result_model_name,
+    )
+
+    task = await task_sql.add_task(task, config.psql_db)
+
+    logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
+
+
+async def create_task_grpo(
+    request: NewTaskRequestGrpo,
+    config: Config = Depends(get_config),
+) -> NewTaskResponse:
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
+
+    task = GrpoRawTask(
+        model_id=request.model_repo,
+        ds=request.ds_repo,
+        file_format=request.file_format,
+        field_prompt=request.field_prompt,
+        reward_functions=request.reward_functions,
+        is_organic=True,
+        status=TaskStatus.PENDING,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=request.hours_to_complete,
+        account_id=request.account_id,
+        task_type=TaskType.GRPOTASK,
         result_model_name=request.result_model_name,
     )
 
@@ -228,7 +260,7 @@ async def create_task_image(
         account_id=request.account_id,
         task_type=TaskType.IMAGETASK,
         result_model_name=request.result_model_name,
-        model_type=request.model_type
+        model_type=request.model_type,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -329,21 +361,23 @@ async def get_task_details_by_account(
     limit: int = 100,
     page: int = 1,
     config: Config = Depends(get_config),
-) -> list[InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
+) -> list[AnyTypeTaskDetails]:
     offset = (page - 1) * limit
     tasks = await task_sql.get_tasks_by_account_id(config.psql_db, account_id, limit, offset)
-    
+    tasks = [hide_sensitive_data_till_finished(task) for task in tasks]
+
     return [convert_task_to_task_details(task) for task in tasks]
 
 
 async def get_task_details(
     task_id: UUID,
     config: Config = Depends(get_config),
-) -> Union[InstructTextTaskDetails, ImageTaskDetails, DpoTaskDetails]:
+) -> AnyTypeTaskDetails:
     task = await task_sql.get_task_by_id(task_id, config.psql_db)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found.")
 
+    task = hide_sensitive_data_till_finished(task)
     return convert_task_to_task_details(task)
 
 
@@ -392,6 +426,20 @@ async def get_network_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def get_network_detailed_status(
+    config: Config = Depends(get_config),
+) -> DetailedNetworkStats:
+    try:
+        logger.debug("IN get network detailed status")
+        detailed_stats = await task_sql.get_detailed_task_stats(config.psql_db)
+        if detailed_stats.number_of_jobs_training >= MAX_CONCURRENT_JOBS:
+            detailed_stats.job_can_be_made = False
+        return detailed_stats
+    except Exception as e:
+        logger.info(f"There was an issue with getting detailed status {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 async def get_completed_organic_tasks(
     hours: int | None = Query(default=None, description="Number of hours to look back for completed organic tasks", ge=1),
     task_type: TaskType | None = Query(
@@ -402,7 +450,7 @@ async def get_completed_organic_tasks(
     limit: int = Query(default=100, description="Number of tasks per page", ge=1),
     page: int = Query(default=1, description="Page number", ge=1),
     config: Config = Depends(get_config),
-) -> list[InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails]:
+) -> list[AnyTypeTaskDetails]:
     """Get completed organic tasks with optional time filter and task type filter"""
     tasks = await task_sql.get_completed_organic_tasks(
         config.psql_db,
@@ -451,6 +499,7 @@ def factory_router() -> APIRouter:
     router.add_api_route(TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT, create_task_instruct_text, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_IMAGE, create_task_image, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_DPO, create_task_dpo, methods=["POST"])
+    # router.add_api_route(TASKS_CREATE_ENDPOINT_GRPO, create_task_grpo, methods=["POST"])
     router.add_api_route(TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT, create_task_with_fixed_datasets, methods=["POST"])
     router.add_api_route(CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT, create_text_task_with_custom_dataset, methods=["POST"])
     router.add_api_route(GET_TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])
@@ -460,6 +509,7 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_TASKS_BY_ACCOUNT_ENDPOINT, get_task_details_by_account, methods=["GET"])
     router.add_api_route(LEADERBOARD_ENDPOINT, get_leaderboard, methods=["GET"])
     router.add_api_route(GET_NETWORK_STATUS, get_network_status, methods=["GET"])
+    router.add_api_route(GET_NETWORK_DETAILED_STATUS, get_network_detailed_status, methods=["GET"])
     router.add_api_route(COMPLETED_ORGANIC_TASKS_ENDPOINT, get_completed_organic_tasks, methods=["GET"])
     router.add_api_route(UPDATE_TRAINING_REPO_BACKUP_ENDPOINT, update_training_repo_backup, methods=["PUT"])
     router.add_api_route(UPDATE_RESULT_MODEL_NAME_ENDPOINT, update_result_model_name, methods=["PUT"])

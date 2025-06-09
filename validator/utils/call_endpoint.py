@@ -3,7 +3,6 @@ import json
 import os
 import time
 from typing import Any
-from typing import Optional
 
 import httpx
 import netaddr
@@ -97,7 +96,6 @@ async def process_non_stream_fiber(
 
     return response.json()
 
-
 async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> str | None:
     response = await _post_to_nineteen_ai(PROMPT_GEN_ENDPOINT, payload, keypair)
     response_json = response.json()
@@ -137,7 +135,7 @@ async def _post_to_nineteen_ai(url: str, payload: dict[str, Any], keypair: Keypa
 # If this it to talk to the miner, its already in fiber
 # We can change to that once we add bittensor stuff (i know that's why its like this ATM)
 @retry_http_with_backoff
-async def process_non_stream_get(base_url: str, token: Optional[str]) -> dict[str, Any] | list[dict[str, Any]]:
+async def process_non_stream_get(base_url: str, token: str | None) -> dict[str, Any] | list[dict[str, Any]]:
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {token}",
@@ -275,3 +273,20 @@ async def call_content_service(endpoint: str, keypair: Keypair, params: dict = N
             logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")
             response.raise_for_status()
         return response.json()
+
+
+async def call_content_service_fast(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any] | list[dict[str, Any]]:
+    """Make a signed request to the content service with fast retries for LLM endpoints."""
+    from validator.utils.util import retry_http_fast
+    
+    @retry_http_fast
+    async def _make_request():
+        headers = _get_headers_for_signed_https_request(keypair)
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(url=endpoint, headers=headers, params=params)
+            if response.status_code != 200:
+                logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")
+                response.raise_for_status()
+            return response.json()
+    
+    return await _make_request()

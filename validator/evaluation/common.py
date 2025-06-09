@@ -9,7 +9,7 @@ import torch
 import yaml
 from axolotl.utils.dict import DictDefault
 from datasets import Dataset
-from peft import PeftModel
+from peft import AutoPeftModelForCausalLM
 from requests.exceptions import HTTPError
 from tenacity import retry
 from tenacity import retry_if_exception
@@ -76,7 +76,13 @@ class ProgressLoggerCallback(TrainerCallback):
         return control
 
 
-def has_status_code_5xx(e):
+def should_retry_model_loading_on_exception(e):
+    ephemeral_error_patterns = [
+        "does not appear to have a file named",
+        "does not appear to have files named",
+        "Too Many Requests for url",
+    ]
+
     while e is not None:
         if isinstance(e, HTTPError):
             if e.response is None:
@@ -84,6 +90,8 @@ def has_status_code_5xx(e):
                 return True
             elif 500 <= e.response.status_code < 600:
                 return True
+        if any(pattern in str(e) for pattern in ephemeral_error_patterns):
+            return True
         e = e.__cause__
     return False
 
@@ -92,7 +100,7 @@ def retry_on_5xx():
     return retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=2.5, min=30, max=600),
-        retry=retry_if_exception(has_status_code_5xx),
+        retry=retry_if_exception(should_retry_model_loading_on_exception),
         reraise=True,
     )
 
@@ -148,11 +156,10 @@ def load_tokenizer(original_model: str) -> AutoTokenizer:
 
 
 @retry_on_5xx()
-def load_finetuned_model(base_model, repo: str) -> PeftModel:
+def load_finetuned_model(repo: str) -> AutoPeftModelForCausalLM:
     try:
         cache_dir = create_finetuned_cache_dir()
-        return PeftModel.from_pretrained(
-            base_model,
+        return AutoPeftModelForCausalLM.from_pretrained(
             repo,
             is_trainable=False,
             device_map="auto",
@@ -165,8 +172,7 @@ def load_finetuned_model(base_model, repo: str) -> PeftModel:
             pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
-                return PeftModel.from_pretrained(
-                    base_model,
+                return AutoPeftModelForCausalLM.from_pretrained(
                     repo,
                     is_trainable=False,
                     ignore_mismatched_sizes=True,
@@ -270,6 +276,7 @@ def _load_and_update_evaluation_config(
         dataset=evaluation_args.dataset,
         dataset_type=evaluation_args.dataset_type,
         file_format=evaluation_args.file_format,
+        is_eval=True,
     )
     config_dict["datasets"] = [dataset_entry]
 

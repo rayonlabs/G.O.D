@@ -7,12 +7,15 @@ from huggingface_hub import HfApi
 
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskStatus
-from core.models.utility_models import TaskType
+from validator.core import constants as cst
+from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import DpoRawTask
+from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.tasks.task_prep import prepare_image_task
@@ -25,7 +28,11 @@ logger = get_logger(__name__)
 hf_api = HfApi()
 
 
-async def get_total_text_dataset_size(task: InstructTextRawTask | DpoRawTask) -> int:
+async def get_fake_text_dataset_size(task: AnyTextTypeRawTask) -> int:
+    return 100_000
+
+
+async def get_total_text_dataset_size(task: AnyTextTypeRawTask) -> int:
     if task.file_format == FileFormat.S3:
         if not task.training_data:
             logger.error(f"Training data is missing from task: {task.task_id}")
@@ -78,19 +85,43 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawT
     return task
 
 
-async def run_text_task_prep(task: InstructTextRawTask | DpoRawTask, keypair: Keypair) -> InstructTextRawTask | DpoRawTask:
+async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair) -> AnyTextTypeRawTask:
+    # Store original dataset name for processing
+    original_ds_name = task.ds
+    
     test_data, synth_data, train_data = await prepare_text_task(task, keypair=keypair)
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
     task.synthetic_data = synth_data
     task.test_data = test_data
+    
+    # Update dataset name after processing if multiple datasets were used
+    if original_ds_name and ',' in original_ds_name:
+        num_datasets = len([ds.strip() for ds in original_ds_name.split(',')])
+        task.ds = f"mix of {num_datasets} datasets"
+        logger.info(f"Updated dataset name from '{original_ds_name}' to: {task.ds}")
+    
+
+    if isinstance(task, InstructTextRawTask):
+        task.field_instruction = cst.STANDARD_INSTRUCT_COLUMN
+        task.field_output = cst.STANDARD_OUTPUT_COLUMN
+        task.field_input = cst.STANDARD_INPUT_COLUMN if task.field_input else None
+        task.field_system = cst.STANDARD_SYSTEM_COLUMN if task.field_system else None
+    elif isinstance(task, DpoRawTask):
+        task.field_prompt = cst.STANDARD_DPO_PROMPT_COLUMN
+        task.field_chosen = cst.STANDARD_DPO_CHOSEN_COLUMN
+        task.field_rejected = cst.STANDARD_DPO_REJECTED_COLUMN
+        task.field_system = cst.STANDARD_SYSTEM_COLUMN if task.field_system else None
+    elif isinstance(task, GrpoRawTask):
+        task.field_prompt = cst.STANDARD_GRPO_PROMPT_COLUMN
+
     logger.info("Data creation is complete - now time to find some miners")
     return task
 
 
-def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRequestText:
-    if task.task_type == TaskType.INSTRUCTTEXTTASK:
-        dataset_type = InstructDatasetType(
+def prepare_text_task_request(task: AnyTextTypeRawTask) -> TrainRequestText:
+    if isinstance(task, InstructTextRawTask):
+        dataset_type = InstructTextDatasetType(
             field_system=task.field_system,
             field_input=task.field_input,
             field_output=task.field_output,
@@ -98,8 +129,8 @@ def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRe
             format=task.format,
             no_input_format=task.no_input_format,
         )
-    elif task.task_type == TaskType.DPOTASK:
-        dataset_type = DPODatasetType(
+    elif isinstance(task, DpoRawTask):
+        dataset_type = DpoDatasetType(
             field_prompt=task.field_prompt,
             field_system=task.field_system,
             field_chosen=task.field_chosen,
@@ -107,6 +138,11 @@ def prepare_text_task_request(task: InstructTextRawTask | DpoRawTask) -> TrainRe
             prompt_format=task.prompt_format,
             chosen_format=task.chosen_format,
             rejected_format=task.rejected_format,
+        )
+    elif isinstance(task, GrpoRawTask):
+        dataset_type = GrpoDatasetType(
+            field_prompt=task.field_prompt,
+            reward_functions=task.reward_functions,
         )
 
     dataset = task.training_data if task.training_data else "dataset error"
@@ -128,5 +164,5 @@ def prepare_image_task_request(task: ImageRawTask) -> TrainRequestImage:
         task_id=str(task.task_id),
         hours_to_complete=task.hours_to_complete,
         dataset_zip=task.training_data,
-        model_type=task.model_type
+        model_type=task.model_type,
     )

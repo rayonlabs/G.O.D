@@ -4,7 +4,6 @@ import random
 import secrets
 import string
 from typing import Any
-from typing import Dict
 
 from core.models.config_models import AuditorConfig
 from core.models.config_models import MinerConfig
@@ -43,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def generate_miner_config(dev: bool = False) -> Dict[str, Any]:
+def generate_miner_config(dev: bool = False) -> dict[str, Any]:
     print("\n🤖 Let's configure your Miner! 🛠️\n")
 
     subtensor_network = input("🌐 Enter subtensor network (default: finney): ") or "finney"
@@ -73,7 +72,7 @@ def generate_miner_config(dev: bool = False) -> Dict[str, Any]:
     return vars(config)
 
 
-def generate_validator_config(dev: bool = False) -> Dict[str, Any]:
+def generate_validator_config(dev: bool = False) -> dict[str, Any]:
     print("\n🎯 Let's set up your Validator! 🚀\n")
 
     # Check if POSTGRES_PASSWORD already exists in the environment

@@ -19,7 +19,6 @@ from validator.evaluation.common import ProgressLoggerCallback
 from validator.evaluation.common import _load_and_update_evaluation_config
 from validator.evaluation.common import _log_dataset_and_model_info
 from validator.evaluation.common import check_and_log_base_model_size
-from validator.evaluation.common import count_model_parameters
 from validator.evaluation.common import load_finetuned_model
 from validator.evaluation.common import load_model
 from validator.evaluation.common import load_results_dict
@@ -60,7 +59,7 @@ def _collate_evaluation_batch(batch: list[dict[str, list[int]]], tokenizer: Auto
     return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
 
-def evaluate_language_model_loss(
+def evaluate_instruct_text_model(
     evaluation_config: DictDefault,
     language_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
@@ -81,6 +80,7 @@ def evaluate_language_model_loss(
             output_dir=evaluation_config.output_dir,
             per_device_eval_batch_size=batch_size,
             report_to="none",
+            bf16=True,
         )
 
         trainer = Trainer(
@@ -113,7 +113,7 @@ def evaluate_finetuned_model(
         finetuned_model=finetuned_model,
         config_path=cst.VALI_CONFIG_PATH
     )
-    return evaluate_language_model_loss(evaluation_config, finetuned_model, tokenizer)
+    return evaluate_instruct_text_model(evaluation_config, finetuned_model, tokenizer)
 
 
 def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
@@ -134,10 +134,7 @@ def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
     try:
         if check_for_lora(repo):
             logger.info("LoRA adapter detected. Loading as with Peft")
-            base_model = load_model(evaluation_args.original_model, is_base_model=True)
-            if "model_params_count" not in results_dict:
-                results_dict["model_params_count"] = count_model_parameters(base_model)
-            finetuned_model = load_finetuned_model(base_model, repo)
+            finetuned_model = load_finetuned_model(repo)
             is_finetune = True
         else:
             logger.info("No LoRA adapter detected. Loading full model")
@@ -177,9 +174,9 @@ def main():
         logger.error("Missing required environment variables.")
         exit(1)
 
-    lora_repos = [m.strip() for m in models_str.split(",") if m.strip()]
+    repos = [m.strip() for m in models_str.split(",") if m.strip()]
 
-    for repo in lora_repos:
+    for repo in repos:
         try:
             evaluation_args = EvaluationArgs(
                 dataset=dataset,

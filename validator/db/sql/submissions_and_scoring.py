@@ -1,9 +1,6 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Dict
-from typing import List
-from typing import Optional
 from uuid import UUID
 
 from asyncpg.connection import Connection
@@ -23,7 +20,7 @@ from validator.core.models import WorkloadMetrics
 from validator.db.database import PSQLDB
 
 
-async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> Dict[str, Dict]:
+async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> dict[str, dict]:
     """
     Get both daily participation status and average scores for nodes.
     """
@@ -82,7 +79,7 @@ async def add_submission(submission: Submission, psql_db: PSQLDB) -> Submission:
         return await get_submission(submission_id, psql_db)
 
 
-async def get_submission(submission_id: UUID, psql_db: PSQLDB) -> Optional[Submission]:
+async def get_submission(submission_id: UUID, psql_db: PSQLDB) -> Submission | None:
     """Get a submission by its ID"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -95,7 +92,7 @@ async def get_submission(submission_id: UUID, psql_db: PSQLDB) -> Optional[Submi
         return None
 
 
-async def get_submissions_by_task(task_id: UUID, psql_db: PSQLDB) -> List[Submission]:
+async def get_submissions_by_task(task_id: UUID, psql_db: PSQLDB) -> list[Submission]:
     """Get all submissions for a task"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -107,7 +104,7 @@ async def get_submissions_by_task(task_id: UUID, psql_db: PSQLDB) -> List[Submis
         return [Submission(**dict(row)) for row in rows]
 
 
-async def get_node_latest_submission(task_id: str, hotkey: str, psql_db: PSQLDB) -> Optional[Submission]:
+async def get_node_latest_submission(task_id: str, hotkey: str, psql_db: PSQLDB) -> Submission | None:
     """Get the latest submission for a node on a task"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -180,7 +177,7 @@ async def set_task_node_quality_score(
         )
 
 
-async def get_task_node_quality_score(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> Optional[float]:
+async def get_task_node_quality_score(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> float | None:
     """Get quality score for a node's task submission"""
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -232,7 +229,7 @@ async def get_all_scores_and_losses_for_task(task_id: UUID, psql_db: PSQLDB) -> 
         ]
 
 
-async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> List[Dict]:
+async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> list[dict]:
     """
     Get all quality scores for a specific hotkey across all completed tasks.
     """
@@ -253,7 +250,7 @@ async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> List[Dict]:
         return [dict(row) for row in rows]
 
 
-async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> List[TaskResults]:
+async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> list[TaskResults]:
     """
     Get aggregate scores for all completed tasks since the given start time.
     Only includes tasks that have at least one node with score >= 1 or < 0
@@ -271,7 +268,10 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> L
                             '{cst.QUALITY_SCORE}', tn.{cst.TASK_NODE_QUALITY_SCORE}
                         )
                         ORDER BY tn.{cst.TASK_NODE_QUALITY_SCORE} DESC NULLS LAST
-                    ) FILTER (WHERE tn.{cst.HOTKEY} IS NOT NULL AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL),
+                    ) FILTER (
+                        WHERE tn.{cst.HOTKEY} IS NOT NULL 
+                        AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+                    ),
                     '[]'::json
                 ) as node_scores
             FROM {cst.TASKS_TABLE} t
@@ -350,15 +350,15 @@ async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) 
             SELECT
                 COALESCE(AVG(tn.{cst.QUALITY_SCORE}), 0) as avg_quality_score,
                 COALESCE(COUNT(
-                    CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END
+                    CASE WHEN tn.{cst.QUALITY_SCORE} > -1 THEN 1 END
                 )::FLOAT / NULLIF(COUNT(*), 0), 0) as success_rate,
                 COALESCE(COUNT(
-                    CASE WHEN tn.{cst.QUALITY_SCORE} > 0.9 THEN 1 END
+                    CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END
                 )::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate,
                 COALESCE(COUNT(*), 0) as total_count,
                 COALESCE(SUM(tn.{cst.QUALITY_SCORE}), 0) as total_score,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END), 0) as total_success,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.95 THEN 1 END), 0) as total_quality
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > -1 THEN 1 END), 0) as total_success,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END), 0) as total_quality
 
             FROM {cst.TASK_NODES_TABLE} tn
             JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
@@ -513,12 +513,12 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
                 p.interval,
                 -- Quality metrics
                 COALESCE(AVG(tn.{cst.QUALITY_SCORE}), 0) as avg_quality_score,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as success_rate,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.9 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > -1 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as success_rate,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 0) as quality_rate,
                 COALESCE(COUNT(*), 0) as total_count,
                 COALESCE(SUM(tn.{cst.QUALITY_SCORE}), 0) as total_score,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END), 0) as total_success,
-                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0.95 THEN 1 END), 0) as total_quality,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > -1 THEN 1 END), 0) as total_success,
+                COALESCE(COUNT(CASE WHEN tn.{cst.QUALITY_SCORE} > 0 THEN 1 END), 0) as total_quality,
 
                 -- Workload metrics
                 COALESCE(SUM(t.{cst.HOURS_TO_COMPLETE}), 0)::INTEGER as competition_hours,

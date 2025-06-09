@@ -6,12 +6,8 @@ from pydantic import BaseModel  # noqa
 
 from validator.core.config import Config
 from validator.core.dependencies import get_config
-from validator.core.models import DpoTask
-from validator.core.models import DpoTaskWithHotkeyDetails
-from validator.core.models import ImageTask
-from validator.core.models import ImageTaskWithHotkeyDetails
-from validator.core.models import InstructTextTask
-from validator.core.models import InstructTextTaskWithHotkeyDetails
+from validator.core.models import AnyTypeTask
+from validator.core.models import AnyTypeTaskWithHotkeyDetails
 from validator.db.sql.auditing import get_latest_scores_url
 from validator.db.sql.auditing import get_recent_tasks
 from validator.db.sql.auditing import get_recent_tasks_for_hotkey
@@ -24,21 +20,21 @@ router = APIRouter(tags=["auditing"])
 @router.get("/auditing/tasks")
 async def audit_recent_tasks_endpoint(
     limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTask | ImageTask | DpoTask]:
+) -> list[AnyTypeTask]:
     return await get_recent_tasks(None, limit=limit, page=page, config=config)
 
 
 @router.get("/auditing/tasks/hotkey/{hotkey}")
 async def audit_recent_tasks_for_hotkey_endpoint(
     hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
-) -> list[InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails]:
+) -> list[AnyTypeTaskWithHotkeyDetails]:
     return await get_recent_tasks_for_hotkey(hotkey, limit=limit, page=page, config=config)
 
 
 @router.get("/auditing/tasks/{task_id}")
 async def audit_task_details_endpoint(
     task_id: str, config: Config = Depends(get_config)
-) -> InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails:
+) -> AnyTypeTaskWithHotkeyDetails:
     logger.info(f"Getting task details for task {task_id}")
     return await get_task_with_hotkey_details(task_id, config)
 

@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -6,14 +7,18 @@ from uuid import UUID
 from uuid import uuid4
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_validator
 
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import RewardFunction
 from core.models.utility_models import TaskType
 
 
@@ -31,7 +36,7 @@ class ModelConfig(BaseModel):
     model_type: str
     tokenizer_config: TokenizerConfig
 
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class DatasetData(BaseModel):
@@ -65,7 +70,7 @@ class ModelData(BaseModel):
     config: dict
     parameter_count: int | None = None
 
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class RawTask(BaseModel):
@@ -99,13 +104,14 @@ class RawTask(BaseModel):
     model_params_count: int = 0
 
     # Turn off protected namespace for model
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class DpoRawTask(RawTask):
     """
     DPO task data as stored in the database. It expand the RawTask with fields from the DpoTask table.
     """
+
     field_prompt: str
     field_system: str | None = None
     field_chosen: str
@@ -116,6 +122,25 @@ class DpoRawTask(RawTask):
     synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.DPOTASK
+
+
+class GrpoRawTask(RawTask):
+    """
+    GRPO task data as stored in the database. It expand the RawTask with fields from the GrpoTask table.
+    """
+
+    field_prompt: str
+    reward_functions: list[RewardFunction]
+    file_format: FileFormat = FileFormat.HF
+    task_type: TaskType = TaskType.GRPOTASK
+    synthetic_data: str | None = None
+
+    @model_validator(mode="after")
+    def validate_reward_functions(self) -> "GrpoRawTask":
+        for reward_function in self.reward_functions:
+            if reward_function.func_hash is None:
+                reward_function.func_hash = hashlib.sha256(reward_function.reward_func.encode()).hexdigest()
+        return self
 
 
 class InstructTextRawTask(RawTask):
@@ -169,6 +194,10 @@ class DpoTask(DpoRawTask):
     trained_model_repository: str | None = None
 
 
+class GrpoTask(GrpoRawTask):
+    trained_model_repository: str | None = None
+
+
 class PeriodScore(BaseModel):
     quality_score: float
     summed_task_score: float
@@ -207,7 +236,7 @@ class MiniTaskWithScoringOnly(BaseModel):
     model_params_count: int | None = 0
 
     # Turn off protected namespace for model
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class TaskResults(BaseModel):
@@ -251,10 +280,11 @@ class MinerResults(BaseModel):
 
 class MinerResultsText(MinerResults):
     task_type: TaskType
+
     @field_validator("task_type")
     def validate_task_type(cls, v):
-        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK}:
-            raise ValueError("Must be INSTRUCTTEXTTASK or DPOTASK")
+        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK}:
+            raise ValueError("Must be INSTRUCTTEXTTASK, DPOTASK or GRPOTASK")
         return v
 
 
@@ -288,7 +318,7 @@ class NodeStats(BaseModel):
     workload_metrics: WorkloadMetrics
     model_metrics: ModelMetrics
 
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class AllNodeStats(BaseModel):
@@ -342,6 +372,8 @@ class Img2ImgPayload(BaseModel):
     prompt: str | None = None
     base_image: str | None = None
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class NetworkStats(BaseModel):
     number_of_jobs_training: int
@@ -350,6 +382,28 @@ class NetworkStats(BaseModel):
     number_of_jobs_success: int
     next_training_end: datetime | None
     job_can_be_made: bool = True
+
+
+class DetailedNetworkStats(NetworkStats):
+    instruct_training: int = 0
+    instruct_preevaluation: int = 0
+    instruct_evaluating: int = 0
+    instruct_success: int = 0
+    
+    dpo_training: int = 0
+    dpo_preevaluation: int = 0
+    dpo_evaluating: int = 0
+    dpo_success: int = 0
+    
+    grpo_training: int = 0
+    grpo_preevaluation: int = 0
+    grpo_evaluating: int = 0
+    grpo_success: int = 0
+    
+    image_training: int = 0
+    image_preevaluation: int = 0
+    image_evaluating: int = 0
+    image_success: int = 0
 
 
 class HotkeyDetails(BaseModel):
@@ -376,20 +430,24 @@ class DpoTaskWithHotkeyDetails(DpoTask):
     hotkey_details: list[HotkeyDetails]
 
 
+class GrpoTaskWithHotkeyDetails(GrpoTask):
+    hotkey_details: list[HotkeyDetails]
+
+
 class Dataset(BaseModel):
     dataset_id: str
     num_rows: int
     num_bytes_parquet_files: int
     dpo_available: bool = False
     dpo_prompt_column: str | None = None
-    dpo_accepted_column:str | None = None
-    dpo_rejected_column:str | None = None
+    dpo_accepted_column: str | None = None
+    dpo_rejected_column: str | None = None
 
 
 class EvaluationArgs(BaseModel):
     dataset: str
     original_model: str
-    dataset_type: InstructDatasetType | DPODatasetType
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
     file_format: FileFormat
     repo: str
 
@@ -404,10 +462,21 @@ class EvaluationArgs(BaseModel):
         if isinstance(value, str):
             try:
                 data = json.loads(value)
-                if "field_chosen" in data:
-                    return DPODatasetType.model_validate(data)
-                else:
-                    return InstructDatasetType.model_validate(data)
+                if "field_instruction" in data and "field_input" in data:
+                    return InstructTextDatasetType.model_validate(data)
+                elif "field_chosen" in data:
+                    return DpoDatasetType.model_validate(data)
+                elif "reward_functions" in data:
+                    return GrpoDatasetType.model_validate(data)
             except Exception as e:
                 raise ValueError(f"Failed to parse dataset type: {e}")
         return value
+
+
+# Type aliases for common task type groupings
+AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask
+AnyTypeRawTask = AnyTextTypeRawTask | ImageRawTask
+AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask
+AnyTypeTaskWithHotkeyDetails = (
+    InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails
+)

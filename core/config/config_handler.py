@@ -7,9 +7,10 @@ from fiber.logging_utils import get_logger
 from transformers import AutoTokenizer
 
 import core.constants as cst
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import InstructTextDatasetType
 
 
 logger = get_logger(__name__)
@@ -17,19 +18,25 @@ logger = get_logger(__name__)
 
 def create_dataset_entry(
     dataset: str,
-    dataset_type: InstructDatasetType | DPODatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
     file_format: FileFormat,
+    is_eval: bool = False,
 ) -> dict:
     dataset_entry = {"path": dataset}
 
     if file_format == FileFormat.JSON:
-        dataset_entry = {"path": f"/workspace/input_data/{os.path.basename(dataset)}"}
+        if not is_eval:
+            dataset_entry = {"path": "/workspace/input_data/"}
+        else:
+            dataset_entry = {"path": f"/workspace/input_data/{os.path.basename(dataset)}"}
 
-    if isinstance(dataset_type, InstructDatasetType):
+    if isinstance(dataset_type, InstructTextDatasetType):
         instruct_type_dict = {key: value for key, value in dataset_type.model_dump().items() if value is not None}
         dataset_entry.update(_process_instruct_dataset_fields(instruct_type_dict))
-    elif isinstance(dataset_type, DPODatasetType):
+    elif isinstance(dataset_type, DpoDatasetType):
         dataset_entry.update(_process_dpo_dataset_fields(dataset_type))
+    elif isinstance(dataset_type, GrpoDatasetType):
+        dataset_entry.update(_process_grpo_dataset_fields(dataset_type))
     else:
         raise ValueError("Invalid dataset_type provided.")
 
@@ -70,12 +77,27 @@ def save_config_toml(config: dict, config_path: str):
         toml.dump(config, file)
 
 
-def _process_dpo_dataset_fields(dataset_type: DPODatasetType) -> dict:
-    # Back to using chatml.intel with its hardcoded field names
-    return {
-        "type": cst.DPO_DEFAULT_DATASET_TYPE,
-        "split": "train"
-    }
+def _process_grpo_dataset_fields(dataset_type: GrpoDatasetType) -> dict:
+    return {"split": "train"}
+
+
+def _process_dpo_dataset_fields(dataset_type: DpoDatasetType) -> dict:
+    # Enable below when https://github.com/axolotl-ai-cloud/axolotl/issues/1417 is fixed
+    # context: https://discord.com/channels/1272221995400167588/1355226588178022452/1356982842374226125
+
+    # dpo_type_dict = dataset_type.model_dump()
+    # dpo_type_dict["type"] = "user_defined.default"
+    # if not dpo_type_dict.get("prompt_format"):
+    #     if dpo_type_dict.get("field_system"):
+    #         dpo_type_dict["prompt_format"] = "{system} {prompt}"
+    #     else:
+    #         dpo_type_dict["prompt_format"] = "{prompt}"
+    # return dpo_type_dict
+
+    # Fallback to https://axolotl-ai-cloud.github.io/axolotl/docs/rlhf.html#chatml.intel
+    # Column names are hardcoded in axolotl: "DPO_DEFAULT_FIELD_SYSTEM",
+    # "DPO_DEFAULT_FIELD_PROMPT", "DPO_DEFAULT_FIELD_CHOSEN", "DPO_DEFAULT_FIELD_REJECTED"
+    return {"type": cst.DPO_DEFAULT_DATASET_TYPE, "split": "train"}
 
 
 def _process_instruct_dataset_fields(instruct_type_dict: dict) -> dict:

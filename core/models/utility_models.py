@@ -3,6 +3,7 @@ from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 
 
@@ -43,7 +44,7 @@ class WinningSubmission(BaseModel):
     model_repo: str
 
     # Turn off protected namespace for model
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class MinerTaskResult(BaseModel):
@@ -60,7 +61,7 @@ class TaskMinerResult(BaseModel):
     quality_score: float
 
 
-class InstructDatasetType(BaseModel):
+class InstructTextDatasetType(BaseModel):
     system_prompt: str | None = ""
     system_format: str | None = "{system}"
     field_system: str | None = None
@@ -72,7 +73,29 @@ class InstructDatasetType(BaseModel):
     field: str | None = None
 
 
-class DPODatasetType(BaseModel):
+class RewardFunction(BaseModel):
+    """Model representing a reward function with its metadata"""
+
+    reward_func: str = Field(
+        ...,
+        description="String with the python code of the reward function to use",
+        examples=[
+            "def reward_func_conciseness(completions, **kwargs):",
+            '"""Reward function that favors shorter, more concise answers."""',
+            "    return [100.0/(len(completion.split()) + 10) for completion in completions]",
+        ],
+    )
+    reward_weight: float = Field(..., ge=0)
+    func_hash: str | None = None
+    is_generic: bool | None = None
+
+
+class GrpoDatasetType(BaseModel):
+    field_prompt: str | None = None
+    reward_functions: list[RewardFunction] | None = []
+
+
+class DpoDatasetType(BaseModel):
     field_prompt: str | None = None
     field_system: str | None = None
     field_chosen: str | None = None
@@ -97,11 +120,12 @@ class Job(BaseModel):
 
 class TextJob(Job):
     dataset: str
-    dataset_type: InstructDatasetType | DPODatasetType
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
     file_format: FileFormat
 
 
 class DiffusionJob(Job):
+    model_config = ConfigDict(protected_namespaces=())
     dataset_zip: str = Field(
         ...,
         description="Link to dataset zip file",
@@ -126,12 +150,15 @@ class Prompts(BaseModel):
     input_output_reformulation_user: str
     input_reformulation_sys: str
     input_reformulation_user: str
+    reward_function_generation_sys: str
+    reward_function_generation_user: str
 
 
 class TaskType(str, Enum):
     INSTRUCTTEXTTASK = "InstructTextTask"
     IMAGETASK = "ImageTask"
     DPOTASK = "DpoTask"
+    GRPOTASK = "GrpoTask"
 
     def __hash__(self):
         return hash(str(self))

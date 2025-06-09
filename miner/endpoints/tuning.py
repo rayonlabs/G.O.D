@@ -18,6 +18,7 @@ from pydantic import ValidationError
 import core.constants as cst
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
+from core.models.payload_models import TrainRequestGrpo
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
 from core.models.payload_models import TrainResponse
@@ -37,6 +38,41 @@ current_job_finish_time = None
 
 async def tune_model_text(
     train_request: TrainRequestText,
+    worker_config: WorkerConfig = Depends(get_worker_config),
+):
+    global current_job_finish_time
+    logger.info("Starting model tuning.")
+
+    current_job_finish_time = datetime.now() + timedelta(hours=train_request.hours_to_complete)
+    logger.info(f"Job received is {train_request}")
+
+    try:
+        logger.info(train_request.file_format)
+        if train_request.file_format != FileFormat.HF:
+            if train_request.file_format == FileFormat.S3:
+                train_request.dataset = await download_s3_file(train_request.dataset)
+                logger.info(train_request.dataset)
+                train_request.file_format = FileFormat.JSON
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    job = create_job_text(
+        job_id=str(train_request.task_id),
+        dataset=train_request.dataset,
+        model=train_request.model,
+        dataset_type=train_request.dataset_type,
+        file_format=train_request.file_format,
+        expected_repo_name=train_request.expected_repo_name,
+    )
+    logger.info(f"Created job {job}")
+    worker_config.trainer.enqueue_job(job)
+
+    return {"message": "Training job enqueued.", "task_id": job.job_id}
+
+
+async def tune_model_grpo(
+    train_request: TrainRequestGrpo,
     worker_config: WorkerConfig = Depends(get_worker_config),
 ):
     global current_job_finish_time
@@ -139,11 +175,11 @@ async def task_offer(
         # You will want to optimise this as a miner
         global current_job_finish_time
         current_time = datetime.now()
-        if request.task_type not in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK]:
+        if request.task_type not in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
             return MinerTaskResponse(
                 message=f"This endpoint only accepts text tasks: "
-                        f"{TaskType.INSTRUCTTEXTTASK} and {TaskType.DPOTASK}",
-                accepted=False
+                f"{TaskType.INSTRUCTTEXTTASK}, {TaskType.DPOTASK} and {TaskType.GRPOTASK}",
+                accepted=False,
             )
 
         if "llama" not in request.model.lower():
@@ -239,6 +275,14 @@ def factory_router() -> APIRouter:
     router.add_api_route(
         "/start_training/",  # TODO: change to /start_training_text or similar
         tune_model_text,
+        tags=["Subnet"],
+        methods=["POST"],
+        response_model=TrainResponse,
+        dependencies=[Depends(blacklist_low_stake), Depends(verify_request)],
+    )
+    router.add_api_route(
+        "/start_training_grpo/",
+        tune_model_grpo,
         tags=["Subnet"],
         methods=["POST"],
         response_model=TrainResponse,

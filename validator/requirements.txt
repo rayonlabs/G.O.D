@@ -1,3 +1,9 @@
 git+https://github.com/rayonlabs/fiber
 datasets==2.21.0
 peft==0.15.1
+docker
+toml
+debugpy
+textstat==0.7.7
+langcheck==0.9.0
+detoxify

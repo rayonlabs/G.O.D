@@ -3,7 +3,6 @@ import time
 from contextvars import ContextVar
 from logging import Logger
 from logging import LogRecord
-from typing import Optional
 
 from docker.models.containers import Container
 from fiber.logging_utils import get_logger as fiber_get_logger
@@ -41,7 +40,7 @@ def clear_context() -> None:
     current_context.set({})
 
 
-def get_context_tag(key: str) -> Optional[str | dict]:
+def get_context_tag(key: str) -> str | dict | None:
     """Get a tag value from the current logging context"""
     try:
         context = current_context.get()

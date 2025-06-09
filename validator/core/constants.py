@@ -1,5 +1,6 @@
 import os
 
+from core.constants import GRPO_DEFAULT_FIELD_PROMPT
 from core.constants import NETUID
 
 
@@ -27,6 +28,7 @@ NULL_ACCOUNT_ID = "00000000-0000-0000-0000-000000000000"
 # api stuff should move this out to be shared by both miner and vali code?
 START_TRAINING_ENDPOINT = "/start_training/"
 START_TRAINING_IMAGE_ENDPOINT = "/start_training_image/"
+START_TRAINING_GRPO_ENDPOINT = "/start_training_grpo/"
 TASK_OFFER_ENDPOINT = "/task_offer/"
 TASK_OFFER_IMAGE_ENDPOINT = "/task_offer_image/"
 SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
@@ -60,6 +62,12 @@ MAX_SYNTH_DATA_POINTS = 300
 MAX_TEST_DATA_POINTS = 1000
 
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
+
+# Synthetic data constants - used for both DPO and Instruct Text tasks
+SYNTHETIC_TOTAL_SIZE = 1200
+SYNTHETIC_FOR_TRAINING = 700
+SYNTHETIC_FOR_EVAL = 500
+SYNTH_EXAMPLES_FROM_TRAIN = 500
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
 TEMP_PATH_FOR_IMAGES = "/tmp/validator/temp_images"
@@ -72,9 +80,14 @@ EXAMPLE_PROMPTS_PATH = "validator/tasks/example_prompts.json"
 NUM_SYNTH_RETRIES = 3
 SYNTH_GEN_BATCH_SIZE = 30
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
+
+# Multi-dataset augmentation
+MIN_DATASETS_FOR_AUGMENTATION = 2
+MAX_DATASETS_FOR_AUGMENTATION = 16
+
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
-PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.1
+PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.05
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
@@ -95,7 +108,7 @@ INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
 # text augmentation synth
 TEXT_SYNTH_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
 TEXT_SYNTH_WEAKER_MODEL = "llama-3-2-3b"
-TEXT_SYNTH_MODEL_TEMPERATURE = 0.4
+TEXT_SYNTH_MODEL_TEMPERATURE = 0.6
 TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
 END_OF_REASONING_TAG = "</think>"
 
@@ -117,9 +130,14 @@ NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
 # Task Stuff
 MINIMUM_MINER_POOL = 1
 
+# General miner pool sizes
+MIN_IDEAL_NUM_MINERS_IN_POOL = 8
+MAX_IDEAL_NUM_MINERS_IN_POOL = 15
 
-MIN_IDEAL_NUM_MINERS_IN_POOL = 5
-MAX_IDEAL_NUM_MINERS_IN_POOL = 9
+# Image-specific miner pool sizes
+MIN_IDEAL_NUM_MINERS_IN_IMAGE_POOL = 15
+MAX_IDEAL_NUM_MINERS_IN_IMAGE_POOL = 25
+
 MIN_IMAGE_COMPETITION_HOURS = 1
 MAX_IMAGE_COMPETITION_HOURS = 2
 TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
@@ -128,7 +146,8 @@ MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
 MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
-
+MODEL_SIZE_REQUIRING_3_GPUS = 75 * 10**9
+MODEL_SIZE_REQUIRING_4_GPUS = 110 * 10**9
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
 TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
@@ -141,10 +160,11 @@ SIGMOID_POWER = 0.75  # Higher = more extreme difference between high and low sc
 LINEAR_WEIGHT = 0.05  # Weight for linear component (0-1) - benefits low scores
 SIGMOID_WEIGHT = 0.7  # Weight for sigmoid component (0-1) - benefits high scores
 
-REWEIGHTING_EXP = 0.7  # how much of a drop off from leader
+REWEIGHTING_EXP = 1.0  # how much of a drop off from leader
 
 SCORING_WINDOW = 7  # number of days over which we score
 OUTLIER_STD_THRESHOLD = 2.0  # number of standard deviations from the mean to reject the outlier scores
+
 
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
@@ -153,10 +173,14 @@ MAX_CONCURRENT_TRAININGS = 10
 MAX_CONCURRENT_EVALUATIONS = 1
 MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
 
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT = 0.4  # image is currently 1 minus DPO minus this
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT = 0.25
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE = 0.35
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO = 0.1
-PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE = (
-    1 - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
+PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO = (
+    1
+    - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
+    - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE
+    - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
 )
 PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = (
     0.5  # person synth chance is 1 minus this (only for sdxl models, flux is always person)
@@ -166,6 +190,11 @@ PERSON_SYNTH_DS_PREFIX = "person"
 PERSON_SYNTH_DOCKER_IMAGE = "diagonalge/person_synth:latest"
 PERSON_SYNTH_CONTAINER_SAVE_PATH = "/app/avatars/"
 
+# grpo synth
+MIN_NUM_REWARD_FUNCTIONS = 1
+MAX_NUM_REWARD_FUNCTIONS = 5
+PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_LLM = 0.0
+PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_DB = 1 - PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_LLM
 
 # diffusion eval stuff
 LORA_SDXL_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora_sdxl.json"
@@ -205,9 +234,10 @@ MAX_IMAGE_HEIGHT = 1024
 IMAGE_RESOLUTION_STEP = 64  # Ensures we get resolutions divisible by 64
 
 # scoring stuff
-INSTRUCT_TEXT_TASK_SCORE_WEIGHT = 0.3
-IMAGE_TASK_SCORE_WEIGHT = 0.4
-DPO_TASK_SCORE_WEIGHT = 1 - INSTRUCT_TEXT_TASK_SCORE_WEIGHT - IMAGE_TASK_SCORE_WEIGHT
+INSTRUCT_TEXT_TASK_SCORE_WEIGHT = 0.25
+IMAGE_TASK_SCORE_WEIGHT = 0.25
+DPO_TASK_SCORE_WEIGHT = 0.15
+GRPO_TASK_SCORE_WEIGHT = 1 - INSTRUCT_TEXT_TASK_SCORE_WEIGHT - IMAGE_TASK_SCORE_WEIGHT - DPO_TASK_SCORE_WEIGHT
 
 SEVEN_DAY_SCORE_WEIGHT = 0.4
 THREE_DAY_SCORE_WEIGHT = 0.3
@@ -216,7 +246,7 @@ ONE_DAY_SCORE_WEIGHT = 0.3
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
 CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
-MAX_CACHE_SIZE_BYTES = 1000 * 1024**3  # in bytes
+MAX_CACHE_SIZE_BYTES = 500 * 1024**3 if NETUID == 241 else 1000 * 1024**3  # in bytes
 CACHE_CLEANUP_INTERVAL = 8 * 60 * 60  # in seconds
 
 
@@ -232,3 +262,30 @@ DOCKER_EVAL_HF_CACHE_DIR = "/root/.cache/huggingface"
 TRL_DPO_FIELD_PROMPT = "prompt"
 TRL_DPO_FIELD_CHOSEN = "chosen"
 TRL_DPO_FIELD_REJECTED = "rejected"
+
+# Miner performance constants
+MINER_PERFORMANCE_CACHE_TTL = 3600
+MINER_PERFORMANCE_CACHE_KEY_PREFIX = "miner_performance:"
+DEFAULT_RECENT_SUBMISSIONS_LIMIT = 20
+CHAIN_WEIGHT_DIVISOR = 65535
+
+# GRPO evaluation
+TRL_GRPO_FIELD_PROMPT = GRPO_DEFAULT_FIELD_PROMPT
+
+# Default, fixed Hyperparameters
+BETA_DPO = 0.1
+BETA_GRPO = 0.04
+
+# GRPO evaluation
+GRPO_INITIAL_BATCH_SIZE = 32
+GRPO_DEFAULT_NUM_GENERATIONS = 2
+
+
+STANDARD_INSTRUCT_COLUMN = "instruct"
+STANDARD_INPUT_COLUMN = "input"
+STANDARD_OUTPUT_COLUMN = "output"
+STANDARD_SYSTEM_COLUMN = "system"
+STANDARD_GRPO_PROMPT_COLUMN = "prompt"
+STANDARD_DPO_PROMPT_COLUMN = "prompt"
+STANDARD_DPO_CHOSEN_COLUMN = "chosen"
+STANDARD_DPO_REJECTED_COLUMN = "rejected"

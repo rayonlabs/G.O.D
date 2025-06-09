@@ -8,7 +8,7 @@ class BaseConfig:
     subtensor_network: str
     netuid: int
     env: str
-    subtensor_address: str | None = None
+    subtensor_address: str | None
 
 
 @dataclass

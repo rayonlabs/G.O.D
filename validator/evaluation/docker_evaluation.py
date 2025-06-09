@@ -13,10 +13,11 @@ from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
-from core.models.utility_models import InstructDatasetType
+from core.models.utility_models import InstructTextDatasetType
 from core.utils import download_s3_file
 from validator.tasks.task_prep import unzip_to_temp_path
 from validator.utils.logging import get_all_context_tags
@@ -60,11 +61,30 @@ def process_evaluation_results(results: dict, is_image: bool = False) -> DockerE
         if isinstance(result, str) and not isinstance(result, dict):
             processed_results[repo] = Exception(result)
         else:
-            if is_image:
-                result["is_finetune"] = True
-                processed_results[repo] = EvaluationResultImage.model_validate(result)
+            # Handle when result is a list (GRPO specific issue)
+            if isinstance(result, list):
+                logger.warning(f"Converting list result to proper format for repo {repo}: {result}")
+
+                # Extract the score from the list format
+                if len(result) > 0 and isinstance(result[0], dict):
+                    # Find our key-value pair in the first dict of the list
+                    for key, value in result[0].items():
+                        if repo in key:
+                            processed_results[repo] = EvaluationResultText.model_validate({
+                                "is_finetune": True,
+                                "eval_loss": value
+                            })
+                            break
+                    else:
+                        processed_results[repo] = Exception(f"Could not extract eval_loss from list result: {result}")
+                else:
+                    processed_results[repo] = Exception(f"Invalid result format: {result}")
             else:
-                processed_results[repo] = EvaluationResultText.model_validate(result)
+                if is_image:
+                    result["is_finetune"] = True
+                    processed_results[repo] = EvaluationResultImage.model_validate(result)
+                else:
+                    processed_results[repo] = EvaluationResultText.model_validate(result)
 
     return DockerEvaluationResults(
         results=processed_results,
@@ -76,15 +96,17 @@ async def run_evaluation_docker_text(
     dataset: str,
     models: list[str],
     original_model: str,
-    dataset_type: InstructDatasetType | DPODatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
     file_format: FileFormat,
     gpu_ids: list[int],
 ) -> DockerEvaluationResults:
 
-    if isinstance(dataset_type, InstructDatasetType):
+    if isinstance(dataset_type, InstructTextDatasetType):
         command = ["python", "-m", "validator.evaluation.eval_instruct_text"]
-    elif isinstance(dataset_type, DPODatasetType):
+    elif isinstance(dataset_type, DpoDatasetType):
         command = ["python", "-m", "validator.evaluation.eval_dpo"]
+    elif isinstance(dataset_type, GrpoDatasetType):
+        command = ["python", "-m", "validator.evaluation.eval_grpo"]
     else:
         raise ValueError(f"Unsupported dataset type: {type(dataset_type)}")
     task_type = type(dataset_type).__name__
