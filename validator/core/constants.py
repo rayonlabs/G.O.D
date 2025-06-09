@@ -246,7 +246,7 @@ ONE_DAY_SCORE_WEIGHT = 0.3
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
 CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
-MAX_CACHE_SIZE_BYTES = 1000 * 1024**3  # in bytes
+MAX_CACHE_SIZE_BYTES = 500 * 1024**3 if NETUID == 241 else 1000 * 1024**3  # in bytes
 CACHE_CLEANUP_INTERVAL = 8 * 60 * 60  # in seconds
 
 # Docker evaluation
@@ -283,4 +283,3 @@ STANDARD_GRPO_PROMPT_COLUMN = "prompt"
 STANDARD_DPO_PROMPT_COLUMN = "prompt"
 STANDARD_DPO_CHOSEN_COLUMN = "chosen"
 STANDARD_DPO_REJECTED_COLUMN = "rejected"
-
