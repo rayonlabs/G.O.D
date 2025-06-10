@@ -228,7 +228,8 @@ async def _real_task_creation_demo(round_data: Round, is_final: bool = False):
     try:
         # Try to load actual config
         print("Loading real validator config...")
-        config = Config()
+        from validator.core.config import load_config
+        config = load_config()
         print("✅ Config loaded successfully")
         
         # Debug logging for config
