@@ -265,7 +265,7 @@ async def _real_task_creation_demo(round_data: Round, is_final: bool = False):
 
 if __name__ == "__main__":
     import asyncio
-    test_sizes = [10, 5, 2]  # Just test smaller sizes for demo
+    test_sizes = [8, 2]  # One group round (8 players), one knockout (2 players)
     
     async def run_demo():
         for size in test_sizes:
