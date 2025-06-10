@@ -231,6 +231,12 @@ async def _real_task_creation_demo(round_data: Round, is_final: bool = False):
         config = Config()
         print("✅ Config loaded successfully")
         
+        # Debug logging for config
+        print(f"🔍 TOURNAMENT DEBUG: config.keypair type: {type(config.keypair)}")
+        print(f"🔍 TOURNAMENT DEBUG: config.keypair: {config.keypair}")
+        if hasattr(config.keypair, '_mock_name'):
+            print(f"🚨 TOURNAMENT: Config keypair is a Mock: {config.keypair}")
+        
         try:
             # Try to create actual text tournament
             print("Attempting to create text tournament...")
