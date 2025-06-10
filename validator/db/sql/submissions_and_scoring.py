@@ -312,6 +312,61 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
         return results
 
 
+async def get_aggregate_scores_for_leaderboard_since(start_time: datetime, psql_db: PSQLDB) -> list[TaskResults]:
+    """
+    Get aggregate scores for all completed tasks since the given start time.
+    Includes ALL scores (including zeros) for leaderboard and analytics purposes.
+    This is separate from get_aggregate_scores_since which filters for weight calculations.
+    """
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            SELECT
+                t.*,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            '{cst.TASK_ID}', t.{cst.TASK_ID}::text,
+                            '{cst.HOTKEY}', tn.{cst.HOTKEY},
+                            '{cst.QUALITY_SCORE}', tn.{cst.TASK_NODE_QUALITY_SCORE}
+                        )
+                        ORDER BY tn.{cst.TASK_NODE_QUALITY_SCORE} DESC NULLS LAST
+                    ) FILTER (
+                        WHERE tn.{cst.HOTKEY} IS NOT NULL 
+                        AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+                    ),
+                    '[]'::json
+                ) as node_scores
+            FROM {cst.TASKS_TABLE} t
+            LEFT JOIN {cst.TASK_NODES_TABLE} tn ON t.{cst.TASK_ID} = tn.{cst.TASK_ID}
+            WHERE t.{cst.STATUS} = 'success'
+            AND t.{cst.CREATED_AT} >= $1
+            AND tn.{cst.NETUID} = $2
+            GROUP BY t.{cst.TASK_ID}
+            ORDER BY t.{cst.CREATED_AT} DESC
+        """
+        rows = await connection.fetch(query, start_time, NETUID)
+        results = []
+        for row in rows:
+            row_dict = dict(row)
+            task_dict = {k: v for k, v in row_dict.items() if k != "node_scores"}
+            task = MiniTaskWithScoringOnly(**task_dict)
+            node_scores_data = row_dict["node_scores"]
+            if isinstance(node_scores_data, str):
+                node_scores_data = json.loads(node_scores_data)
+            node_scores = [
+                TaskNode(
+                    task_id=str(node[cst.TASK_ID]),
+                    hotkey=node[cst.HOTKEY],
+                    quality_score=float(node[cst.QUALITY_SCORE]) if node[cst.QUALITY_SCORE] is not None else None,
+                )
+                for node in node_scores_data
+                if node[cst.QUALITY_SCORE] is not None
+            ]
+            results.append(TaskResults(task=task, node_scores=node_scores))
+        return results
+
+
 async def get_organic_proportion_since(
     start_time: datetime,
     psql_db: PSQLDB,

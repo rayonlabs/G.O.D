@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
-from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
+from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since, get_aggregate_scores_for_leaderboard_since
 
 
 load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
@@ -240,6 +240,20 @@ async def _get_weights_to_set(config: Config) -> tuple[list[PeriodScore], list[T
     """
     date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
     task_results: list[TaskResults] = await get_aggregate_scores_since(date, config.psql_db)
+
+    all_period_scores = get_period_scores_from_task_results(task_results)
+
+    return all_period_scores, task_results
+
+
+async def _get_leaderboard_data(config: Config) -> tuple[list[PeriodScore], list[TaskResults]]:
+    """
+    Retrieve task results from the database for leaderboard/analytics purposes.
+    This includes ALL scores (including zeros) for accurate counting and statistics.
+    This is separate from _get_weights_to_set which filters for weight calculations.
+    """
+    date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
+    task_results: list[TaskResults] = await get_aggregate_scores_for_leaderboard_since(date, config.psql_db)
 
     all_period_scores = get_period_scores_from_task_results(task_results)
 
