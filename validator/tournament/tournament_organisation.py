@@ -221,34 +221,39 @@ async def _create_probability_based_text_tasks(round_data: KnockoutRound, config
 async def _real_task_creation_demo(round_data: Round, is_final: bool = False):
     """Actually try to create real tasks to show what happens"""
     import asyncio
-    from unittest.mock import Mock
+    from validator.core.config import Config
     
     print("\n--- REAL Task Creation Attempt ---")
     
-    # Create a mock config (this will likely fail but show real behavior)
-    mock_config = Mock()
-    mock_config.keypair = Mock()
-    mock_config.psql_db = Mock()
-    
     try:
-        # Try to create actual text tournament
-        print("Attempting to create text tournament...")
-        text_tournament = await create_text_tournament_round(round_data, mock_config, is_final)
-        print(f"✅ Text tournament created with {len(text_tournament.tasks)} tasks")
-        print(f"   Task IDs: {text_tournament.tasks}")
+        # Try to load actual config
+        print("Loading real validator config...")
+        config = Config()
+        print("✅ Config loaded successfully")
+        
+        try:
+            # Try to create actual text tournament
+            print("Attempting to create text tournament...")
+            text_tournament = await create_text_tournament_round(round_data, config, is_final)
+            print(f"✅ Text tournament created with {len(text_tournament.tasks)} tasks")
+            print(f"   Task IDs: {text_tournament.tasks}")
+        except Exception as e:
+            print(f"❌ Text tournament creation failed: {type(e).__name__}: {e}")
+        
+        try:
+            # Try to create actual image tournament  
+            print("\nAttempting to create image tournament...")
+            image_tournament = await create_image_tournament_round(round_data, config)
+            print(f"✅ Image tournament created with {len(image_tournament.tasks)} tasks")
+            print(f"   Task IDs: {image_tournament.tasks}")
+        except Exception as e:
+            print(f"❌ Image tournament creation failed: {type(e).__name__}: {e}")
+            
     except Exception as e:
-        print(f"❌ Text tournament creation failed: {type(e).__name__}: {e}")
+        print(f"❌ Config loading failed: {type(e).__name__}: {e}")
+        print("Cannot proceed with real task creation without proper config.")
     
-    try:
-        # Try to create actual image tournament  
-        print("\nAttempting to create image tournament...")
-        image_tournament = await create_image_tournament_round(round_data, mock_config)
-        print(f"✅ Image tournament created with {len(image_tournament.tasks)} tasks")
-        print(f"   Task IDs: {image_tournament.tasks}")
-    except Exception as e:
-        print(f"❌ Image tournament creation failed: {type(e).__name__}: {e}")
-    
-    print("\nNOTE: This attempts real task creation but will likely fail due to missing database/API connections.")
+    print("\nNOTE: This attempts real task creation with actual validator config.")
 
 
 if __name__ == "__main__":
