@@ -1,27 +1,33 @@
-from core.models.utility_models import FileFormat
-from core.models.utility_models import InstructTextDatasetType
-from validator.evaluation.docker_evaluation import run_evaluation_docker
-from validator.utils.logging import get_logger
+import asyncio
 
+from core.models.utility_models import FileFormat
+from core.models.utility_models import ChatTemplateDatasetType
+from validator.evaluation.docker_evaluation import run_evaluation_docker_text
+from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def test():
-    custom_dataset_type = InstructTextDatasetType(
-        system_prompt="you are helpful",
-        system_format="{system}",
-        field_system="text",
-        field_instruction="instruction",
-        field_input="input",
-        field_output="output",
+async def test():
+    custom_dataset_type = ChatTemplateDatasetType(
+        chat_template='chatml',
+        chat_column='conversations',
+        chat_role_field='from',
+        chat_content_field='value',
+        chat_user_reference='human',
+        chat_assistant_reference='gpt'
     )
 
-    results = run_evaluation_docker(
-        dataset="mhenrichsen/alpaca_2k_test",
-        model="unsloth/Llama-3.2-3B-Instruct",
-        original_model="unsloth/Llama-3.2-3B-Instruct",
+    results = await run_evaluation_docker_text(
+        dataset="/tmp/728c0ffac41d1699_test_data.json",
+        models=['diagonalge/8ad2b90f-7b3e-4b67-9741-3f3c2ecc53eb'],
+        original_model="Qwen/Qwen2.5-0.5B",
         dataset_type=custom_dataset_type,
         file_format=FileFormat.JSON,
+        gpu_ids=[0]
     )
     logger.info(f"Evaluation results: {results}")
+
+
+if __name__ == "__main__":
+    asyncio.run(test())

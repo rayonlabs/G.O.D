@@ -8,6 +8,7 @@ from huggingface_hub import HfApi
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
 from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
@@ -17,6 +18,7 @@ from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
+from validator.core.models import ChatRawTask
 from validator.core.models import InstructTextRawTask
 from validator.tasks.task_prep import prepare_image_task
 from validator.tasks.task_prep import prepare_text_task
@@ -143,6 +145,15 @@ def prepare_text_task_request(task: AnyTextTypeRawTask) -> TrainRequestText:
         dataset_type = GrpoDatasetType(
             field_prompt=task.field_prompt,
             reward_functions=task.reward_functions,
+        )
+    elif isinstance(task, ChatRawTask):
+        dataset_type = ChatTemplateDatasetType(
+            chat_template=task.chat_template,
+            chat_column=task.chat_column,
+            chat_role_field=task.chat_role_field,
+            chat_content_field=task.chat_content_field,
+            chat_user_reference=task.chat_user_reference,
+            chat_assistant_reference=task.chat_assistant_reference,
         )
 
     dataset = task.training_data if task.training_data else "dataset error"

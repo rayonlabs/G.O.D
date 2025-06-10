@@ -1,7 +1,8 @@
 import os
 import subprocess
 from pathlib import Path
-import yaml
+from pydantic import TypeAdapter
+import json
 
 import torch
 from accelerate.utils import find_executable_batch_size
@@ -16,6 +17,7 @@ from transformers import TrainingArguments
 
 from validator.core import constants as cst
 from validator.core.models import EvaluationArgs
+from core.models.utility_models import TextDatasetType
 from validator.evaluation.common import ProgressLoggerCallback
 from validator.evaluation.common import _load_and_update_evaluation_config
 from validator.evaluation.common import _log_dataset_and_model_info
@@ -177,6 +179,9 @@ def main():
         logger.error("Missing required environment variables.")
         exit(1)
 
+    model_adapter = TypeAdapter(TextDatasetType)
+    dataset_type = model_adapter.validate_python(json.loads(dataset_type_str))
+
     repos = [m.strip() for m in models_str.split(",") if m.strip()]
 
     for repo in repos:
@@ -184,7 +189,7 @@ def main():
             evaluation_args = EvaluationArgs(
                 dataset=dataset,
                 original_model=original_model,
-                dataset_type=dataset_type_str,
+                dataset_type=dataset_type,
                 file_format=file_format_str,
                 repo=repo
             )
