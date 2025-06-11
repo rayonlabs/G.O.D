@@ -170,22 +170,3 @@ class ImageTextPair(BaseModel):
 
 
 
-class Group(BaseModel):
-    member_ids: list[str]
-
-
-class GroupRound(BaseModel):
-    groups: list[Group]
-
-
-class KnockoutRound(BaseModel):
-    pairs: list[tuple[str, str]]
-
-
-Round = GroupRound  | KnockoutRound
-
-
-class TournamentRound(BaseModel):
-    round_structure: Round
-    tasks: list[str] = Field(default_factory=list)
-    is_final_round: bool = False
