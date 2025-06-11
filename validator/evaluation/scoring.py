@@ -258,24 +258,20 @@ def calculate_miner_ranking_and_scores(
         is_dpo_task = valid_results[0].task_type == TaskType.DPOTASK
         is_grpo_task = valid_results[0].task_type == TaskType.GRPOTASK
         is_instruct_task = valid_results[0].task_type == TaskType.INSTRUCTTEXTTASK
+        is_chat_task = valid_results[0].task_type == TaskType.CHATTASK
 
         # For both DPO and Instruct Text tasks, use max(synth, test)
-        use_max_approach = is_dpo_task or is_instruct_task
+        use_max_approach = is_dpo_task or is_instruct_task or is_chat_task
 
-        if is_dpo_task:
-            logger.info("Processing DPO task with max(test_loss, synth_loss) approach")
-        if is_instruct_task:
-            logger.info("Processing INSTRUCT task with max(test_loss, synth_loss) approach")
-        if is_grpo_task:
+        if use_max_approach:
+            logger.info(f"Processing {valid_results[0].task_type} - using max(test, synth) loss for ranking")
+        else:
             logger.info("Processing GRPO task - higher loss is better")
 
     use_weighted_loss = use_max_approach or _is_synth_loss_valid_for_group(valid_results)
     if use_weighted_loss:
         if use_max_approach:
-            if is_dpo_task:
-                logger.info("Using max(test, synth) loss for DPO task ranking")
-            elif is_instruct_task:
-                logger.info("Using max(test, synth) loss for INSTRUCT task ranking")
+            logger.info(f"Using max loss for ranking {valid_results[0].task_type}")
         else:
             logger.info("Using weighted loss for ranking (at least one miner has valid synth loss)")
 
@@ -783,7 +779,7 @@ async def process_miners_pool(
                                 )
                         )
                         continue
-                    elif task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+                    elif task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK]:
                         synth_result, test_result = eval_result
                     elif task.task_type == TaskType.IMAGETASK:
                         test_result = eval_result

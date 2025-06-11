@@ -304,7 +304,7 @@ class MinerResultsText(MinerResults):
 
     @field_validator("task_type")
     def validate_task_type(cls, v):
-        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK}:
+        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK}:
             raise ValueError("Must be INSTRUCTTEXTTASK, DPOTASK or GRPOTASK")
         return v
 
@@ -455,6 +455,10 @@ class GrpoTaskWithHotkeyDetails(GrpoTask):
     hotkey_details: list[HotkeyDetails]
 
 
+class ChatTaskWithHotkeyDetails(ChatTask):
+    hotkey_details: list[HotkeyDetails]
+
+
 class Dataset(BaseModel):
     dataset_id: str
     num_rows: int
@@ -497,7 +501,7 @@ class EvaluationArgs(BaseModel):
 # Type aliases for common task type groupings
 AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask | ChatRawTask
 AnyTypeRawTask = AnyTextTypeRawTask | ImageRawTask
-AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask
+AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask | ChatTask
 AnyTypeTaskWithHotkeyDetails = (
-    InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails
+    InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails | ChatTaskWithHotkeyDetails
 )

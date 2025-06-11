@@ -14,10 +14,12 @@ from validator.core.models import AnyTypeTaskWithHotkeyDetails
 from validator.core.models import DpoTask
 from validator.core.models import DpoTaskWithHotkeyDetails
 from validator.core.models import GrpoTask
+from validator.core.models import ChatTask
 from validator.core.models import GrpoTaskWithHotkeyDetails
 from validator.core.models import HotkeyDetails
 from validator.core.models import ImageTask
 from validator.core.models import ImageTaskWithHotkeyDetails
+from validator.core.models import ChatTaskWithHotkeyDetails
 from validator.core.models import InstructTextTask
 from validator.core.models import InstructTextTaskWithHotkeyDetails
 from validator.db import constants as cst
@@ -162,6 +164,7 @@ async def _process_task_batch(
     image_task_ids = []
     dpo_task_ids = []
     grpo_task_ids = []
+    chat_task_ids = []
 
     for task_id, task_data in tasks_by_id.items():
         task_type = task_data.get(cst.TASK_TYPE)
@@ -173,6 +176,8 @@ async def _process_task_batch(
             dpo_task_ids.append(task_id)
         elif task_type == TaskType.GRPOTASK.value:
             grpo_task_ids.append(task_id)
+        elif task_type == TaskType.CHATTASK.value:
+            chat_task_ids.append(task_id)
 
     # Get all InstructTextTask specific data in one query
     instruct_text_task_data = {}
@@ -184,6 +189,17 @@ async def _process_task_batch(
         """
         rows = await connection.fetch(query, *instruct_text_task_ids)
         instruct_text_task_data = {str(row[cst.TASK_ID]): dict(row) for row in rows}
+
+    # Get all ChatTask specific data in one query
+    chat_task_data = {}
+    if chat_task_ids:
+        placeholders = ", ".join("$%d::uuid" % (i + 1) for i in range(len(chat_task_ids)))
+        query = f"""
+            SELECT * FROM {cst.CHAT_TASKS_TABLE}
+            WHERE {cst.TASK_ID} IN ({placeholders})
+        """
+        rows = await connection.fetch(query, *chat_task_ids)
+        chat_task_data = {str(row[cst.TASK_ID]): dict(row) for row in rows}
 
     # Get all ImageTask specific data in one query
     image_task_data = {}
@@ -255,6 +271,8 @@ async def _process_task_batch(
             task_data.update(dpo_task_data[task_id])
         elif task_type == TaskType.GRPOTASK.value and task_id in grpo_task_data:
             task_data.update(grpo_task_data[task_id])
+        elif task_type == TaskType.CHATTASK.value and task_id in chat_task_data:
+            task_data.update(chat_task_data[task_id])
 
         hotkey_details = []
         if task_id in details_by_task_id:
@@ -278,6 +296,11 @@ async def _process_task_batch(
             task = InstructTextTask(**task_fields)
             task = hide_sensitive_data_till_finished(task)
             tasks_with_details.append(InstructTextTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
+        elif task_type == TaskType.CHATTASK.value:
+            task_fields = {k: v for k, v in task_data.items() if k in ChatTask.model_fields}
+            task = ChatTask(**task_fields)
+            task = hide_sensitive_data_till_finished(task)
+            tasks_with_details.append(ChatTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details))
         elif task_type == TaskType.IMAGETASK.value:
             task_fields = {k: v for k, v in task_data.items() if k in ImageTask.model_fields}
             task = ImageTask(**task_fields)
@@ -392,6 +415,8 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
         return DpoTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
     elif task.task_type == TaskType.GRPOTASK:
         return GrpoTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
+    elif task.task_type == TaskType.CHATTASK:
+        return ChatTaskWithHotkeyDetails(**task.model_dump(), hotkey_details=hotkey_details)
 
 
 async def store_latest_scores_url(url: str, config: Config = Depends(get_config)) -> None:

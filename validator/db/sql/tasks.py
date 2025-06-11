@@ -883,6 +883,8 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
         elif task_type == TaskType.GRPOTASK.value:
             reward_functions = await get_reward_functions(task_id, psql_db)
             return GrpoTask(**full_task_data, reward_functions=reward_functions)
+        elif task_type == TaskType.CHATTASK.value:
+            return ChatTask(**full_task_data)
 
 async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> list[Task]:
     async with await psql_db.connection() as connection:
