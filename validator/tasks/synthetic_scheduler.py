@@ -569,7 +569,6 @@ async def _add_new_task_to_network_if_not_enough(
         if selected_task_type == TaskType.INSTRUCTTEXTTASK:
             await create_synthetic_instruct_text_task(config, models, instruct_datasets)
         elif selected_task_type == TaskType.CHATTASK:
-            logger.info("Creating a synthetic chat task")
             await create_synthetic_chat_task(config, models, instruct_datasets)
         elif selected_task_type == TaskType.IMAGETASK:
             await create_synthetic_image_task(config, image_models)
