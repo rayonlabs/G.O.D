@@ -555,7 +555,6 @@ async def _add_new_task_to_network_if_not_enough(
         )
         TASK_TYPES = [
             (TaskType.INSTRUCTTEXTTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT),
-            (TaskType.CHATTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_CHAT),
             (TaskType.IMAGETASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE),
             (TaskType.DPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO),
             (TaskType.GRPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO),
@@ -567,7 +566,11 @@ async def _add_new_task_to_network_if_not_enough(
         )[0]
 
         if selected_task_type == TaskType.INSTRUCTTEXTTASK:
-            await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+            probability_of_chat_task = random.random()
+            if probability_of_chat_task < cst.PERCENTAGE_OF_INSTRUCT_TASKS_THAT_SHOULD_BE_CHAT:
+                await create_synthetic_chat_task(config, models, instruct_datasets)
+            else:
+                await create_synthetic_instruct_text_task(config, models, instruct_datasets)
         elif selected_task_type == TaskType.CHATTASK:
             await create_synthetic_chat_task(config, models, instruct_datasets)
         elif selected_task_type == TaskType.IMAGETASK:
