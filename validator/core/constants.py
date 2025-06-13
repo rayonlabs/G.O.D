@@ -87,6 +87,13 @@ MAX_DATASETS_FOR_AUGMENTATION = 16
 
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
+
+_trainer_ips = os.getenv("TRAINER_IPS", "").strip()
+TRAINER_IPS = [ip.strip() for ip in _trainer_ips.split(",")] if _trainer_ips else []
+
+_trainer_gpu_ids = os.getenv("TRAINER_GPU_IDS", "").strip()
+TRAINER_GPU_IDS = [[int(id) for id in group.split(",")] for group in _trainer_gpu_ids.split(";")] if _trainer_gpu_ids else []
+
 PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.05
 
 # we sample datasets with these num_rows ranges equally

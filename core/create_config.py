@@ -112,6 +112,13 @@ def generate_validator_config(dev: bool = False) -> dict[str, Any]:
 
     gpu_ids = input("🎮 Enter comma-separated GPU IDs to use (e.g., 0,1,2, default = 0): ").strip() or "0"
 
+    trainer_ips = input(
+        "🌐 Enter trainer IPs as comma-separated list (e.g., 192.168.1.1,192.168.1.2, localhost): "
+        ).strip() or ""
+    trainer_gpu_ids = input(
+        "🎮 Enter trainer GPU IDs as semicolon-separated groups (e.g., 0,1;2,3 for [[0,1],[2,3]]): "
+        ).strip() or ""
+
     s3_compatible_endpoint = input("🎯 Enter s3 compatible endpoint: ")
     s3_compatible_access_key = input("🎯 Enter s3 compatible access key: ")
     s3_compatible_secret_key = input("🎯 Enter s3 compatible secret key: ")
@@ -140,6 +147,8 @@ def generate_validator_config(dev: bool = False) -> dict[str, Any]:
         frontend_api_key=frontend_api_key,
         validator_port=validator_port,
         gpu_ids=gpu_ids,
+        trainer_ips=trainer_ips,
+        trainer_gpu_ids=trainer_gpu_ids,
         gpu_server=None,
         set_metagraph_weights=parse_bool_input(
             "Set metagraph weights when updated gets really high to not dereg?",
