@@ -37,6 +37,8 @@ class ValidatorConfig(BaseConfig):
     set_metagraph_weights: bool
     validator_port: str
     gpu_ids: str
+    trainer_ips: str
+    trainer_gpu_ids: str
     gpu_server: str | None = None
     localhost: bool = False
     env_file: str = ".vali.env"
@@ -45,6 +47,19 @@ class ValidatorConfig(BaseConfig):
     refresh_nodes: bool = True
     database_url: str | None = None
     postgres_profile: str = "default"
+
+    def __post_init__(self):
+        # Validate that trainer IPs and trainer GPU IDs have matching lengths
+        if self.trainer_gpu_ids and self.trainer_ips:
+            gpu_groups = [group.strip() for group in self.trainer_gpu_ids.split(";") if group.strip()]
+            ips = [ip.strip() for ip in self.trainer_ips.split(",") if ip.strip()]
+
+            if len(gpu_groups) != len(ips):
+                raise ValueError(
+                    f"Number of trainer GPU groups ({len(gpu_groups)}) must match "
+                    f"number of trainer IPs ({len(ips)}). "
+                    f"GPU groups: {gpu_groups}, IPs: {ips}"
+                )
 
 
 @dataclass
