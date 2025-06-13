@@ -6,8 +6,6 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
-from typing import Union
-
 
 class FileFormat(str, Enum):
     CSV = "csv"  # needs to be local file
