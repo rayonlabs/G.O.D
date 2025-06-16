@@ -120,6 +120,12 @@ def detect_suspicious_nodes(task_results: list[TaskResults], task_type: TaskType
                     f"for {task_type} in {days}-day period - flagging as suspicious"
                 )
                 suspicious_hotkeys.add(organic_score.hotkey)
+        else:
+            logger.info(
+                f"Node {organic_score.hotkey} has organic scores but no synth scores "
+                f"for {task_type} in {days}-day period - flagging as suspicious"
+            )
+            suspicious_hotkeys.add(organic_score.hotkey)
 
     return suspicious_hotkeys
 
