@@ -130,8 +130,7 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         return []
 
     task_types = [
-        {"type": TaskType.INSTRUCTTEXTTASK, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
-        {"type": TaskType.CHATTASK, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
+        {"type": {TaskType.INSTRUCTTEXTTASK, TaskType.CHATTASK}, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
         {"type": TaskType.DPOTASK, "weight_key": "DPO_TASK_SCORE_WEIGHT"},
         {"type": TaskType.IMAGETASK, "weight_key": "IMAGE_TASK_SCORE_WEIGHT"},
         {"type": TaskType.GRPOTASK, "weight_key": "GRPO_TASK_SCORE_WEIGHT"},
@@ -141,20 +140,30 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
     suspicious_hotkeys = {}
 
     for task_config in task_types:
-        task_type = task_config["type"]
-        task_type_str = str(task_type)
-        organic_proportions[task_type_str] = get_organic_proportion(task_results, task_type, days=7)
+        task_types_raw = task_config["type"]
+        weight_key = task_config["weight_key"]
 
-        # Detect suspicious nodes for this task type
-        suspicious_hotkeys[task_type_str] = detect_suspicious_nodes(task_results, task_type, days=7)
-        logger.info(f"Found {len(suspicious_hotkeys[task_type_str])} suspicious nodes for {task_type}")
+        task_type_list = task_types_raw if isinstance(task_types_raw, set) else [task_types_raw]
+
+        for task_type in task_type_list:
+            task_type_str = str(task_type) 
+            organic_proportions[task_type_str] = get_organic_proportion(task_results, task_type, days=7)
+
+            # Detect suspicious nodes for this task type
+            suspicious_hotkeys[task_type_str] = detect_suspicious_nodes(task_results, task_type, days=7)
+            logger.info(f"Found {len(suspicious_hotkeys[task_type_str])} suspicious nodes for {task_type}")
 
     filtered_tasks = {}
+
     for task_config in task_types:
-        task_type = task_config["type"]
-        task_type_str = str(task_type)
-        filtered_tasks[f"{task_type_str}_organic"] = filter_tasks_by_type(task_results, task_type, is_organic=True)
-        filtered_tasks[f"{task_type_str}_synth"] = filter_tasks_by_type(task_results, task_type, is_organic=False)
+        task_types_raw = task_config["type"]
+        task_type_list = task_types_raw if isinstance(task_types_raw, set) else [task_types_raw]
+
+        for task_type in task_type_list:
+            task_type_str = str(task_type)
+            filtered_tasks[f"{task_type_str}_organic"] = filter_tasks_by_type(task_results, task_type, is_organic=True)
+            filtered_tasks[f"{task_type_str}_synth"] = filter_tasks_by_type(task_results, task_type, is_organic=False)
+
 
     periods = {
         "one_day": {
@@ -178,36 +187,40 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
         period_weight = period_config["weight"]
 
         for task_config in task_types:
-            task_type = task_config["type"]
-            task_type_str = str(task_type)
+            raw_types = task_config["type"]
+            task_type_list = raw_types if isinstance(raw_types, set) else [raw_types]
+
             weight_key = task_config["weight_key"]
             task_weight = getattr(cts, weight_key)
 
-            organic_proportion = organic_proportions[task_type_str]
-            synth_proportion = 1 - organic_proportion
+            for task_type in task_type_list:
+                task_type_str = str(task_type) 
 
-            # Process organic tasks
-            period_tasks_organic = filter_tasks_by_period(filtered_tasks[f"{task_type_str}_organic"], cutoff)
-            scores_organic = get_period_scores_from_results(
-                    period_tasks_organic,
-                    weight_multiplier=period_weight * task_weight * organic_proportion
-                )
+                organic_proportion = organic_proportions[task_type_str]
+                synth_proportion = 1 - organic_proportion
 
-            # Zero out organic scores for suspicious nodes for this task type
-            for organic_score in scores_organic:
-                    if organic_score.hotkey in suspicious_hotkeys[task_type_str]:
-                        logger.info(f"Setting {task_type} organic score to zero for suspicious node {organic_score.hotkey} in {period_name} period")
-                        organic_score.weight_multiplier = 0.0
+                # Process organic tasks
+                period_tasks_organic = filter_tasks_by_period(filtered_tasks[f"{task_type_str}_organic"], cutoff)
+                scores_organic = get_period_scores_from_results(
+                        period_tasks_organic,
+                        weight_multiplier=period_weight * task_weight * organic_proportion
+                    )
 
-            # Process synthetic tasks
-            period_tasks_synth = filter_tasks_by_period(filtered_tasks[f"{task_type_str}_synth"], cutoff)
-            scores_synth = get_period_scores_from_results(
-                    period_tasks_synth,
-                    weight_multiplier=period_weight * task_weight * synth_proportion
-                )
+                # Zero out organic scores for suspicious nodes for this task type
+                for organic_score in scores_organic:
+                        if organic_score.hotkey in suspicious_hotkeys[task_type_str]:
+                            logger.info(f"Setting {task_type} organic score to zero for suspicious node {organic_score.hotkey} in {period_name} period")
+                            organic_score.weight_multiplier = 0.0
 
-            all_period_scores.extend(scores_organic)
-            all_period_scores.extend(scores_synth)
+                # Process synthetic tasks
+                period_tasks_synth = filter_tasks_by_period(filtered_tasks[f"{task_type_str}_synth"], cutoff)
+                scores_synth = get_period_scores_from_results(
+                        period_tasks_synth,
+                        weight_multiplier=period_weight * task_weight * synth_proportion
+                    )
+
+                all_period_scores.extend(scores_organic)
+                all_period_scores.extend(scores_synth)
 
     return all_period_scores
 
@@ -270,8 +283,7 @@ def get_miner_performance_breakdown(hotkey: str, task_results: list[TaskResults]
     """Get detailed performance breakdown for a specific miner"""
     
     task_type_configs = [
-        {"type": TaskType.INSTRUCTTEXTTASK, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
-        {"type": TaskType.CHATTASK, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
+        {"type": {TaskType.INSTRUCTTEXTTASK, TaskType.CHATTASK}, "weight_key": "INSTRUCT_TEXT_TASK_SCORE_WEIGHT"},
         {"type": TaskType.DPOTASK, "weight_key": "DPO_TASK_SCORE_WEIGHT"},
         {"type": TaskType.IMAGETASK, "weight_key": "IMAGE_TASK_SCORE_WEIGHT"},
         {"type": TaskType.GRPOTASK, "weight_key": "GRPO_TASK_SCORE_WEIGHT"},
@@ -287,77 +299,83 @@ def get_miner_performance_breakdown(hotkey: str, task_results: list[TaskResults]
     suspicious_hotkeys = {}
     
     for task_config in task_type_configs:
-        task_type = task_config["type"]
-        task_type_str = str(task_type)
-        organic_proportions[task_type_str] = get_organic_proportion(task_results, task_type, days=7)
-        suspicious_hotkeys[task_type_str] = detect_suspicious_nodes(task_results, task_type, days=7)
+        raw_types = task_config["type"]
+        task_type_list = raw_types if isinstance(raw_types, set) else [raw_types]
+
+        for task_type in task_type_list:
+            task_type_str = str(task_type)
+            organic_proportions[task_type_str] = get_organic_proportion(task_results, task_type, days=7)
+            suspicious_hotkeys[task_type_str] = detect_suspicious_nodes(task_results, task_type, days=7)
     
     breakdown = {"task_types": {}, "period_totals": {}, "all_scores": []}
     
     for task_config in task_type_configs:
-        task_type = task_config["type"]
-        task_type_str = str(task_type)
+        raw_types = task_config["type"]
+        task_type_list = raw_types if isinstance(raw_types, set) else [raw_types]
+
         task_weight = getattr(cts, task_config["weight_key"])
+
+        for task_type in task_type_list:
+            task_type_str = str(task_type) 
+            organic_tasks = filter_tasks_by_type(task_results, task_type, is_organic=True)
+            synthetic_tasks = filter_tasks_by_type(task_results, task_type, is_organic=False)
         
-        organic_tasks = filter_tasks_by_type(task_results, task_type, is_organic=True)
-        synthetic_tasks = filter_tasks_by_type(task_results, task_type, is_organic=False)
-        
-        miner_organic_tasks = [tr for tr in organic_tasks if any(ns.hotkey == hotkey for ns in tr.node_scores)]
-        miner_synthetic_tasks = [tr for tr in synthetic_tasks if any(ns.hotkey == hotkey for ns in tr.node_scores)]
-        
-        type_data = {
-            "task_weight": task_weight,
-            "organic_proportion": organic_proportions[task_type_str],
-            "is_suspicious": hotkey in suspicious_hotkeys[task_type_str],
-            "periods": {}
-        }
-        
-        for period_name, period_config in periods.items():
-            period_weight = period_config["weight"]
-            cutoff = period_config["cutoff"]
+            miner_organic_tasks = [tr for tr in organic_tasks if any(ns.hotkey == hotkey for ns in tr.node_scores)]
+            miner_synthetic_tasks = [tr for tr in synthetic_tasks if any(ns.hotkey == hotkey for ns in tr.node_scores)]
             
-            period_organic = filter_tasks_by_period(miner_organic_tasks, cutoff)
-            period_synthetic = filter_tasks_by_period(miner_synthetic_tasks, cutoff)
-            
-            organic_mult = period_weight * task_weight * organic_proportions[task_type_str]
-            synth_mult = period_weight * task_weight * (1 - organic_proportions[task_type_str])
-            
-            organic_scores = get_period_scores_from_results(period_organic, weight_multiplier=organic_mult) if period_organic else []
-            synth_scores = get_period_scores_from_results(period_synthetic, weight_multiplier=synth_mult) if period_synthetic else []
-            
-            miner_organic_score = next((s for s in organic_scores if s.hotkey == hotkey), None)
-            miner_synth_score = next((s for s in synth_scores if s.hotkey == hotkey), None)
-            
-            if miner_organic_score and hotkey in suspicious_hotkeys[task_type_str]:
-                miner_organic_score.weight_multiplier = 0.0
-            
-            type_data["periods"][period_name] = {
-                "organic": {
-                    "score": miner_organic_score,
-                    "task_count": len(period_organic),
-                    "weighted_contribution": (miner_organic_score.normalised_score * miner_organic_score.weight_multiplier) if miner_organic_score and miner_organic_score.normalised_score else 0
-                },
-                "synthetic": {
-                    "score": miner_synth_score,
-                    "task_count": len(period_synthetic),
-                    "weighted_contribution": (miner_synth_score.normalised_score * miner_synth_score.weight_multiplier) if miner_synth_score and miner_synth_score.normalised_score else 0
-                }
+            type_data = {
+                "task_weight": task_weight,
+                "organic_proportion": organic_proportions[task_type_str],
+                "is_suspicious": hotkey in suspicious_hotkeys[task_type_str],
+                "periods": {}
             }
+
+            for period_name, period_config in periods.items():
+                period_weight = period_config["weight"]
+                cutoff = period_config["cutoff"]
+                
+                period_organic = filter_tasks_by_period(miner_organic_tasks, cutoff)
+                period_synthetic = filter_tasks_by_period(miner_synthetic_tasks, cutoff)
+                
+                organic_mult = period_weight * task_weight * organic_proportions[task_type_str]
+                synth_mult = period_weight * task_weight * (1 - organic_proportions[task_type_str])
+                
+                organic_scores = get_period_scores_from_results(period_organic, weight_multiplier=organic_mult) if period_organic else []
+                synth_scores = get_period_scores_from_results(period_synthetic, weight_multiplier=synth_mult) if period_synthetic else []
+                
+                miner_organic_score = next((s for s in organic_scores if s.hotkey == hotkey), None)
+                miner_synth_score = next((s for s in synth_scores if s.hotkey == hotkey), None)
+                
+                if miner_organic_score and hotkey in suspicious_hotkeys[task_type_str]:
+                    miner_organic_score.weight_multiplier = 0.0
+                
+                type_data["periods"][period_name] = {
+                    "organic": {
+                        "score": miner_organic_score,
+                        "task_count": len(period_organic),
+                        "weighted_contribution": (miner_organic_score.normalised_score * miner_organic_score.weight_multiplier) if miner_organic_score and miner_organic_score.normalised_score else 0
+                    },
+                    "synthetic": {
+                        "score": miner_synth_score,
+                        "task_count": len(period_synthetic),
+                        "weighted_contribution": (miner_synth_score.normalised_score * miner_synth_score.weight_multiplier) if miner_synth_score and miner_synth_score.normalised_score else 0
+                    }
+                }
+                
+                breakdown["all_scores"].extend([s for s in [miner_organic_score, miner_synth_score] if s])
             
-            breakdown["all_scores"].extend([s for s in [miner_organic_score, miner_synth_score] if s])
+            type_data["total_organic_tasks"] = len(miner_organic_tasks)
+            type_data["total_synthetic_tasks"] = len(miner_synthetic_tasks)
+            
+            breakdown["task_types"][task_type_str] = type_data
         
-        type_data["total_organic_tasks"] = len(miner_organic_tasks)
-        type_data["total_synthetic_tasks"] = len(miner_synthetic_tasks)
-        
-        breakdown["task_types"][task_type_str] = type_data
-    
-    for period_name in periods:
-        total = sum(
-            breakdown["task_types"][tt]["periods"][period_name]["organic"]["weighted_contribution"] +
-            breakdown["task_types"][tt]["periods"][period_name]["synthetic"]["weighted_contribution"]
-            for tt in breakdown["task_types"]
-        )
-        breakdown["period_totals"][period_name] = total
+        for period_name in periods:
+            total = sum(
+                breakdown["task_types"][tt]["periods"][period_name]["organic"]["weighted_contribution"] +
+                breakdown["task_types"][tt]["periods"][period_name]["synthetic"]["weighted_contribution"]
+                for tt in breakdown["task_types"]
+            )
+            breakdown["period_totals"][period_name] = total
     
     return breakdown
 
