@@ -506,7 +506,7 @@ async def create_synthetic_chat_task(
     
     dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
 
-    chat_dataset_url = await merge_and_upload_chat_datasets(dataset_ids=dataset_ids, input_field=columns.field_input, output_field=columns.field_output)
+    chat_dataset_url = await merge_and_upload_chat_datasets(dataset_ids=[d.dataset_id for d in selected_datasets], input_field=columns.field_input, output_field=columns.field_output)
     
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
