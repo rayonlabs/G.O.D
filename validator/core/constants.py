@@ -98,7 +98,7 @@ DATASET_BINS_TO_SAMPLE = [
 
 # dataset row bins to training hours range
 INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
-    #   (5_000, 10_000): (3, 5),  # 5k-10k rows needs 1-2 hours
+    (1_000, 10_000): (1, 3),  # 1k-10k rows needs 1-3 hours
     (10_000, 25_000): (3, 6),  # 10k-25k rows needs 2-4 hours
     (25_000, 50_000): (4, 8),  # 25k-50k rows needs 3-6 hours
     (50_000, 100_000): (5, 9),  # 50k-500k rows needs 4-8 hours
