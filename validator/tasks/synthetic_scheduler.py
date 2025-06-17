@@ -485,7 +485,7 @@ async def create_synthetic_instruct_text_task(
     logger.info(f"INSTRUCT_TASK: Successfully created task with {len(selected_datasets)} datasets")
 
     task = await add_task(task, config.psql_db)
-    logger.info(f"INSTRUCT_TASK: Task saved to database with ID: {task.id}")
+    logger.info(f"INSTRUCT_TASK: Task saved to database with ID: {task.task_id}")
 
     return task
 
@@ -532,7 +532,7 @@ async def create_synthetic_chat_task(
     logger.info(f"CHAT_TASK: Successfully created task with {len(selected_datasets)} datasets")
 
     task = await add_task(task, config.psql_db)
-    logger.info(f"CHAT_TASK: Task saved to database with ID: {task.id}")
+    logger.info(f"CHAT_TASK: Task saved to database with ID: {task.task_id}")
 
     return task
 
