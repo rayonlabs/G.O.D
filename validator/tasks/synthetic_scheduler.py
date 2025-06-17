@@ -157,7 +157,7 @@ async def _get_columns_for_instruct_dataset(
 ) -> InstructTextDatasetColumnsResponse:
     from validator.utils.call_endpoint import call_content_service_fast
     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
-    logger.info(f"Getting columns for dataset {dataset_id}")
+    logger.info(f"Getting columns for dataset {dataset_id} - ACTUAL MAPPING CALL")
 
     response = await call_content_service_fast(url, keypair)
     if not isinstance(response, dict):
@@ -206,9 +206,9 @@ async def get_multiple_datasets(
             try:
                 from validator.utils.call_endpoint import call_content_service_fast
                 url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
-                logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id}")
+                logger.info(f"PRE-VALIDATION: Checking column mapping for dataset {dataset.dataset_id}")
                 await call_content_service_fast(url, keypair)
-                logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
+                logger.info(f"PRE-VALIDATION: Dataset {dataset.dataset_id} column mapping validated successfully")
             except Exception as e:
                 logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
                 failed_ids.add(dataset.dataset_id)
@@ -455,7 +455,9 @@ async def create_synthetic_instruct_text_task(
 ) -> RawTask:
     model_id = await anext(models)
     
+    logger.info("INSTRUCT_TASK: Starting dataset selection...")
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
+    logger.info(f"INSTRUCT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
     
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
@@ -480,7 +482,7 @@ async def create_synthetic_instruct_text_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"New task created with {len(selected_datasets)} datasets: {task}")
+    logger.info(f"INSTRUCT_TASK: Successfully created task with {len(selected_datasets)} datasets: {task.id}")
 
     task = await add_task(task, config.psql_db)
 
@@ -494,7 +496,9 @@ async def create_synthetic_chat_task(
 ) -> RawTask:
     model_id = await anext(models)
     
+    logger.info("CHAT_TASK: Starting dataset selection...")
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
+    logger.info(f"CHAT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
     
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
@@ -524,7 +528,7 @@ async def create_synthetic_chat_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"New task created with {len(selected_datasets)} datasets: {task}")
+    logger.info(f"CHAT_TASK: Successfully created task with {len(selected_datasets)} datasets: {task.id}")
 
     task = await add_task(task, config.psql_db)
 
@@ -568,10 +572,13 @@ async def _add_new_task_to_network_if_not_enough(
         if selected_task_type == TaskType.INSTRUCTTEXTTASK:
             probability_of_chat_task = random.random()
             if probability_of_chat_task < cst.PERCENTAGE_OF_INSTRUCT_TASKS_THAT_SHOULD_BE_CHAT:
+                logger.info(f"TASK_TYPE_SELECTION: Creating CHAT task (probability: {probability_of_chat_task:.3f})")
                 await create_synthetic_chat_task(config, models, instruct_datasets)
             else:
+                logger.info(f"TASK_TYPE_SELECTION: Creating INSTRUCT task (probability: {probability_of_chat_task:.3f})")
                 await create_synthetic_instruct_text_task(config, models, instruct_datasets)
         elif selected_task_type == TaskType.CHATTASK:
+            logger.info("TASK_TYPE_SELECTION: Creating CHAT task (direct selection)")
             await create_synthetic_chat_task(config, models, instruct_datasets)
         elif selected_task_type == TaskType.IMAGETASK:
             await create_synthetic_image_task(config, image_models)
