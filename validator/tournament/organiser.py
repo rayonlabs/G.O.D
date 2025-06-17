@@ -2,7 +2,11 @@ import math
 import random
 
 from fiber.chain.models import Node
-from core.models.tournament_models import Round, KnockoutRound, GroupRound, Group
+
+from core.models.tournament_models import Group
+from core.models.tournament_models import GroupRound
+from core.models.tournament_models import KnockoutRound
+from core.models.tournament_models import Round
 from validator.core.constants import EXPECTED_GROUP_SIZE
 from validator.core.constants import MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND
 from validator.core.constants import PREVIOUS_WINNER_BASE_CONTESTANT
