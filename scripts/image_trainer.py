@@ -3,38 +3,38 @@
 Standalone script for image model training (SDXL or Flux)
 """
 
-import os
-import json
-import toml
-import sys
-import shutil
-import subprocess
-import asyncio
 import argparse
+import asyncio
+import os
+import subprocess
+import sys
 import uuid
-from pathlib import Path
+
+import toml
+
+import core.constants as cst
+from core.config.config_handler import save_config_toml
+from core.dataset.prepare_diffusion_dataset import prepare_dataset
+from core.models.utility_models import ImageModelType
+from core.utils import download_s3_file
+from miner.utils import download_flux_unet
+
 
 # Add project root to python path to import modules
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
-from core.config.config_handler import save_config_toml
-from core.dataset.prepare_diffusion_dataset import prepare_dataset
-from core.utils import download_s3_file
-from core.models.utility_models import ImageModelType
-import core.constants as cst
-from miner.utils import download_flux_unet
 
 
 async def download_dataset_if_needed(dataset_zip_url, task_id):
     # Use environment variable if set, otherwise use constant
     dataset_dir = os.environ.get("DATASET_DIR", cst.DIFFUSION_DATASET_DIR)
     os.makedirs(dataset_dir, exist_ok=True)
-    
+
     # Create tmp directory that will be needed for extraction
     os.makedirs(f"{dataset_dir}/tmp", exist_ok=True)
-    
+
     local_zip_path = f"{dataset_dir}/{task_id}.zip"
     print(f"Downloading dataset from: {dataset_zip_url}")
     local_path = await download_s3_file(dataset_zip_url, local_zip_path)
@@ -68,13 +68,13 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
 
     # Update config
     config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
-    
+
     # Configure Hugging Face Hub upload if not disabled
     if not disable_upload:
         if huggingface_token:
             os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
-        
-        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", "rayonlabs")
+
+        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", cst.RAYONLABS_HF_USERNAME)
         os.environ["HUGGINGFACE_USERNAME"] = hf_username
         repo_name = expected_repo_name or str(uuid.uuid4())
         config["huggingface_repo_id"] = f"{hf_username}/{repo_name}"
@@ -94,21 +94,21 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
 def make_repo_public(repo_id):
     """Make a Hugging Face repository public"""
     from huggingface_hub import HfApi
-    
+
     token = os.environ.get("HUGGINGFACE_TOKEN")
     if not token:
         print("No Hugging Face token in environment, can't make repository public")
         return False
-    
+
     try:
         api = HfApi(token=token)
-        
+
         try:
             api.repo_info(repo_id=repo_id)
             repo_exists = True
         except Exception:
             repo_exists = False
-        
+
         if not repo_exists:
             print(f"Repository {repo_id} does not exist yet, creating it...")
             api.create_repo(repo_id=repo_id, private=False, exist_ok=True)
@@ -117,7 +117,7 @@ def make_repo_public(repo_id):
             api.update_repo_visibility(repo_id=repo_id, private=False)
             print(f"Successfully made repository {repo_id} public!")
             return True
-            
+
     except Exception as e:
         print(f"Error making repository public: {e}")
         return False
@@ -125,26 +125,26 @@ def make_repo_public(repo_id):
 
 def run_training(model_type, config_path):
     print(f"Starting training with config: {config_path}")
-    
+
     with open(config_path, "r") as f:
         config = toml.load(f)
-    
+
     repo_id = config.get("huggingface_repo_id")
-    
+
     training_command = [
-        "accelerate", "launch", 
-        "--dynamo_backend", "no", 
-        "--dynamo_mode", "default", 
-        "--mixed_precision", "bf16", 
-        "--num_processes", "1", 
-        "--num_machines", "1", 
-        "--num_cpu_threads_per_process", "2", 
+        "accelerate", "launch",
+        "--dynamo_backend", "no",
+        "--dynamo_mode", "default",
+        "--mixed_precision", "bf16",
+        "--num_processes", "1",
+        "--num_machines", "1",
+        "--num_cpu_threads_per_process", "2",
         f"/app/sd-scripts/{model_type}_train_network.py",
         "--config_file", config_path
     ]
-    
+
     subprocess.run(training_command, check=True)
-    
+
     if repo_id and os.environ.get("HUGGINGFACE_TOKEN"):
         print(f"Making repository {repo_id} public...")
         if make_repo_public(repo_id):
@@ -180,7 +180,7 @@ async def main():
 
     # Download dataset
     dataset_zip = await download_dataset_if_needed(args.dataset_zip, args.task_id)
-    
+
     # Create config file
     config_path = create_config(
         args.task_id,
@@ -191,15 +191,15 @@ async def main():
         args.huggingface_token,
         disable_upload=False  # Always keep uploads enabled
     )
-    
+
     # Prepare dataset
     print("Preparing dataset...")
-    
+
     # Set DIFFUSION_DATASET_DIR to environment variable if available
     original_dataset_dir = cst.DIFFUSION_DATASET_DIR
     if os.environ.get("DATASET_DIR"):
         cst.DIFFUSION_DATASET_DIR = os.environ.get("DATASET_DIR")
-    
+
     prepare_dataset(
         training_images_zip_path=dataset_zip,
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
@@ -207,10 +207,10 @@ async def main():
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,
         job_id=args.task_id,
     )
-    
+
     # Restore original value
     cst.DIFFUSION_DATASET_DIR = original_dataset_dir
-    
+
     # Run training
     run_training(args.model_type, config_path)
 
