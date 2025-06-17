@@ -540,7 +540,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
         return stats
 
 
-async def get_tasks_ready_to_evaluate(psql_db: PSQLDB) -> list[RawTask]:
+async def get_tasks_exceeding_termination_time(psql_db: PSQLDB) -> list[RawTask]:
     async with await psql_db.connection() as connection:
         connection: Connection
         query = """
@@ -666,7 +666,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
 
     if connection is not None:
         return await _get_task_inner(connection)
-    
+
     async with await psql_db.connection() as connection:
         return await _get_task_inner(connection)
 
@@ -1031,7 +1031,7 @@ async def get_image_text_pairs(task_id: UUID, psql_db: PSQLDB, connection: Conne
 
     if connection is not None:
         return await _get_image_text_pairs(connection)
-    
+
     async with await psql_db.connection() as connection:
         return await _get_image_text_pairs(connection)
 
@@ -1107,7 +1107,7 @@ async def get_reward_functions(task_id: UUID, psql_db: PSQLDB, connection: Conne
 
     if connection is not None:
         return await _get_reward_functions(connection)
-    
+
     async with await psql_db.connection() as connection:
         return await _get_reward_functions(connection)
 
