@@ -282,11 +282,13 @@ async def call_content_service_fast(endpoint: str, keypair: Keypair, params: dic
     @retry_http_fast
     async def _make_request():
         headers = _get_headers_for_signed_https_request(keypair)
+        logger.info(f"Making request to {endpoint} with params: {params}")
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(url=endpoint, headers=headers, params=params)
             if response.status_code != 200:
-                logger.error(f"Error in content service response. Status code: {response.status_code} and response: {response.text}")
+                logger.error(f"Error in content service response. URL: {endpoint}, Status code: {response.status_code} and response: {response.text}")
                 response.raise_for_status()
+            logger.info(f"Successful request to {endpoint}, response size: {len(response.text)} chars")
             return response.json()
     
     return await _make_request()
