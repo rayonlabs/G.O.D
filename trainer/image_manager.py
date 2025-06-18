@@ -49,7 +49,7 @@ async def run_trainer_container(
     dataset_zip: str,
     model_type: str,
     hours_to_complete: int=1,
-) -> None:
+) -> Container:
     client: docker.DockerClient = docker.from_env()
 
     checkpoints_dir: str = cst.TRAINER_CHECKPOINTS_PATH
@@ -83,7 +83,7 @@ async def run_trainer_container(
         )
 
         log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
-    
+        return container
     except Exception as e:
         logger.error(e)
         return e

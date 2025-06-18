@@ -80,6 +80,7 @@ class TrainRequestImage(TrainRequest):
 
 class TrainerProxyRequestImage(TrainRequestImage):
     github_repo: str
+    local_repo_path: str = None
 
 
 class TrainResponse(BaseModel):
