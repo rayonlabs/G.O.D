@@ -79,8 +79,7 @@ class TrainRequestImage(TrainRequest):
 
 
 class TrainerProxyRequestImage(TrainRequestImage):
-    dockerfile_path: str
-    context_path: str = "."
+    github_repo: str
 
 
 class TrainResponse(BaseModel):

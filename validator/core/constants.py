@@ -284,11 +284,6 @@ BETA_GRPO = 0.04
 GRPO_INITIAL_BATCH_SIZE = 32
 GRPO_DEFAULT_NUM_GENERATIONS = 2
 
-#Trainer Proxy
-DEFAULT_IMAGE_DOCKERFILE_PATH="dockerfiles/standalone-image-trainer.dockerfile"
-TRAINER_CHECKPOINTS_PATH="/tmp/trainer/checkpoints"
-
-
 STANDARD_INSTRUCT_COLUMN = "instruct"
 STANDARD_INPUT_COLUMN = "input"
 STANDARD_OUTPUT_COLUMN = "output"

@@ -7,7 +7,7 @@ from docker.models.containers import Container
 from docker.errors import NotFound, APIError, BuildError, ContainerError
 from typing import Optional
 
-from validator.core import constants as cst
+from trainer import constants as cst
 from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
 from validator.utils.logging import stream_image_build_logs, stream_container_logs
@@ -25,7 +25,7 @@ async def build_docker_image(
     if tag is None:
         tag = f"standalone-image-trainer:{uuid.uuid4()}"
 
-    logger.info(f"Building Docker image '{tag}'...")
+    logger.info(f"Building Docker image '{tag}', Dockerfile path: {dockerfile_path}, Context Path: {context_path}...")
     try:
         image, logs = client.images.build(
             path=context_path,

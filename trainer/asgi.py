@@ -4,7 +4,7 @@ import uvicorn
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from validator.endpoints.trainer import factory_router
+from trainer.endpoints import factory_router
 from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
