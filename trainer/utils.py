@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 def clone_repo(repo_url: str, parent_dir: str, branch: str = None) -> str:
     repo_name = os.path.basename(urlparse(repo_url).path)
     if repo_name.endswith(".git"):
-        repo_name = repo_name[:-4]  # Strip ".git" manually
+        repo_name = repo_name[:-4]
 
     repo_dir = os.path.join(parent_dir, repo_name)
 
