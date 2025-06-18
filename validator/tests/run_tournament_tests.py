@@ -5,6 +5,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from validator.tests.test_tournament_organiser import test_all_organiser_functionality
+from validator.tests.test_tournament_integration import test_all_tournament_integration
 from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -17,6 +18,9 @@ def run_all_tournament_tests():
     
     logger.info("Running tournament organiser tests...")
     test_results["organiser"] = test_all_organiser_functionality()
+    
+    logger.info("Running tournament integration tests...")
+    test_results["integration"] = test_all_tournament_integration()
     
     passed_tests = sum(test_results.values())
     total_tests = len(test_results)

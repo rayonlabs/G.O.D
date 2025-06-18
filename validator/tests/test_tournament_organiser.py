@@ -1,6 +1,5 @@
 from validator.tournament.organiser import organise_tournament_round
 from core.models.tournament_models import KnockoutRound, GroupRound
-from fiber.chain.models import Node
 from validator.core.constants import (
     MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND, EXPECTED_GROUP_SIZE, 
     PREVIOUS_WINNER_BASE_CONTESTANT
@@ -9,29 +8,10 @@ from validator.tests.test_constants import (
     SMALL_KNOCKOUT_COUNT, LARGE_GROUP_COUNT, BOUNDARY_KNOCKOUT_COUNT, 
     BOUNDARY_GROUP_COUNT, ODD_PARTICIPANT_COUNT, TEST_HOTKEY_PREFIX
 )
+from validator.tests.test_helpers import create_test_node
 from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-def create_test_node(hotkey: str) -> Node:
-    return Node(
-        hotkey=hotkey,
-        coldkey="test_coldkey",
-        node_id=0,
-        incentive=0.0,
-        netuid=181,
-        alpha_stake=0.0,
-        tao_stake=0.0,
-        stake=0.0,
-        trust=0.0,
-        vtrust=0.0,
-        last_updated=0.0,
-        ip="0.0.0.0",
-        ip_type=4,
-        port=8080,
-        protocol=4
-    )
 
 
 def test_knockout_tournament_creation():
