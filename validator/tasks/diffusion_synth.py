@@ -327,13 +327,14 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
         log_task.cancel()
         images_dir = Path(tmp_dir_path)
         for file in images_dir.iterdir():
-            if file.is_file():
-                if file.suffix == ".png":
+            if file.is_file() and file.suffix == ".png":
+                txt_path = images_dir / f"{file.stem}.txt"
+                if txt_path.exists() and txt_path.stat().st_size > 0:
                     img_url = await upload_file_to_minio(
-                        f"{tmp_dir_path}/{file.name}", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png"
+                        str(file), cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png"
                     )
                     txt_url = await upload_file_to_minio(
-                        f"{tmp_dir_path}/{file.stem}.txt", cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt"
+                        str(txt_path), cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt"
                     )
                     image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
         if os.path.exists(tmp_dir_path):
@@ -354,18 +355,15 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[Ima
     model_info = await anext(models)
     Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
     is_flux_model = model_info.model_type == ImageModelType.FLUX
-    if is_flux_model:
-        image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+    if (random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE) and not is_flux_model:
+        image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
     else:
-        if random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE:
-            image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
-        else:
-            for person_synth_try in range(cst.PERSON_GEN_RETRIES):
-                image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
-                if len(image_text_pairs) >= 10:
-                    break
-                else:
-                    logger.info(f"Person synth generation failed, trying again {person_synth_try + 1}/{cst.PERSON_GEN_RETRIES}")
+        for person_synth_try in range(cst.PERSON_GEN_RETRIES):
+            image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+            if len(image_text_pairs) >= 10:
+                break
+            else:
+                logger.info(f"Person synth generation failed, trying again {person_synth_try + 1}/{cst.PERSON_GEN_RETRIES}")
 
 
     if len(image_text_pairs) >= 10:

@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 
 from accelerate.utils import find_executable_batch_size
 from axolotl.utils.dict import DictDefault
@@ -226,6 +227,9 @@ def main():
 
     repos = [m.strip() for m in models_str.split(",") if m.strip()]
 
+    timeout_seconds = 18_000
+    timeout_adjusted = False
+
     for repo in repos:
         try:
             evaluation_args = EvaluationArgs(
@@ -236,14 +240,27 @@ def main():
                 repo=repo
             )
 
-            # Launching subprocess to purge memory
-            subprocess.run([
-                "python",
-                "-m",
-                "validator.evaluation.single_eval_grpo",
-                evaluation_args.model_dump_json()
-            ], check=True)
-            logger.info(f"Subprocess completed for {repo}")
+            max_retries = 3
+            retry_count = 0
+            while retry_count < max_retries:
+                try:
+                    start_time = time.monotonic()
+                    # Launching subprocess to purge memory
+                    subprocess.run([
+                        "python",
+                        "-m",
+                        "validator.evaluation.single_eval_grpo",
+                        evaluation_args.model_dump_json()
+                    ], check=True, timeout=timeout_seconds)
+                    elapsed = time.monotonic() - start_time
+                    logger.info(f"Subprocess completed for {repo} in {elapsed:.2f} seconds")
+                    break
+                except subprocess.TimeoutExpired as e:
+                    retry_count += 1
+                    logger.warning(f"Subprocess timed out for {repo} (attempt {retry_count}/{max_retries})")
+                    if retry_count == max_retries:
+                        logger.error(f"Max retries reached for {repo}")
+                        raise
         except subprocess.CalledProcessError as e:
             logger.error(f"Error running subprocess for {repo}: {e}")
     try:
