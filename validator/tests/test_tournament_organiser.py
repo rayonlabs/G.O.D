@@ -1,5 +1,6 @@
-from validator.tournament.organiser import organize_tournament
-from core.models.tournament_models import TournamentType, RoundType
+from validator.tournament.organiser import organise_tournament_round
+from core.models.tournament_models import KnockoutRound, GroupRound
+from fiber.chain.models import Node
 from validator.core.constants import MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND, EXPECTED_GROUP_SIZE
 from validator.utils.logging import get_logger
 
@@ -7,9 +8,9 @@ logger = get_logger(__name__)
 
 
 def test_knockout_tournament_creation():
-    participants = [f"hotkey_{i}" for i in range(8)]
+    nodes = [Node(hotkey=f"hotkey_{i}") for i in range(8)]
     
-    result = organize_tournament("TOURN_001", "ROUND_001", participants, TournamentType.TEXT)
+    result = organise_tournament_round(nodes)
     
     assert result["round_type"] == RoundType.KNOCKOUT
     assert len(result["pairs"]) == 4
