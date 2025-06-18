@@ -1,0 +1,29 @@
+import os
+import asyncio
+import uvicorn
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from validator.endpoints.trainer import factory_router
+from validator.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+def factory() -> FastAPI:
+    logger.debug("Entering factory function")
+    app = FastAPI()
+    app.include_router(factory_router())
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    return app
+
+app = factory()
+
+if __name__ == "__main__":
+    logger.info("Starting trainer")
+    uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -14,6 +14,7 @@ import argparse
 import uuid
 from pathlib import Path
 
+
 # Add project root to python path to import modules
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
@@ -42,7 +43,7 @@ async def download_dataset_if_needed(dataset_zip_url, task_id):
     return local_path
 
 
-def create_config(task_id, model, model_type, expected_repo_name=None, huggingface_username=None, huggingface_token=None, disable_upload=False):
+def create_config(task_id, model, model_type, expected_repo_name=None):
     """Create the diffusion config file"""
     # In Docker environment, adjust paths
     if os.path.exists("/workspace/core/config"):
@@ -70,19 +71,19 @@ def create_config(task_id, model, model_type, expected_repo_name=None, huggingfa
     config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
     
     # Configure Hugging Face Hub upload if not disabled
-    if not disable_upload:
-        if huggingface_token:
-            os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
+    # if not disable_upload:
+    #     if huggingface_token:
+    #         os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
         
-        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", "rayonlabs")
-        os.environ["HUGGINGFACE_USERNAME"] = hf_username
-        repo_name = expected_repo_name or str(uuid.uuid4())
-        config["huggingface_repo_id"] = f"{hf_username}/{repo_name}"
-    else:
+    #     hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", "rayonlabs")
+    #     os.environ["HUGGINGFACE_USERNAME"] = hf_username
+    #     repo_name = expected_repo_name or str(uuid.uuid4())
+    #     config["huggingface_repo_id"] = f"{hf_username}/{repo_name}"
+    # else:
         # Disable Hub upload
-        print("Hub upload is disabled")
-        config.pop("huggingface_token", None)
-        config.pop("huggingface_repo_id", None)
+        # print("Hub upload is disabled")
+        # config.pop("huggingface_token", None)
+        # config.pop("huggingface_repo_id", None)
 
     # Save config to file
     config_path = os.path.join("/dataset/configs", f"{task_id}.toml")
@@ -143,8 +144,23 @@ def run_training(model_type, config_path):
         "--config_file", config_path
     ]
     
-    subprocess.run(training_command, check=True)
-    
+    try:
+        result = subprocess.run(
+            training_command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        print("✅ Training subprocess completed successfully.")
+        print(result.stdout)
+    except subprocess.CalledProcessError as e:
+        print("❌ Training subprocess failed!")
+        print(f"Exit Code: {e.returncode}")
+        print(f"Command: {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}")
+        print(f"Output:\n{e.output}")
+        raise RuntimeError(f"Training subprocess failed with exit code {e.returncode}")
+        
     if repo_id and os.environ.get("HUGGINGFACE_TOKEN"):
         print(f"Making repository {repo_id} public...")
         if make_repo_public(repo_id):
@@ -162,9 +178,9 @@ async def main():
     parser.add_argument("--model-type", required=True, choices=["sdxl", "flux"], help="Model type")
     parser.add_argument("--hours-to-complete", type=int, required=True, help="Number of hours to complete the task")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
-    parser.add_argument("--huggingface-token", help="Hugging Face token")
-    parser.add_argument("--wandb-token", help="Weights & Biases token")
-    parser.add_argument("--huggingface-username", help="Hugging Face username")
+    # parser.add_argument("--huggingface-token", help="Hugging Face token")
+    # parser.add_argument("--wandb-token", help="Weights & Biases token")
+    # parser.add_argument("--huggingface-username", help="Hugging Face username")
     args = parser.parse_args()
 
     # Create required directories
@@ -172,11 +188,11 @@ async def main():
     os.makedirs("/dataset/outputs", exist_ok=True)
     os.makedirs("/dataset/images", exist_ok=True)
 
-    # Set environment variables
-    if args.huggingface_token:
-        os.environ["HUGGINGFACE_TOKEN"] = args.huggingface_token
-    if args.wandb_token:
-        os.environ["WANDB_TOKEN"] = args.wandb_token
+    # # Set environment variables
+    # if args.huggingface_token:
+    #     os.environ["HUGGINGFACE_TOKEN"] = args.huggingface_token
+    # if args.wandb_token:
+    #     os.environ["WANDB_TOKEN"] = args.wandb_token
 
     # Download dataset
     dataset_zip = await download_dataset_if_needed(args.dataset_zip, args.task_id)
@@ -187,9 +203,9 @@ async def main():
         args.model,
         args.model_type,
         args.expected_repo_name,
-        args.huggingface_username,
-        args.huggingface_token,
-        disable_upload=False  # Always keep uploads enabled
+        # args.huggingface_username,
+        # args.huggingface_token,
+        # disable_upload=False  # Always keep uploads enabled
     )
     
     # Prepare dataset

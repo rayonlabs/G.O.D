@@ -24,6 +24,10 @@ tasks:
     cmds:
       - ENV=DEV uvicorn miner.server:app --reload --host 0.0.0.0 --port 7999 --env-file .1.env --log-level debug
 
+  trainer:
+    cmds:
+      - ENV=DEV uvicorn validator.trainer.server:app --reload --host 0.0.0.0 --port 8001 --env-file .vali.env --log-level debug
+
   dbdown:
     cmds:
       - docker compose --env-file .vali.env -f docker-compose.yml run dbmate --wait down
