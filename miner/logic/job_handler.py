@@ -20,6 +20,7 @@ from core.config.config_handler import update_flash_attention
 from core.config.config_handler import update_model_info
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.docker_utils import stream_logs
+from core.dpo_utils import adapt_columns_for_dpo_dataset
 from core.models.utility_models import DiffusionJob
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat

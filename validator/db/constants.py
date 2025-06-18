@@ -21,6 +21,15 @@ GRPO_TASKS_TABLE = "grpo_tasks"
 REWARD_FUNCTIONS_TABLE = "reward_functions"
 GRPO_TASK_FUNCTIONS_TABLE = "grpo_task_functions"
 
+# Tournament Tables
+TOURNAMENTS_TABLE = "tournaments"
+TOURNAMENT_ROUNDS_TABLE = "tournament_rounds"
+TOURNAMENT_PARTICIPANTS_TABLE = "tournament_participants"
+TOURNAMENT_GROUPS_TABLE = "tournament_groups"
+TOURNAMENT_GROUP_MEMBERS_TABLE = "tournament_group_members"
+TOURNAMENT_PAIRS_TABLE = "tournament_pairs"
+TOURNAMENT_TASKS_TABLE = "tournament_tasks"
+
 # Node Table Columns
 NODE_ID = "node_id"
 HOTKEY = "hotkey"
@@ -122,6 +131,27 @@ SCORE_REASON = "score_reason"
 # Offer Responses Table Columns
 OFFER_RESPONSE = "offer_response"
 
+
+# Tournament Table Columns
+TOURNAMENT_ID = "tournament_id"
+TOURNAMENT_TYPE = "tournament_type"
+TOURNAMENT_STATUS = "status"
+CURRENT_ROUND_ID = "current_round_id"
+ROUND_ID = "round_id"
+ROUND_NUMBER = "round_number"
+ROUND_TYPE = "round_type"
+IS_FINAL_ROUND = "is_final_round"
+ROUND_STATUS = "status"
+STARTED_AT = "started_at"
+COMPLETED_AT = "completed_at"
+GROUP_ID = "group_id"
+PAIR_ID = "pair_id"
+HOTKEY1 = "hotkey1"
+HOTKEY2 = "hotkey2"
+WINNER_HOTKEY = "winner_hotkey"
+ELIMINATED_IN_ROUND_ID = "eliminated_in_round_id"
+FINAL_POSITION = "final_position"
+TASK_ORDER = "task_order"
 
 # Common Column Names (shared between tables)
 QUALITY_SCORE = "quality_score"  # Used in both submissions and task_nodes

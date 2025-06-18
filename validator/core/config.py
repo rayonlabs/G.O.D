@@ -71,6 +71,17 @@ def load_config() -> Config:
             substrate = None
         keypair = chain_utils.load_hotkey_keypair(wallet_name=wallet_name, hotkey_name=hotkey_name)
         logger.info(f"This is my own keypair {keypair}")
+        
+        # Debug logging for keypair
+        logger.info(f"🔍 CONFIG DEBUG: keypair type: {type(keypair)}")
+        logger.info(f"🔍 CONFIG DEBUG: keypair module: {keypair.__class__.__module__}")
+        logger.info(f"🔍 CONFIG DEBUG: keypair class: {keypair.__class__.__name__}")
+        if hasattr(keypair, '_mock_name'):
+            logger.error(f"🚨 CONFIG: Keypair is a Mock object: {keypair}")
+        if hasattr(keypair, 'ss58_address'):
+            logger.info(f"🔍 CONFIG DEBUG: ss58_address type: {type(keypair.ss58_address)}")
+            if hasattr(keypair.ss58_address, '_mock_name'):
+                logger.error(f"🚨 CONFIG: ss58_address is a Mock object: {keypair.ss58_address}")
 
         httpx_limits = httpx.Limits(max_connections=500, max_keepalive_connections=100)
         httpx_client = httpx.AsyncClient(limits=httpx_limits)
