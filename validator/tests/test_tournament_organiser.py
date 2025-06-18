@@ -14,8 +14,28 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def create_test_node(hotkey: str) -> Node:
+    return Node(
+        hotkey=hotkey,
+        coldkey="test_coldkey",
+        node_id=0,
+        incentive=0.0,
+        netuid=181,
+        alpha_stake=0.0,
+        tao_stake=0.0,
+        stake=0.0,
+        trust=0.0,
+        vtrust=0.0,
+        last_updated=0.0,
+        ip="0.0.0.0",
+        ip_type=4,
+        port=8080,
+        protocol=4
+    )
+
+
 def test_knockout_tournament_creation():
-    nodes = [Node(hotkey=f"{TEST_HOTKEY_PREFIX}{i}") for i in range(SMALL_KNOCKOUT_COUNT)]
+    nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") for i in range(SMALL_KNOCKOUT_COUNT)]
     
     result = organise_tournament_round(nodes)
     
@@ -32,7 +52,7 @@ def test_knockout_tournament_creation():
 
 
 def test_group_tournament_creation():
-    nodes = [Node(hotkey=f"{TEST_HOTKEY_PREFIX}{i}") for i in range(LARGE_GROUP_COUNT)]
+    nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") for i in range(LARGE_GROUP_COUNT)]
     
     result = organise_tournament_round(nodes)
     
@@ -45,7 +65,7 @@ def test_group_tournament_creation():
 
 
 def test_odd_number_participants_knockout():
-    nodes = [Node(hotkey=f"{TEST_HOTKEY_PREFIX}{i}") for i in range(ODD_PARTICIPANT_COUNT)]
+    nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") for i in range(ODD_PARTICIPANT_COUNT)]
     
     result = organise_tournament_round(nodes)
     
@@ -61,11 +81,11 @@ def test_odd_number_participants_knockout():
 
 
 def test_boundary_conditions():
-    exactly_boundary_nodes = [Node(hotkey=f"{TEST_HOTKEY_PREFIX}{i}") for i in range(BOUNDARY_KNOCKOUT_COUNT)]
+    exactly_boundary_nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") for i in range(BOUNDARY_KNOCKOUT_COUNT)]
     result_boundary = organise_tournament_round(exactly_boundary_nodes)
     assert isinstance(result_boundary, KnockoutRound)
     
-    just_over_boundary_nodes = [Node(hotkey=f"{TEST_HOTKEY_PREFIX}{i}") for i in range(BOUNDARY_GROUP_COUNT)]
+    just_over_boundary_nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") for i in range(BOUNDARY_GROUP_COUNT)]
     result_over = organise_tournament_round(just_over_boundary_nodes)
     assert isinstance(result_over, GroupRound)
     
@@ -73,7 +93,7 @@ def test_boundary_conditions():
 
 
 def test_group_size_distribution():
-    nodes = [Node(hotkey=f"{TEST_HOTKEY_PREFIX}{i}") for i in range(25)]
+    nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") for i in range(25)]
     
     result = organise_tournament_round(nodes)
     
@@ -88,7 +108,7 @@ def test_group_size_distribution():
 
 
 def test_participant_uniqueness():
-    nodes = [Node(hotkey=f"{TEST_HOTKEY_PREFIX}{i}") for i in range(12)]
+    nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") for i in range(12)]
     
     result = organise_tournament_round(nodes)
     
