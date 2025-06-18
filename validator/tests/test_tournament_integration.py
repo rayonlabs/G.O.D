@@ -8,7 +8,7 @@ from core.models.tournament_models import (
 from validator.tournament.organiser import organise_tournament_round
 from validator.tournament.tournament_manager import create_new_tournament
 from validator.core.constants import (
-    MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND, 
+    MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND, 
     PREVIOUS_WINNER_BASE_CONTESTANT,
     TEXT_TASKS_PER_GROUP, IMAGE_TASKS_PER_GROUP
 )
@@ -133,13 +133,13 @@ def test_boundary_conditions():
     """Test the boundary between knockout and group tournaments"""
     # Exactly at boundary should be knockout
     boundary_nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") 
-                     for i in range(MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND)]
+                     for i in range(MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND)]
     boundary_result = organise_tournament_round(boundary_nodes)
     assert hasattr(boundary_result, 'pairs')
     
     # Just over boundary should be group
     over_boundary_nodes = [create_test_node(f"{TEST_HOTKEY_PREFIX}{i}") 
-                          for i in range(MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND + 1)]
+                          for i in range(MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND + 1)]
     over_boundary_result = organise_tournament_round(over_boundary_nodes)
     assert hasattr(over_boundary_result, 'groups')
     
@@ -148,7 +148,7 @@ def test_boundary_conditions():
 
 def test_tournament_constants_validation():
     """Test that tournament constants are sensible"""
-    assert MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND > 0
+    assert MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND > 0
     assert TEXT_TASKS_PER_GROUP > 0
     assert IMAGE_TASKS_PER_GROUP > 0
     assert PREVIOUS_WINNER_BASE_CONTESTANT == "BASE"

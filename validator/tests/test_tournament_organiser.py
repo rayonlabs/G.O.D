@@ -1,7 +1,7 @@
 from validator.tournament.organiser import organise_tournament_round
 from core.models.tournament_models import KnockoutRound, GroupRound
 from validator.core.constants import (
-    MIN_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND, EXPECTED_GROUP_SIZE, 
+    MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND, EXPECTED_GROUP_SIZE, 
     PREVIOUS_WINNER_BASE_CONTESTANT
 )
 from validator.tests.test_constants import (
