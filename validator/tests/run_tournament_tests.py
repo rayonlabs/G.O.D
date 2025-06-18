@@ -4,9 +4,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from test_tournament_organiser import test_all_organiser_functionality
-from test_tournament_db import test_tournament_database
-from test_tournament_manager import test_tournament_manager
+from validator.tests.test_tournament_organiser import test_all_organiser_functionality
+from validator.tests.test_tournament_db import test_tournament_database
+from validator.tests.test_tournament_manager import test_tournament_manager
 from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
