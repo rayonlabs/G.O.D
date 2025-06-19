@@ -112,7 +112,15 @@ async def get_recent_tasks(
             gt.field_prompt as grpo_field_prompt,
             gt.synthetic_data as grpo_synthetic_data,
             gt.file_format as grpo_file_format,
-            rf.reward_functions
+            rf.reward_functions,
+            ct.chat_template,
+            ct.chat_column,
+            ct.chat_role_field,
+            ct.chat_content_field,
+            ct.chat_user_reference,
+            ct.chat_assistant_reference,
+            ct.synthetic_data as chat_synthetic_data,
+            ct.file_format as chat_file_format
         FROM task_ids 
         JOIN {cst.TASKS_TABLE} t ON t.{cst.TASK_ID} = task_ids.{cst.TASK_ID}
         LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} itt ON t.{cst.TASK_ID} = itt.{cst.TASK_ID}
@@ -120,6 +128,7 @@ async def get_recent_tasks(
         LEFT JOIN image_pairs ip ON t.{cst.TASK_ID} = ip.{cst.TASK_ID}
         LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
         LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
+        LEFT JOIN {cst.CHAT_TASKS_TABLE} ct ON t.{cst.TASK_ID} = ct.{cst.TASK_ID}
         LEFT JOIN reward_functions rf ON t.{cst.TASK_ID} = rf.{cst.TASK_ID}
         """
 
@@ -178,6 +187,13 @@ async def get_recent_tasks(
                 task_data['reward_functions'] = reward_functions
                 
                 task = GrpoTask(**{k: v for k, v in task_data.items() if k in GrpoTask.model_fields})
+            elif task_type == TaskType.CHATTASK.value:
+                task_data['synthetic_data'] = task_data.pop('chat_synthetic_data')
+                task_data['file_format'] = task_data.pop('chat_file_format')
+                task = ChatTask(**{k: v for k, v in task_data.items() if k in ChatTask.model_fields})
+            else:
+                logger.warning(f"Unknown task type: {task_type}, skipping task {task_data.get('task_id')}")
+                continue
             
             task = hide_sensitive_data_till_finished(task)
             tasks_processed.append(task)
