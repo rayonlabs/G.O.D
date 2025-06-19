@@ -40,6 +40,7 @@ class MinerTaskOffer(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
 
+
 class TrainRequest(BaseModel):
     model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
     task_id: str
@@ -75,6 +76,11 @@ class TrainRequestImage(TrainRequest):
         min_length=1,
     )
     model_type: ImageModelType = ImageModelType.SDXL
+
+
+class TrainerProxyRequestImage(TrainRequestImage):
+    github_repo: str
+    local_repo_path: str = None
 
 
 class TrainResponse(BaseModel):
