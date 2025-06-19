@@ -4,8 +4,7 @@ import uuid
 import asyncio
 from docker.models.images import Image
 from docker.models.containers import Container
-from docker.errors import NotFound, APIError, BuildError, ContainerError
-from typing import Optional
+from docker.errors import BuildError
 
 from trainer import constants as cst
 from validator.utils.logging import get_all_context_tags
@@ -63,14 +62,13 @@ async def run_trainer_container(
         "--model-type", model_type,
         "--hours-to-complete", str(hours_to_complete),
     ]
-
-
+    
     try:
         container: Container = client.containers.run(
             image=tag,
             command=command,
             volumes={
-                checkpoints_dir: {"bind": "/app/checkpoints/", "mode": "rw"}
+                checkpoints_dir: {"bind": cst.CONTAINER_SAVE_PATH, "mode": "rw"}
             },
             remove=True,
             name="image-trainer-example",
