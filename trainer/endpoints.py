@@ -20,7 +20,7 @@ trainer_queue = TrainerQueue()
 
 
 async def build_and_run_trainer(req: TrainerProxyRequestImage) -> Response:
-    local_repo_path = clone_repo(req.github_repo, cst.TEMP_REPO_PATH, branch="proxy-trainer")
+    local_repo_path = clone_repo(req.github_repo, cst.TEMP_REPO_PATH)
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
     req.local_repo_path = local_repo_path
 
