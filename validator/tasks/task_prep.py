@@ -776,7 +776,6 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
         should_reupload_train,
         should_reupload_test,
         train_dataset_name if task.file_format == FileFormat.HF else None,
-        task,
     )
 
 
