@@ -10,7 +10,6 @@ import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
-import validator.db.sql.tournaments as tournaments_sql
 from core.constants import IS_PROD_ENV
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
@@ -387,11 +386,7 @@ async def process_pending_tasks(config: Config) -> None:
 async def move_tasks_to_preevaluation_loop(config: Config):
     await _move_any_evaluating_tasks_to_pending_evaluation(config)
     while True:
-        tasks_exceeding_termination = await tasks_sql.get_tasks_exceeding_termination_time(config.psql_db)
-        in_tournament = await tournaments_sql.are_tasks_in_tournament(
-            [task.task_id for task in tasks_exceeding_termination], config.psql_db
-        )
-        completed_tasks = [task for task, in_tournament in zip(tasks_exceeding_termination, in_tournament) if not in_tournament]
+        completed_tasks = await tasks_sql.get_tasks_exceeding_termination_time(config.psql_db, include_tournament_tasks=False)
         if completed_tasks:
             await _move_to_preevaluation(completed_tasks, config)
         else:
