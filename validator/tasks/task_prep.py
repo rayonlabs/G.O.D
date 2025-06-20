@@ -30,7 +30,6 @@ from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
-from validator.core.models import ChatRawTask
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
@@ -210,7 +209,6 @@ async def download_and_load_dataset(
     return combined_dataset
 
 
-<
 def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None):
     result = []
     total_rows = 0
@@ -223,24 +221,24 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
         for col in columns:
             if col in row:
                 value = row[col]
-                
+
                 # Only parse JSON strings for ChatTask types
                 if is_chat_task and isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
                     try:
                         value = json.loads(value)
                     except json.JSONDecodeError:
                         pass
-                
+
                 # Ensure consistent data types: strings for non-ChatTask, preserve type for ChatTask
                 if is_chat_task:
                     processed_value = value if value is not None else ""
                 else:
                     processed_value = str(value) if value is not None else ""
-                
+
                 row_dict[col] = processed_value
                 if processed_value != "" and processed_value != []:
                     is_row_empty = False
-                    
+
         result.append(row_dict)
         total_rows += 1
         if is_row_empty:
