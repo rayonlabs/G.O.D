@@ -2,6 +2,7 @@ import os
 
 from core.constants import GRPO_DEFAULT_FIELD_PROMPT
 from core.constants import NETUID
+from core.constants import RAYONLABS_HF_USERNAME
 
 
 SUCCESS = "success"

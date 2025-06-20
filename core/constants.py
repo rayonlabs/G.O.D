@@ -51,6 +51,8 @@ HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 WANDB_TOKEN = os.getenv("WANDB_TOKEN")
 
 HUGGINGFACE_USERNAME = os.getenv("HUGGINGFACE_USERNAME")
+RAYONLABS_HF_USERNAME = "rayonlabs"
+
 CUSTOM_DATASET_TYPE = "custom"
 
 # DPO default dataset type

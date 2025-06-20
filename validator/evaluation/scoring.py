@@ -32,6 +32,7 @@ from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
+from validator.db.sql.tournaments import is_task_in_tournament
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.utils.call_endpoint import process_non_stream_fiber_get
@@ -103,12 +104,12 @@ def calculate_node_quality_scores(
 
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
         std_score = float(np.std(node_agg.task_raw_scores))
-        
+
         if node_agg.average_raw_score < 0:
             score = 0.0
         else:
             score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
-        
+
         node_agg.quality_score = score
 
         final_scores.append(
@@ -720,26 +721,33 @@ async def process_miners_pool(
 ) -> list[MinerResultsText | MinerResultsImage]:
     assert task.task_id is not None, "We should have a task id when processing miners"
 
+    is_tournament_task = await is_task_in_tournament(str(task.task_id), config.psql_db)
 
     miner_repos: dict[str, str] = {}
     for miner in miners:
         with LogContext(miner_hotkey=miner.hotkey):
             expected_name = await get_expected_repo_name(task.task_id, miner.hotkey, config.psql_db)
-            repo = await _get_submission_repo(miner, str(task.task_id), config)
-            if repo is not None:
-                repo_parts = repo.split("/")
-                if len(repo_parts) >= 2:
-                    submitted_name = repo_parts[-1]
 
-                    if expected_name and submitted_name != expected_name:
-                        logger.warning(
-                            f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
-                            f"but expected {expected_name}. Marking as failed."
-                        )
-                        continue
+            if is_tournament_task and expected_name:
+                repo = f"{cts.RAYONLABS_HF_USERNAME}/{expected_name}"
+                logger.info(f"Tournament task: constructed repo {repo} for miner {miner.hotkey}")
+                miner_repos[miner.hotkey] = repo
+            else:
+                repo = await _get_submission_repo(miner, str(task.task_id), config)
+                if repo is not None:
+                    repo_parts = repo.split("/")
+                    if len(repo_parts) >= 2:
+                        submitted_name = repo_parts[-1]
 
-                    miner_repos[miner.hotkey] = repo
-            logger.info(f"Found repo {repo} for miner {miner.hotkey}")
+                        if expected_name and submitted_name != expected_name:
+                            logger.warning(
+                                f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
+                                f"but expected {expected_name}. Marking as failed."
+                            )
+                            continue
+
+                        miner_repos[miner.hotkey] = repo
+                logger.info(f"Found repo {repo} for miner {miner.hotkey}")
 
     results = [
         _create_failed_miner_result(miner.hotkey, score_reason="Invalid/No repo submitted", task_type=task.task_type)
