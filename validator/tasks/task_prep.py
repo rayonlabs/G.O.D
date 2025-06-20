@@ -209,10 +209,11 @@ async def download_and_load_dataset(
     return combined_dataset
 
 
-def change_to_json_format(dataset: Dataset, columns: list[str]):
+def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None):
     result = []
     total_rows = 0
     fully_empty_rows = 0
+    is_chat_task = isinstance(task, ChatRawTask)
 
     for row in dataset:
         row_dict = {}
@@ -220,15 +221,24 @@ def change_to_json_format(dataset: Dataset, columns: list[str]):
         for col in columns:
             if col in row:
                 value = row[col]
-                if isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
+                
+                # Only parse JSON strings for ChatTask types
+                if is_chat_task and isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
                     try:
                         value = json.loads(value)
                     except json.JSONDecodeError:
-                        pass 
-                str_value = value if value is not None else ""
-                row_dict[col] = str_value
-                if str_value != "" and str_value != []:
+                        pass
+                
+                # Ensure consistent data types: strings for non-ChatTask, preserve type for ChatTask
+                if is_chat_task:
+                    processed_value = value if value is not None else ""
+                else:
+                    processed_value = str(value) if value is not None else ""
+                
+                row_dict[col] = processed_value
+                if processed_value != "" and processed_value != []:
                     is_row_empty = False
+                    
         result.append(row_dict)
         total_rows += 1
         if is_row_empty:
@@ -284,7 +294,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
 
 
 async def _process_and_upload_datasets(
-    train_dataset, test_dataset, synthetic_data, columns_to_sample, should_reupload_train, should_reupload_test, ds_hf_name=None
+    train_dataset, test_dataset, synthetic_data, columns_to_sample, should_reupload_train, should_reupload_test, ds_hf_name=None, task=None
 ):
     files_to_delete = []
     logger.info("Processing and uploading datasets to MinIO storage")
@@ -294,7 +304,7 @@ async def _process_and_upload_datasets(
     logger.info(f"Dataset HF name: {ds_hf_name}")
     try:
         if should_reupload_train:
-            train_data_json = change_to_json_format(train_dataset, columns_to_sample)
+            train_data_json = change_to_json_format(train_dataset, columns_to_sample, task)
             train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
             files_to_delete.append(train_json_path)
             await _check_file_size(train_json_size, "train_data")
@@ -304,7 +314,7 @@ async def _process_and_upload_datasets(
         else:
             train_json_url = train_dataset
         if should_reupload_test:
-            test_data_json = change_to_json_format(test_dataset, columns_to_sample)
+            test_data_json = change_to_json_format(test_dataset, columns_to_sample, task)
             test_json_path, test_json_size = await save_json_to_temp_file(test_data_json, prefix="test_data_")
             files_to_delete.append(test_json_path)
             await _check_file_size(test_json_size, "test_data")
@@ -312,7 +322,7 @@ async def _process_and_upload_datasets(
         else:
             test_json_url = test_dataset
         if synthetic_data:
-            synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample)
+            synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample, task)
             synth_json_path, synth_json_size = await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_")
             files_to_delete.append(synth_json_path)
             await _check_file_size(synth_json_size, "synth_data")
@@ -764,6 +774,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
         should_reupload_train,
         should_reupload_test,
         train_dataset_name if task.file_format == FileFormat.HF else None,
+        task,
     )
 
 
