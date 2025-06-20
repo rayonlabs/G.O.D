@@ -294,7 +294,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
 
 
 async def _process_and_upload_datasets(
-    task,
+    task: AnyTextTypeRawTask,
     train_dataset, test_dataset, synthetic_data, columns_to_sample, should_reupload_train, should_reupload_test, ds_hf_name=None
 ):
     files_to_delete = []
