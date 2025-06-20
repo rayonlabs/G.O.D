@@ -26,6 +26,7 @@ from validator.augmentation.augmentation import generate_dpo_reformulation
 from validator.augmentation.augmentation import load_and_merge_multiple_datasets
 from validator.augmentation.augmentation import load_prompts
 from validator.core.models import AnyTextTypeRawTask
+from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
@@ -209,6 +210,7 @@ async def download_and_load_dataset(
     return combined_dataset
 
 
+<
 def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None):
     result = []
     total_rows = 0
@@ -294,7 +296,9 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
 
 
 async def _process_and_upload_datasets(
+
     train_dataset, test_dataset, synthetic_data, columns_to_sample, should_reupload_train, should_reupload_test, ds_hf_name=None, task=None
+
 ):
     files_to_delete = []
     logger.info("Processing and uploading datasets to MinIO storage")
@@ -767,6 +771,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
         train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=is_dpo)
 
     return await _process_and_upload_datasets(
+        task,
         train_ds,
         test_ds,
         synthetic_ds,
