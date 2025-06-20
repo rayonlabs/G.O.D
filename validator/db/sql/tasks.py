@@ -216,9 +216,12 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> list[Node
         return [Node(**dict(row)) for row in rows]
 
 
-async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False) -> list[AnyTypeRawTask]:
+async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False, include_tournament_tasks=False) -> list[AnyTypeRawTask]:
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
+    )
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
 
     async with await psql_db.connection() as connection:
@@ -227,6 +230,7 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
             SELECT * FROM {cst.TASKS_TABLE}
             WHERE {cst.STATUS} = $1
             {delay_timestamp_clause}
+            {tournament_tasks_clause}
         """
         base_rows = await connection.fetch(base_query, status.value)
 
@@ -446,8 +450,11 @@ async def get_synthetic_set_for_task(task_id: str, psql_db: PSQLDB):
         return await connection.fetchval(query, task_id)
 
 
-async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
+async def get_current_task_stats(psql_db: PSQLDB, include_tournament_tasks=False) -> NetworkStats:
     async with await psql_db.connection() as connection:
+        tournament_tasks_clause = (
+            "" if include_tournament_tasks else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+        )
         query = f"""
             SELECT
                 COUNT(*) FILTER (WHERE {cst.STATUS} = $1) as number_of_jobs_training,
@@ -456,6 +463,7 @@ async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
                 COUNT(*) FILTER (WHERE {cst.STATUS} = $4) as number_of_jobs_success,
                 MIN(termination_at) FILTER (WHERE {cst.STATUS} = $1) as next_training_end
             FROM {cst.TASKS_TABLE}
+            {tournament_tasks_clause}
         """
         row = await connection.fetchrow(
             query,
@@ -474,7 +482,10 @@ async def get_current_task_stats(psql_db: PSQLDB) -> NetworkStats:
         )
 
 
-async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
+async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=False) -> DetailedNetworkStats:
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT
@@ -484,6 +495,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
                 COUNT(*) FILTER (WHERE {cst.STATUS} = $4) as number_of_jobs_success,
                 MIN(termination_at) FILTER (WHERE {cst.STATUS} = $1) as next_training_end
             FROM {cst.TASKS_TABLE}
+            {tournament_tasks_clause}
         """
         row = await connection.fetchrow(
             query,
@@ -540,18 +552,22 @@ async def get_detailed_task_stats(psql_db: PSQLDB) -> DetailedNetworkStats:
         return stats
 
 
-async def get_tasks_exceeding_termination_time(psql_db: PSQLDB) -> list[RawTask]:
+async def get_tasks_exceeding_termination_time(psql_db: PSQLDB, include_tournament_tasks=False) -> list[RawTask]:
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     async with await psql_db.connection() as connection:
         connection: Connection
-        query = """
-            SELECT * FROM tasks t
+        query = f"""
+            SELECT * FROM {cst.TASKS_TABLE} t
             WHERE status IN ($1, $2)
             AND NOW() > termination_at
             AND EXISTS (
-                SELECT 1 FROM task_nodes tn
+                SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
                 WHERE tn.task_id = t.task_id
                 AND tn.netuid = $3
             )
+            {tournament_tasks_clause}
             ORDER BY termination_at ASC
         """
         rows = await connection.fetch(query, TaskStatus.TRAINING.value, TaskStatus.PREEVALUATION.value, NETUID)
@@ -788,7 +804,10 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
             return GrpoTask(**full_task_data, reward_functions=reward_functions)
 
 
-async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> list[Task]:
+async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0, include_tournament_tasks=False) -> list[Task]:
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -808,6 +827,7 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0) -> list[
                 COALESCE(tasks.training_repo_backup, victorious_repo.{cst.REPO}) as trained_model_repository
             FROM {cst.TASKS_TABLE} tasks
             LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
+            {tournament_tasks_clause}
             ORDER BY tasks.{cst.CREATED_AT} DESC
             LIMIT $1 OFFSET $2
         """
@@ -1192,9 +1212,12 @@ async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_looku
 
 
 async def get_successful_matching_tasks(
-    model_repo: str, ds_repo: str, field_instruction: str, field_input: str, field_output: str, psql_db: PSQLDB
+    model_repo: str, ds_repo: str, field_instruction: str, field_input: str, field_output: str, psql_db: PSQLDB, include_tournament_tasks=False
 ) -> list[InstructTextTask]:
     """Get most recent successful task with matching model_id and dataset within last 7 days"""
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"AND t.{cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -1227,6 +1250,7 @@ async def get_successful_matching_tasks(
             AND t.{cst.STATUS} = $6
             AND t.{cst.TASK_TYPE} = $7
             AND t.{cst.CREATED_AT} >= NOW() - INTERVAL '7 days'
+            {tournament_tasks_clause}
             ORDER BY t.{cst.CREATED_AT} DESC
             LIMIT 100
         """

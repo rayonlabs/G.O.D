@@ -38,8 +38,14 @@ def normalise_float(float: float | None) -> float | None:
 
 
 async def get_recent_tasks(
-    hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
+    hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config), include_tournament_tasks=False
 ) -> list[AnyTypeTask]:
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
+    tournament_tasks_clause_hotkeys = (
+        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     async with await config.psql_db.connection() as connection:
         connection: Connection
         base_query = f"""
@@ -49,6 +55,7 @@ async def get_recent_tasks(
                 SELECT DISTINCT s.{cst.TASK_ID}
                 FROM {cst.SUBMISSIONS_TABLE} s
                 WHERE s.{cst.HOTKEY} = ANY($1)
+                {tournament_tasks_clause_hotkeys}
                 ORDER BY s.{cst.CREATED_ON} DESC
                 LIMIT $2 OFFSET $3
                 '''
@@ -56,6 +63,7 @@ async def get_recent_tasks(
                 f'''
                 SELECT {cst.TASK_ID}
                 FROM {cst.TASKS_TABLE}
+                {tournament_tasks_clause}
                 ORDER BY {cst.CREATED_AT} DESC
                 LIMIT $1 OFFSET $2
                 '''
@@ -184,11 +192,14 @@ async def get_recent_tasks(
 
 
 async def _process_task_batch(
-    connection, hotkey: str, task_ids: list[str]
+    connection, hotkey: str, task_ids: list[str], include_tournament_tasks=False
 ) -> list[AnyTypeTaskWithHotkeyDetails]:
     """
     Helper function to process a batch of task IDs.
     """
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     tasks_with_details = []
 
     tasks_by_id = {}
@@ -201,6 +212,7 @@ async def _process_task_batch(
                 {cst.TASKS_TABLE} t
             WHERE
                 t.{cst.TASK_ID} IN ({task_placeholders})
+                {tournament_tasks_clause}
         """
 
         tasks_rows = await connection.fetch(tasks_query, *task_ids)
@@ -401,13 +413,15 @@ async def _process_task_batch(
 
 
 async def get_recent_tasks_for_hotkey(
-    hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
+    hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config), include_tournament_tasks=False
 ) -> list[AnyTypeTaskWithHotkeyDetails]:
     """
     Retrieves recent tasks for a specific hotkey with detailed information.
     """
     MAX_BATCH_SIZE = 500
-
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     async with await config.psql_db.connection() as connection:
         task_ids_query = f"""
             SELECT
@@ -416,6 +430,7 @@ async def get_recent_tasks_for_hotkey(
                 {cst.SUBMISSIONS_TABLE} s
             WHERE
                 s.{cst.HOTKEY} = $1
+                {tournament_tasks_clause}
             ORDER BY
                 s.{cst.CREATED_ON} DESC
             LIMIT $2 OFFSET $3
@@ -432,11 +447,11 @@ async def get_recent_tasks_for_hotkey(
             all_results = []
             for i in range(0, len(task_ids), MAX_BATCH_SIZE):
                 batch_ids = task_ids[i : i + MAX_BATCH_SIZE]
-                batch_results = await _process_task_batch(connection, hotkey, batch_ids)
+                batch_results = await _process_task_batch(connection, hotkey, batch_ids, include_tournament_tasks)
                 all_results.extend(batch_results)
             return all_results
 
-        return await _process_task_batch(connection, hotkey, task_ids)
+        return await _process_task_batch(connection, hotkey, task_ids, include_tournament_tasks)
 
 async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(get_config)) -> AnyTypeTaskWithHotkeyDetails:
     # First get all the task details like normal
