@@ -13,6 +13,7 @@ from pydantic import model_validator
 from core import constants as cst
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import GPUType
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
@@ -80,8 +81,22 @@ class TrainRequestImage(TrainRequest):
 
 class TrainerProxyRequestImage(TrainRequestImage):
     github_repo: str
+    num_gpus: int = 1
+    gpu_type: GPUType = None
+
+
+class TrainerProxyJobImage(TrainerProxyRequestImage):
     local_repo_path: str = None
 
+
+class TrainerProxyTaskOffer(BaseModel):
+    num_gpus: int
+    gpu_type: GPUType
+
+
+class TrainerProxyResponse(BaseModel):
+    message: str
+    accepted: bool
 
 class TrainResponse(BaseModel):
     message: str

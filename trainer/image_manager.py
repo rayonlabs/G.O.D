@@ -13,7 +13,7 @@ from validator.utils.logging import stream_image_build_logs, stream_container_lo
 
 logger = get_logger(__name__)
 
-async def build_docker_image(
+def build_docker_image(
     dockerfile_path: str = cst.DEFAULT_IMAGE_DOCKERFILE_PATH,
     context_path: str = ".",
     tag: str = None,
@@ -48,6 +48,7 @@ async def run_trainer_container(
     dataset_zip: str,
     model_type: str,
     hours_to_complete: int=1,
+    gpu_ids: list[int]=[0]
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
 
@@ -72,9 +73,9 @@ async def run_trainer_container(
             },
             remove=True,
             name="image-trainer-example",
-            mem_limit="32g",
+            mem_limit="16g",
             nano_cpus=8 * 1_000_000_000,
-            device_requests=[docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])],
+            device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids],  capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
             detach=True,
