@@ -1,7 +1,7 @@
 from fiber.chain.models import Node
 
 import validator.db.constants as cst
-from core.models.tournament_models import GroupRound
+from core.models.tournament_models import GroupRound, TournamentGroupData
 from core.models.tournament_models import KnockoutRound
 from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentParticipant
