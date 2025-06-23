@@ -39,6 +39,7 @@ from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
 from validator.utils.reward_functions import validate_reward_function
+from validator.utils.util import retry_with_backoff
 
 
 logger = get_logger(__name__)
@@ -215,6 +216,7 @@ async def get_multiple_datasets(
     return selected_datasets
 
 
+@retry_with_backoff
 async def create_synthetic_dpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
@@ -346,6 +348,7 @@ def _randomize_reward_weights(reward_functions: list[RewardFunction]) -> list[Re
             ]
 
 
+@retry_with_backoff
 async def create_synthetic_grpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
@@ -385,6 +388,7 @@ async def create_synthetic_grpo_task(
     return task
 
 
+@retry_with_backoff
 async def create_synthetic_instruct_text_task(
     config: Config,
     models: AsyncGenerator[str, None],

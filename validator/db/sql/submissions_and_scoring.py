@@ -610,3 +610,103 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
             results[hotkey][period_name] = stats
 
         return {hotkey: AllNodeStats(**stats) for hotkey, stats in results.items()}
+
+
+async def get_task_winner(task_id: UUID, psql_db: PSQLDB) -> str | None:
+    """Get the winner of a task based on the best quality score (lowest loss)."""
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            SELECT {cst.HOTKEY}
+            FROM {cst.TASK_NODES_TABLE}
+            WHERE {cst.TASK_ID} = $1
+            AND {cst.NETUID} = $2
+            AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+            ORDER BY {cst.TASK_NODE_QUALITY_SCORE} ASC  -- Lower score (loss) is better
+            LIMIT 1
+        """
+        return await connection.fetchval(query, task_id, NETUID)
+
+
+async def get_task_winners(task_ids: list[UUID], psql_db: PSQLDB) -> dict[str, str]:
+    """Get winners for multiple tasks. Returns dict mapping task_id to winner hotkey."""
+    if not task_ids:
+        return {}
+    
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        # Create placeholders for the task IDs
+        placeholders = ", ".join(f"${i+1}" for i in range(len(task_ids)))
+        
+        query = f"""
+            WITH task_winners AS (
+                SELECT 
+                    {cst.TASK_ID}::text as task_id,
+                    {cst.HOTKEY},
+                    {cst.TASK_NODE_QUALITY_SCORE},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY {cst.TASK_ID} 
+                        ORDER BY {cst.TASK_NODE_QUALITY_SCORE} ASC  -- Lower score (loss) is better
+                    ) as rn
+                FROM {cst.TASK_NODES_TABLE}
+                WHERE {cst.TASK_ID} = ANY($1)
+                AND {cst.NETUID} = $2
+                AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+            )
+            SELECT task_id, {cst.HOTKEY}
+            FROM task_winners
+            WHERE rn = 1
+        """
+        
+        rows = await connection.fetch(query, task_ids, NETUID)
+        return {row['task_id']: row[cst.HOTKEY] for row in rows}
+
+
+async def get_task_scores_for_participants(task_id: UUID, hotkeys: list[str], psql_db: PSQLDB) -> dict[str, float]:
+    """Get quality scores for specific participants in a task."""
+    if not hotkeys:
+        return {}
+    
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        placeholders = ", ".join(f"${i+2}" for i in range(len(hotkeys)))
+        
+        query = f"""
+            SELECT {cst.HOTKEY}, {cst.TASK_NODE_QUALITY_SCORE}
+            FROM {cst.TASK_NODES_TABLE}
+            WHERE {cst.TASK_ID} = $1
+            AND {cst.NETUID} = $2
+            AND {cst.HOTKEY} = ANY($3)
+            AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+        """
+        
+        rows = await connection.fetch(query, task_id, NETUID, hotkeys)
+        return {row[cst.HOTKEY]: row[cst.TASK_NODE_QUALITY_SCORE] for row in rows}
+
+
+async def get_average_scores_for_participants(task_ids: list[UUID], hotkeys: list[str], psql_db: PSQLDB) -> dict[str, float]:
+    """Get average quality scores for participants across multiple tasks."""
+    if not task_ids or not hotkeys:
+        return {}
+    
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        task_placeholders = ", ".join(f"${i+2}" for i in range(len(task_ids)))
+        hotkey_placeholders = ", ".join(f"${i+len(task_ids)+2}" for i in range(len(hotkeys)))
+        
+        query = f"""
+            SELECT 
+                {cst.HOTKEY},
+                AVG({cst.TASK_NODE_QUALITY_SCORE}) as avg_score,
+                COUNT(*) as task_count
+            FROM {cst.TASK_NODES_TABLE}
+            WHERE {cst.TASK_ID} = ANY($1)
+            AND {cst.NETUID} = $2
+            AND {cst.HOTKEY} = ANY($3)
+            AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+            GROUP BY {cst.HOTKEY}
+            HAVING COUNT(*) > 0
+        """
+        
+        rows = await connection.fetch(query, task_ids, NETUID, hotkeys)
+        return {row[cst.HOTKEY]: row['avg_score'] for row in rows}

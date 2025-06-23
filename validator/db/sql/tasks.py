@@ -325,6 +325,16 @@ async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
     rows = await connection.fetch(query, table_name)
     return {row["column_name"] for row in rows}
 
+async def update_task_status(task_id: str, status: TaskStatus, psql_db: PSQLDB) -> None:
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            UPDATE {cst.TASKS_TABLE}
+            SET {cst.STATUS} = $1
+            WHERE {cst.TASK_ID} = $2
+        """
+        await connection.execute(query, status.value, task_id)
+        
 
 async def update_task(updated_task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)

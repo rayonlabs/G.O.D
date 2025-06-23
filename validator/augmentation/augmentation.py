@@ -444,10 +444,12 @@ async def load_and_merge_multiple_datasets(
                 # Check if all required columns exist
                 missing_columns = [col for col in columns if col not in dataset.column_names]
                 if missing_columns:
+                    suggestions = suggest_alternative_columns(columns, dataset.column_names)
                     logger.error(f"Missing columns in {dataset_id}: {missing_columns}")
                     logger.error(f"Available columns: {dataset.column_names}")
                     logger.error(f"Required columns from mapping: {columns}")
-                    raise ValueError(f"Missing required columns: {missing_columns}")
+                    logger.error(f"Suggestions: {suggestions}")
+                    raise ValueError(f"Missing required columns: {missing_columns}. {suggestions}")
 
                 dataset = dataset.select_columns(columns)
                 samples = list(dataset)

@@ -7,6 +7,7 @@ from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentTask
+from core.models.tournament_models import TournamentPairData
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
 
@@ -112,6 +113,20 @@ async def create_tournament_pairs(
     return pair_ids
 
 
+async def add_tournament_participants(participants: list[TournamentParticipant], psql_db: PSQLDB):
+    async with await psql_db.connection() as connection:
+        async with connection.transaction():
+            query = f"""
+                INSERT INTO {cst.TOURNAMENT_PARTICIPANTS_TABLE} 
+                ({cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.CREATED_AT})
+                VALUES ($1, $2, CURRENT_TIMESTAMP)
+                ON CONFLICT ({cst.TOURNAMENT_ID}, {cst.HOTKEY}) DO NOTHING
+            """
+            for participant in participants:
+                await connection.execute(query, participant.tournament_id, participant.hotkey)
+            logger.info(f"Added {len(participants)} participants to tournament")
+
+
 async def add_tournament_tasks(tasks: list[TournamentTask], psql_db: PSQLDB):
     async with await psql_db.connection() as connection:
         async with connection.transaction():
@@ -146,21 +161,139 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
         return None
 
 
-async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> list[str]:
+async def get_tournament_round(round_id: str, psql_db: PSQLDB) -> TournamentRoundData | None:
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.HOTKEY} FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+            SELECT {cst.ROUND_ID}, {cst.TOURNAMENT_ID}, {cst.ROUND_NUMBER}, {cst.ROUND_TYPE}, 
+                   {cst.IS_FINAL_ROUND}, {cst.ROUND_STATUS}
+            FROM {cst.TOURNAMENT_ROUNDS_TABLE}
+            WHERE {cst.ROUND_ID} = $1
+        """
+        result = await connection.fetchrow(query, round_id)
+        if result:
+            return TournamentRoundData(
+                round_id=result[cst.ROUND_ID],
+                tournament_id=result[cst.TOURNAMENT_ID],
+                round_number=result[cst.ROUND_NUMBER],
+                round_type=result[cst.ROUND_TYPE],
+                is_final_round=result[cst.IS_FINAL_ROUND],
+                status=result[cst.ROUND_STATUS]
+            )
+        return None
+
+
+async def get_tournament_rounds(tournament_id: str, psql_db: PSQLDB) -> list[TournamentRoundData]:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.ROUND_ID}, {cst.TOURNAMENT_ID}, {cst.ROUND_NUMBER}, {cst.ROUND_TYPE}, 
+                   {cst.IS_FINAL_ROUND}, {cst.ROUND_STATUS}
+            FROM {cst.TOURNAMENT_ROUNDS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1
-            ORDER BY {cst.CREATED_AT}
+            ORDER BY {cst.ROUND_NUMBER} ASC
         """
         results = await connection.fetch(query, tournament_id)
-        return [row[cst.HOTKEY] for row in results]
+        return [
+            TournamentRoundData(
+                round_id=row[cst.ROUND_ID],
+                tournament_id=row[cst.TOURNAMENT_ID],
+                round_number=row[cst.ROUND_NUMBER],
+                round_type=row[cst.ROUND_TYPE],
+                is_final_round=row[cst.IS_FINAL_ROUND],
+                status=row[cst.ROUND_STATUS]
+            )
+            for row in results
+        ]
+
+
+async def get_tournament_tasks(round_id: str, psql_db: PSQLDB) -> list[TournamentTask]:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.ROUND_ID}, {cst.TASK_ID}, {cst.GROUP_ID}, {cst.PAIR_ID}
+            FROM {cst.TOURNAMENT_TASKS_TABLE}
+            WHERE {cst.ROUND_ID} = $1
+        """
+        results = await connection.fetch(query, round_id)
+        return [
+            TournamentTask(
+                tournament_id=row[cst.TOURNAMENT_ID],
+                round_id=row[cst.ROUND_ID],
+                task_id=row[cst.TASK_ID],
+                group_id=row[cst.GROUP_ID],
+                pair_id=row[cst.PAIR_ID]
+            )
+            for row in results
+        ]
+
+
+async def get_tournament_pairs(round_id: str, psql_db: PSQLDB) -> list[TournamentPairData]:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.PAIR_ID}, {cst.ROUND_ID}, {cst.HOTKEY1}, {cst.HOTKEY2}
+            FROM {cst.TOURNAMENT_PAIRS_TABLE}
+            WHERE {cst.ROUND_ID} = $1
+        """
+        results = await connection.fetch(query, round_id)
+        return [
+            TournamentPairData(
+                pair_id=row[cst.PAIR_ID],
+                round_id=row[cst.ROUND_ID],
+                hotkey1=row[cst.HOTKEY1],
+                hotkey2=row[cst.HOTKEY2],
+                winner_hotkey=None  # No longer stored in database
+            )
+            for row in results
+        ]
+
+
+async def get_tournament_groups(round_id: str, psql_db: PSQLDB) -> list[TournamentGroupData]:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.GROUP_ID}, {cst.ROUND_ID}
+            FROM {cst.TOURNAMENT_GROUPS_TABLE}
+            WHERE {cst.ROUND_ID} = $1
+        """
+        results = await connection.fetch(query, round_id)
+        return [
+            TournamentGroupData(
+                group_id=row[cst.GROUP_ID],
+                round_id=row[cst.ROUND_ID]
+            )
+            for row in results
+        ]
+
+
+async def get_tournament_group_members(group_id: str, psql_db: PSQLDB) -> list[TournamentParticipant]:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.GROUP_ID}, {cst.HOTKEY}
+            FROM {cst.TOURNAMENT_GROUP_MEMBERS_TABLE}
+            WHERE {cst.GROUP_ID} = $1
+        """
+        results = await connection.fetch(query, group_id)
+        return [
+            TournamentParticipant(
+                tournament_id="",  # Not available in this context
+                hotkey=row[cst.HOTKEY]
+            )
+            for row in results
+        ]
+
+
+async def update_round_status(round_id: str, status: str, psql_db: PSQLDB):
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENT_ROUNDS_TABLE} 
+            SET {cst.ROUND_STATUS} = $2
+            WHERE {cst.ROUND_ID} = $1
+        """
+        await connection.execute(query, round_id, status)
+        logger.info(f"Updated round {round_id} status to {status}")
 
 
 async def update_tournament_status(tournament_id: str, status: str, psql_db: PSQLDB):
     async with await psql_db.connection() as connection:
         query = f"""
-            UPDATE {cst.TOURNAMENTS_TABLE}
+            UPDATE {cst.TOURNAMENTS_TABLE} 
             SET {cst.TOURNAMENT_STATUS} = $2, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
             WHERE {cst.TOURNAMENT_ID} = $1
         """
@@ -168,39 +301,15 @@ async def update_tournament_status(tournament_id: str, status: str, psql_db: PSQ
         logger.info(f"Updated tournament {tournament_id} status to {status}")
 
 
-async def update_round_status(round_id: str, status: str, psql_db: PSQLDB):
+async def update_tournament_current_round(tournament_id: str, round_id: str, psql_db: PSQLDB):
     async with await psql_db.connection() as connection:
         query = f"""
-            UPDATE {cst.TOURNAMENT_ROUNDS_TABLE}
-            SET {cst.ROUND_STATUS} = $2, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
-            WHERE {cst.ROUND_ID} = $1
+            UPDATE {cst.TOURNAMENTS_TABLE} 
+            SET {cst.CURRENT_ROUND_ID} = $2, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.TOURNAMENT_ID} = $1
         """
-        await connection.execute(query, round_id, status)
-        logger.info(f"Updated round {round_id} status to {status}")
-
-
-async def set_pair_winner(pair_id: str, winner_hotkey: str, psql_db: PSQLDB):
-    async with await psql_db.connection() as connection:
-        query = f"""
-            UPDATE {cst.TOURNAMENT_PAIRS_TABLE}
-            SET {cst.WINNER_HOTKEY} = $2, {cst.COMPLETED_AT} = CURRENT_TIMESTAMP
-            WHERE {cst.PAIR_ID} = $1
-        """
-        await connection.execute(query, pair_id, winner_hotkey)
-        logger.info(f"Set winner {winner_hotkey} for pair {pair_id}")
-
-
-async def eliminate_participant(
-    tournament_id: str, hotkey: str, round_id: str, psql_db: PSQLDB
-):
-    async with await psql_db.connection() as connection:
-        query = f"""
-            UPDATE {cst.TOURNAMENT_PARTICIPANTS_TABLE}
-            SET {cst.ELIMINATED_IN_ROUND_ID} = $3
-            WHERE {cst.TOURNAMENT_ID} = $1 AND {cst.HOTKEY} = $2
-        """
-        await connection.execute(query, tournament_id, hotkey, round_id)
-        logger.info(f"Eliminated participant {hotkey} in round {round_id}")
+        await connection.execute(query, tournament_id, round_id)
+        logger.info(f"Updated tournament {tournament_id} current round to {round_id}")
 
 
 async def get_active_tournaments(psql_db: PSQLDB) -> list[TournamentData]:
