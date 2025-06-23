@@ -498,6 +498,8 @@ async def _evaluate_submissions(
         if not repos_to_evaluate:
             return results
 
+        is_grpo_task = task.task_type == TaskType.GRPOTASK
+
         assert task.synthetic_data is not None, "Synthetic data shouldn't be none for text tasks"
         assert task.test_data is not None, "Test data shouldn't be none for text tasks"
 
