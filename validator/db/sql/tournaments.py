@@ -1,3 +1,4 @@
+from fiber.chain.models import Node
 
 import validator.db.constants as cst
 from core.models.tournament_models import GroupRound
@@ -244,3 +245,35 @@ async def are_tasks_in_tournament(task_ids: list[str], psql_db: PSQLDB) -> list[
         result = await connection.fetch(query, task_ids)
         existing_task_ids = {row[cst.TASK_ID] for row in result}
         return [task_id in existing_task_ids for task_id in task_ids]
+
+
+async def get_miners_for_tournament(task_id: str, psql_db: PSQLDB) -> list[Node]:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            -- Get miners for group rounds
+            SELECT DISTINCT n.*
+            FROM {cst.TOURNAMENT_TASKS_TABLE} tt
+            JOIN {cst.TOURNAMENT_GROUPS_TABLE} tg ON tt.{cst.GROUP_ID} = tg.{cst.GROUP_ID}
+            JOIN {cst.TOURNAMENT_GROUP_MEMBERS_TABLE} tgm ON tg.{cst.GROUP_ID} = tgm.{cst.GROUP_ID}
+            JOIN {cst.NODES_TABLE} n ON tgm.{cst.HOTKEY} = n.{cst.HOTKEY}
+            WHERE tt.{cst.TASK_ID} = $1 AND tt.{cst.GROUP_ID} IS NOT NULL
+
+            UNION
+
+            -- Get miners for knockout rounds
+            SELECT DISTINCT n.*
+            FROM {cst.TOURNAMENT_TASKS_TABLE} tt
+            JOIN {cst.TOURNAMENT_PAIRS_TABLE} tp ON tt.{cst.PAIR_ID} = tp.{cst.PAIR_ID}
+            JOIN {cst.NODES_TABLE} n ON tp.{cst.HOTKEY1} = n.{cst.HOTKEY}
+            WHERE tt.{cst.TASK_ID} = $1 AND tt.{cst.PAIR_ID} IS NOT NULL
+
+            UNION
+
+            SELECT DISTINCT n.*
+            FROM {cst.TOURNAMENT_TASKS_TABLE} tt
+            JOIN {cst.TOURNAMENT_PAIRS_TABLE} tp ON tt.{cst.PAIR_ID} = tp.{cst.PAIR_ID}
+            JOIN {cst.NODES_TABLE} n ON tp.{cst.HOTKEY2} = n.{cst.HOTKEY}
+            WHERE tt.{cst.TASK_ID} = $1 AND tt.{cst.PAIR_ID} IS NOT NULL
+        """
+        result = await connection.fetch(query, task_id)
+        return [Node(**dict(row)) for row in result]
