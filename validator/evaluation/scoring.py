@@ -536,7 +536,10 @@ async def _evaluate_submissions(
             else:
                 test_losses.append((repo, test_result.eval_loss))
 
-        test_losses.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
+        if is_grpo_task:
+            test_losses.sort(key=lambda x: float("-inf") if math.isnan(x[1]) else x[1], reverse=True)
+        else:
+            test_losses.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
         top_4_repos = [repo for repo, _ in test_losses[:4]]
 
         for repo, _ in test_losses[4:]:
