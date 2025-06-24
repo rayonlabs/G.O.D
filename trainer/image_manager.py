@@ -11,7 +11,7 @@ from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
 from validator.utils.logging import stream_image_build_logs, stream_container_logs
 from trainer.tasks import log_task, complete_task
-from core.models.payload_models import TrainerProxyJobImage
+from core.models.payload_models import TrainerProxyRequest
 
 
 logger = get_logger(__name__)
@@ -92,7 +92,7 @@ async def run_trainer_container(
         logger.error(e)
         return e
 
-async def start_training_task(task: TrainerProxyJobImage):
+async def start_training_task(task: TrainerProxyRequest):
     tag = await asyncio.to_thread(
         build_docker_image,
         dockerfile_path=f"{task.local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}",

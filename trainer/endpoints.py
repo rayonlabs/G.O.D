@@ -3,9 +3,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 import asyncio
 
-from core.models.payload_models import TrainerProxyRequestImage
-from core.models.payload_models import TrainerProxyJobImage
-from core.models.payload_models import TrainerImageTaskLog
+from core.models.payload_models import TrainerProxyRequest
+from core.models.payload_models import TrainerTaskLog
 from trainer import constants as cst
 from validator.core.dependencies import get_api_key
 from validator.utils.logging import get_logger
@@ -25,8 +24,8 @@ TASK_DETAILS_ENDPOINT= "/v1/trainer/{task_id}"
 load_task_history()
 
 
-async def start_training(req: TrainerProxyRequestImage) -> Response:
-    training_job = TrainerProxyJobImage(**req.dict())
+async def start_training(req: TrainerProxyRequest) -> Response:
+    training_job = TrainerProxyJob(**req.dict())
     local_repo_path = clone_repo(req.github_repo, cst.TEMP_REPO_PATH, branch="proxy-trainer")
     training_job.local_repo_path = local_repo_path
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")

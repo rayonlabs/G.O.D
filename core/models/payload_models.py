@@ -79,16 +79,14 @@ class TrainRequestImage(TrainRequest):
     model_type: ImageModelType = ImageModelType.SDXL
 
 
-class TrainerProxyRequestImage(TrainRequestImage):
+class TrainerProxyRequest(BaseModel):
+    training_data: TrainRequestImage | TrainRequestText
     github_repo: str
     gpu_ids: list[int]
+    local_repo_path: str = Field(default=None, include_in_schema=False)
 
 
-class TrainerProxyJobImage(TrainerProxyRequestImage):
-    local_repo_path: str = None
-
-
-class TrainerImageTaskLog(TrainerProxyRequestImage):
+class TrainerTaskLog(TrainerProxyRequest):
     status: TaskStatus
     started_at: datetime | None
     finished_at: datetime | None
