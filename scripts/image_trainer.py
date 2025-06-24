@@ -70,14 +70,15 @@ def create_config(task_id, model, model_type, expected_repo_name=None):
 
     # Update config
     config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
-    if not os.path.exists(train_cst.CONTAINER_SAVE_PATH):
-        os.makedirs(train_cst.CONTAINER_SAVE_PATH, exist_ok=True)
-    config["output_dir"] = train_cst.CONTAINER_SAVE_PATH
+    output_dir = f"{train_cst.CONTAINER_SAVE_PATH}/{expected_repo_name}"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    config["output_dir"] = output_dir
 
     # Save config to file
     config_path = os.path.join("/dataset/configs", f"{task_id}.toml")
     save_config_toml(config, config_path)
-    print(f"Created config at {config_path}")
+    print(f"Created config at {config_path}", flush=True)
     return config_path
 
 

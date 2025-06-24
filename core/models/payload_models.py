@@ -81,22 +81,19 @@ class TrainRequestImage(TrainRequest):
 
 class TrainerProxyRequestImage(TrainRequestImage):
     github_repo: str
-    num_gpus: int = 1
-    gpu_type: GPUType = None
+    gpu_ids: list[int]
 
 
 class TrainerProxyJobImage(TrainerProxyRequestImage):
     local_repo_path: str = None
 
 
-class TrainerProxyTaskOffer(BaseModel):
-    num_gpus: int
-    gpu_type: GPUType
+class TrainerImageTaskLog(TrainerProxyRequestImage):
+    status: TaskStatus
+    started_at: datetime | None
+    finished_at: datetime | None
+    logs: list[str] = []
 
-
-class TrainerProxyResponse(BaseModel):
-    message: str
-    accepted: bool
 
 class TrainResponse(BaseModel):
     message: str

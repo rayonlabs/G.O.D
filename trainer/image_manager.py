@@ -10,6 +10,9 @@ from trainer import constants as cst
 from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
 from validator.utils.logging import stream_image_build_logs, stream_container_logs
+from trainer.tasks import log_task, complete_task
+from core.models.payload_models import TrainerProxyJobImage
+
 
 logger = get_logger(__name__)
 
@@ -38,7 +41,7 @@ def build_docker_image(
     except BuildError as e:
         stream_image_build_logs(logs, get_all_context_tags())
         logger.error("Docker build failed.")
-        raise e
+        return e
 
 
 async def run_trainer_container(
@@ -47,12 +50,13 @@ async def run_trainer_container(
     model: str,
     dataset_zip: str,
     model_type: str,
+    expected_repo_name: str,
     hours_to_complete: int=1,
     gpu_ids: list[int]=[0]
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
 
-    checkpoints_dir: str = cst.TRAINER_CHECKPOINTS_PATH
+    checkpoints_dir: str = f"{cst.TRAINER_CHECKPOINTS_PATH}/{task_id}/"
     os.makedirs(checkpoints_dir, exist_ok=True)
     os.chmod(checkpoints_dir, 0o700)
 
@@ -62,6 +66,7 @@ async def run_trainer_container(
         "--dataset-zip", dataset_zip,
         "--model-type", model_type,
         "--hours-to-complete", str(hours_to_complete),
+        "--expected-repo-name", expected_repo_name
     ]
     
     try:
@@ -86,3 +91,63 @@ async def run_trainer_container(
     except Exception as e:
         logger.error(e)
         return e
+
+async def start_training_task(task: TrainerProxyJobImage):
+    tag = await asyncio.to_thread(
+        build_docker_image,
+        dockerfile_path=f"{task.local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}",
+        context_path=task.local_repo_path,
+    )
+
+    log_task(task.task_id, f"Docker image built with tag: {tag}")
+
+    container = await asyncio.wait_for(
+        run_trainer_container(
+            task_id=task.task_id,
+            tag=tag,
+            model=task.model,
+            dataset_zip=task.dataset_zip,
+            model_type=task.model_type,
+            expected_repo_name=task.expected_repo_name,
+            hours_to_complete=task.hours_to_complete,
+            gpu_ids=task.gpu_ids,
+        ),
+        timeout=60
+    )
+
+    timeout_seconds = task.hours_to_complete * 3600
+
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(container.wait),
+            timeout=timeout_seconds
+        )
+        status_code = result.get("StatusCode", -1)
+        log_task(task.task_id, f"Container exited with status code {status_code}")
+
+        if status_code == 0:
+            log_task(task.task_id, "Training completed successfully.")
+            complete_task(task.task_id, success=True)
+        else:
+            log_task(task.task_id, f"Training failed with status code {status_code}.")
+            complete_task(task.task_id, success=False)
+
+    except asyncio.TimeoutError:
+        log_task(task.task_id, f"Timeout reached ({timeout_seconds}s). Killing container...")
+        logger.info(f"Timeout reached for job {task.task_id}. Killing container...")
+        container.kill()
+        container.remove(force=True)
+        log_task(task.task_id, f"Container {container.name} killed due to timeout. Marking task as complete.")
+        complete_task(task.task_id, success=True)
+
+    except Exception as e:
+        log_task(task.task_id, f"Unexpected error during training: {e}")
+        logger.exception(f"Error in training job {task.task_id}")
+        try:
+            container.kill()
+            container.remove(force=True)
+            log_task(task.task_id, f"Container {container.name} forcibly removed due to error.")
+        except Exception as cleanup_error:
+            log_task(task.task_id, f"Error during container cleanup: {cleanup_error}")
+        complete_task(task.task_id, success=False)
+
