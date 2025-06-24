@@ -306,7 +306,11 @@ async def _start_training_task(task: AnyTypeRawTask, config: Config) -> None:
 
 
 async def _process_ready_to_train_tasks(config: Config):
-    ready_to_train_tasks = await tasks_sql.get_tasks_with_status(status=TaskStatus.READY, psql_db=config.psql_db)
+    ready_to_train_tasks = await tasks_sql.get_tasks_with_status(
+        status=TaskStatus.READY,
+        psql_db=config.psql_db,
+        tournament_filter="exclude",
+    )
     if len(ready_to_train_tasks) > 0:
         logger.info(f"There are {len(ready_to_train_tasks)} ready to train")
         await asyncio.gather(
