@@ -19,11 +19,11 @@ from core.models.utility_models import TaskType
 from validator.augmentation.augmentation import load_prompts
 from validator.core.config import Config
 from validator.core.constants import END_OF_REASONING_TAG
+from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
+from validator.core.constants import MIN_DATASETS_FOR_AUGMENTATION
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
 from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
-from validator.core.constants import MIN_DATASETS_FOR_AUGMENTATION
-from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
 from validator.core.models import Dataset
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
@@ -185,17 +185,17 @@ async def get_multiple_datasets(
     """Get multiple unique datasets from the generator, validating column availability."""
     if num_datasets is None:
         num_datasets = random.randint(MIN_DATASETS_FOR_AUGMENTATION, MAX_DATASETS_FOR_AUGMENTATION)
-    
+
     selected_datasets = []
     selected_ids = set()
     failed_ids = set()
-    
+
     while len(selected_datasets) < num_datasets:
         dataset = await anext(datasets_generator)
-        
+
         if dataset.dataset_id in selected_ids or dataset.dataset_id in failed_ids:
             continue
-            
+
         if task_type and keypair and task_type != TaskType.DPOTASK:
             try:
                 from validator.utils.call_endpoint import call_content_service_fast
@@ -207,10 +207,10 @@ async def get_multiple_datasets(
                 logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
                 failed_ids.add(dataset.dataset_id)
                 continue
-        
+
         selected_datasets.append(dataset)
         selected_ids.add(dataset.dataset_id)
-    
+
     logger.info(f"Selected {len(selected_datasets)} unique datasets for task (validated)")
     return selected_datasets
 
@@ -223,17 +223,17 @@ async def create_synthetic_dpo_task(
     logger.info("DPO task")
     model_id = await anext(models)
     logger.info(f"We picked {model_id}")
-    
+
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.DPOTASK, keypair=config.keypair)
-    
+
     primary_dataset = selected_datasets[0]
     logger.info(f"Primary dataset: {primary_dataset}")
-    
+
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     assert primary_dataset.dpo_rejected_column, "we should have a reject column"
     assert primary_dataset.dpo_accepted_column, "we should have a accepted column"
     assert primary_dataset.dpo_prompt_column, "we should have a prompt column"
-    
+
     dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
 
     current_time = datetime.utcnow()
@@ -352,15 +352,15 @@ async def create_synthetic_grpo_task(
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
-    
+
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.GRPOTASK, keypair=config.keypair)
-    
+
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-    
+
     dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
-    
+
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
@@ -391,15 +391,15 @@ async def create_synthetic_instruct_text_task(
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
-    
+
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
-    
+
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-    
+
     dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
-    
+
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
