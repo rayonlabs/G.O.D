@@ -25,7 +25,7 @@ load_task_history()
 
 
 async def start_training(req: TrainerProxyRequest) -> Response:
-    local_repo_path = clone_repo(req.github_repo, cst.TEMP_REPO_PATH, branch="proxy-trainer")
+    local_repo_path = clone_repo(req.github_repo, cst.TEMP_REPO_PATH)
     req.local_repo_path = local_repo_path
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
 
