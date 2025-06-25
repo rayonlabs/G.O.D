@@ -10,8 +10,9 @@ from validator.core.dependencies import get_api_key
 from validator.utils.logging import get_logger
 from trainer.image_manager import start_training_task
 from trainer.utils.misc import clone_repo
-from trainer.utils.misc import get_available_gpu_types
+from trainer.utils.misc import get_gpu_info
 from trainer.tasks import start_task, load_task_history, get_task
+from core.models.utility_models import GPUInfo
 
 
 logger = get_logger(__name__)
@@ -25,7 +26,12 @@ load_task_history()
 
 
 async def start_training(req: TrainerProxyRequest) -> Response:
-    local_repo_path = clone_repo(req.github_repo, cst.TEMP_REPO_PATH)
+    local_repo_path = clone_repo(
+        repo_url=req.github_repo,
+        parent_dir=cst.TEMP_REPO_PATH,
+        branch=req.github_branch,
+        commit_hash=req.github_commit_hash
+    )
     req.local_repo_path = local_repo_path
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
 
@@ -35,13 +41,13 @@ async def start_training(req: TrainerProxyRequest) -> Response:
     return {"message": "Started Training!", "task_id": req.training_data.task_id}
 
 
-async def get_available_gpus():
-    gpu_types = await get_available_gpu_types()
-    return {gpu_type.value: count for gpu_type, count in gpu_types.items()}
+async def get_available_gpus() -> list[GPUInfo]:
+    gpu_info = await get_gpu_info()
+    return gpu_info
 
 
-async def get_task_details(task_id: str) -> TrainerTaskLog:
-    return get_task(task_id)
+async def get_task_details(task_id: str, hotkey: str) -> TrainerTaskLog:
+    return get_task(task_id, hotkey)
 
 
 def factory_router() -> APIRouter:

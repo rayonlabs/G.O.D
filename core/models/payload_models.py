@@ -83,6 +83,9 @@ class TrainerProxyRequest(BaseModel):
     training_data: TrainRequestImage | TrainRequestText
     github_repo: str
     gpu_ids: list[int]
+    hotkey: str
+    github_branch: str | None = None
+    github_commit_hash: str | None = None
     local_repo_path: str = Field(default=None, include_in_schema=False)
 
 

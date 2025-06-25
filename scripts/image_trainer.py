@@ -44,7 +44,7 @@ async def download_dataset_if_needed(dataset_zip_url, task_id):
     return local_path
 
 
-def create_config(task_id, model, model_type, expected_repo_name=None):
+def create_config(task_id, model, model_type, expected_repo_name):
     """Create the diffusion config file"""
     # In Docker environment, adjust paths
     if os.path.exists("/workspace/core/config"):
@@ -70,7 +70,7 @@ def create_config(task_id, model, model_type, expected_repo_name=None):
 
     # Update config
     config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
-    output_dir = f"{train_cst.CONTAINER_SAVE_PATH}{task_id}"
+    output_dir = f"{train_cst.CONTAINER_SAVE_PATH}{expected_repo_name}"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir

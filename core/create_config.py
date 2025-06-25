@@ -8,6 +8,7 @@ from typing import Any
 from core.models.config_models import AuditorConfig
 from core.models.config_models import MinerConfig
 from core.models.config_models import ValidatorConfig
+from core.models.config_models import TrainerConfig
 from core.validators import InputValidators
 from core.validators import validate_input
 
@@ -39,6 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dev", action="store_true", help="Use development configuration")
     parser.add_argument("--miner", action="store_true", help="Generate miner configuration")
     parser.add_argument("--auditor", action="store_true", help="Generate auditor configuration")
+    parser.add_argument("--trainer", action="store_true", help="Generate trainer configuration")
     return parser.parse_args()
 
 
@@ -67,6 +69,21 @@ def generate_miner_config(dev: bool = False) -> dict[str, Any]:
         env="dev" if dev else "prod",
         min_stake_threshold=input(f"Enter MIN_STAKE_THRESHOLD (default: {'0' if subtensor_network == 'test' else '1000'}): ")
         or ("0" if subtensor_network == "test" else "1000"),
+    )
+
+    return vars(config)
+
+
+def generate_trainer_config() -> dict[str, Any]:
+    print("\n🤖 Let's configure your Trainer! 🛠️\n")
+
+    frontend_api_key = generate_secure_password()
+
+    config = TrainerConfig(
+        wandb_token=input("📊 Enter wandb token (default: default): ") or "default",
+        huggingface_token=input("🤗 Enter huggingface token (default: default): ") or "default",
+        huggingface_username=input("🏗️ Enter your huggingface username where you would like to save the models: "),
+        frontend_api_key=frontend_api_key
     )
 
     return vars(config)
@@ -155,9 +172,11 @@ def generate_validator_config(dev: bool = False) -> dict[str, Any]:
     return vars(config)
 
 
-def generate_config(dev: bool = False, miner: bool = False) -> dict[str, Any]:
+def generate_config(dev: bool = False, miner: bool = False, trainer: bool=False) -> dict[str, Any]:
     if miner:
         return generate_miner_config(dev)
+    elif trainer:
+        return generate_trainer_config
     else:
         return generate_validator_config(dev)
 
@@ -209,6 +228,9 @@ if __name__ == "__main__":
     elif args.auditor:
         config = generate_auditor_config(args.dev)
         name = "test-temp"
+    elif args.trainer:
+        config = generate_trainer_config()
+        name = "trainer"
 
     else:
         env = "dev" if args.dev else "prod"

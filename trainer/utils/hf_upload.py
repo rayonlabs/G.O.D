@@ -15,7 +15,7 @@ def main():
     login(token=hf_token)
 
     repo_id = f"{hf_user}/{repo_name}"
-    local_folder = f"/app/checkpoints/{task_id}"
+    local_folder = f"/app/checkpoints/{expected_repo_name}"
 
     if not os.path.isdir(local_folder):
         raise FileNotFoundError(f"Local folder {local_folder} does not exist")

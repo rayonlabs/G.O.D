@@ -175,4 +175,11 @@ class GPUType(str, Enum):
     A6000 = "A6000"
 
 
+class GPUInfo(BaseModel):
+    gpu_id: int = Field(..., description="GPU ID")
+    gpu_type: GPUType = Field(..., description="GPU Type")
+    vram_gb: int = Field(..., description="GPU VRAM in GB")
+    available: bool = Field(..., description="GPU Availability")
+
+
 

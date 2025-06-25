@@ -162,7 +162,7 @@ async def start_training_task(task: TrainerProxyRequest):
             dockerfile_path=f"{task.local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}",
             context_path=task.local_repo_path,
         )
-        log_task(training_data.task_id, f"Docker image built with tag: {tag}")
+        log_task(training_data.task_id, task.hotkey, f"Docker image built with tag: {tag}")
 
         container = await asyncio.wait_for(
             run_trainer_container(
@@ -186,28 +186,31 @@ async def start_training_task(task: TrainerProxyRequest):
                 timeout=timeout_seconds
             )
             status_code = result.get("StatusCode", -1)
-            log_task(training_data.task_id, f"Container exited with status code {status_code}")
+            log_task(training_data.task_id, task.hotkey, f"Container exited with status code {status_code}")
 
             if status_code != 0:
-                log_task(training_data.task_id, f"Training failed with status code {status_code}")
+                log_task(training_data.task_id, task.hotkey, f"Training failed with status code {status_code}")
                 return
 
-            log_task(training_data.task_id, "Training completed successfully.")
+            log_task(training_data.task_id, task.hotkey, "Training completed successfully.")
 
         except asyncio.TimeoutError:
-            log_task(training_data.task_id, f"Timeout reached ({timeout_seconds}s). Killing container...")
+            complete_task(training_data.task_id, task.hotkey, success=success)
+            log_task(training_data.task_id, task.hotkey, f"Timeout reached ({timeout_seconds}s). Killing container...")
             container.kill()
             container.remove(force=True)
-            log_task(training_data.task_id, f"Container {container.name} killed due to timeout. Proceeding to upload.")
+            log_task(training_data.task_id, task.hotkey, f"Container {container.name} killed due to timeout. Proceeding to upload.")
 
         except Exception as e:
-            log_task(training_data.task_id, f"Unexpected error during training: {e}")
+            complete_task(training_data.task_id, task.hotkey, success=success)
+            log_task(training_data.task_id, task.hotkey, f"Unexpected error during training: {e}")
             logger.exception(f"Error in training job {training_data.task_id}")
             try:
                 container.kill()
                 container.remove(force=True)
             except Exception as cleanup_error:
-                log_task(training_data.task_id, f"Error during container cleanup: {cleanup_error}")
+                complete_task(training_data.task_id, task.hotkey, success=success)
+                log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_error}")
             return
 
         await upload_repo_to_hf(
@@ -221,11 +224,12 @@ async def start_training_task(task: TrainerProxyRequest):
         success = True
 
     except Exception as outer_e:
-        log_task(training_data.task_id, f"Fatal error during training pipeline: {outer_e}")
+        complete_task(training_data.task_id, task.hotkey, success=success)
+        log_task(training_data.task_id, task.hotkey, f"Fatal error during training pipeline: {outer_e}")
         logger.exception(f"Fatal error in training job {training_data.task_id}")
 
     finally:
-        complete_task(training_data.task_id, success=success)
+        complete_task(training_data.task_id, task.hotkey, success=success)
 
 
 
