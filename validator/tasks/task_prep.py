@@ -247,7 +247,29 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
     if total_rows > 0 and (fully_empty_rows / total_rows) > 0.8:
         raise ValueError(f"More than 80% of rows are fully empty ({fully_empty_rows}/{total_rows} rows)")
 
+    result = _validate_dpo_data(result, task)
     return result
+
+
+def _validate_dpo_data(result: list[dict], task: AnyTextTypeRawTask) -> list[dict]:
+    if not isinstance(task, DpoRawTask):
+        return result
+    
+    original_count = len(result)
+    filtered_result = [
+        row for row in result 
+        if (row.get(cst.STANDARD_DPO_PROMPT_COLUMN, "").strip() and 
+            row.get(cst.STANDARD_DPO_CHOSEN_COLUMN, "").strip() and 
+            row.get(cst.STANDARD_DPO_REJECTED_COLUMN, "").strip())
+    ]
+    
+    if len(filtered_result) < original_count:
+        logger.warning(f"Filtered out {original_count - len(filtered_result)} DPO rows with empty prompt/chosen/rejected fields")
+    
+    if len(filtered_result) == 0:
+        raise ValueError("All DPO data points have empty prompt, chosen, or rejected fields")
+    
+    return filtered_result
 
 
 def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = False):
