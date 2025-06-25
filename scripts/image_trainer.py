@@ -70,7 +70,7 @@ def create_config(task_id, model, model_type, expected_repo_name=None):
 
     # Update config
     config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
-    output_dir = f"{train_cst.CONTAINER_SAVE_PATH}/{expected_repo_name}"
+    output_dir = f"{train_cst.CONTAINER_SAVE_PATH}{task_id}"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir
@@ -80,38 +80,6 @@ def create_config(task_id, model, model_type, expected_repo_name=None):
     save_config_toml(config, config_path)
     print(f"Created config at {config_path}", flush=True)
     return config_path
-
-
-def make_repo_public(repo_id):
-    """Make a Hugging Face repository public"""
-    from huggingface_hub import HfApi
-    
-    token = os.environ.get("HUGGINGFACE_TOKEN")
-    if not token:
-        print("No Hugging Face token in environment, can't make repository public")
-        return False
-    
-    try:
-        api = HfApi(token=token)
-        
-        try:
-            api.repo_info(repo_id=repo_id)
-            repo_exists = True
-        except Exception:
-            repo_exists = False
-        
-        if not repo_exists:
-            print(f"Repository {repo_id} does not exist yet, creating it...")
-            api.create_repo(repo_id=repo_id, private=False, exist_ok=True)
-            return True
-        else:
-            api.update_repo_visibility(repo_id=repo_id, private=False)
-            print(f"Successfully made repository {repo_id} public!")
-            return True
-            
-    except Exception as e:
-        print(f"Error making repository public: {e}")
-        return False
 
 
 def run_training(model_type, config_path):

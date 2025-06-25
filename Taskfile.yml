@@ -26,7 +26,7 @@ tasks:
 
   trainer:
     cmds:
-      - ENV=DEV uvicorn trainer.asgi:app --reload --host 0.0.0.0 --port 8001 --env-file .vali.env --log-level debug
+      - ENV=DEV uvicorn trainer.asgi:app --reload --host 0.0.0.0 --port 8001 --env-file .1.env --log-level debug
 
   dbdown:
     cmds:

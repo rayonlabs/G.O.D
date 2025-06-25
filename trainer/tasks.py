@@ -19,7 +19,7 @@ def start_task(task: TrainerProxyRequest) -> str:
     )
     task_history.append(log_entry)
     save_task_history()
-    return log_entry.task_id
+    return log_entry.training_data.task_id
 
 def complete_task(task_id: str, success: bool = True):
     task = get_task(task_id)
@@ -31,7 +31,7 @@ def complete_task(task_id: str, success: bool = True):
 
 def get_task(task_id: str) -> TrainerTaskLog | None:
     for task in task_history:
-        if task.task_id == task_id:
+        if task.training_data.task_id == task_id:
             return task
     return None
 
