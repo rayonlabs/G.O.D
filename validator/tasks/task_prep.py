@@ -30,8 +30,8 @@ from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
-from validator.evaluation.utils import get_default_dataset_config
 from validator.db.sql.tasks import update_task
+from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
 from validator.utils.reward_functions import validate_reward_function
@@ -417,9 +417,7 @@ async def _validate_and_filter_grpo_reward_functions(task: GrpoRawTask, json_dat
         task.reward_functions = valid_reward_functions
         
         # Update database with filtered reward functions
-        reward_functions_data = [rf.model_dump() for rf in valid_reward_functions]
-        updates = {"reward_functions": reward_functions_data}
-        await update_task(task.task_id, updates, psql_db)
+        await update_task(task, psql_db)
         
         return True
     
