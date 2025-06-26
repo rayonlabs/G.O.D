@@ -152,7 +152,9 @@ async def upload_repo_to_hf(
 
 async def start_training_task(task: TrainerProxyRequest):
     training_data = task.training_data
-    success = False 
+    success = False
+    container = None
+    timeout_seconds = 10
 
     try:
         await create_volume_if_doesnt_exist()
@@ -178,57 +180,50 @@ async def start_training_task(task: TrainerProxyRequest):
             timeout=60
         )
 
-        timeout_seconds = training_data.hours_to_complete * 3600
+        log_task(training_data.task_id, task.hotkey, f"Container started: {container.name}")
 
-        try:
-            result = await asyncio.wait_for(
-                asyncio.to_thread(container.wait),
-                timeout=timeout_seconds
-            )
+        wait_task = asyncio.to_thread(container.wait)
+        done, pending = await asyncio.wait({wait_task}, timeout=timeout_seconds)
+
+        if wait_task in done:
+            result = await wait_task
             status_code = result.get("StatusCode", -1)
-            log_task(training_data.task_id, task.hotkey, f"Container exited with status code {status_code}")
-
-            if status_code != 0:
+            if status_code == 0:
+                log_task(training_data.task_id, task.hotkey, "Training completed successfully.")
+                success = True
+            else:
                 log_task(training_data.task_id, task.hotkey, f"Training failed with status code {status_code}")
-                return
-
-            log_task(training_data.task_id, task.hotkey, "Training completed successfully.")
-
-        except asyncio.TimeoutError:
-            complete_task(training_data.task_id, task.hotkey, success=success)
+        else:
             log_task(training_data.task_id, task.hotkey, f"Timeout reached ({timeout_seconds}s). Killing container...")
-            container.kill()
-            container.remove(force=True)
-            log_task(training_data.task_id, task.hotkey, f"Container {container.name} killed due to timeout. Proceeding to upload.")
+            success = True  
 
-        except Exception as e:
-            complete_task(training_data.task_id, task.hotkey, success=success)
-            log_task(training_data.task_id, task.hotkey, f"Unexpected error during training: {e}")
-            logger.exception(f"Error in training job {training_data.task_id}")
+    except Exception as e:
+        log_task(training_data.task_id, task.hotkey, f"Fatal error during training: {e}")
+        logger.exception(f"Training job failed: {training_data.task_id}")
+
+    finally:
+        if container:
             try:
                 container.kill()
                 container.remove(force=True)
-            except Exception as cleanup_error:
-                complete_task(training_data.task_id, task.hotkey, success=success)
-                log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_error}")
-            return
+                log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
+            except Exception as cleanup_err:
+                log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
 
-        await upload_repo_to_hf(
-            task_id=training_data.task_id,
-            expected_repo_name=training_data.expected_repo_name,
-            huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
-            huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
-            path_in_repo=cst.IMAGE_TASKS_HF_SUBFOLDER_PATH
-        )
+        if success:
+            try:
+                await upload_repo_to_hf(
+                    task_id=training_data.task_id,
+                    expected_repo_name=training_data.expected_repo_name,
+                    huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
+                    huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
+                    path_in_repo=cst.IMAGE_TASKS_HF_SUBFOLDER_PATH
+                )
+                log_task(training_data.task_id, task.hotkey, "Repo uploaded successfully.")
+            except Exception as upload_err:
+                log_task(training_data.task_id, task.hotkey, f"Upload to HuggingFace failed: {upload_err}")
+                success = False
 
-        success = True
-
-    except Exception as outer_e:
-        complete_task(training_data.task_id, task.hotkey, success=success)
-        log_task(training_data.task_id, task.hotkey, f"Fatal error during training pipeline: {outer_e}")
-        logger.exception(f"Fatal error in training job {training_data.task_id}")
-
-    finally:
         complete_task(training_data.task_id, task.hotkey, success=success)
 
 
