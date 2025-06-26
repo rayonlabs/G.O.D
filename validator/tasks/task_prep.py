@@ -413,7 +413,9 @@ def pick_columns_to_sample(task: AnyTextTypeRawTask, dataset: Dataset = None) ->
         if task.field_system:
             columns_to_sample.append(cst.STANDARD_SYSTEM_COLUMN)
     elif isinstance(task, GrpoRawTask):
-        columns_to_sample = [cst.STANDARD_GRPO_PROMPT_COLUMN] + extract_grpo_extra_columns(task)
+        columns_to_sample = [cst.STANDARD_GRPO_PROMPT_COLUMN]
+        if task.extra_column:
+            columns_to_sample.append(cst.STANDARD_GRPO_EXTRA_COLUMN)
     elif isinstance(task, ChatRawTask):
         columns_to_sample = [task.chat_column if task.chat_column else cst.STANDARD_CHAT_MESSAGES_COLUMN]
     else:
@@ -614,6 +616,9 @@ def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Datase
         column_mapping[task.field_prompt] = cst.STANDARD_GRPO_PROMPT_COLUMN
     else:
         raise ValueError(f"Prompt column {task.field_prompt} not found in dataset")
+
+    if task.extra_column and task.extra_column in dataset.column_names:
+        column_mapping[task.extra_column] = cst.STANDARD_GRPO_EXTRA_COLUMN
 
     for old_name, new_name in column_mapping.items():
         if old_name != new_name:

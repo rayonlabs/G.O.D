@@ -408,6 +408,7 @@ def _get_dataset_type(task: AnyTypeRawTask) -> TextDatasetType | None:
         return GrpoDatasetType(
             field_prompt=task.field_prompt,
             reward_functions=task.reward_functions,
+            extra_column=task.extra_column,
         )
     elif task.task_type == TaskType.CHATTASK:
         return ChatTemplateDatasetType(

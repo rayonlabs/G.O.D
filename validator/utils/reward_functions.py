@@ -1,3 +1,4 @@
+import inspect
 import numbers
 from typing import Callable
 
@@ -5,6 +6,14 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def supports_extra_data(func: Callable) -> bool:
+    try:
+        sig = inspect.signature(func)
+        return 'extra_data' in sig.parameters
+    except Exception:
+        return False
 
 
 def validate_reward_function(func_def: str) -> tuple[bool, str, Callable | None]:
