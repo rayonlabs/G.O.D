@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fiber.chain.models import Node
 
 import validator.db.constants as cst
@@ -7,6 +9,8 @@ from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentTask
+from core.models.utility_models import GPUInfo
+from core.models.utility_models import TrainerInfo
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
 
@@ -277,3 +281,84 @@ async def get_miners_for_tournament(task_id: str, psql_db: PSQLDB) -> list[Node]
         """
         result = await connection.fetch(query, task_id)
         return [Node(**dict(row)) for row in result]
+
+
+async def add_trainer_gpus(trainer_ip: str, gpu_infos: list[GPUInfo], psql_db: PSQLDB):
+    """Add or update GPU information for a trainer"""
+    async with await psql_db.connection() as connection:
+        async with connection.transaction():
+            # First, remove existing entries for this trainer
+            delete_query = f"""
+                DELETE FROM {cst.TRAINERS_GPUS_TABLE}
+                WHERE {cst.TRAINER_IP} = $1
+            """
+            await connection.execute(delete_query, trainer_ip)
+
+            # Then insert new GPU information
+            insert_query = f"""
+                INSERT INTO {cst.TRAINERS_GPUS_TABLE}
+                ({cst.TRAINER_IP}, {cst.GPU_ID}, {cst.GPU_TYPE}, {cst.VRAM_GB}, {cst.USED_UNTIL})
+                VALUES ($1, $2, $3, $4, $5)
+            """
+
+            for gpu_info in gpu_infos:
+                used_until = None
+                if not gpu_info.available:
+                    used_until = "CURRENT_TIMESTAMP + INTERVAL '48 hours'"
+
+                await connection.execute(
+                    insert_query,
+                    trainer_ip,
+                    gpu_info.gpu_id,
+                    gpu_info.gpu_type,
+                    gpu_info.vram_gb,
+                    used_until
+                )
+
+            logger.info(f"Added {len(gpu_infos)} GPUs for trainer {trainer_ip}")
+
+
+async def remove_trainer(trainer_ip: str, psql_db: PSQLDB):
+    """Remove a trainer and all its GPUs from the database"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            DELETE FROM {cst.TRAINERS_GPUS_TABLE}
+            WHERE {cst.TRAINER_IP} = $1
+        """
+        result = await connection.execute(query, trainer_ip)
+        logger.info(f"Removed trainer {trainer_ip} from the database")
+
+
+async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
+    """Get all trainers and their GPU information from the database"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TRAINER_IP}, {cst.GPU_ID}, {cst.GPU_TYPE}, {cst.VRAM_GB}, {cst.USED_UNTIL}
+            FROM {cst.TRAINERS_GPUS_TABLE}
+            ORDER BY {cst.TRAINER_IP}, {cst.GPU_ID}
+        """
+        results = await connection.fetch(query)
+
+        # Group by trainer IP
+        trainers = {}
+        for row in results:
+            trainer_ip = row[cst.TRAINER_IP]
+            if trainer_ip not in trainers:
+                trainers[trainer_ip] = TrainerInfo(
+                    trainer_ip=trainer_ip,
+                    gpus=[]
+                )
+
+            # Determine availability based on used_until
+            used_until = row[cst.USED_UNTIL]
+            available = used_until is None or used_until < datetime.utcnow()
+
+            trainers[trainer_ip].gpus.append(GPUInfo(
+                gpu_id=row[cst.GPU_ID],
+                gpu_type=row[cst.GPU_TYPE],
+                vram_gb=row[cst.VRAM_GB],
+                available=available,
+                used_until=used_until
+            ))
+
+        return list(trainers.values())

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
@@ -166,3 +167,22 @@ class TaskType(str, Enum):
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")
     text_url: str = Field(..., description="Presigned URL for the text file")
+
+
+class GPUType(str, Enum):
+    H100 = "H100"
+    A100 = "A100"
+    A6000 = "A6000"
+
+
+class GPUInfo(BaseModel):
+    gpu_id: int = Field(..., description="GPU ID")
+    gpu_type: GPUType = Field(..., description="GPU Type")
+    vram_gb: int = Field(..., description="GPU VRAM in GB")
+    available: bool = Field(..., description="GPU Availability")
+    used_until: datetime | None = Field(..., description="GPU Used Until")
+
+
+class TrainerInfo(BaseModel):
+    trainer_ip: str = Field(..., description="Trainer IP address")
+    gpus: list[GPUInfo] = Field(..., description="List of GPUs available on this trainer")
