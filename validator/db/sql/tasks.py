@@ -178,8 +178,8 @@ async def _insert_dpo_task(connection: Connection, task: DpoRawTask, task_record
 async def _insert_grpo_task(connection: Connection, task: GrpoRawTask, task_record: dict) -> None:
     query_grpo = f"""
         INSERT INTO {cst.GRPO_TASKS_TABLE}
-        ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FILE_FORMAT}, {cst.SYNTHETIC_DATA})
-        VALUES ($1, $2, $3, $4)
+        ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FILE_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FIELD_EXTRA_COLUMN})
+        VALUES ($1, $2, $3, $4, $5)
     """
     await connection.execute(
         query_grpo,
@@ -187,6 +187,7 @@ async def _insert_grpo_task(connection: Connection, task: GrpoRawTask, task_reco
         task.field_prompt,
         task.file_format,
         task.synthetic_data,
+        task.extra_column,
     )
 
     for reward_function in task.reward_functions:
@@ -284,7 +285,7 @@ async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not
                 """
             elif task_type == TaskType.GRPOTASK.value:
                 specific_query = f"""
-                    SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format
+                    SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format, gt.extra_column
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
@@ -700,7 +701,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
             """
         elif task_type == TaskType.GRPOTASK.value:
             specific_query = f"""
-                SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format
+                SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format, gt.extra_column
                 FROM {cst.TASKS_TABLE} t
                 LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
@@ -861,7 +862,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                 {victorious_repo_cte}
                 SELECT
                     tasks.*,
-                    gt.field_prompt, gt.synthetic_data, gt.file_format,
+                    gt.field_prompt, gt.synthetic_data, gt.file_format, gt.extra_column,
                     COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
                 LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON tasks.{cst.TASK_ID} = gt.{cst.TASK_ID}
