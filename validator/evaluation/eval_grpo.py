@@ -109,10 +109,17 @@ def evaluate_grpo_model(
             supports_extra = supports_extra_data(original_func)
             def wrapper(completions, **kwargs):
                 if supports_extra and has_extra_column:
-                    extra_data = {cst.STANDARD_GRPO_EXTRA_COLUMN: extra_column_data}
-                    raw_results = original_func(completions, extra_data=extra_data)
+                    batch_size = len(completions)
+                    available_extra_data = extra_column_data[:batch_size] if extra_column_data else []
+                    
+                    if available_extra_data:
+                        extra_data = {cst.STANDARD_GRPO_EXTRA_COLUMN: available_extra_data}
+                        raw_results = original_func(completions, extra_data=extra_data)
+                    else:
+                        raw_results = original_func(completions)
                 else:
                     raw_results = original_func(completions)
+                    
                 raw_rewards[func_name].extend(raw_results)
                 weighted_results = [r * weight for r in raw_results]
                 captured_rewards[func_name].extend(weighted_results)
