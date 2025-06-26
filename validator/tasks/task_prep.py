@@ -31,8 +31,10 @@ from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.evaluation.utils import get_default_dataset_config
+from validator.db.sql.tasks import update_task
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
+from validator.utils.reward_functions import validate_reward_function
 from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import upload_file_to_minio
 
@@ -328,6 +330,10 @@ async def _process_and_upload_datasets(
     try:
         if should_reupload_train:
             train_data_json = change_to_json_format(train_dataset, columns_to_sample, task)
+            
+            if psql_db:
+                await _validate_and_filter_grpo_reward_functions(task, train_data_json, psql_db)
+            
             train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
             files_to_delete.append(train_json_path)
             await _check_file_size(train_json_size, "train_data")
@@ -379,6 +385,45 @@ async def _process_and_upload_datasets(
         synth_json_url.strip('"') if synth_json_url else None,
         train_json_url.strip('"'),
     )
+
+
+async def _validate_and_filter_grpo_reward_functions(task: GrpoRawTask, json_data: list[dict], psql_db) -> bool:
+    """
+    Validate GRPO reward functions with real dataset sample and update database if needed.
+    Returns True if any functions were filtered out.
+    """
+    if not isinstance(task, GrpoRawTask) or not task.reward_functions:
+        return False
+    
+    sample_size = min(5, len(json_data))
+    json_sample = json_data[:sample_size]
+    
+    valid_reward_functions = []
+    for rf in task.reward_functions:
+        is_valid, error_msg, func = validate_reward_function(rf.reward_func, json_sample)
+        if is_valid:
+            valid_reward_functions.append(rf)
+        else:
+            logger.warning(f"Removing invalid reward function: {error_msg}")
+    
+    if not valid_reward_functions:
+        raise ValueError("No valid reward functions remain after dataset validation")
+    
+    # Update database if any functions were filtered out
+    if len(valid_reward_functions) != len(task.reward_functions):
+        logger.info(f"Filtering reward functions: {len(task.reward_functions)} -> {len(valid_reward_functions)}")
+        
+        # Update task object
+        task.reward_functions = valid_reward_functions
+        
+        # Update database with filtered reward functions
+        reward_functions_data = [rf.model_dump() for rf in valid_reward_functions]
+        updates = {"reward_functions": reward_functions_data}
+        await update_task(task.task_id, updates, psql_db)
+        
+        return True
+    
+    return False
 
 
 def extract_grpo_extra_columns(task: GrpoRawTask) -> list[str]:
@@ -627,7 +672,7 @@ def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Datase
     return dataset
 
 
-async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple[str, str, str]:
+async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
 
