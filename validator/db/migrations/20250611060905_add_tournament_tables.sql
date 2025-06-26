@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS tournament_pairs (
 CREATE TABLE IF NOT EXISTS tournament_tasks (
     tournament_id TEXT REFERENCES tournaments(tournament_id),
     round_id TEXT REFERENCES tournament_rounds(round_id),
-    task_id TEXT NOT NULL, -- references existing tasks.task_id (UUID as TEXT)
+    task_id UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
     group_id TEXT REFERENCES tournament_groups(group_id), -- NULL for knockout
     pair_id TEXT REFERENCES tournament_pairs(pair_id),     -- NULL for group
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,

@@ -25,17 +25,16 @@ class JobStatus(str, Enum):
 class TaskStatus(str, Enum):
     PENDING = "pending"
     PREPARING_DATA = "preparing_data"
-    READY = "ready"
-    SUCCESS = "success"
-    LOOKING_FOR_NODES = "looking_for_nodes"
-    DELAYED = "delayed"
-    EVALUATING = "evaluating"
-    PREEVALUATION = "preevaluation"
-    TRAINING = "training"
-    FAILURE = "failure"
-    FAILURE_FINDING_NODES = "failure_finding_nodes"
     PREP_TASK_FAILURE = "prep_task_failure"
-    NODE_TRAINING_FAILURE = "node_training_failure"
+    LOOKING_FOR_NODES = "looking_for_nodes"
+    FAILURE_FINDING_NODES = "failure_finding_nodes"
+    DELAYED = "delayed"
+    READY = "ready"
+    TRAINING = "training"
+    PREEVALUATION = "preevaluation"
+    EVALUATING = "evaluating"
+    SUCCESS = "success"
+    FAILURE = "failure"
 
 
 class WinningSubmission(BaseModel):
@@ -167,6 +166,3 @@ class TaskType(str, Enum):
 class ImageTextPair(BaseModel):
     image_url: str = Field(..., description="Presigned URL for the image file")
     text_url: str = Field(..., description="Presigned URL for the text file")
-
-
-
