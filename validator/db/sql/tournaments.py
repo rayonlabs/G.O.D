@@ -325,7 +325,7 @@ async def remove_trainer(trainer_ip: str, psql_db: PSQLDB):
             DELETE FROM {cst.TRAINERS_GPUS_TABLE}
             WHERE {cst.TRAINER_IP} = $1
         """
-        result = await connection.execute(query, trainer_ip)
+        await connection.execute(query, trainer_ip)
         logger.info(f"Removed trainer {trainer_ip} from the database")
 
 
@@ -362,3 +362,27 @@ async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
             ))
 
         return list(trainers.values())
+
+
+async def add_tournament_task_hotkey_trainings(task_hotkey_triples: list[tuple[str, str, datetime]], psql_db: PSQLDB):
+    """Add task-hotkey pairs to tournament_task_hotkey_trainings table using batch insert"""
+    async with await psql_db.connection() as connection:
+        async with connection.transaction():
+            if not task_hotkey_triples:
+                logger.info("No task-hotkey triples to insert")
+                return
+
+            query = f"""
+                INSERT INTO {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+                ({cst.TASK_ID}, {cst.HOTKEY}, {cst.CREATED_AT})
+                SELECT * FROM unnest($1::text[], $2::text[], $3::timestamptz[])
+                ON CONFLICT ({cst.TASK_ID}, {cst.HOTKEY}) DO NOTHING
+            """
+
+            task_ids = [triple[0] for triple in task_hotkey_triples]
+            hotkeys = [triple[1] for triple in task_hotkey_triples]
+            timestamps = [triple[2] for triple in task_hotkey_triples]
+
+            await connection.execute(query, task_ids, hotkeys, timestamps)
+
+            logger.info(f"Added {len(task_hotkey_triples)} task-hotkey training triples in batch")
