@@ -64,7 +64,7 @@ def create_config(task_id, model, model_type, expected_repo_name):
         with open(flux_path, "r") as file:
             config = toml.load(file)
         flux_unet_path = download_flux_unet(model)
-        config["pretrained_model_name_or_path"] = f"{cst.CONTAINER_FLUX_PATH}/flux_unet_{model.replace('/', '_')}.safetensors"
+        config["pretrained_model_name_or_path"] = flux_unet_path
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -142,6 +142,7 @@ async def main():
 
     # Download dataset
     dataset_zip = await download_dataset_if_needed(args.dataset_zip, args.task_id)
+
     
     # Create config file
     config_path = create_config(

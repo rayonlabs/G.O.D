@@ -7,7 +7,10 @@ def main():
     wandb_token = os.getenv("WANDB_TOKEN")
     task_id = os.getenv("TASK_ID")
     repo_name = os.getenv("EXPECTED_REPO_NAME")
-    repo_subfolder = os.getenv("HF_REPO_SUBFOLDER", "").strip("/")  # Optional, strip trailing slash
+    local_folder = os.getenv("LOCAL_FOLDER")
+    repo_subfolder = os.getenv("HF_REPO_SUBFOLDER", None)
+    if repo_subfolder:
+        repo_subfolder = repo_subfolder.strip("/")
 
     if not all([hf_token, hf_user, task_id, repo_name]):
         raise RuntimeError("Missing one or more required environment variables")
@@ -15,7 +18,7 @@ def main():
     login(token=hf_token)
 
     repo_id = f"{hf_user}/{repo_name}"
-    local_folder = f"/app/checkpoints/{repo_name}"
+    local_folder = f"{local_folder}{repo_name}"
 
     if not os.path.isdir(local_folder):
         raise FileNotFoundError(f"Local folder {local_folder} does not exist")
