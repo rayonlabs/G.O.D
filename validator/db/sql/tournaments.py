@@ -10,8 +10,11 @@ from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentTask
 from core.models.utility_models import GPUInfo
+from core.models.utility_models import TournamentTaskTraining
 from core.models.utility_models import TrainerInfo
+from core.models.utility_models import TrainingStatus
 from validator.db.database import PSQLDB
+from validator.db.sql import tasks as task_sql
 from validator.utils.logging import get_logger
 
 
@@ -386,3 +389,144 @@ async def add_tournament_task_hotkey_trainings(task_hotkey_triples: list[tuple[s
             await connection.execute(query, task_ids, hotkeys, timestamps)
 
             logger.info(f"Added {len(task_hotkey_triples)} task-hotkey training triples in batch")
+
+
+async def get_tournament_training_tasks(
+    psql_db: PSQLDB,
+    status: TrainingStatus
+    ) -> list[TournamentTaskTraining]:
+    """Fetch pending tournament tasks in reverse chronological order (newest first) so we can pop() from the end"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TASK_ID}, {cst.HOTKEY}, {cst.TRAINING_STATUS}, {cst.N_TRAINING_ATTEMPTS},
+                   {cst.CREATED_AT}, {cst.UPDATED_AT}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            WHERE {cst.TRAINING_STATUS} = $1
+            ORDER BY {cst.CREATED_AT} DESC
+        """
+        results = await connection.fetch(query, status)
+
+        if not results:
+            return []
+
+        unique_task_ids = list({row[cst.TASK_ID] for row in results})
+        tasks = await task_sql.get_tasks_by_ids(unique_task_ids, psql_db, connection)
+
+        # Create a mapping for quick lookup
+        tasks_dict = {task.task_id: task for task in tasks}
+
+        tournament_tasks = []
+        for row in results:
+            task = tasks_dict.get(row[cst.TASK_ID])
+            if task:
+                tournament_tasks.append(TournamentTaskTraining(
+                    task=task,
+                    hotkey=row[cst.HOTKEY],
+                    training_status=row[cst.TRAINING_STATUS],
+                    n_training_attempts=row[cst.N_TRAINING_ATTEMPTS],
+                    created_at=row[cst.CREATED_AT],
+                    updated_at=row[cst.UPDATED_AT]
+                ))
+            else:
+                logger.warning(f"Task {row[cst.TASK_ID]} not found in batch load")
+
+        return tournament_tasks
+
+
+async def update_tournament_task_training_status(task_id: str, hotkey: str, status: TrainingStatus, psql_db: PSQLDB):
+    """Update the training status of a specific task-hotkey pair"""
+    async with await psql_db.connection() as connection:
+        increment_clause = (
+            f", {cst.N_TRAINING_ATTEMPTS} = {cst.N_TRAINING_ATTEMPTS} + 1"
+            if status == TrainingStatus.TRAINING
+            else ""
+        )
+
+        query = f"""
+            UPDATE {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            SET {cst.TRAINING_STATUS} = $3{increment_clause}, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
+        """
+
+        await connection.execute(query, task_id, hotkey, status)
+        logger.info(f"Marked task-hotkey pair ({task_id}, {hotkey}) as {status}")
+
+
+async def get_training_attempts(task_id: str, hotkey: str, psql_db: PSQLDB) -> int:
+    """Get the number of training attempts for a task-hotkey pair"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.N_TRAINING_ATTEMPTS}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
+        """
+        result = await connection.fetchrow(query, task_id, hotkey)
+        return result[cst.N_TRAINING_ATTEMPTS] if result else 0
+
+
+async def get_tournament_training_repo_and_commit(hotkey: str, psql_db: PSQLDB) -> tuple[str | None, str | None]:
+    """Get the training_repo and training_commit_hash for a hotkey from tournament_participants table"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
+            FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+            WHERE {cst.HOTKEY} = $1
+            ORDER BY {cst.CREATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, hotkey)
+        if result:
+            return result[cst.TRAINING_REPO], result[cst.TRAINING_COMMIT_HASH]
+        return None, None
+
+
+async def get_tournament_training_stats(psql_db: PSQLDB) -> dict:
+    """Get statistics about tournament training status"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT
+                {cst.TRAINING_STATUS},
+                COUNT(*) as count,
+                AVG({cst.N_TRAINING_ATTEMPTS}) as avg_attempts,
+                MAX({cst.N_TRAINING_ATTEMPTS}) as max_attempts
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            GROUP BY {cst.TRAINING_STATUS}
+        """
+        results = await connection.fetch(query)
+
+        stats = {
+            'total_pairs': 0,
+            'pending': 0,
+            'success': 0,
+            'failure': 0,
+            'avg_attempts': 0,
+            'max_attempts': 0
+        }
+
+        for row in results:
+            status = row[cst.TRAINING_STATUS]
+            count = row['count']
+            avg_attempts = row['avg_attempts'] or 0
+            max_attempts = row['max_attempts'] or 0
+
+            stats['total_pairs'] += count
+            stats[status] = count
+            stats['avg_attempts'] = max(stats['avg_attempts'], avg_attempts)
+            stats['max_attempts'] = max(stats['max_attempts'], max_attempts)
+
+        return stats
+
+
+async def update_gpu_availability(trainer_ip: str, gpu_ids: list[int], hours_to_complete: int, psql_db: PSQLDB):
+    """Update GPU availability by setting used_until based on hours_to_complete"""
+    async with await psql_db.connection() as connection:
+        used_until = f"CURRENT_TIMESTAMP + INTERVAL '{hours_to_complete} hours'"
+
+        query = f"""
+            UPDATE {cst.TRAINERS_GPUS_TABLE}
+            SET {cst.USED_UNTIL} = {used_until}, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.TRAINER_IP} = $1 AND {cst.GPU_ID} = ANY($2)
+        """
+
+        await connection.execute(query, trainer_ip, gpu_ids)
+        logger.info(f"Updated GPU availability for trainer {trainer_ip}, GPUs {gpu_ids} to be used for {hours_to_complete} hours")

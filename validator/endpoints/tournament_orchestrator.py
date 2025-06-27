@@ -1,4 +1,3 @@
-
 import httpx
 from fastapi import APIRouter
 from fastapi import Depends
@@ -21,6 +20,7 @@ logger = get_logger(__name__)
 ADD_TRAINER_ENDPOINT = "/v1/tournament_orchestrator/add_trainer"
 REMOVE_TRAINER_ENDPOINT = "/v1/tournament_orchestrator/remove_trainer/{trainer_ip}"
 GET_TRAINERS_ENDPOINT = "/v1/tournament_orchestrator/trainers"
+GET_TRAINING_STATS_ENDPOINT = "/v1/tournament_orchestrator/training_stats"
 
 
 async def add_trainer(
@@ -82,9 +82,26 @@ async def get_trainers(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+async def get_training_stats(
+    config: Config = Depends(get_config),
+) -> dict:
+    """
+    Get statistics about tournament training status for monitoring.
+    """
+    try:
+        stats = await tournament_sql.get_tournament_training_stats(config.psql_db)
+        logger.info(f"Retrieved tournament training stats: {stats}")
+        return stats
+
+    except Exception as e:
+        logger.error(f"Error retrieving training stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Tournament Orchestrator"], dependencies=[Depends(get_api_key)])
     router.add_api_route(ADD_TRAINER_ENDPOINT, add_trainer, methods=["POST"])
     router.add_api_route(REMOVE_TRAINER_ENDPOINT, remove_trainer, methods=["DELETE"])
     router.add_api_route(GET_TRAINERS_ENDPOINT, get_trainers, methods=["GET"])
+    router.add_api_route(GET_TRAINING_STATS_ENDPOINT, get_training_stats, methods=["GET"])
     return router

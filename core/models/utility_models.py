@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
+from validator.core.models import AnyTypeRawTask
+
 
 class FileFormat(str, Enum):
     CSV = "csv"  # needs to be local file
@@ -173,6 +175,21 @@ class GPUType(str, Enum):
     H100 = "H100"
     A100 = "A100"
     A6000 = "A6000"
+
+
+class TrainingStatus(str, Enum):
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+class TournamentTaskTraining(BaseModel):
+    task: AnyTypeRawTask
+    hotkey: str
+    training_status: TrainingStatus
+    n_training_attempts: int
+    created_at: datetime
+    updated_at: datetime
 
 
 class GPUInfo(BaseModel):
