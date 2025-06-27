@@ -126,7 +126,7 @@ class TournamentTask(BaseModel):
     task_id: str
     group_id: str | None = None
     pair_id: str | None = None
-    gpu_requirement: GpuRequirement | None = None
+    gpu_requirement: GpuRequirement
 
 
 class Group(BaseModel):

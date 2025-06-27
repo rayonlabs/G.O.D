@@ -13,6 +13,7 @@ from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
+from core.models.tournament_models import get_tournament_gpu_requirement
 from validator.core.config import Config
 from validator.core.constants import IMAGE_TASKS_PER_GROUP
 from validator.core.constants import TEXT_TASKS_PER_GROUP
@@ -26,6 +27,7 @@ from validator.db.sql.tournaments import create_tournament_round
 from validator.db.sql.tournaments import get_active_tournaments
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import update_tournament_status
+from validator.db.sql.tasks import get_task
 from validator.tournament.organiser import organise_tournament_round
 from validator.tournament.task_creator import create_image_tournament_round
 from validator.tournament.task_creator import create_text_tournament_round
@@ -121,24 +123,34 @@ async def _create_tournament_tasks(
             for j in range(group_task_count):
                 task_index = i * group_task_count + j
                 if task_index < len(tournament_round.tasks):
+                    task_id = tournament_round.tasks[task_index]
+                    task_data = await get_task(task_id, config.psql_db)
+                    gpu_requirement = get_tournament_gpu_requirement(task_data.task_type, task_data.model_params_count)
+                    
                     task = TournamentTask(
                         tournament_id=tournament_id,
                         round_id=round_id,
-                        task_id=tournament_round.tasks[task_index],
+                        task_id=task_id,
                         group_id=group_id,
-                        pair_id=None
+                        pair_id=None,
+                        gpu_requirement=gpu_requirement
                     )
                     tasks.append(task)
     else:
         for i, pair in enumerate(round_structure.pairs):
             pair_id = f"{round_id}_pair_{i+1:03d}"
             if i < len(tournament_round.tasks):
+                task_id = tournament_round.tasks[i]
+                task_data = await get_task(task_id, config.psql_db)
+                gpu_requirement = get_tournament_gpu_requirement(task_data.task_type, task_data.model_params_count)
+                
                 task = TournamentTask(
                     tournament_id=tournament_id,
                     round_id=round_id,
-                    task_id=tournament_round.tasks[i],
+                    task_id=task_id,
                     group_id=None,
-                    pair_id=pair_id
+                    pair_id=pair_id,
+                    gpu_requirement=gpu_requirement
                 )
                 tasks.append(task)
 

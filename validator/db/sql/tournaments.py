@@ -117,13 +117,13 @@ async def add_tournament_tasks(tasks: list[TournamentTask], psql_db: PSQLDB):
         async with connection.transaction():
             query = f"""
                 INSERT INTO {cst.TOURNAMENT_TASKS_TABLE}
-                ({cst.TOURNAMENT_ID}, {cst.ROUND_ID}, {cst.TASK_ID}, {cst.GROUP_ID}, {cst.PAIR_ID}, {cst.CREATED_AT})
-                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                ({cst.TOURNAMENT_ID}, {cst.ROUND_ID}, {cst.TASK_ID}, {cst.GROUP_ID}, {cst.PAIR_ID}, {cst.GPU_REQUIREMENT}, {cst.CREATED_AT})
+                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
             """
             for task in tasks:
                 await connection.execute(
                     query, task.tournament_id, task.round_id, task.task_id,
-                    task.group_id, task.pair_id
+                    task.group_id, task.pair_id, task.gpu_requirement.value
                 )
             logger.info(f"Added {len(tasks)} tasks to tournament")
 

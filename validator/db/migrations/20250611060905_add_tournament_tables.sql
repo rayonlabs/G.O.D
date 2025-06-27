@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS tournament_tasks (
     task_id UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
     group_id TEXT REFERENCES tournament_groups(group_id), -- NULL for knockout
     pair_id TEXT REFERENCES tournament_pairs(pair_id),     -- NULL for group
+    gpu_requirement TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (tournament_id, task_id),
     CHECK ((group_id IS NOT NULL AND pair_id IS NULL) OR (group_id IS NULL AND pair_id IS NOT NULL))

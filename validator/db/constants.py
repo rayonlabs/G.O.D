@@ -152,6 +152,7 @@ WINNER_HOTKEY = "winner_hotkey"
 ELIMINATED_IN_ROUND_ID = "eliminated_in_round_id"
 FINAL_POSITION = "final_position"
 TASK_ORDER = "task_order"
+GPU_REQUIREMENT = "gpu_requirement"
 
 # Common Column Names (shared between tables)
 QUALITY_SCORE = "quality_score"  # Used in both submissions and task_nodes
