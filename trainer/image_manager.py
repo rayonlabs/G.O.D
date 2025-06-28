@@ -3,9 +3,8 @@ import docker
 import uuid
 import json
 import asyncio
-from docker.models.images import Image
 from docker.models.containers import Container
-from docker.errors import BuildError
+from docker.errors import BuildError, APIError
 
 from trainer import constants as cst
 from validator.utils.logging import get_all_context_tags
@@ -23,32 +22,36 @@ from core.models.utility_models import TaskType
 logger = get_logger(__name__)
 
 def build_docker_image(
-    dockerfile_path: str = cst.DEFAULT_IMAGE_DOCKERFILE_PATH,
+    dockerfile_path: str,
     context_path: str = ".",
     is_image_task: bool = False,
     tag: str = None,
     no_cache: bool = True
 ) -> str:
+
     client: docker.DockerClient = docker.from_env()
 
     if tag is None:
         tag = f"standalone-image-trainer:{uuid.uuid4()}" if is_image_task else f"standalone-text-trainer:{uuid.uuid4()}"
 
     logger.info(f"Building Docker image '{tag}', Dockerfile path: {dockerfile_path}, Context Path: {context_path}...")
+
     try:
-        image, logs = client.images.build(
+        build_output = client.api.build(
             path=context_path,
             dockerfile=dockerfile_path,
             tag=tag,
-            nocache=no_cache
+            nocache=no_cache,
+            decode=True,
         )
-        stream_image_build_logs(logs, get_all_context_tags())
+        stream_image_build_logs(build_output, get_all_context_tags())
+
         logger.info("Docker image built successfully.")
         return tag
-    except BuildError as e:
-        stream_image_build_logs(logs, get_all_context_tags())
-        logger.error("Docker build failed.")
-        return e
+    except (BuildError, APIError) as e:
+        logger.error(f"Docker build failed: {str(e)}")
+        raise
+
 
 
 async def run_trainer_container_image(
