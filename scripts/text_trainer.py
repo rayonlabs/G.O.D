@@ -171,7 +171,7 @@ async def main():
     except Exception as e:
         sys.exit(f"Error creating dataset type object: {e}")
 
-    base_dataset_path = f"{train_cst.DATASET_CACHE_PATH}/{args.task_id}"
+    base_dataset_path = f"{train_cst.CACHE_PATH}/{args.task_id}/datasets"
     dataset_path = f"{base_dataset_path}/{args.task_id}_train_data.json" if args.file_format == FileFormat.S3.value else f"{base_dataset_path}/{args.dataset.replace('/', '--')}"
 
     

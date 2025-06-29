@@ -16,7 +16,7 @@ async def download_text_dataset(task_id, dataset_url, file_format):
     Returns local dataset path and updated file_format.
     """
 
-    dataset_task_dir = f"{cst.DATASET_CACHE_PATH}/{task_id}"
+    dataset_task_dir = f"{cst.CACHE_PATH}/{task_id}/datasets"
     os.makedirs(dataset_task_dir, exist_ok=True)
 
     if file_format == FileFormat.S3.value:
@@ -40,7 +40,7 @@ async def download_text_dataset(task_id, dataset_url, file_format):
     return input_data_path, file_format
 
 async def download_image_dataset(dataset_zip_url, task_id):
-    dataset_dir = f"{cst.DATASET_CACHE_PATH}/{task_id}"
+    dataset_dir = f"{cst.CACHE_PATH}/{task_id}/datasets"
     os.makedirs(dataset_dir, exist_ok=True)
     local_zip_path = f"{dataset_dir}/{task_id}.zip"
     print(f"Downloading dataset from: {dataset_zip_url}")
