@@ -39,10 +39,7 @@ logger = get_logger(__name__)
 
 
 async def get_additional_datasets_for_augmentation(
-    task_type: TaskType,
-    primary_dataset_id: str,
-    keypair: Keypair,
-    num_additional: int = 2
+    task_type: TaskType, primary_dataset_id: str, keypair: Keypair, num_additional: int = 2
 ) -> list[tuple[str, dict[str, str]]]:
     """
     Get additional datasets for augmentation based on task type.
@@ -66,7 +63,7 @@ async def get_additional_datasets_for_augmentation(
         response = await call_content_service(
             "/datasets/random",  # This will be prefixed with CONTENT_BASE_URL
             keypair,
-            params=params
+            params=params,
         )
 
         if not isinstance(response, list):
@@ -89,7 +86,7 @@ async def get_additional_datasets_for_augmentation(
                         column_mapping = {
                             "prompt": dataset.dpo_prompt_column,
                             "chosen": dataset.dpo_accepted_column,
-                            "rejected": dataset.dpo_rejected_column
+                            "rejected": dataset.dpo_rejected_column,
                         }
                         additional_datasets.append((dataset_id, column_mapping))
                     else:
@@ -107,11 +104,7 @@ async def get_additional_datasets_for_augmentation(
     return additional_datasets
 
 
-async def get_dataset_column_mapping(
-    dataset_id: str,
-    task_type: TaskType,
-    keypair: Keypair
-) -> dict[str, str]:
+async def get_dataset_column_mapping(dataset_id: str, task_type: TaskType, keypair: Keypair) -> dict[str, str]:
     """Get column mapping for a specific dataset based on task type."""
     from validator.core.constants import CONTENT_BASE_URL
     from validator.utils.call_endpoint import call_content_service_fast
@@ -128,7 +121,7 @@ async def get_dataset_column_mapping(
         mapping = {
             "prompt": response.get("field_prompt", "prompt"),
             "chosen": response.get("field_chosen", "chosen"),
-            "rejected": response.get("field_rejected", "rejected")
+            "rejected": response.get("field_rejected", "rejected"),
         }
         logger.info(f"DPO column mapping for {dataset_id}: response={response}, mapping={mapping}")
         return mapping
@@ -144,9 +137,7 @@ async def get_dataset_column_mapping(
             column_mapping["system"] = response["field_system"]
         return column_mapping
     elif task_type == TaskType.GRPOTASK:
-        return {
-            "prompt": response.get("field_prompt", "prompt")
-        }
+        return {"prompt": response.get("field_prompt", "prompt")}
     else:
         raise ValueError(f"Unsupported task type: {task_type}")
 
@@ -196,9 +187,9 @@ def standardize_instruct_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     std_sample = {}
     std_sample[STANDARD_INSTRUCT_COLUMN] = sample.get(task.field_instruction, "")
     std_sample[STANDARD_OUTPUT_COLUMN] = sample.get(task.field_output, "")
-    if hasattr(task, 'field_input') and task.field_input:
+    if hasattr(task, "field_input") and task.field_input:
         std_sample[STANDARD_INPUT_COLUMN] = sample.get(task.field_input, "")
-    if hasattr(task, 'field_system') and task.field_system:
+    if hasattr(task, "field_system") and task.field_system:
         std_sample[STANDARD_SYSTEM_COLUMN] = sample.get(task.field_system, "")
     return std_sample
 
@@ -208,9 +199,9 @@ def standardize_dpo_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     std_sample = {
         STANDARD_DPO_PROMPT_COLUMN: sample.get(task.field_prompt, ""),
         STANDARD_DPO_CHOSEN_COLUMN: sample.get(task.field_chosen, ""),
-        STANDARD_DPO_REJECTED_COLUMN: sample.get(task.field_rejected, "")
+        STANDARD_DPO_REJECTED_COLUMN: sample.get(task.field_rejected, ""),
     }
-    if hasattr(task, 'field_system') and task.field_system:
+    if hasattr(task, "field_system") and task.field_system:
         std_sample[STANDARD_SYSTEM_COLUMN] = sample.get(task.field_system, "")
     return std_sample
 
@@ -229,7 +220,7 @@ def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[d
     from validator.core.models import InstructTextRawTask
 
     logger.info(f"Standardizing {len(samples)} samples with task type: {type(task).__name__}")
-    if hasattr(task, '__dict__'):
+    if hasattr(task, "__dict__"):
         logger.info(f"Task fields: {vars(task)}")
 
     standardized = []
@@ -250,8 +241,9 @@ def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[d
                 result = standardize_grpo_sample(processed_sample, task)
             else:
                 # Handle temp task objects that don't inherit from the models
-                if hasattr(task, 'task_type'):
+                if hasattr(task, "task_type"):
                     from validator.core.models import TaskType
+
                     if task.task_type == TaskType.GRPOTASK:
                         result = standardize_grpo_sample(processed_sample, task)
                     elif task.task_type == TaskType.DPOTASK:
@@ -287,7 +279,7 @@ def get_task_columns(task: AnyTextTypeRawTask) -> list[str]:
             columns.append(task.field_system)
     elif isinstance(task, DpoRawTask):
         columns = [task.field_prompt, task.field_chosen, task.field_rejected]
-        if hasattr(task, 'field_system') and task.field_system:
+        if hasattr(task, "field_system") and task.field_system:
             columns.append(task.field_system)
     elif isinstance(task, GrpoRawTask):
         columns = [task.field_prompt]
@@ -305,39 +297,35 @@ def create_temp_task_from_mapping(column_mapping: dict[str, str], task_type):
     from validator.core.models import TaskType
 
     if task_type == TaskType.INSTRUCTTEXTTASK:
-        temp_task_dict = {'task_type': task_type}
+        temp_task_dict = {"task_type": task_type}
         if "instruction" in column_mapping:
-            temp_task_dict['field_instruction'] = column_mapping["instruction"]
+            temp_task_dict["field_instruction"] = column_mapping["instruction"]
         if "output" in column_mapping:
-            temp_task_dict['field_output'] = column_mapping["output"]
+            temp_task_dict["field_output"] = column_mapping["output"]
         if "input" in column_mapping:
-            temp_task_dict['field_input'] = column_mapping["input"]
+            temp_task_dict["field_input"] = column_mapping["input"]
         if "system" in column_mapping:
-            temp_task_dict['field_system'] = column_mapping["system"]
-        return type('obj', (object,), temp_task_dict)
+            temp_task_dict["field_system"] = column_mapping["system"]
+        return type("obj", (object,), temp_task_dict)
     elif task_type == TaskType.DPOTASK:
-        temp_task_dict = {'task_type': task_type}
+        temp_task_dict = {"task_type": task_type}
         if "prompt" in column_mapping:
-            temp_task_dict['field_prompt'] = column_mapping["prompt"]
+            temp_task_dict["field_prompt"] = column_mapping["prompt"]
         if "chosen" in column_mapping:
-            temp_task_dict['field_chosen'] = column_mapping["chosen"]
+            temp_task_dict["field_chosen"] = column_mapping["chosen"]
         if "rejected" in column_mapping:
-            temp_task_dict['field_rejected'] = column_mapping["rejected"]
+            temp_task_dict["field_rejected"] = column_mapping["rejected"]
         if "system" in column_mapping:
-            temp_task_dict['field_system'] = column_mapping["system"]
-        return type('obj', (object,), temp_task_dict)
+            temp_task_dict["field_system"] = column_mapping["system"]
+        return type("obj", (object,), temp_task_dict)
     elif task_type == TaskType.GRPOTASK:
-        temp_task_dict = {'task_type': task_type}
+        temp_task_dict = {"task_type": task_type}
         if "prompt" in column_mapping:
-            temp_task_dict['field_prompt'] = column_mapping["prompt"]
-        return type('obj', (object,), temp_task_dict)
+            temp_task_dict["field_prompt"] = column_mapping["prompt"]
+        return type("obj", (object,), temp_task_dict)
 
 
-async def load_and_merge_multiple_datasets(
-    dataset_ids: list[str],
-    task: AnyTextTypeRawTask,
-    keypair: Keypair
-) -> list[dict]:
+async def load_and_merge_multiple_datasets(dataset_ids: list[str], task: AnyTextTypeRawTask, keypair: Keypair) -> list[dict]:
     """Load and merge multiple datasets, returning average size."""
     import random
 
@@ -395,7 +383,7 @@ async def load_and_merge_multiple_datasets(
                             column_mapping = {
                                 "prompt": columns.get("prompt", "prompt"),
                                 "chosen": columns.get("accepted", "chosen"),
-                                "rejected": columns.get("rejected", "rejected")
+                                "rejected": columns.get("rejected", "rejected"),
                             }
                             logger.info(f"DPO column mapping from detectcolumns for {dataset_id}: {column_mapping}")
                         else:
@@ -405,9 +393,7 @@ async def load_and_merge_multiple_datasets(
                         raise
                 else:
                     try:
-                        column_mapping = await get_dataset_column_mapping(
-                            dataset_id, task.task_type, keypair
-                        )
+                        column_mapping = await get_dataset_column_mapping(dataset_id, task.task_type, keypair)
                         logger.info(f"Column mapping for {dataset_id}: {column_mapping}")
                     except Exception as e:
                         logger.error(f"Failed to get column mapping for {dataset_id}: {e}")
@@ -421,7 +407,7 @@ async def load_and_merge_multiple_datasets(
                 dataset = load_dataset(dataset_id, config_name, trust_remote_code=True)
 
                 # Handle DatasetDict vs Dataset
-                if hasattr(dataset, 'column_names') and not isinstance(dataset, dict):
+                if hasattr(dataset, "column_names") and not isinstance(dataset, dict):
                     # It's already a Dataset
                     pass
                 else:
@@ -505,7 +491,6 @@ async def load_and_merge_multiple_datasets(
     samples_per_dataset = total_available_balanced // len(dataset_sizes)
     remainder = total_available_balanced % len(dataset_sizes)
 
-
     logger.info(f"Taking {samples_per_dataset} samples from each dataset (with {remainder} extra distributed)")
 
     final_samples = []
@@ -530,7 +515,6 @@ async def load_and_merge_multiple_datasets(
         num_to_take = min(num_to_take, len(dataset_samples))
 
         logger.info(f"Dataset {i}: has {len(dataset_samples)} samples, taking {num_to_take}")
-
 
         final_samples.extend(dataset_samples[:num_to_take])
         start_idx = end_idx
@@ -574,7 +558,7 @@ def unstandardize_samples_to_task_columns(samples: list[dict], task: AnyTextType
                 new_sample[task.field_chosen] = sample["chosen"]
             if "rejected" in sample:
                 new_sample[task.field_rejected] = sample["rejected"]
-            if "system" in sample and hasattr(task, 'field_system') and task.field_system:
+            if "system" in sample and hasattr(task, "field_system") and task.field_system:
                 new_sample[task.field_system] = sample["system"]
 
         unstandardized.append(new_sample)
@@ -616,12 +600,9 @@ def create_messages_for_input_reformulation(ds_prompt: dict, prompts: Prompts) -
     messages = []
     system_message = Message(role=Role.SYSTEM, content=prompts.input_reformulation_sys)
     messages.append(system_message)
-    user_message = Message(
-        role=Role.USER,
-        content=prompts.input_reformulation_user.format(input=prompt_text))
+    user_message = Message(role=Role.USER, content=prompts.input_reformulation_user.format(input=prompt_text))
     messages.append(user_message)
     return messages
-
 
 
 def check_the_synthetic_data(synthetic_data_point: dict, original_data_columns: list[str]) -> bool:
@@ -635,20 +616,23 @@ async def generate_paraphrased_version(row: dict, prompts: Prompts, keypair: Key
     paraphrased_data = extract_json_from_response(result) if isinstance(result, str) else result
     return paraphrased_data
 
+
 async def generate_dpo_reformulation(prompt: str, prompts: Prompts, keypair: Keypair) -> DpoDatasetColumnsResponse:
     messages = create_messages_for_input_reformulation(prompt, prompts)
     payload = convert_to_nineteen_payload(messages, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
     new_prompt = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
     assert new_prompt, "new prompt should not be None"
-    prompt_message = [Message(
-        role=Role.USER,
-        content=new_prompt)]
-    weak_model_payload = convert_to_nineteen_payload(prompt_message, TEXT_SYNTH_WEAKER_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
+    prompt_message = [Message(role=Role.USER, content=new_prompt)]
+    weak_model_payload = convert_to_nineteen_payload(
+        prompt_message, TEXT_SYNTH_WEAKER_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS
+    )
     weak_model_result = await post_to_nineteen_chat(weak_model_payload, keypair)
-    strong_model_payload = convert_to_nineteen_payload(prompt_message, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS)
+    strong_model_payload = convert_to_nineteen_payload(
+        prompt_message, TEXT_SYNTH_MODEL, TEXT_SYNTH_MODEL_TEMPERATURE, TEXT_SYNTH_MODEL_MAX_TOKENS
+    )
     strong_model_result = await post_to_nineteen_chat_with_reasoning(strong_model_payload, keypair, END_OF_REASONING_TAG)
 
-    return DpoDatasetColumnsResponse(field_prompt = new_prompt, field_chosen=strong_model_result, field_rejected=weak_model_result)
+    return DpoDatasetColumnsResponse(field_prompt=new_prompt, field_chosen=strong_model_result, field_rejected=weak_model_result)
 
 
 async def process_row(row, prompts, keypair, task_type: TaskType) -> dict | DpoDatasetColumnsResponse:
@@ -670,7 +654,7 @@ async def process_row(row, prompts, keypair, task_type: TaskType) -> dict | DpoD
 
 async def generate_augmented_text_dataset(
     sampled_data: list[dict], keypair: Keypair, task_type: TaskType
-    ) -> list[dict] | list[DpoDatasetColumnsResponse]:
+) -> list[dict] | list[DpoDatasetColumnsResponse]:
     prompts = load_prompts()
     logger.info(f"Creating an augmented dataset with {len(sampled_data)} samples...")
     logger.info(f"Prompts: {prompts}")
@@ -697,7 +681,9 @@ async def generate_augmented_text_dataset(
                     generic_errors += 1
                 consecutive_errors += 1
                 if consecutive_errors >= max_consecutive_errors:
-                    logger.error(f"Maximum consecutive errors reached when generating the augmented dataset. Here is one result {result}")
+                    logger.error(
+                        f"Maximum consecutive errors reached when generating the augmented dataset. Here is one result {result}"
+                    )
                     return None
             else:
                 if idx == 0:

@@ -20,7 +20,9 @@ from validator.tasks.synthetic_scheduler import create_synthetic_image_task
 from validator.tasks.synthetic_scheduler import create_synthetic_instruct_text_task
 from validator.utils.logging import get_logger
 
+
 logger = get_logger(__name__)
+
 
 async def create_text_tournament_round(
     round_data: Round,
@@ -39,11 +41,7 @@ async def create_text_tournament_round(
         logger.info(f"Creating text tournament for {num_pairs} knockout pairs (probability-based)")
         tasks = await _create_probability_based_text_tasks(round_data, config)
 
-    return TournamentRound(
-        round_structure=round_data,
-        tasks=[str(task.task_id) for task in tasks],
-        is_final_round=is_final_round
-    )
+    return TournamentRound(round_structure=round_data, tasks=[str(task.task_id) for task in tasks], is_final_round=is_final_round)
 
 
 async def create_image_tournament_round(round_data: Round, config: Config) -> TournamentRound:
@@ -55,7 +53,7 @@ async def create_image_tournament_round(round_data: Round, config: Config) -> To
         logger.info(f"Creating image tournament for {num_groups} groups (1 per group)")
 
         for i, group in enumerate(round_data.groups):
-            logger.info(f"  Group {i+1} ({len(group.member_ids)} members):")
+            logger.info(f"  Group {i + 1} ({len(group.member_ids)} members):")
             task = await create_synthetic_image_task(config, image_models)
             gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
             logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
@@ -65,17 +63,13 @@ async def create_image_tournament_round(round_data: Round, config: Config) -> To
         logger.info(f"Creating image tournament for {num_pairs} knockout pairs (1 per pair)")
 
         for i, pair in enumerate(round_data.pairs):
-            logger.info(f"  Pair {i+1} ({pair[0]} vs {pair[1]}):")
+            logger.info(f"  Pair {i + 1} ({pair[0]} vs {pair[1]}):")
             task = await create_synthetic_image_task(config, image_models)
             gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
             logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
             tasks.append(task)
 
-    return TournamentRound(
-        round_structure=round_data,
-        tasks=[str(task.task_id) for task in tasks],
-        is_final_round=False
-    )
+    return TournamentRound(round_structure=round_data, tasks=[str(task.task_id) for task in tasks], is_final_round=False)
 
 
 async def _create_group_text_tasks(round_data: GroupRound, config: Config, is_final_round: bool) -> list[RawTask]:
@@ -85,11 +79,13 @@ async def _create_group_text_tasks(round_data: GroupRound, config: Config, is_fi
 
     tasks = []
     for i, group in enumerate(round_data.groups):
-        logger.info(f"  Group {i+1} ({len(group.member_ids)} members): creating 1 instruct + 1 DPO + 1 GRPO task")
+        logger.info(f"  Group {i + 1} ({len(group.member_ids)} members): creating 1 instruct + 1 DPO + 1 GRPO task")
 
         instruct_task = await create_synthetic_instruct_text_task(config, models, instruct_datasets)
         gpu_req = get_tournament_gpu_requirement(instruct_task.task_type, instruct_task.model_params_count)
-        logger.info(f"    Instruct: {instruct_task.task_id} - Model: {instruct_task.model_id} - Dataset: {instruct_task.ds} - GPU: {gpu_req}")
+        logger.info(
+            f"    Instruct: {instruct_task.task_id} - Model: {instruct_task.model_id} - Dataset: {instruct_task.ds} - GPU: {gpu_req}"
+        )
         tasks.append(instruct_task)
 
         dpo_task = await create_synthetic_dpo_task(config, models, dpo_datasets)
@@ -112,9 +108,13 @@ async def _create_one_of_each_text_task(config: Config, use_big_model: bool) -> 
 
     tasks = []
 
-    instruct_task = await create_synthetic_instruct_text_task(config, big_models if use_big_model else small_models, instruct_datasets)
+    instruct_task = await create_synthetic_instruct_text_task(
+        config, big_models if use_big_model else small_models, instruct_datasets
+    )
     gpu_req = get_tournament_gpu_requirement(instruct_task.task_type, instruct_task.model_params_count)
-    logger.info(f"  Instruct (BIG): {instruct_task.task_id} - Model: {instruct_task.model_id} - Dataset: {instruct_task.ds} - GPU: {gpu_req}")
+    logger.info(
+        f"  Instruct (BIG): {instruct_task.task_id} - Model: {instruct_task.model_id} - Dataset: {instruct_task.ds} - GPU: {gpu_req}"
+    )
     tasks.append(instruct_task)
 
     dpo_task = await create_synthetic_dpo_task(config, small_models, dpo_datasets)
@@ -147,7 +147,7 @@ async def _create_probability_based_text_tasks(round_data: KnockoutRound, config
     tasks = []
     for i in range(num_tasks):
         pair = round_data.pairs[i]
-        logger.info(f"  Pair {i+1} ({pair[0]} vs {pair[1]}):")
+        logger.info(f"  Pair {i + 1} ({pair[0]} vs {pair[1]}):")
 
         rand_val = random.random()
         if rand_val < instruct_prob:

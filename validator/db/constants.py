@@ -148,10 +148,11 @@ GROUP_ID = "group_id"
 PAIR_ID = "pair_id"
 HOTKEY1 = "hotkey1"
 HOTKEY2 = "hotkey2"
-WINNER_HOTKEY = "winner_hotkey"
 ELIMINATED_IN_ROUND_ID = "eliminated_in_round_id"
 FINAL_POSITION = "final_position"
 TASK_ORDER = "task_order"
+TRAINING_REPO = "training_repo"
+TRAINING_COMMIT_HASH = "training_commit_hash"
 
 # Common Column Names (shared between tables)
 QUALITY_SCORE = "quality_score"  # Used in both submissions and task_nodes

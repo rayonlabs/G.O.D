@@ -18,6 +18,7 @@ from pydantic import ValidationError
 import core.constants as cst
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
+from core.models.payload_models import TrainingRepoResponse
 from core.models.payload_models import TrainRequestGrpo
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
@@ -242,6 +243,12 @@ async def task_offer_image(
         raise HTTPException(status_code=500, detail=f"Error processing task offer: {str(e)}")
 
 
+async def get_training_repo(task_id: str) -> TrainingRepoResponse:
+    return TrainingRepoResponse(
+        github_repo="https://github.com/rayonlabs/G.O.D", commit_hash="9d14a63e4d1f065a203f51b19c2f6066933dd3a5"
+    )
+
+
 def factory_router() -> APIRouter:
     router = APIRouter()
     router.add_api_route(
@@ -272,6 +279,18 @@ def factory_router() -> APIRouter:
         description="Retrieve the latest model submission for a given task ID",
         dependencies=[Depends(blacklist_low_stake), Depends(verify_get_request)],
     )
+
+    router.add_api_route(
+        "/training_repo",
+        get_training_repo,
+        tags=["Subnet"],
+        methods=["GET"],
+        response_model=TrainingRepoResponse,
+        summary="Get Training Repo",
+        description="Retrieve the training repository and commit hash for the tournament.",
+        dependencies=[Depends(blacklist_low_stake), Depends(verify_get_request)],
+    )
+
     router.add_api_route(
         "/start_training/",  # TODO: change to /start_training_text or similar
         tune_model_text,

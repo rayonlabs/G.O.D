@@ -82,6 +82,11 @@ class TrainResponse(BaseModel):
     task_id: UUID
 
 
+class TrainingRepoResponse(BaseModel):
+    github_repo: str = Field(..., description="The GitHub repository URL")
+    commit_hash: str = Field(..., description="The commit hash of the repository")
+
+
 class JobStatusPayload(BaseModel):
     task_id: UUID
 

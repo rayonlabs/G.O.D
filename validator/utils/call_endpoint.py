@@ -29,21 +29,8 @@ logger = get_logger(__name__)
 def _get_headers_for_signed_https_request(keypair: Keypair):
     nonce = f"{time.time_ns()}"
     
-    # Debug logging to identify Mock objects
-    logger.info(f"🔍 DEBUG: keypair type: {type(keypair)}")
-    logger.info(f"🔍 DEBUG: keypair value: {keypair}")
-    logger.info(f"🔍 DEBUG: keypair.ss58_address type: {type(keypair.ss58_address)}")
-    logger.info(f"🔍 DEBUG: keypair.ss58_address value: {keypair.ss58_address}")
-    logger.info(f"🔍 DEBUG: nonce type: {type(nonce)}")
-    logger.info(f"🔍 DEBUG: nonce value: {nonce}")
-    
     signature = chain_utils.sign_message(keypair, nonce)
-    
-    logger.info(f"🔍 DEBUG: signature type: {type(signature)}")
-    logger.info(f"🔍 DEBUG: signature value: {signature}")
-    logger.info(f"🔍 DEBUG: signature repr: {repr(signature)}")
-    logger.info(f"🔍 DEBUG: str(signature): {str(signature)}")
-    
+
     headers = {
         "validator-hotkey": keypair.ss58_address,
         "signature": signature,
@@ -51,13 +38,7 @@ def _get_headers_for_signed_https_request(keypair: Keypair):
         "netuid": str(NETUID),
         "Content-Type": "application/json",
     }
-    
-    # Check each header value
-    for key, value in headers.items():
-        logger.info(f"🔍 DEBUG: header '{key}' type: {type(value)}, value: {repr(value)}")
-        if hasattr(value, '_mock_name'):
-            logger.error(f"🚨 FOUND MOCK in header '{key}': {value}")
-    
+
     return headers
 
 
