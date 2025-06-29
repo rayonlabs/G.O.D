@@ -147,6 +147,15 @@ MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
 MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
+
+# Tournament GPU requirement thresholds (in billions of parameters)
+TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100 = 4.0
+TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100 = 12.0
+TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100 = 40.0
+
+# Tournament task type GPU multipliers
+TOURNAMENT_DPO_GPU_MULTIPLIER = 3
+TOURNAMENT_GRPO_GPU_MULTIPLIER = 2
 MODEL_SIZE_REQUIRING_3_GPUS = 75 * 10**9
 MODEL_SIZE_REQUIRING_4_GPUS = 110 * 10**9
 

@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from asyncpg.connection import Connection
@@ -216,13 +217,21 @@ async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> list[Node
         return [Node(**dict(row)) for row in rows]
 
 
-async def get_tasks_with_status(status: TaskStatus, psql_db: PSQLDB, include_not_ready_tasks=False, include_tournament_tasks=False) -> list[AnyTypeRawTask]:
+async def get_tasks_with_status(
+    status: TaskStatus,
+    psql_db: PSQLDB,
+    include_not_ready_tasks: bool = False,
+    tournament_filter: Literal["all", "only", "exclude"] = "all"
+) -> list[AnyTypeRawTask]:
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
     )
-    tournament_tasks_clause = (
-        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
-    )
+    if tournament_filter == "exclude":
+        tournament_tasks_clause = f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    elif tournament_filter == "only":
+        tournament_tasks_clause = f"AND {cst.TASK_ID} IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    elif tournament_filter == "all":
+        tournament_tasks_clause = ""
 
     async with await psql_db.connection() as connection:
         connection: Connection
