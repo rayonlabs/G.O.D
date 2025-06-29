@@ -3,6 +3,8 @@ import os
 import shutil
 import tempfile
 import asyncio
+from transformers import CLIPTokenizer
+from transformers import T5TokenizerFast
 from huggingface_hub import snapshot_download, hf_hub_download, HfApi
 from core.utils import download_s3_file
 from core.models.utility_models import FileFormat, TaskType
@@ -145,6 +147,21 @@ async def main():
     if args.task_type == TaskType.IMAGETASK.value:
         dataset_zip_path = await download_image_dataset(args.dataset, args.task_id)
         model_path = await download_base_model(args.model, model_dir)
+        print("Downloading clip models", flush=True)
+        CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir="/cache/hf_cache")
+        CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir="/cache/hf_cache")
+        snapshot_download(
+            repo_id="google/t5-v1_1-xxl",
+            repo_type="model",
+            local_dir="/cache/hf_cache/google--t5-v1_1-xxl",
+            local_dir_use_symlinks=False,
+            allow_patterns=[
+                "tokenizer_config.json",
+                "spiece.model",
+                "special_tokens_map.json",
+                "tokenizer.json"
+            ]
+        )
     else:
         dataset_path, _ = await download_text_dataset(
             args.task_id,
