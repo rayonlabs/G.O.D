@@ -4,15 +4,11 @@ Standalone script for image model training (SDXL or Flux)
 """
 
 import os
-import json
 import toml
 import sys
-import shutil
 import subprocess
 import asyncio
 import argparse
-import uuid
-from pathlib import Path
 
 
 # Add project root to python path to import modules
@@ -22,27 +18,19 @@ sys.path.append(project_root)
 
 from core.config.config_handler import save_config_toml
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
-from core.utils import download_s3_file
 from core.models.utility_models import ImageModelType
 import core.constants as cst
 import trainer.constants as train_cst
-from miner.utils import download_flux_unet
 
 
-async def download_dataset_if_needed(dataset_zip_url, task_id):
-    # Use environment variable if set, otherwise use constant
-    dataset_dir = os.environ.get("DATASET_DIR", cst.DIFFUSION_DATASET_DIR)
-    os.makedirs(dataset_dir, exist_ok=True)
-    
-    # Create tmp directory that will be needed for extraction
-    os.makedirs(f"{dataset_dir}/tmp", exist_ok=True)
-    
-    local_zip_path = f"{dataset_dir}/{task_id}.zip"
-    print(f"Downloading dataset from: {dataset_zip_url}")
-    local_path = await download_s3_file(dataset_zip_url, local_zip_path)
-    print(f"Downloaded dataset to: {local_path}")
-    return local_path
-
+def get_model_path(base_dir: str) -> str:
+    for item in os.listdir(base_dir):
+        full_path = os.path.join(base_dir, item)
+        if item.endswith(".safetensors") and os.path.isfile(full_path):
+            return full_path
+        if os.path.isdir(full_path):
+            return full_path
+    raise FileNotFoundError("No model folder or .safetensors file found in the provided directory.")
 
 def create_config(task_id, model, model_type, expected_repo_name):
     """Create the diffusion config file"""
@@ -59,16 +47,14 @@ def create_config(task_id, model, model_type, expected_repo_name):
     if model_type == ImageModelType.SDXL.value:
         with open(sdxl_path, "r") as file:
             config = toml.load(file)
-        config["pretrained_model_name_or_path"] = model
     elif model_type == ImageModelType.FLUX.value:
         with open(flux_path, "r") as file:
             config = toml.load(file)
-        flux_unet_path = download_flux_unet(model)
-        config["pretrained_model_name_or_path"] = flux_unet_path
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
     # Update config
+    config["pretrained_model_name_or_path"] = model
     config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
     output_dir = f"{train_cst.CONTAINER_SAVE_PATH}{expected_repo_name}"
     if not os.path.exists(output_dir):
@@ -140,14 +126,12 @@ async def main():
     os.makedirs("/dataset/outputs", exist_ok=True)
     os.makedirs("/dataset/images", exist_ok=True)
 
-    # Download dataset
-    dataset_zip = await download_dataset_if_needed(args.dataset_zip, args.task_id)
-
+    model_path = get_model_path(f"{train_cst.MODELS_CACHE_PATH}/{args.task_id}")
     
     # Create config file
     config_path = create_config(
         args.task_id,
-        args.model,
+        model_path,
         args.model_type,
         args.expected_repo_name,
     )
@@ -161,7 +145,7 @@ async def main():
         cst.DIFFUSION_DATASET_DIR = os.environ.get("DATASET_DIR")
     
     prepare_dataset(
-        training_images_zip_path=dataset_zip,
+        training_images_zip_path=f"{train_cst.DATASET_CACHE_PATH}/{args.task_id}/{args.task_id}.zip",
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
         instance_prompt=cst.DIFFUSION_DEFAULT_INSTANCE_PROMPT,
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,

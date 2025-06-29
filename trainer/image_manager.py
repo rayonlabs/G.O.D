@@ -82,7 +82,8 @@ async def run_trainer_container_image(
             image=tag,
             command=command,
             volumes={
-                cst.CHECKPOINTS_VOLUME_NAME: {"bind": cst.IMAGE_CONTAINER_SAVE_PATH, "mode": "rw"}
+                cst.VOLUME_NAMES[0]: {"bind": cst.IMAGE_CONTAINER_SAVE_PATH, "mode": "rw"},
+                cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"}
             },
             remove=False,
             name=container_name,
@@ -91,6 +92,7 @@ async def run_trainer_container_image(
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids],  capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
+            network_mode="none",
             detach=True,
         )
 
@@ -138,7 +140,8 @@ async def run_trainer_container_text(
             image=tag,
             command=command,
             volumes={
-                cst.CHECKPOINTS_VOLUME_NAME: {"bind": cst.TEXT_CONTAINER_SAVE_PATH, "mode": "rw"}
+                cst.VOLUME_NAMES[0]: {"bind": cst.TEXT_CONTAINER_SAVE_PATH, "mode": "rw"},
+                cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"}
             },
             remove=False,
             name=container_name,
@@ -148,6 +151,7 @@ async def run_trainer_container_text(
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
             detach=True,
+            network_mode="none",
             environment=environment
         )
 
@@ -158,14 +162,75 @@ async def run_trainer_container_text(
         return e
 
 
-async def create_volume_if_doesnt_exist():
+async def create_volumes_if_dont_exist():
     client: docker.DockerClient = docker.from_env()
-    volume_name = cst.CHECKPOINTS_VOLUME_NAME
+    volume_names = cst.VOLUME_NAMES
+    for volume_name in volume_names:
+        try:
+            volume = client.volumes.get(volume_name)
+        except docker.errors.NotFound:
+            volume = client.volumes.create(name=volume_name)
+            logger.info(f"Volume '{volume_name}' created.")
+
+
+def run_downloader_container(
+    task_id: str,
+    model: str,
+    dataset_url: str,
+    task_type: TaskType,
+    file_format: FileFormat | None = None,
+) -> tuple[int, Exception | None]:
+    client = docker.from_env()
+
+    command = [
+        "--task-id", task_id,
+        "--model", model,
+        "--task-type", task_type,
+        "--dataset", dataset_url,
+    ]
+    if file_format:
+        command += ["--file-format", file_format]
+
+    container_name = f"downloader-{task_id}-{str(uuid.uuid4())[:8]}"
+    container = None
+
     try:
-        volume = client.volumes.get(volume_name)
-    except docker.errors.NotFound:
-        volume = client.volumes.create(name=volume_name)
-        logger.info(f"Volume '{volume_name}' created.")
+        logger.info(f"Starting downloader container: {container_name}")
+        container = client.containers.run(
+            image=cst.TRAINER_DOWNLOADER_DOCKER_IMAGE,
+            name=container_name,
+            command=command,
+            volumes={cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"}},
+            remove=False,
+            detach=True
+        )
+
+        stream_container_logs(container, get_all_context_tags())
+
+        result = container.wait()
+        exit_code = result.get("StatusCode", -1)
+
+        if exit_code == 0:
+            logger.info(f"Download completed successfully for task {task_id}")
+        else:
+            logger.error(f"Download container exited with code {exit_code} for task {task_id}")
+
+        return exit_code, None
+
+    except docker.errors.ContainerError as e:
+        logger.error(f"Downloader container failed for task {task_id}: {e}")
+        return 1, e
+
+    except Exception as ex:
+        logger.error(f"Unexpected error in downloader for task {task_id}: {ex}")
+        return 1, ex
+
+    finally:
+        if container:
+            try:
+                container.remove(force=True)
+            except Exception as cleanup_err:
+                logger.warning(f"Failed to remove container {container_name}: {cleanup_err}")
 
 
 async def upload_repo_to_hf(
@@ -195,7 +260,7 @@ async def upload_repo_to_hf(
         container_path = cst.IMAGE_CONTAINER_SAVE_PATH if task_type == TaskType.IMAGETASK else cst.TEXT_CONTAINER_SAVE_PATH
 
         volumes = {
-            cst.CHECKPOINTS_VOLUME_NAME: {
+            cst.VOLUME_NAMES[0]: {
                 "bind": container_path,
                 "mode": "rw"
             }
@@ -249,16 +314,38 @@ async def start_training_task(task: TrainerProxyRequest):
     logger.info(f"Task Type: {task_type}")
 
     try:
-        await create_volume_if_doesnt_exist()
+        await create_volumes_if_dont_exist()
 
         dockerfile_path = f"{task.local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}" if task_type == TaskType.IMAGETASK else f"{task.local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
 
+        logger.info("Running Cache Download Container")
+        log_task(training_data.task_id, task.hotkey, "Downloading data")
+
+        download_status, exc = await asyncio.to_thread(
+            run_downloader_container,
+            task_id=training_data.task_id,
+            model=training_data.model,
+            dataset_url=training_data.dataset_zip if task_type == TaskType.IMAGETASK else training_data.dataset,
+            task_type=task_type,
+            file_format=getattr(training_data, "file_format", None),
+        )
+
+        if download_status == 0:
+            message = "Download container completed successfully"
+            log_task(training_data.task_id, task.hotkey, message)
+        else:
+            message = f"Download container failed with error: {exc}"
+            log_task(training_data.task_id, task.hotkey, message)
+            complete_task(training_data.task_id, task.hotkey, success=False)
+            raise exc
+  
         tag = await asyncio.to_thread(
             build_docker_image,
             dockerfile_path=dockerfile_path,
             is_image_task=(task_type == TaskType.IMAGETASK),
             context_path=task.local_repo_path,
         )
+
         log_task(training_data.task_id, task.hotkey, f"Docker image built with tag: {tag}")
 
         if task_type == TaskType.IMAGETASK:

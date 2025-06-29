@@ -21,7 +21,7 @@ async def download_text_dataset(task_id, dataset_url, file_format):
 
     if file_format == FileFormat.S3.value:
         local_path = await download_s3_file(dataset_url)
-        dataset_filename = os.path.basename(local_path)
+        dataset_filename = f"{task_id}_train_data.json"
         input_data_path = os.path.join(dataset_task_dir, dataset_filename)
         shutil.copy(local_path, input_data_path)
 

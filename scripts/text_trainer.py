@@ -20,28 +20,11 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
-from core.config.config_handler import create_dataset_entry, save_config, update_flash_attention, update_model_info
-from core.utils import download_s3_file
+from core.config.config_handler import create_dataset_entry, save_config, update_flash_attention
 from core.models.utility_models import FileFormat, InstructTextDatasetType, DpoDatasetType, TaskType
 from core.dpo_utils import adapt_columns_for_dpo_dataset
 import core.constants as cst
-
-
-async def download_dataset_if_needed(dataset_url, file_format, task_type=None, dataset_type=None):
-    """Download dataset from S3 and process it if needed."""
-    if file_format == FileFormat.S3.value:
-        local_path = await download_s3_file(dataset_url)
-        
-        dataset_filename = os.path.basename(local_path)
-        input_data_path = f"/workspace/input_data/{dataset_filename}"
-        os.makedirs("/workspace/input_data", exist_ok=True)
-        shutil.copy(local_path, input_data_path)
-        
-        if task_type == "DpoTask" and dataset_type:
-            adapt_columns_for_dpo_dataset(input_data_path, dataset_type, apply_formatting=True)
-        
-        return input_data_path, FileFormat.JSON.value
-    return dataset_url, file_format
+import trainer.constants as train_cst
 
 
 def copy_dataset_if_needed(dataset_path, file_format):
@@ -69,9 +52,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
         config = yaml.safe_load(file)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
-    config["base_model"] = model
-    config["wandb_runid"] = task_id
-    config["wandb_name"] = task_id
+    config["base_model"] = f"{train_cst.MODELS_CACHE_PATH}/{model.replace('/', '--')}"
 
     config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"
     config["mlflow_experiment_name"] = dataset
@@ -190,21 +171,21 @@ async def main():
     except Exception as e:
         sys.exit(f"Error creating dataset type object: {e}")
 
-    dataset_path, file_format = await download_dataset_if_needed(
-        args.dataset, 
-        args.file_format,
-        args.task_type,
-        dataset_type
-    )
+    base_dataset_path = f"{train_cst.DATASET_CACHE_PATH}/{args.task_id}"
+    dataset_path = f"{base_dataset_path}/{args.task_id}_train_data.json" if args.file_format == FileFormat.S3.value else f"{base_dataset_path}/{args.dataset.replace('/', '--')}"
+
     
-    dataset_path = copy_dataset_if_needed(dataset_path, file_format)
+    dataset_path = copy_dataset_if_needed(dataset_path, args.file_format)
+
+    if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
+        adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
     
     config_path = create_config(
         args.task_id, 
         args.model, 
         dataset_path, 
         dataset_type, 
-        file_format,
+        args.file_format,
         args.expected_repo_name,
     )
     
@@ -213,4 +194,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-ADAPT DPO COLUMNS
