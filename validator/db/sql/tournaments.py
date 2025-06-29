@@ -8,7 +8,6 @@ from core.models.tournament_models import TournamentPairData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentTask
-from core.models.utility_models import TaskStatus
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
 
@@ -215,37 +214,6 @@ async def get_tournament_tasks(round_id: str, psql_db: PSQLDB) -> list[Tournamen
             WHERE {cst.ROUND_ID} = $1
         """
         results = await connection.fetch(query, round_id)
-        return [
-            TournamentTask(
-                tournament_id=row[cst.TOURNAMENT_ID],
-                round_id=row[cst.ROUND_ID],
-                task_id=row[cst.TASK_ID],
-                group_id=row[cst.GROUP_ID],
-                pair_id=row[cst.PAIR_ID],
-            )
-            for row in results
-        ]
-
-
-async def get_unfinished_tournament_tasks(round_id: str, psql_db: PSQLDB) -> list[TournamentTask]:
-    """Get tournament tasks associated with a round that are not finished (not in SUCCESS or FAILURE states)."""
-    async with await psql_db.connection() as connection:
-        query = f"""
-            SELECT tt.{cst.TOURNAMENT_ID}, tt.{cst.ROUND_ID}, tt.{cst.TASK_ID}, tt.{cst.GROUP_ID}, tt.{cst.PAIR_ID}
-            FROM {cst.TOURNAMENT_TASKS_TABLE} tt
-            JOIN {cst.TASKS_TABLE} t ON tt.{cst.TASK_ID} = t.{cst.TASK_ID}
-            WHERE tt.{cst.ROUND_ID} = $1
-            AND t.{cst.STATUS} NOT IN ($2, $3, $4, $5, $6)
-        """
-        results = await connection.fetch(
-            query,
-            round_id,
-            TaskStatus.SUCCESS.value,
-            TaskStatus.FAILURE.value,
-            TaskStatus.FAILURE_FINDING_NODES.value,
-            TaskStatus.PREP_TASK_FAILURE.value,
-            TaskStatus.NODE_TRAINING_FAILURE.value,
-        )
         return [
             TournamentTask(
                 tournament_id=row[cst.TOURNAMENT_ID],
