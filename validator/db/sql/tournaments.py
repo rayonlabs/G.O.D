@@ -1,13 +1,14 @@
 from fiber.chain.models import Node
 
 import validator.db.constants as cst
-from core.models.tournament_models import GroupRound, TournamentGroupData
-from core.models.tournament_models import KnockoutRound
+from core.models.tournament_models import GroupRound
 from core.models.tournament_models import TournamentData
+from core.models.tournament_models import TournamentGroupData
+from core.models.tournament_models import TournamentPairData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentTask
-from core.models.tournament_models import TournamentPairData
+from core.models.utility_models import TaskStatus
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
 
@@ -23,14 +24,12 @@ async def create_tournament(tournament: TournamentData, psql_db: PSQLDB) -> str:
             VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             RETURNING {cst.TOURNAMENT_ID}
         """
-        result = await connection.fetchrow(
-            query, tournament.tournament_id, tournament.tournament_type, tournament.status
-        )
+        result = await connection.fetchrow(query, tournament.tournament_id, tournament.tournament_type, tournament.status)
         logger.info(f"Created tournament: {tournament.tournament_id}")
         return result[cst.TOURNAMENT_ID]
 
 
-async def create_tournament_round(round_data: TournamentRoundData, psql_db: PSQLDB) -> str:
+async def insert_tournament_round(round_data: TournamentRoundData, psql_db: PSQLDB) -> str:
     async with await psql_db.connection() as connection:
         query = f"""
             INSERT INTO {cst.TOURNAMENT_ROUNDS_TABLE}
@@ -40,35 +39,24 @@ async def create_tournament_round(round_data: TournamentRoundData, psql_db: PSQL
             RETURNING {cst.ROUND_ID}
         """
         result = await connection.fetchrow(
-            query, round_data.round_id, round_data.tournament_id, round_data.round_number,
-            round_data.round_type, round_data.is_final_round, round_data.status
+            query,
+            round_data.round_id,
+            round_data.tournament_id,
+            round_data.round_number,
+            round_data.round_type,
+            round_data.is_final_round,
+            round_data.status,
         )
         logger.info(f"Created tournament round: {round_data.round_id}")
         return result[cst.ROUND_ID]
 
 
-async def add_tournament_participants(participants: list[TournamentParticipant], psql_db: PSQLDB):
-    async with await psql_db.connection() as connection:
-        async with connection.transaction():
-            query = f"""
-                INSERT INTO {cst.TOURNAMENT_PARTICIPANTS_TABLE}
-                ({cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.CREATED_AT})
-                VALUES ($1, $2, CURRENT_TIMESTAMP)
-                ON CONFLICT ({cst.TOURNAMENT_ID}, {cst.HOTKEY}) DO NOTHING
-            """
-            for participant in participants:
-                await connection.execute(query, participant.tournament_id, participant.hotkey)
-            logger.info(f"Added {len(participants)} participants to tournament")
-
-
-async def create_tournament_groups_with_members(
-    round_id: str, round_structure: GroupRound, psql_db: PSQLDB
-) -> list[str]:
+async def insert_tournament_groups_with_members(round_id: str, round_structure: GroupRound, psql_db: PSQLDB) -> list[str]:
     group_ids = []
     async with await psql_db.connection() as connection:
         async with connection.transaction():
             for i, group in enumerate(round_structure.groups):
-                group_id = f"{round_id}_group_{i+1:03d}"
+                group_id = f"{round_id}_group_{i + 1:03d}"
 
                 group_query = f"""
                     INSERT INTO {cst.TOURNAMENT_GROUPS_TABLE}
@@ -92,9 +80,7 @@ async def create_tournament_groups_with_members(
     return group_ids
 
 
-async def create_tournament_pairs(
-    round_id: str, round_structure: KnockoutRound, psql_db: PSQLDB
-) -> list[str]:
+async def insert_tournament_pairs(round_id: str, hotkey_pairs: list[tuple[str, str]], psql_db: PSQLDB) -> list[str]:
     pair_ids = []
     async with await psql_db.connection() as connection:
         async with connection.transaction():
@@ -104,8 +90,8 @@ async def create_tournament_pairs(
                 VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
                 RETURNING {cst.PAIR_ID}
             """
-            for i, (hotkey1, hotkey2) in enumerate(round_structure.pairs):
-                pair_id = f"{round_id}_pair_{i+1:03d}"
+            for i, (hotkey1, hotkey2) in enumerate(hotkey_pairs):
+                pair_id = f"{round_id}_pair_{i + 1:03d}"
                 await connection.execute(query, pair_id, round_id, hotkey1, hotkey2)
                 pair_ids.append(pair_id)
 
@@ -136,10 +122,7 @@ async def add_tournament_tasks(tasks: list[TournamentTask], psql_db: PSQLDB):
                 VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
             """
             for task in tasks:
-                await connection.execute(
-                    query, task.tournament_id, task.round_id, task.task_id,
-                    task.group_id, task.pair_id
-                )
+                await connection.execute(query, task.tournament_id, task.round_id, task.task_id, task.group_id, task.pair_id)
             logger.info(f"Added {len(tasks)} tasks to tournament")
 
 
@@ -156,7 +139,26 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
                 tournament_id=result[cst.TOURNAMENT_ID],
                 tournament_type=result[cst.TOURNAMENT_TYPE],
                 status=result[cst.TOURNAMENT_STATUS],
-                current_round_id=result[cst.CURRENT_ROUND_ID]
+                current_round_id=result[cst.CURRENT_ROUND_ID],
+            )
+        return None
+
+
+async def get_latest_completed_tournament(psql_db: PSQLDB) -> TournamentData | None:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.CURRENT_ROUND_ID}
+            FROM {cst.TOURNAMENTS_TABLE}
+            ORDER BY {cst.UPDATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query)
+        if result:
+            return TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                current_round_id=result[cst.CURRENT_ROUND_ID],
             )
         return None
 
@@ -177,7 +179,7 @@ async def get_tournament_round(round_id: str, psql_db: PSQLDB) -> TournamentRoun
                 round_number=result[cst.ROUND_NUMBER],
                 round_type=result[cst.ROUND_TYPE],
                 is_final_round=result[cst.IS_FINAL_ROUND],
-                status=result[cst.ROUND_STATUS]
+                status=result[cst.ROUND_STATUS],
             )
         return None
 
@@ -199,7 +201,7 @@ async def get_tournament_rounds(tournament_id: str, psql_db: PSQLDB) -> list[Tou
                 round_number=row[cst.ROUND_NUMBER],
                 round_type=row[cst.ROUND_TYPE],
                 is_final_round=row[cst.IS_FINAL_ROUND],
-                status=row[cst.ROUND_STATUS]
+                status=row[cst.ROUND_STATUS],
             )
             for row in results
         ]
@@ -219,7 +221,38 @@ async def get_tournament_tasks(round_id: str, psql_db: PSQLDB) -> list[Tournamen
                 round_id=row[cst.ROUND_ID],
                 task_id=row[cst.TASK_ID],
                 group_id=row[cst.GROUP_ID],
-                pair_id=row[cst.PAIR_ID]
+                pair_id=row[cst.PAIR_ID],
+            )
+            for row in results
+        ]
+
+
+async def get_unfinished_tournament_tasks(round_id: str, psql_db: PSQLDB) -> list[TournamentTask]:
+    """Get tournament tasks associated with a round that are not finished (not in SUCCESS or FAILURE states)."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT tt.{cst.TOURNAMENT_ID}, tt.{cst.ROUND_ID}, tt.{cst.TASK_ID}, tt.{cst.GROUP_ID}, tt.{cst.PAIR_ID}
+            FROM {cst.TOURNAMENT_TASKS_TABLE} tt
+            JOIN {cst.TASKS_TABLE} t ON tt.{cst.TASK_ID} = t.{cst.TASK_ID}
+            WHERE tt.{cst.ROUND_ID} = $1
+            AND t.{cst.STATUS} NOT IN ($2, $3, $4, $5, $6)
+        """
+        results = await connection.fetch(
+            query,
+            round_id,
+            TaskStatus.SUCCESS.value,
+            TaskStatus.FAILURE.value,
+            TaskStatus.FAILURE_FINDING_NODES.value,
+            TaskStatus.PREP_TASK_FAILURE.value,
+            TaskStatus.NODE_TRAINING_FAILURE.value,
+        )
+        return [
+            TournamentTask(
+                tournament_id=row[cst.TOURNAMENT_ID],
+                round_id=row[cst.ROUND_ID],
+                task_id=row[cst.TASK_ID],
+                group_id=row[cst.GROUP_ID],
+                pair_id=row[cst.PAIR_ID],
             )
             for row in results
         ]
@@ -239,7 +272,6 @@ async def get_tournament_pairs(round_id: str, psql_db: PSQLDB) -> list[Tournamen
                 round_id=row[cst.ROUND_ID],
                 hotkey1=row[cst.HOTKEY1],
                 hotkey2=row[cst.HOTKEY2],
-                winner_hotkey=None  # No longer stored in database
             )
             for row in results
         ]
@@ -253,13 +285,7 @@ async def get_tournament_groups(round_id: str, psql_db: PSQLDB) -> list[Tourname
             WHERE {cst.ROUND_ID} = $1
         """
         results = await connection.fetch(query, round_id)
-        return [
-            TournamentGroupData(
-                group_id=row[cst.GROUP_ID],
-                round_id=row[cst.ROUND_ID]
-            )
-            for row in results
-        ]
+        return [TournamentGroupData(group_id=row[cst.GROUP_ID], round_id=row[cst.ROUND_ID]) for row in results]
 
 
 async def get_tournament_group_members(group_id: str, psql_db: PSQLDB) -> list[TournamentParticipant]:
@@ -270,10 +296,11 @@ async def get_tournament_group_members(group_id: str, psql_db: PSQLDB) -> list[T
             WHERE {cst.GROUP_ID} = $1
         """
         results = await connection.fetch(query, group_id)
+        # TODO: join with full participant table
         return [
             TournamentParticipant(
-                tournament_id="",  # Not available in this context
-                hotkey=row[cst.HOTKEY]
+                tournament_id="",
+                hotkey=row[cst.HOTKEY],
             )
             for row in results
         ]
@@ -301,6 +328,20 @@ async def update_tournament_status(tournament_id: str, status: str, psql_db: PSQ
         logger.info(f"Updated tournament {tournament_id} status to {status}")
 
 
+async def cancel_all_active_tournaments(psql_db: PSQLDB) -> int:
+    """Set all active or pending tournaments to cancelled status. Returns number of tournaments cancelled."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENTS_TABLE} 
+            SET {cst.TOURNAMENT_STATUS} = 'cancelled', {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.TOURNAMENT_STATUS} IN ('pending', 'active')
+        """
+        result = await connection.execute(query)
+        cancelled_count = result.split()[-1] if result else "0"
+        logger.info(f"Cancelled {cancelled_count} active/pending tournaments")
+        return int(cancelled_count)
+
+
 async def update_tournament_current_round(tournament_id: str, round_id: str, psql_db: PSQLDB):
     async with await psql_db.connection() as connection:
         query = f"""
@@ -326,7 +367,7 @@ async def get_active_tournaments(psql_db: PSQLDB) -> list[TournamentData]:
                 tournament_id=row[cst.TOURNAMENT_ID],
                 tournament_type=row[cst.TOURNAMENT_TYPE],
                 status=row[cst.TOURNAMENT_STATUS],
-                current_round_id=row[cst.CURRENT_ROUND_ID]
+                current_round_id=row[cst.CURRENT_ROUND_ID],
             )
             for row in results
         ]
@@ -386,3 +427,40 @@ async def get_miners_for_tournament(task_id: str, psql_db: PSQLDB) -> list[Node]
         """
         result = await connection.fetch(query, task_id)
         return [Node(**dict(row)) for row in result]
+
+
+async def update_tournament_participant_training_repo(
+    tournament_id: str, hotkey: str, training_repo: str, training_commit_hash: str, psql_db: PSQLDB
+):
+    """Update the training repo information for a tournament participant."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+            SET {cst.TRAINING_REPO} = $1, {cst.TRAINING_COMMIT_HASH} = $2
+            WHERE {cst.TOURNAMENT_ID} = $3 AND {cst.HOTKEY} = $4
+        """
+        await connection.execute(query, training_repo, training_commit_hash, tournament_id, hotkey)
+        logger.info(f"Updated training repo for participant {hotkey} in tournament {tournament_id}")
+
+
+async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> list[TournamentParticipant]:
+    """Get all participants for a tournament with their training repo information."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.ELIMINATED_IN_ROUND_ID}, 
+                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
+            FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+            WHERE {cst.TOURNAMENT_ID} = $1
+        """
+        results = await connection.fetch(query, tournament_id)
+        return [
+            TournamentParticipant(
+                tournament_id=row[cst.TOURNAMENT_ID],
+                hotkey=row[cst.HOTKEY],
+                eliminated_in_round_id=row[cst.ELIMINATED_IN_ROUND_ID],
+                final_position=row[cst.FINAL_POSITION],
+                training_repo=row[cst.TRAINING_REPO],
+                training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
+            )
+            for row in results
+        ]

@@ -312,11 +312,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
         return results
 
 
-async def get_organic_proportion_since(
-    start_time: datetime,
-    psql_db: PSQLDB,
-    task_type: str | None = None
-) -> float:
+async def get_organic_proportion_since(start_time: datetime, psql_db: PSQLDB, task_type: str | None = None) -> float:
     """
     Get the proportion of organic tasks since the given start time.
     Optionally filter by task_type.
@@ -340,7 +336,7 @@ async def get_organic_proportion_since(
             params.append(task_type)
 
         row = await connection.fetchrow(query, *params)
-        return float(row['organic_proportion']) if row else 0.0
+        return float(row["organic_proportion"]) if row else 0.0
 
 
 async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) -> QualityMetrics:
@@ -632,12 +628,9 @@ async def get_task_winners(task_ids: list[UUID], psql_db: PSQLDB) -> dict[str, s
     """Get winners for multiple tasks. Returns dict mapping task_id to winner hotkey."""
     if not task_ids:
         return {}
-    
+
     async with await psql_db.connection() as connection:
         connection: Connection
-        # Create placeholders for the task IDs
-        placeholders = ", ".join(f"${i+1}" for i in range(len(task_ids)))
-        
         query = f"""
             WITH task_winners AS (
                 SELECT 
@@ -657,20 +650,18 @@ async def get_task_winners(task_ids: list[UUID], psql_db: PSQLDB) -> dict[str, s
             FROM task_winners
             WHERE rn = 1
         """
-        
+
         rows = await connection.fetch(query, task_ids, NETUID)
-        return {row['task_id']: row[cst.HOTKEY] for row in rows}
+        return {row["task_id"]: row[cst.HOTKEY] for row in rows}
 
 
 async def get_task_scores_for_participants(task_id: UUID, hotkeys: list[str], psql_db: PSQLDB) -> dict[str, float]:
     """Get quality scores for specific participants in a task."""
     if not hotkeys:
         return {}
-    
+
     async with await psql_db.connection() as connection:
         connection: Connection
-        placeholders = ", ".join(f"${i+2}" for i in range(len(hotkeys)))
-        
         query = f"""
             SELECT {cst.HOTKEY}, {cst.TASK_NODE_QUALITY_SCORE}
             FROM {cst.TASK_NODES_TABLE}
@@ -679,34 +670,6 @@ async def get_task_scores_for_participants(task_id: UUID, hotkeys: list[str], ps
             AND {cst.HOTKEY} = ANY($3)
             AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
         """
-        
+
         rows = await connection.fetch(query, task_id, NETUID, hotkeys)
         return {row[cst.HOTKEY]: row[cst.TASK_NODE_QUALITY_SCORE] for row in rows}
-
-
-async def get_average_scores_for_participants(task_ids: list[UUID], hotkeys: list[str], psql_db: PSQLDB) -> dict[str, float]:
-    """Get average quality scores for participants across multiple tasks."""
-    if not task_ids or not hotkeys:
-        return {}
-    
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        task_placeholders = ", ".join(f"${i+2}" for i in range(len(task_ids)))
-        hotkey_placeholders = ", ".join(f"${i+len(task_ids)+2}" for i in range(len(hotkeys)))
-        
-        query = f"""
-            SELECT 
-                {cst.HOTKEY},
-                AVG({cst.TASK_NODE_QUALITY_SCORE}) as avg_score,
-                COUNT(*) as task_count
-            FROM {cst.TASK_NODES_TABLE}
-            WHERE {cst.TASK_ID} = ANY($1)
-            AND {cst.NETUID} = $2
-            AND {cst.HOTKEY} = ANY($3)
-            AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
-            GROUP BY {cst.HOTKEY}
-            HAVING COUNT(*) > 0
-        """
-        
-        rows = await connection.fetch(query, task_ids, NETUID, hotkeys)
-        return {row[cst.HOTKEY]: row['avg_score'] for row in rows}
