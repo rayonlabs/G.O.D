@@ -281,6 +281,10 @@ async def upload_repo_to_hf(
             cst.VOLUME_NAMES[0]: {
                 "bind": container_path,
                 "mode": "rw"
+            },
+            cst.VOLUME_NAMES[1]: {
+                "bind": "/cache",
+                "mode": "rw"
             }
         }
 

@@ -30,7 +30,7 @@ def clear_old_cache(directory: str, max_age_hours: int = 24):
             try:
                 if os.path.getmtime(path) < cutoff_time:
                     shutil.rmtree(path)
-                    print(f"🧹 Deleted folder: {path}")
+                    print(f"Deleted folder: {path}")
             except Exception as e:
                 print(f"Error deleting folder {path}: {e}")
 
@@ -77,6 +77,7 @@ def main():
     try:
         print("Clearing old cache files...", flush=True)
         clear_old_cache("/cache", max_age_hours=24)
+        clear_old_cache("/checkpoints", max_age_hours=24)
     except Exception as e:
         print(f"Error during cache cleanup: {e}", flush=True)
         pass
