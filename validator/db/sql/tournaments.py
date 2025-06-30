@@ -7,7 +7,9 @@ from core.models.tournament_models import TournamentGroupData
 from core.models.tournament_models import TournamentPairData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
+from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentTask
+from core.models.tournament_models import TournamentType
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
 
@@ -143,15 +145,16 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
         return None
 
 
-async def get_latest_completed_tournament(psql_db: PSQLDB) -> TournamentData | None:
+async def get_latest_completed_tournament(psql_db: PSQLDB, tournament_type: TournamentType) -> TournamentData | None:
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.CURRENT_ROUND_ID}
             FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'completed'
             ORDER BY {cst.UPDATED_AT} DESC
             LIMIT 1
         """
-        result = await connection.fetchrow(query)
+        result = await connection.fetchrow(query, tournament_type.value)
         if result:
             return TournamentData(
                 tournament_id=result[cst.TOURNAMENT_ID],
@@ -321,15 +324,15 @@ async def update_tournament_current_round(tournament_id: str, round_id: str, psq
         logger.info(f"Updated tournament {tournament_id} current round to {round_id}")
 
 
-async def get_active_tournaments(psql_db: PSQLDB) -> list[TournamentData]:
+async def get_tournaments_with_status(status: TournamentStatus, psql_db: PSQLDB) -> list[TournamentData]:
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.CURRENT_ROUND_ID}
             FROM {cst.TOURNAMENTS_TABLE}
-            WHERE {cst.TOURNAMENT_STATUS} IN ('pending', 'active')
+            WHERE {cst.TOURNAMENT_STATUS} = $1
             ORDER BY {cst.CREATED_AT} DESC
         """
-        results = await connection.fetch(query)
+        results = await connection.fetch(query, status.value)
         return [
             TournamentData(
                 tournament_id=row[cst.TOURNAMENT_ID],

@@ -7,6 +7,7 @@ from fiber.chain.models import Node
 
 from core.models.tournament_models import RoundStatus
 from core.models.tournament_models import RoundType
+from core.models.tournament_models import TournamentType
 from validator.db.database import PSQLDB
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import insert_nodes
@@ -138,38 +139,19 @@ async def get_node_by_hotkey(psql_db: PSQLDB, hotkey: str) -> Node | None:
     return None
 
 
-async def get_base_contestant_dynamically(psql_db: PSQLDB, tournament_id: str, current_round_id: str) -> str:
-    """Get a BASE contestant dynamically from the database.
+async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType) -> str:
+    """Get a BASE contestant as the last tournament winner."""
 
-    Strategy:
-    1. First try to get the latest tournament winner (from any completed tournament)
-    2. If no winner available, get the best dropped out contestant from current tournament
-    3. If no dropped out contestants, use a random node from the database
-    """
-
-    latest_winner = await get_latest_tournament_winner(psql_db)
+    latest_winner = await get_latest_tournament_winner(psql_db, tournament_type)
     if latest_winner:
         logger.info(f"Using latest tournament winner as BASE: {latest_winner}")
         return latest_winner
 
-    best_dropped_out = await get_best_dropped_out_contestant(tournament_id, current_round_id, psql_db)
-    if best_dropped_out:
-        logger.info(f"Using best dropped out contestant as BASE: {best_dropped_out}")
-        return best_dropped_out
 
-    all_nodes = await get_all_nodes(psql_db)
-    if all_nodes:
-        random_node = random.choice(all_nodes)
-        logger.info(f"No suitable contestants found, using random node as BASE: {random_node.hotkey}")
-        return random_node.hotkey
-    else:
-        raise ValueError("Cannot find a suitable BASE contestant. No nodes available in database.")
-
-
-async def get_latest_tournament_winner(psql_db: PSQLDB) -> str | None:
+async def get_latest_tournament_winner(psql_db: PSQLDB, tournament_type: TournamentType) -> str | None:
     """Get the winner of the most recently completed tournament from the final round."""
 
-    latest_tournament = await get_latest_completed_tournament(psql_db)
+    latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
     if not latest_tournament:
         return None
 

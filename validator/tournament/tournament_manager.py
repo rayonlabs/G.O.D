@@ -18,6 +18,7 @@ from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
+from core.models.utility_models import TaskStatus
 from validator.core import constants as cst
 from validator.core.config import Config
 from validator.db import constants as db_cst
@@ -27,16 +28,18 @@ from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_f
 from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.submissions_and_scoring import get_task_winners
 from validator.db.sql.tasks import assign_node_to_task
+from validator.db.sql.tasks import get_task
+from validator.db.sql.tasks import get_tasks_with_status
+from validator.db.sql.tasks import update_task_status
 from validator.db.sql.tournaments import add_tournament_participants
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import create_tournament
-from validator.db.sql.tournaments import get_active_tournaments
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
-from validator.db.sql.tournaments import get_tournament_pairs
 from validator.db.sql.tournaments import get_tournament_participants
 from validator.db.sql.tournaments import get_tournament_rounds
 from validator.db.sql.tournaments import get_tournament_tasks
+from validator.db.sql.tournaments import get_tournaments_with_status
 from validator.db.sql.tournaments import insert_tournament_groups_with_members
 from validator.db.sql.tournaments import insert_tournament_pairs
 from validator.db.sql.tournaments import insert_tournament_round
@@ -45,9 +48,7 @@ from validator.db.sql.tournaments import update_tournament_participant_training_
 from validator.db.sql.tournaments import update_tournament_status
 from validator.tournament.task_creator import create_image_tournament_round
 from validator.tournament.task_creator import create_text_tournament_round
-from validator.tournament.utils import draw_group_stage_table
-from validator.tournament.utils import draw_knockout_bracket
-from validator.tournament.utils import get_base_contestant_dynamically
+from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_boss_round_ascii_art
 from validator.tournament.utils import get_node_by_hotkey
 from validator.utils.logging import get_logger
@@ -98,7 +99,7 @@ def organise_tournament_round(nodes: list[Node], base_contestant: str = None) ->
 async def _create_first_round(
     tournament_id: str, tournament_type: TournamentType, nodes: list[Node], psql_db: PSQLDB, config: Config
 ):
-    base_contestant = await get_base_contestant_dynamically(psql_db, tournament_id, tournament_id)
+    base_contestant = await get_base_contestant(psql_db, tournament_type)
     round_id = generate_round_id(tournament_id, 1)
     round_structure = organise_tournament_round(nodes, base_contestant=base_contestant)
 
@@ -232,7 +233,8 @@ async def get_knockout_winners(
     else:
         # Boss round. You need to beat the boss by 5% to win the task.
         # Best of 3 wins the round.
-        boss_hotkey = await get_base_contestant_dynamically(psql_db, completed_round.tournament_id, completed_round.round_id)
+        tournament = await get_tournament(completed_round.tournament_id, psql_db)
+        boss_hotkey = await get_base_contestant(psql_db, tournament.tournament_type)
         opponent_hotkey = None
         task_winners = []
         for task in round_tasks:
@@ -324,7 +326,7 @@ async def create_next_round(
     next_round_number = completed_round.round_number + 1
     next_round_id = generate_round_id(tournament.tournament_id, next_round_number)
 
-    base_contestant = await get_base_contestant_dynamically(psql_db, tournament.tournament_id, tournament.tournament_id)
+    base_contestant = await get_base_contestant(psql_db, tournament.tournament_type)
     next_round_is_final = len(winners) == 1
 
     if len(winners) == 2:
@@ -332,9 +334,14 @@ async def create_next_round(
             next_round_is_final = True
     elif len(winners) % 2 == 1:
         if base_contestant not in winners:
-            base_contestant = base_contestant
+            winners.append(base_contestant)
         else:
-            winners = [w for w in winners if w != base_contestant]
+            # If the base contestant is the only winner, make this the final round
+            if len(winners) == 1:
+                next_round_is_final = True
+            else:
+                # Remove base contestant to maintain even pairing
+                winners = [w for w in winners if w != base_contestant]
 
     winner_nodes = []
     for hotkey in winners:
@@ -370,6 +377,8 @@ async def create_next_round(
         tournament.tournament_id, next_round_id, round_structure, tournament.tournament_type, next_round_is_final, config
     )
     await add_tournament_tasks(tasks, psql_db)
+
+    await assign_nodes_to_tournament_tasks(next_round_id, round_structure, psql_db)
 
     await update_round_status(next_round_id, RoundStatus.ACTIVE, psql_db)
 
@@ -490,29 +499,30 @@ async def create_first_round_for_active_tournament(tournament_id: str, config: C
     return True
 
 
-async def process_pending_tournaments(config: Config, psql_db: PSQLDB) -> list[str]:
+async def process_pending_tournaments(config: Config) -> list[str]:
     """
     Process all pending tournaments by populating participants and activating them.
     Returns list of tournament IDs that were activated.
     """
     logger.info("Processing pending tournaments...")
 
-    tournaments = await get_active_tournaments(psql_db)
-    pending_tournaments = [t for t in tournaments if t.status == TournamentStatus.PENDING]
+    pending_tournaments = await get_tournaments_with_status(TournamentStatus.PENDING, config.psql_db)
+
+    logger.info(f"Found {len(pending_tournaments)} pending tournaments")
 
     activated_tournaments = []
 
     for tournament in pending_tournaments:
         logger.info(f"Processing pending tournament {tournament.tournament_id}")
 
-        participants = await get_tournament_participants(tournament.tournament_id, psql_db)
+        participants = await get_tournament_participants(tournament.tournament_id, config.psql_db)
 
         if not participants:
             logger.info(f"Tournament {tournament.tournament_id} has no participants, populating...")
-            num_participants = await populate_tournament_participants(tournament.tournament_id, config, psql_db)
+            num_participants = await populate_tournament_participants(tournament.tournament_id, config, config.psql_db)
 
             if num_participants > 0:
-                await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, psql_db)
+                await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, config.psql_db)
                 activated_tournaments.append(tournament.tournament_id)
                 logger.info(f"Activated tournament {tournament.tournament_id} with {num_participants} participants")
             else:
@@ -520,103 +530,70 @@ async def process_pending_tournaments(config: Config, psql_db: PSQLDB) -> list[s
         else:
             # TODO: remove existing participants and add new from scratch.
             logger.info(f"Tournament {tournament.tournament_id} already has {len(participants)} participants, activating...")
-            await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, psql_db)
+            await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, config.psql_db)
             activated_tournaments.append(tournament.tournament_id)
+
+    logger.info(f"Activated tournaments: {activated_tournaments}")
 
     return activated_tournaments
 
 
-async def print_tournament_summary(tournament_id: str, psql_db: PSQLDB):
-    """Print a visual summary of the tournament progression and winners.
-    Helps visualize the tournament. AI generated, we can remove once we ship"""
+async def process_active_tournaments(config: Config):
+    """
+    Process all active tournaments by advancing them if needed.
+    """
+    logger.info("Processing active tournaments...")
 
-    logger.info("\n" + "=" * 60)
-    logger.info("TOURNAMENT SUMMARY")
-    logger.info("=" * 60)
-
-    tournament = await get_tournament(tournament_id, psql_db)
-    if not tournament:
-        logger.error(f"Tournament {tournament_id} not found")
-        return
-
-    logger.info(f"Tournament ID: {tournament_id}")
-    logger.info(f"Type: {tournament.tournament_type.value}")
-    logger.info(f"Status: {tournament.status.value}")
-    logger.info("")
-
-    rounds = await get_tournament_rounds(tournament_id, psql_db)
-    rounds.sort(key=lambda r: r.round_number)
-
-    rounds_data = []
-    winners_by_round = {}
-
-    logger.info("TOURNAMENT PROGRESSION:")
-    logger.info("-" * 40)
-
-    for i, round_data in enumerate(rounds):
-        round_header = f"Round {round_data.round_number}: {round_data.round_type.value}"
-        if round_data.is_final_round:
-            round_header += " 🔥 BOSS ROUND 🔥"
-
-        logger.info(round_header)
-        logger.info(f"  Round ID: {round_data.round_id}")
-        logger.info(f"  Status: {round_data.status.value}")
-        logger.info(f"  Final Round: {round_data.is_final_round}")
-
-        round_participants = []
-
-        if round_data.round_type == RoundType.GROUP:
-            groups = await get_tournament_group_members(round_data.round_id, psql_db)
-            if groups:
-                # Group by group_id
-                group_dict = {}
-                for member in groups:
-                    if member.group_id not in group_dict:
-                        group_dict[member.group_id] = []
-                    group_dict[member.group_id].append(member.hotkey)
-
-                logger.info("  Groups:")
-                for group_id, hotkeys in group_dict.items():
-                    logger.info(f"    {group_id}: {', '.join(hotkeys)}")
-                    round_participants.extend(hotkeys)
+    active_tournaments = await get_tournaments_with_status(TournamentStatus.ACTIVE, config.psql_db)
+    for tournament in active_tournaments:
+        logger.info(f"Processing active tournament {tournament.tournament_id}")
+        rounds = await get_tournament_rounds(tournament.tournament_id, config.psql_db)
+        if not rounds:
+            logger.info(f"Tournament {tournament.tournament_id} has no rounds, creating first round...")
+            await create_first_round_for_active_tournament(tournament.tournament_id, config, config.psql_db)
         else:
-            pairs = await get_tournament_pairs(round_data.round_id, psql_db)
-            if pairs:
-                logger.info("  Pairs:")
-                for pair in pairs:
-                    logger.info(f"    {pair.hotkey1} vs {pair.hotkey2}")
-                    round_participants.extend([pair.hotkey1, pair.hotkey2])
+            current_round = rounds[-1]
 
-        if round_data.status == RoundStatus.COMPLETED:
-            winners = await get_round_winners(round_data, psql_db)
-            if winners:
-                logger.info(f"  Winners: {', '.join(winners)}")
-                winners_by_round[i] = winners
-            else:
-                logger.info("  Winners: None")
-                winners_by_round[i] = []
+            if current_round.status in [RoundStatus.PENDING, RoundStatus.ACTIVE]:
+                if await check_if_round_is_completed(current_round, config.psql_db):
+                    await update_round_status(current_round.round_id, RoundStatus.COMPLETED, config.psql_db)
+                    logger.info(
+                        f"Tournament {tournament.tournament_id} round {current_round.round_id} is completed, advancing..."
+                    )
+                    await advance_tournament(tournament, current_round, config, config.psql_db)
 
-        rounds_data.append(
-            {
-                "participants": round_participants,
-                "type": round_data.round_type,
-                "status": round_data.status,
-                "round_id": round_data.round_id,
-                "is_final_round": round_data.is_final_round,
-            }
-        )
 
-        logger.info("")
+async def check_if_round_is_completed(round_data, psql_db: PSQLDB):
+    """Check if a round should be marked as completed based on task completion."""
+    logger.info(f"Checking if round {round_data.round_id} should be completed...")
 
-    await draw_group_stage_table(rounds_data, winners_by_round, psql_db)
+    round_tasks = await get_tournament_tasks(round_data.round_id, psql_db)
 
-    draw_knockout_bracket(rounds_data, winners_by_round)
+    if not round_tasks:
+        logger.info(f"No tasks found for round {round_data.round_id}")
+        return False
 
-    if tournament.status == TournamentStatus.COMPLETED:
-        final_round = rounds[-1] if rounds else None
-        if final_round and final_round.status == RoundStatus.COMPLETED:
-            final_winners = await get_round_winners(final_round, psql_db)
-            if final_winners:
-                logger.info("🏆 TOURNAMENT CHAMPION 🏆")
-                logger.info(f"Winner: {final_winners[0]}")
-                logger.info("=" * 60)
+    all_tasks_completed = True
+    for task in round_tasks:
+        task_obj = await get_task(task.task_id, psql_db)
+        if task_obj and task_obj.status != TaskStatus.SUCCESS.value:
+            all_tasks_completed = False
+            logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
+            break
+
+    if all_tasks_completed:
+        logger.info(f"All tasks in round {round_data.round_id} are completed, marking round as completed")
+        return True
+    else:
+        logger.info(f"Round {round_data.round_id} not ready for completion yet")
+        return False
+
+
+async def process_prepped_tournament_tasks(config: Config):
+    logger.info("Processing prepped tournament tasks...")
+
+    prepped_tasks = await get_tasks_with_status(TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only")
+
+    for task in prepped_tasks:
+        await update_task_status(task.task_id, TaskStatus.READY, config.psql_db)
+        logger.info(f"Set task {task.task_id} status to ready")
