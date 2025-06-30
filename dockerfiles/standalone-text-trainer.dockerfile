@@ -19,6 +19,7 @@ ENV OUTPUT_DIR="/workspace/axolotl/outputs"
 
 COPY core /workspace/core
 COPY miner /workspace/miner
+COPY trainer /workspace/trainer
 COPY scripts /workspace/scripts
 COPY core/config/base.yml /workspace/axolotl/base.yml
 
