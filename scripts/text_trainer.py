@@ -52,7 +52,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
         config = yaml.safe_load(file)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
-    config["base_model"] = f"{train_cst.MODELS_CACHE_PATH}/{model.replace('/', '--')}"
+    config["base_model"] = f"{train_cst.CACHE_PATH}/{task_id}/{model.replace('/', '--')}"
 
     config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"
     config["mlflow_experiment_name"] = dataset

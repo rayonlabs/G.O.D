@@ -13,19 +13,16 @@ from trainer import constants as cst
 hf_api = HfApi()
 
 async def download_text_dataset(task_id, dataset_url, file_format):
-    """
-    Download text dataset from S3 or Hugging Face and prepare for Axolotl.
-    Returns local dataset path and updated file_format.
-    """
-
     dataset_task_dir = f"{cst.CACHE_PATH}/{task_id}/datasets"
     os.makedirs(dataset_task_dir, exist_ok=True)
 
     if file_format == FileFormat.S3.value:
-        local_path = await download_s3_file(dataset_url)
         dataset_filename = f"{task_id}_train_data.json"
         input_data_path = os.path.join(dataset_task_dir, dataset_filename)
-        shutil.copy(local_path, input_data_path)
+
+        if not os.path.exists(input_data_path):
+            local_path = await download_s3_file(dataset_url)
+            shutil.copy(local_path, input_data_path)
 
     elif file_format == FileFormat.HF.value:
         repo_name = dataset_url.replace("/", "--")
@@ -40,6 +37,7 @@ async def download_text_dataset(task_id, dataset_url, file_format):
             )
 
     return input_data_path, file_format
+
 
 async def download_image_dataset(dataset_zip_url, task_id):
     dataset_dir = f"{cst.CACHE_PATH}/{task_id}/datasets"
