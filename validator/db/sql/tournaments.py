@@ -532,3 +532,23 @@ async def update_gpu_availability(trainer_ip: str, gpu_ids: list[int], hours_to_
 
         await connection.execute(query, trainer_ip, gpu_ids)
         logger.info(f"Updated GPU availability for trainer {trainer_ip}, GPUs {gpu_ids} to be used for {hours_to_complete} hours")
+
+
+async def get_tasks_with_all_training_completed(psql_db: PSQLDB) -> list[str]:
+    """Get task IDs where all training tasks (task_id, hotkey pairs) have completed (success or failure) and task is in training status"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT DISTINCT t1.{cst.TASK_ID}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE} t1
+            JOIN {cst.TASKS_TABLE} {cst.TASKS_TABLE} ON t1.{cst.TASK_ID} = {cst.TASKS_TABLE}.{cst.TASK_ID}
+            WHERE {cst.TASKS_TABLE}.{cst.STATUS} = 'training'
+            AND {cst.TASKS_TABLE}.{cst.CREATED_AT} >= NOW() - INTERVAL '1 month'
+            AND NOT EXISTS (
+                SELECT 1
+                FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE} t2
+                WHERE t2.{cst.TASK_ID} = t1.{cst.TASK_ID}
+                AND t2.{cst.TRAINING_STATUS} NOT IN ('success', 'failure')
+            )
+        """
+        results = await connection.fetch(query)
+        return [row[cst.TASK_ID] for row in results]

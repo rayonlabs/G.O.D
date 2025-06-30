@@ -86,7 +86,7 @@ async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str) 
 
 async def fetch_tournament_tasks_ready_to_train(config: Config):
     """
-    Main function to run all tournament orchestrator cycles.
+    Fill training task hotkey table.
     """
     while True:
         try:
@@ -95,7 +95,7 @@ async def fetch_tournament_tasks_ready_to_train(config: Config):
         except Exception as e:
             logger.error(f"Error in tournament orchestrator cycles: {str(e)}")
         finally:
-            await asyncio.sleep(15 * 60)  # 15 minutes in seconds
+            await asyncio.sleep(20 * 60)  # 20 minutes in seconds
 
 
 async def _fetch_tournament_tasks_ready_to_train(config: Config):
@@ -134,9 +134,6 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
 
 
 async def process_pending_tournament_tasks(config: Config):
-    """
-    Main function to run the pending tournament tasks processing cycle.
-    """
     while True:
         try:
             logger.info("Processing pending tournament tasks")
@@ -147,14 +144,14 @@ async def process_pending_tournament_tasks(config: Config):
             logger.info(f"Fetched {len(pending_training_tasks)} pending tournament tasks")
 
             if not pending_training_tasks:
-                logger.info("No pending tasks found, waiting 15 minutes to avoid tight loop")
-                await asyncio.sleep(15 * 60)  # 15 minutes
+                logger.info("No pending tasks found, waiting 20 minutes to avoid tight loop")
+                await asyncio.sleep(20 * 60)  # 20 minutes
                 continue
 
             await schedule_tasks_for_training(pending_training_tasks, config)
         except Exception as e:
             logger.error(f"Error in process_pending_tournament_tasks cycle: {str(e)}")
-            await asyncio.sleep(15 * 60)  # 15 minutes
+            await asyncio.sleep(20 * 60)  # 20 minutes
 
 
 async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTaskTraining], config: Config):
@@ -312,6 +309,177 @@ def _trainer_has_sufficient_gpus(trainer_gpus: list[GPUInfo], requirement: GpuRe
     return []
 
 
+async def monitor_training_tasks(config: Config):
+    """
+    Monitor training tasks and update GPU availability based on completion status.
+    """
+    while True:
+        try:
+            logger.info("Monitoring training tasks")
+            await _monitor_training_tasks(config)
+        except Exception as e:
+            logger.error(f"Error in monitor_training_tasks cycle: {str(e)}")
+        finally:
+            await asyncio.sleep(20 * 60)  # 20 minutes
+
+
+async def _monitor_training_tasks(config: Config):
+    """
+    Monitor training tasks and update GPU availability based on completion status.
+    """
+    # Get all tasks currently in training status
+    training_tasks = await tournament_sql.get_tournament_training_tasks(config.psql_db, TrainingStatus.TRAINING)
+    logger.info(f"Found {len(training_tasks)} tasks currently in training")
+
+    if not training_tasks:
+        logger.info("No tasks in training, skipping monitoring cycle")
+        return
+
+    # Track if any tasks completed to determine if we need to update GPU availability
+    any_completed = False
+
+    # Get all trainers to check task status
+    trainers = await tournament_sql.get_trainers(config.psql_db)
+
+    # Check each training task
+    for training_task in training_tasks:
+        try:
+            # Try to find which trainer has this task running
+            trainer_ip = None
+            task_log = None
+
+            for trainer in trainers:
+                try:
+                    task_log = await get_training_task_details(
+                        trainer.trainer_ip, str(training_task.task.task_id), training_task.hotkey
+                    )
+                    if task_log:
+                        trainer_ip = trainer.trainer_ip
+                        break
+                except Exception:
+                    continue
+
+            if not trainer_ip or not task_log:
+                logger.warning(f"Could not find trainer for task {training_task.task.task_id} with hotkey {training_task.hotkey}")
+                # Move task back to PENDING since trainer may have restarted or lost the task
+                await tournament_sql.update_tournament_task_training_status(
+                    training_task.task.task_id, training_task.hotkey, TrainingStatus.PENDING, config.psql_db
+                )
+                logger.info(f"Moved task {training_task.task.task_id} with hotkey {training_task.hotkey} back to PENDING status")
+                continue
+
+            # Check if task completed (success or failure)
+            if task_log.status in [TaskStatus.SUCCESS, TaskStatus.FAILURE]:
+                any_completed = True
+                logger.info(f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} completed with status {task_log.status}")
+
+                # Update task status in database
+                if task_log.status == TaskStatus.SUCCESS:
+                    await tournament_sql.update_tournament_task_training_status(
+                        training_task.task.task_id, training_task.hotkey, TrainingStatus.SUCCESS, config.psql_db
+                    )
+                else:  # FAILURE
+                    await tournament_sql.update_tournament_task_training_status(
+                        training_task.task.task_id, training_task.hotkey, TrainingStatus.PENDING, config.psql_db
+                    )
+
+        except Exception as e:
+            logger.error(f"Error checking task {training_task.task.task_id} with hotkey {training_task.hotkey}: {str(e)}")
+            continue
+
+    # If any tasks completed, update all trainers' GPU availability
+    if any_completed:
+        logger.info("Found completed tasks, updating GPU availability across all trainers")
+        await _update_all_trainers_gpu_availability(config)
+
+    logger.info(f"Completed monitoring cycle, processed {len(training_tasks)} tasks")
+
+
+async def _update_all_trainers_gpu_availability(config: Config):
+    """
+    Update GPU availability for all trainers by fetching current status and syncing with database.
+    """
+    try:
+        # Get all trainers from database
+        trainers = await tournament_sql.get_trainers(config.psql_db)
+
+        for trainer in trainers:
+            try:
+                # Fetch current GPU availability from trainer
+                current_gpus = await fetch_trainer_gpus(trainer.trainer_ip)
+
+                # Find GPUs that are free according to trainer but marked as used in DB
+                gpus_to_reset = []
+                for current_gpu in current_gpus:
+                    if current_gpu.available:
+                        # Check if this GPU is marked as used in our database
+                        for db_gpu in trainer.gpus:
+                            if db_gpu.gpu_id == current_gpu.gpu_id and not db_gpu.available:
+                                gpus_to_reset.append(current_gpu.gpu_id)
+                                break
+
+                # Reset GPU availability in database if needed
+                if gpus_to_reset:
+                    await tournament_sql.update_gpu_availability(trainer.trainer_ip, gpus_to_reset, 0, config.psql_db)
+                    logger.info(f"Reset {len(gpus_to_reset)} GPUs for trainer {trainer.trainer_ip}: {gpus_to_reset}")
+
+            except Exception as e:
+                logger.error(f"Error updating GPU availability for trainer {trainer.trainer_ip}: {str(e)}")
+                continue
+
+    except Exception as e:
+        logger.error(f"Error in _update_all_trainers_gpu_availability: {str(e)}")
+
+
+async def move_completed_tasks_to_preevaluation(config: Config):
+    """
+    Find tasks where all training tasks (task_id, hotkey) pairs have completed
+    and move those tasks to preevaluation status.
+    """
+    while True:
+        try:
+            logger.info("Moving completed tournament tasks to preevaluation")
+            await _move_completed_tasks_to_preevaluation(config)
+        except Exception as e:
+            logger.error(f"Error in move_completed_tasks_to_preevaluation cycle: {str(e)}")
+        finally:
+            await asyncio.sleep(20 * 60)  # 20 minutes
+
+
+async def _move_completed_tasks_to_preevaluation(config: Config):
+    """
+    Find tasks where all training tasks (task_id, hotkey) pairs have completed
+    and move those tasks to preevaluation status.
+    """
+    # Get task IDs where all training tasks have completed (only from last month)
+    completed_task_ids = await tournament_sql.get_tasks_with_all_training_completed(config.psql_db)
+    logger.info(f"Found {len(completed_task_ids)} tasks with all training completed")
+
+    if not completed_task_ids:
+        logger.info("No tasks with all training completed, skipping cycle")
+        return
+
+    # Get the actual task objects for these IDs
+    tasks_to_move = []
+    for task_id in completed_task_ids:
+        task = await task_sql.get_task(task_id, config.psql_db)
+        if task:
+            tasks_to_move.append(task)
+
+    logger.info(f"Moving {len(tasks_to_move)} tasks to preevaluation status")
+
+    # Move tasks to preevaluation
+    for task in tasks_to_move:
+        try:
+            task.status = TaskStatus.PREEVALUATION
+            await task_sql.update_task(task, config.psql_db)
+            logger.info(f"Moved task {task.task_id} from training to preevaluation status")
+        except Exception as e:
+            logger.error(f"Error moving task {task.task_id} to preevaluation: {str(e)}")
+
+    logger.info(f"Successfully moved {len(tasks_to_move)} tasks to preevaluation status")
+
+
 async def run_tournament_orchestrator_cycles():
     config = load_config()
     await try_db_connections(config)
@@ -319,6 +487,8 @@ async def run_tournament_orchestrator_cycles():
     await asyncio.gather(
         fetch_tournament_tasks_ready_to_train(config),
         process_pending_tournament_tasks(config),
+        monitor_training_tasks(config),
+        move_completed_tasks_to_preevaluation(config),
     )
 
 
