@@ -1,5 +1,39 @@
 import os
 from huggingface_hub import HfApi, login
+import os
+import time
+import shutil
+from datetime import datetime
+
+def clear_old_cache(directory: str, max_age_hours: int = 24):
+    now = time.time()
+    cutoff_time = now - (max_age_hours * 3600)
+
+    print(f"[{datetime.utcnow()}] Cleaning files older than {max_age_hours}h from: {directory}")
+
+    if not os.path.exists(directory):
+        print(f"Directory does not exist: {directory}")
+        return
+
+    for root, dirs, files in os.walk(directory, topdown=False):
+        for name in files:
+            path = os.path.join(root, name)
+            try:
+                if os.path.getmtime(path) < cutoff_time:
+                    os.remove(path)
+                    print(f"Deleted file: {path}")
+            except Exception as e:
+                print(f"Error deleting file {path}: {e}")
+
+        for name in dirs:
+            path = os.path.join(root, name)
+            try:
+                if os.path.getmtime(path) < cutoff_time:
+                    shutil.rmtree(path)
+                    print(f"🧹 Deleted folder: {path}")
+            except Exception as e:
+                print(f"Error deleting folder {path}: {e}")
+
 
 def main():
     hf_token = os.getenv("HUGGINGFACE_TOKEN")
@@ -18,7 +52,6 @@ def main():
     login(token=hf_token)
 
     repo_id = f"{hf_user}/{repo_name}"
-    local_folder = f"{local_folder}{repo_name}"
 
     if not os.path.isdir(local_folder):
         raise FileNotFoundError(f"Local folder {local_folder} does not exist")
@@ -40,6 +73,13 @@ def main():
     )
 
     print(f"Uploaded successfully to https://huggingface.co/{repo_id}", flush=True)
+
+    try:
+        print("Clearing old cache files...", flush=True)
+        clear_old_cache("/cache", max_age_hours=24)
+    except Exception as e:
+        print(f"Error during cache cleanup: {e}", flush=True)
+        pass
 
 if __name__ == "__main__":
     main()

@@ -53,6 +53,23 @@ def build_docker_image(
         raise
 
 
+def delete_image_and_cleanup(tag: str):
+    client = docker.from_env()
+    try:
+        client.images.remove(image=tag, force=True)
+        logger.info(f"Deleted Docker image with tag: {tag}")
+    except docker.errors.ImageNotFound:
+        logger.error(f"No Docker image found with tag: {tag}")
+    except Exception as e:
+        logger.error(f"Failed to delete image '{tag}': {e}")
+
+    try:
+        client.images.prune(filters={"dangling": True})
+        client.api.prune_builds()
+        logger.info("Cleaned up dangling images and build cache.")
+    except Exception as e:
+        logger.error(f"Cleanup failed: {e}")
+
 
 async def run_trainer_container_image(
     task_id: str,
@@ -119,7 +136,8 @@ async def run_trainer_container_text(
     client: docker.DockerClient = docker.from_env()
 
     environment = {
-            "WANDB_MODE": "disabled"
+            "WANDB_MODE": "disabled",
+            "WANDB_DISABLED": "true"
         }
 
     command: list[str] = [
@@ -245,7 +263,7 @@ async def upload_repo_to_hf(
     try:
         client = docker.from_env()
 
-        local_container_folder = cst.IMAGE_CONTAINER_SAVE_PATH if task_type == TaskType.IMAGETASK else cst.TEXT_CONTAINER_SAVE_PATH
+        local_container_folder = f"{cst.IMAGE_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}/" if task_type == TaskType.IMAGETASK else f"{cst.TEXT_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}/"
 
         environment = {
             "HUGGINGFACE_TOKEN": huggingface_token,
@@ -410,6 +428,9 @@ async def start_training_task(task: TrainerProxyRequest):
                 container.kill()
                 container.remove(force=True)
                 log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
+                logger.info(f"Cleaning up")
+                delete_image_and_cleanup(tag)
+                logger.info("Cleaned up Docker resources.")
             except Exception as cleanup_err:
                 log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
 

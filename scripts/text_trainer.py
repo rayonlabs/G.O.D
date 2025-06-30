@@ -45,7 +45,7 @@ def copy_dataset_if_needed(dataset_path, file_format):
     return dataset_path
 
 
-def create_config(task_id, model, dataset, dataset_type, file_format, expected_repo_name=None, 
+def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None, 
                 huggingface_username=None, huggingface_token=None, disable_upload=True):
     """Create the axolotl config file with appropriate settings."""
     with open("/workspace/axolotl/base.yml", "r") as file:
@@ -56,7 +56,6 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
 
     config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"
     config["mlflow_experiment_name"] = dataset
-    output_dir = f"/workspace/axolotl/outputs/{expected_repo_name}"
     os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir
 
@@ -182,6 +181,8 @@ async def main():
 
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
+
+    output_dir = f"/workspace/axolotl/outputs/{args.task_id}/{args.expected_repo_name}"
     
     config_path = create_config(
         args.task_id, 
@@ -189,6 +190,7 @@ async def main():
         dataset_path, 
         dataset_type, 
         args.file_format,
+        output_dir,
         args.expected_repo_name,
     )
     

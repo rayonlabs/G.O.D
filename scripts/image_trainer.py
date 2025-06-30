@@ -56,7 +56,7 @@ def create_config(task_id, model, model_type, expected_repo_name):
     # Update config
     config["pretrained_model_name_or_path"] = model
     config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
-    output_dir = f"{train_cst.IMAGE_CONTAINER_SAVE_PATH}{expected_repo_name}"
+    output_dir = f"{train_cst.IMAGE_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir
