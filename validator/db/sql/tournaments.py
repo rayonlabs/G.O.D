@@ -1,4 +1,6 @@
 from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 
 from fiber.chain.models import Node
 
@@ -307,7 +309,7 @@ async def add_trainer_gpus(trainer_ip: str, gpu_infos: list[GPUInfo], psql_db: P
             for gpu_info in gpu_infos:
                 used_until = None
                 if not gpu_info.available:
-                    used_until = "CURRENT_TIMESTAMP + INTERVAL '48 hours'"
+                    used_until = datetime.now(timezone.utc) + timedelta(hours=48)
 
                 await connection.execute(
                     insert_query,
@@ -354,7 +356,7 @@ async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
 
             # Determine availability based on used_until
             used_until = row[cst.USED_UNTIL]
-            available = used_until is None or used_until < datetime.utcnow()
+            available = used_until is None or used_until < datetime.now(timezone.utc)
 
             trainers[trainer_ip].gpus.append(GPUInfo(
                 gpu_id=row[cst.GPU_ID],

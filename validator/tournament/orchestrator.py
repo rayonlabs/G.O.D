@@ -29,7 +29,6 @@ from validator.utils.logging import get_logger
 from validator.utils.util import try_db_connections
 
 
-load_dotenv(".vali.env", override=True)
 logger = get_logger(__name__)
 
 
@@ -324,4 +323,5 @@ async def run_tournament_orchestrator_cycles():
 
 
 if __name__ == "__main__":
+    load_dotenv(".vali.env", override=True)
     asyncio.run(run_tournament_orchestrator_cycles())
