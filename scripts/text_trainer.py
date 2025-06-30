@@ -78,7 +78,10 @@ def create_config(task_id, model, dataset, dataset_type, file_format, expected_r
         config.pop("hub_model_id", None)
         config.pop("hub_strategy", None)
         config.pop("hub_token", None)
-    
+        for key in list(config.keys()):
+            if key.startswith("wandb"):
+                config.pop(key)
+            
     if file_format != FileFormat.HF.value:
         for ds in config["datasets"]:
             ds["ds_type"] = "json"
