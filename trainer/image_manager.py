@@ -119,8 +119,7 @@ async def run_trainer_container_text(
     client: docker.DockerClient = docker.from_env()
 
     environment = {
-            "WANDB_TOKEN": os.getenv("WANDB_TOKEN"),
-            "WANDB_API_KEY": os.getenv("WANDB_TOKEN")
+            "WANDB_MODE": "disabled"
         }
 
     command: list[str] = [

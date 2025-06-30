@@ -1,7 +1,7 @@
 FROM axolotlai/axolotl:main-20241128-py3.11-cu124-2.5.1
 
 # Install core dependencies from pyproject.toml
-RUN pip install mlflow huggingface_hub wandb aiohttp pydantic requests toml \
+RUN pip install mlflow huggingface_hub aiohttp pydantic requests toml \
     "fiber @ git+https://github.com/rayonlabs/fiber.git@2.4.0" \
     fastapi uvicorn httpx loguru python-dotenv \
     scipy numpy datasets tenacity minio \
