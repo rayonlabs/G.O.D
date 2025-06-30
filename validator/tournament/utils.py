@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 
-import random
-from typing import List
-
-from fiber.chain.models import Node
 
 from core.models.tournament_models import RoundStatus
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentType
 from validator.db.database import PSQLDB
-from validator.db.sql.nodes import get_all_nodes
-from validator.db.sql.nodes import insert_nodes
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
@@ -20,47 +14,6 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
-
-
-async def setup_mock_nodes(psql_db: PSQLDB, num_nodes: int = 8) -> List[Node]:
-    """Create mock nodes and insert them into the database if no nodes exist."""
-
-    existing_nodes = await get_all_nodes(psql_db)
-    if existing_nodes:
-        logger.info(f"Found {len(existing_nodes)} existing nodes in database")
-        # Use existing nodes, but limit to requested number
-        return existing_nodes[:num_nodes]
-
-    logger.info(f"Setting up {num_nodes} mock nodes...")
-    mock_nodes = []
-    for i in range(num_nodes):
-        hotkey = f"mock_hotkey_{i:03d}"
-        coldkey = f"mock_coldkey_{i:03d}"
-
-        node = Node(
-            hotkey=hotkey,
-            coldkey=coldkey,
-            node_id=i,
-            netuid=1,
-            ip="127.0.0.1",
-            ip_type=4,
-            port=8080 + i,
-            stake=100.0 + random.uniform(0, 50),
-            incentive=0.0,
-            alpha_stake=0.0,
-            tao_stake=0.0,
-            trust=random.uniform(0.5, 1.0),
-            vtrust=random.uniform(0.5, 1.0),
-            last_updated=0.0,
-            protocol=4,
-        )
-        mock_nodes.append(node)
-
-    async with await psql_db.connection() as connection:
-        await insert_nodes(connection, mock_nodes)
-
-    logger.info(f"Created and inserted {len(mock_nodes)} mock nodes")
-    return mock_nodes
 
 
 async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType) -> str:
