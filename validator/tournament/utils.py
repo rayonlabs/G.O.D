@@ -11,83 +11,15 @@ from core.models.tournament_models import TournamentType
 from validator.db.database import PSQLDB
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import insert_nodes
-from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
-from validator.db.sql.tournaments import get_tournament_pairs
 from validator.db.sql.tournaments import get_tournament_rounds
-from validator.db.sql.tournaments import get_tournament_tasks
 from validator.tournament.tournament_manager import get_round_winners
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
-
-
-async def get_best_dropped_out_contestant(tournament_id: str, current_round_id: str, psql_db: PSQLDB) -> str | None:
-    """
-    Logic:
-    - If previous round was knockout: take one of the losers
-    - If previous round was group: take random dropped out contestant
-    """
-    rounds = await get_tournament_rounds(tournament_id, psql_db)
-    rounds.sort(key=lambda r: r.round_number)
-
-    current_round_index = None
-    for i, round_data in enumerate(rounds):
-        if round_data.round_id == current_round_id:
-            current_round_index = i
-            break
-
-    if current_round_index is None or current_round_index == 0:
-        return None
-
-    previous_round = rounds[current_round_index - 1]
-
-    if previous_round.round_type == RoundType.KNOCKOUT:
-        pairs = await get_tournament_pairs(previous_round.round_id, psql_db)
-        tasks = await get_tournament_tasks(previous_round.round_id, psql_db)
-
-        losers = []
-        for i, pair in enumerate(pairs):
-            if i < len(tasks):
-                winner = await get_task_winner(tasks[i].task_id, psql_db)
-                if winner:
-                    loser = pair.hotkey2 if winner == pair.hotkey1 else pair.hotkey1
-                    losers.append(loser)
-
-        if losers:
-            return losers[0]
-
-    elif previous_round.round_type == RoundType.GROUP:
-        groups = await get_tournament_groups(previous_round.round_id, psql_db)
-
-        current_participants = set()
-        if rounds[current_round_index].round_type == RoundType.GROUP:
-            current_groups = await get_tournament_groups(current_round_id, psql_db)
-            for group in current_groups:
-                members = await get_tournament_group_members(group.group_id, psql_db)
-                for member in members:
-                    current_participants.add(member.hotkey)
-        else:
-            current_pairs = await get_tournament_pairs(current_round_id, psql_db)
-            for pair in current_pairs:
-                current_participants.add(pair.hotkey1)
-                current_participants.add(pair.hotkey2)
-
-        all_previous_participants = set()
-        for group in groups:
-            members = await get_tournament_group_members(group.group_id, psql_db)
-            for member in members:
-                all_previous_participants.add(member.hotkey)
-
-        non_advancing = all_previous_participants - current_participants
-
-        if non_advancing:
-            return random.choice(list(non_advancing))
-
-    return None
 
 
 async def setup_mock_nodes(psql_db: PSQLDB, num_nodes: int = 8) -> List[Node]:
@@ -129,15 +61,6 @@ async def setup_mock_nodes(psql_db: PSQLDB, num_nodes: int = 8) -> List[Node]:
 
     logger.info(f"Created and inserted {len(mock_nodes)} mock nodes")
     return mock_nodes
-
-
-async def get_node_by_hotkey(psql_db: PSQLDB, hotkey: str) -> Node | None:
-    """Get node by hotkey from database."""
-    nodes = await get_all_nodes(psql_db)
-    for node in nodes:
-        if node.hotkey == hotkey:
-            return node
-    return None
 
 
 async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType) -> str:

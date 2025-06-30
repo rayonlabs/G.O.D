@@ -24,6 +24,7 @@ from validator.core.config import Config
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
 from validator.db.sql.nodes import get_all_nodes
+from validator.db.sql.nodes import get_node_by_hotkey
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.submissions_and_scoring import get_task_winners
@@ -50,7 +51,6 @@ from validator.tournament.task_creator import create_image_tournament_round
 from validator.tournament.task_creator import create_text_tournament_round
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_boss_round_ascii_art
-from validator.tournament.utils import get_node_by_hotkey
 from validator.utils.logging import get_logger
 
 
@@ -200,7 +200,7 @@ async def assign_nodes_to_tournament_tasks(round_id: str, round_structure: Round
 
             for task in group_tasks:
                 for hotkey in group.member_ids:
-                    node = await get_node_by_hotkey(psql_db, hotkey)
+                    node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
                         await assign_node_to_task(task.task_id, node, psql_db)
                         logger.info(f"Assigned {hotkey} to group task {task.task_id}")
@@ -213,7 +213,7 @@ async def assign_nodes_to_tournament_tasks(round_id: str, round_structure: Round
             pair_task = next((task for task in round_tasks if task.pair_id == pair_id), None)
             if pair_task:
                 for hotkey in pair:
-                    node = await get_node_by_hotkey(psql_db, hotkey)
+                    node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
                         await assign_node_to_task(pair_task.task_id, node, psql_db)
                         logger.info(f"Assigned {hotkey} to pair task {pair_task.task_id}")
@@ -345,7 +345,7 @@ async def create_next_round(
 
     winner_nodes = []
     for hotkey in winners:
-        node = await get_node_by_hotkey(psql_db, hotkey)
+        node = await get_node_by_hotkey(hotkey, psql_db)
         if node:
             winner_nodes.append(node)
 
@@ -483,7 +483,7 @@ async def create_first_round_for_active_tournament(tournament_id: str, config: C
 
     participant_nodes = []
     for participant in participants:
-        node = await get_node_by_hotkey(psql_db, participant.hotkey)
+        node = await get_node_by_hotkey(participant.hotkey, psql_db)
         if node:
             participant_nodes.append(node)
 
