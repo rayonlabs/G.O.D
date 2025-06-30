@@ -18,6 +18,7 @@ from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_pairs
 from validator.db.sql.tournaments import get_tournament_rounds
 from validator.db.sql.tournaments import get_tournament_tasks
+from validator.tournament.tournament_manager import get_round_winners
 from validator.utils.logging import get_logger
 
 
@@ -169,17 +170,13 @@ async def get_latest_tournament_winner(psql_db: PSQLDB, tournament_type: Tournam
     if final_round.status != RoundStatus.COMPLETED:
         return None
 
-    tasks = await get_tournament_tasks(final_round.round_id, psql_db)
-    winners = []
-    if tasks:
-        for task in tasks:
-            winner_hotkey = await get_task_winner(task.task_id, psql_db)
-            if winner_hotkey:
-                winners.append(winner_hotkey)
+    winners = await get_round_winners(final_round, psql_db)
+
+    if len(winners) != 1:
+        logger.error(f"Expected 1 winner in final round {final_round.round_id}, got {len(winners)}")
 
     if winners:
-        # gets the one with the most wins
-        return max(set(winners), key=winners.count)
+        return winners[0]
     else:
         return None
 
