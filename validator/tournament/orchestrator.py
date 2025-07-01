@@ -86,7 +86,7 @@ async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str) 
 
 async def fetch_tournament_tasks_ready_to_train(config: Config):
     """
-    Fill training task hotkey table.
+    Fill the `tournament_task_hotkey_trainings` table with task-hotkey pairs that haven't been trained yet.
     """
     while True:
         try:
