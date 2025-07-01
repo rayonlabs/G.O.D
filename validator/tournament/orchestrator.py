@@ -179,7 +179,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
         if not suitable_gpus_result:
             logger.info(f"No suitable GPUs found for requirement {required_gpus.value}, waiting 30 minutes before retry")
-            await asyncio.sleep(30 * 60)
+            await asyncio.sleep(15 * 60)
             continue
 
         trainer_ip, gpu_ids = suitable_gpus_result
