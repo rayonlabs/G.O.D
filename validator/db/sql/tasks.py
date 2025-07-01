@@ -852,65 +852,8 @@ async def get_tasks_by_ids(task_ids: list[UUID], psql_db: PSQLDB, connection: Co
 
         for task_type, type_rows in tasks_by_type.items():
             type_task_ids = [row[cst.TASK_ID] for row in type_rows]
-
-            if task_type == TaskType.INSTRUCTTEXTTASK.value:
-                specific_query = f"""
-                    SELECT t.*, tt.field_system,
-                           tt.field_instruction, tt.field_input, tt.field_output,
-                           tt.format, tt.no_input_format, tt.synthetic_data
-                    FROM {cst.TASKS_TABLE} t
-                    LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
-                    WHERE t.{cst.TASK_ID} = ANY($1)
-                """
-            elif task_type == TaskType.IMAGETASK.value:
-                specific_query = f"""
-                    SELECT t.*, it.model_type
-                    FROM {cst.TASKS_TABLE} t
-                    LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
-                    WHERE t.{cst.TASK_ID} = ANY($1)
-                """
-            elif task_type == TaskType.DPOTASK.value:
-                specific_query = f"""
-                    SELECT t.*, dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
-                           dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format
-                    FROM {cst.TASKS_TABLE} t
-                    LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
-                    WHERE t.{cst.TASK_ID} = ANY($1)
-                """
-            elif task_type == TaskType.GRPOTASK.value:
-                specific_query = f"""
-                    SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format
-                    FROM {cst.TASKS_TABLE} t
-                    LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
-                    WHERE t.{cst.TASK_ID} = ANY($1)
-                """
-            else:
-                logger.warning(f"Unknown task type {task_type}, skipping tasks")
-                continue
-
-            specific_rows = await conn.fetch(specific_query, type_task_ids)
-
-            # Create a mapping for this task type
-            specific_rows_dict = {row[cst.TASK_ID]: row for row in specific_rows}
-
-            for row in type_rows:
-                task_id = row[cst.TASK_ID]
-                specific_row = specific_rows_dict.get(task_id)
-
-                if specific_row:
-                    full_task_data = dict(specific_row)
-                    if task_type == TaskType.INSTRUCTTEXTTASK.value:
-                        all_tasks.append(InstructTextRawTask(**full_task_data))
-                    elif task_type == TaskType.IMAGETASK.value:
-                        image_text_pairs = await get_image_text_pairs(task_id, psql_db, connection)
-                        all_tasks.append(ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs))
-                    elif task_type == TaskType.DPOTASK.value:
-                        all_tasks.append(DpoRawTask(**full_task_data))
-                    elif task_type == TaskType.GRPOTASK.value:
-                        reward_functions = await get_reward_functions(task_id, psql_db, connection)
-                        all_tasks.append(GrpoRawTask(**full_task_data, reward_functions=reward_functions))
-                else:
-                    logger.warning(f"Specific data not found for task {task_id} of type {task_type}")
+            tasks = await _load_tasks_by_type(conn, task_type, type_task_ids, type_rows, psql_db)
+            all_tasks.extend(tasks)
 
         # Create a mapping for quick lookup
         tasks_dict = {task.task_id: task for task in all_tasks}
@@ -931,6 +874,97 @@ async def get_tasks_by_ids(task_ids: list[UUID], psql_db: PSQLDB, connection: Co
 
     async with await psql_db.connection() as connection:
         return await _get_tasks_by_ids_inner(connection)
+
+
+async def _load_tasks_by_type(
+    conn: Connection,
+    task_type: str,
+    type_task_ids: list[UUID],
+    type_rows: list,
+    psql_db: PSQLDB
+) -> list[AnyTypeTask]:
+    """Load tasks of a specific type with their type-specific data"""
+    specific_query = _get_specific_query_for_task_type(task_type)
+    if not specific_query:
+        logger.warning(f"Unknown task type {task_type}, skipping tasks")
+        return []
+
+    specific_rows = await conn.fetch(specific_query, type_task_ids)
+    specific_rows_dict = {row[cst.TASK_ID]: row for row in specific_rows}
+
+    tasks = []
+    for row in type_rows:
+        task_id = row[cst.TASK_ID]
+        specific_row = specific_rows_dict.get(task_id)
+
+        if specific_row:
+            task = await _create_task_from_data(task_type, specific_row, task_id, psql_db, conn)
+            if task:
+                tasks.append(task)
+        else:
+            logger.warning(f"Specific data not found for task {task_id} of type {task_type}")
+
+    return tasks
+
+
+def _get_specific_query_for_task_type(task_type: str) -> str | None:
+    """Get the specific query for a given task type"""
+    if task_type == TaskType.INSTRUCTTEXTTASK.value:
+        return f"""
+            SELECT t.*, tt.field_system,
+                   tt.field_instruction, tt.field_input, tt.field_output,
+                   tt.format, tt.no_input_format, tt.synthetic_data
+            FROM {cst.TASKS_TABLE} t
+            LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
+            WHERE t.{cst.TASK_ID} = ANY($1)
+        """
+    elif task_type == TaskType.IMAGETASK.value:
+        return f"""
+            SELECT t.*, it.model_type
+            FROM {cst.TASKS_TABLE} t
+            LEFT JOIN {cst.IMAGE_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
+            WHERE t.{cst.TASK_ID} = ANY($1)
+        """
+    elif task_type == TaskType.DPOTASK.value:
+        return f"""
+            SELECT t.*, dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
+                   dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format
+            FROM {cst.TASKS_TABLE} t
+            LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
+            WHERE t.{cst.TASK_ID} = ANY($1)
+        """
+    elif task_type == TaskType.GRPOTASK.value:
+        return f"""
+            SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format
+            FROM {cst.TASKS_TABLE} t
+            LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
+            WHERE t.{cst.TASK_ID} = ANY($1)
+        """
+    return None
+
+
+async def _create_task_from_data(
+    task_type: str,
+    task_data: dict,
+    task_id: UUID,
+    psql_db: PSQLDB,
+    conn: Connection
+) -> AnyTypeTask | None:
+    """Create a task object from the given data based on task type"""
+    full_task_data = dict(task_data)
+
+    if task_type == TaskType.INSTRUCTTEXTTASK.value:
+        return InstructTextRawTask(**full_task_data)
+    elif task_type == TaskType.IMAGETASK.value:
+        image_text_pairs = await get_image_text_pairs(task_id, psql_db, conn)
+        return ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs)
+    elif task_type == TaskType.DPOTASK.value:
+        return DpoRawTask(**full_task_data)
+    elif task_type == TaskType.GRPOTASK.value:
+        reward_functions = await get_reward_functions(task_id, psql_db, conn)
+        return GrpoRawTask(**full_task_data, reward_functions=reward_functions)
+
+    return None
 
 
 async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0, include_tournament_tasks=False) -> list[Task]:
