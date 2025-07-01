@@ -11,6 +11,7 @@ from PIL import Image
 from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 
+from validator.evaluation.common import retry_on_5xx
 from validator.utils.logging import get_logger
 
 
@@ -18,6 +19,7 @@ logger = get_logger(__name__)
 hf_api = HfApi()
 
 
+@retry_on_5xx()
 def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalLM) -> bool:
     original_config = AutoConfig.from_pretrained(original_repo, token=os.environ.get("HUGGINGFACE_TOKEN"))
     finetuned_config = finetuned_model.config
