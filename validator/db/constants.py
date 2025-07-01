@@ -29,6 +29,7 @@ TOURNAMENT_GROUPS_TABLE = "tournament_groups"
 TOURNAMENT_GROUP_MEMBERS_TABLE = "tournament_group_members"
 TOURNAMENT_PAIRS_TABLE = "tournament_pairs"
 TOURNAMENT_TASKS_TABLE = "tournament_tasks"
+TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE = "tournament_task_hotkey_trainings"
 
 # Node Table Columns
 NODE_ID = "node_id"
@@ -153,8 +154,19 @@ HOTKEY2 = "hotkey2"
 ELIMINATED_IN_ROUND_ID = "eliminated_in_round_id"
 FINAL_POSITION = "final_position"
 TASK_ORDER = "task_order"
+TRAINING_STATUS = "training_status"
+N_TRAINING_ATTEMPTS = "n_training_attempts"
 TRAINING_REPO = "training_repo"
 TRAINING_COMMIT_HASH = "training_commit_hash"
+
+# Trainer GPUs Table
+TRAINERS_GPUS_TABLE = "trainers_gpus"
+TRAINER_IP = "trainer_ip"
+GPU_ID = "gpu_id"
+GPU_TYPE = "gpu_type"
+VRAM_GB = "vram_gb"
+USED_UNTIL = "used_until"
+
 
 # Common Column Names (shared between tables)
 QUALITY_SCORE = "quality_score"  # Used in both submissions and task_nodes

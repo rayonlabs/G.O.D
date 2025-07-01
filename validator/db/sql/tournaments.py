@@ -1,3 +1,7 @@
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
+
 from fiber.chain.models import Node
 
 import validator.db.constants as cst
@@ -10,7 +14,12 @@ from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
+from core.models.utility_models import GPUInfo
+from core.models.utility_models import TournamentTaskTraining
+from core.models.utility_models import TrainerInfo
+from core.models.utility_models import TrainingStatus
 from validator.db.database import PSQLDB
+from validator.db.sql import tasks as task_sql
 from validator.utils.logging import get_logger
 
 
@@ -491,3 +500,270 @@ async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> li
             )
             for row in results
         ]
+
+
+async def add_trainer_gpus(trainer_ip: str, gpu_infos: list[GPUInfo], psql_db: PSQLDB):
+    """Add or update GPU information for a trainer"""
+    async with await psql_db.connection() as connection:
+        async with connection.transaction():
+            # First, remove existing entries for this trainer
+            delete_query = f"""
+                DELETE FROM {cst.TRAINERS_GPUS_TABLE}
+                WHERE {cst.TRAINER_IP} = $1
+            """
+            await connection.execute(delete_query, trainer_ip)
+
+            # Then insert new GPU information
+            insert_query = f"""
+                INSERT INTO {cst.TRAINERS_GPUS_TABLE}
+                ({cst.TRAINER_IP}, {cst.GPU_ID}, {cst.GPU_TYPE}, {cst.VRAM_GB}, {cst.USED_UNTIL})
+                VALUES ($1, $2, $3, $4, $5)
+            """
+
+            for gpu_info in gpu_infos:
+                used_until = None
+                if not gpu_info.available:
+                    used_until = datetime.now(timezone.utc) + timedelta(hours=48)
+
+                await connection.execute(
+                    insert_query, trainer_ip, gpu_info.gpu_id, gpu_info.gpu_type, gpu_info.vram_gb, used_until
+                )
+
+            logger.info(f"Added {len(gpu_infos)} GPUs for trainer {trainer_ip}")
+
+
+async def remove_trainer(trainer_ip: str, psql_db: PSQLDB):
+    """Remove a trainer and all its GPUs from the database"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            DELETE FROM {cst.TRAINERS_GPUS_TABLE}
+            WHERE {cst.TRAINER_IP} = $1
+        """
+        await connection.execute(query, trainer_ip)
+        logger.info(f"Removed trainer {trainer_ip} from the database")
+
+
+async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
+    """Get all trainers and their GPU information from the database"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TRAINER_IP}, {cst.GPU_ID}, {cst.GPU_TYPE}, {cst.VRAM_GB}, {cst.USED_UNTIL}
+            FROM {cst.TRAINERS_GPUS_TABLE}
+            ORDER BY {cst.TRAINER_IP}, {cst.GPU_ID}
+        """
+        results = await connection.fetch(query)
+
+        # Group by trainer IP
+        trainers = {}
+        for row in results:
+            trainer_ip = row[cst.TRAINER_IP]
+            if trainer_ip not in trainers:
+                trainers[trainer_ip] = TrainerInfo(trainer_ip=trainer_ip, gpus=[])
+
+            # Determine availability based on used_until
+            used_until = row[cst.USED_UNTIL]
+            available = used_until is None or used_until < datetime.now(timezone.utc)
+
+            trainers[trainer_ip].gpus.append(
+                GPUInfo(
+                    gpu_id=row[cst.GPU_ID],
+                    gpu_type=row[cst.GPU_TYPE],
+                    vram_gb=row[cst.VRAM_GB],
+                    available=available,
+                    used_until=used_until,
+                )
+            )
+
+        return list(trainers.values())
+
+
+async def add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples: list[tuple[str, str, datetime]], psql_db: PSQLDB):
+    """
+    Add task-hotkey pairs to the tournament_task_hotkey_trainings table using batch insert.
+    Each task-hotkey pair defines a training task that we'll send to a trainer later.
+    """
+    async with await psql_db.connection() as connection:
+        async with connection.transaction():
+            if not task_hotkey_triples:
+                logger.info("No task-hotkey triples to insert")
+                return
+
+            query = f"""
+                INSERT INTO {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+                ({cst.TASK_ID}, {cst.HOTKEY}, {cst.CREATED_AT})
+                SELECT * FROM unnest($1::text[], $2::text[], $3::timestamptz[])
+                ON CONFLICT ({cst.TASK_ID}, {cst.HOTKEY}) DO NOTHING
+            """
+
+            task_ids = [triple[0] for triple in task_hotkey_triples]
+            hotkeys = [triple[1] for triple in task_hotkey_triples]
+            timestamps = [triple[2] for triple in task_hotkey_triples]
+
+            await connection.execute(query, task_ids, hotkeys, timestamps)
+
+            logger.info(f"Added {len(task_hotkey_triples)} task-hotkey training triples in batch")
+
+
+async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus) -> list[TournamentTaskTraining]:
+    """
+    Fetch tournament tasks with specific training status in reverse chronological order.
+
+    Args:
+        psql_db: Database connection
+        status: Training status to filter by
+
+    Returns:
+        List of TournamentTaskTraining objects ordered by creation time (newest first)
+    """
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TASK_ID}, {cst.HOTKEY}, {cst.TRAINING_STATUS}, {cst.N_TRAINING_ATTEMPTS},
+                   {cst.CREATED_AT}, {cst.UPDATED_AT}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            WHERE {cst.TRAINING_STATUS} = $1
+            ORDER BY {cst.CREATED_AT} DESC
+        """
+        results = await connection.fetch(query, status)
+
+        if not results:
+            return []
+
+        unique_task_ids = list({row[cst.TASK_ID] for row in results})
+        tasks = await task_sql.get_tasks_by_ids(unique_task_ids, psql_db, connection)
+
+        # Create a mapping for quick lookup
+        tasks_dict = {task.task_id: task for task in tasks}
+
+        tournament_tasks = []
+        missing_tasks = []
+
+        for row in results:
+            task = tasks_dict.get(row[cst.TASK_ID])
+            if task:
+                tournament_tasks.append(
+                    TournamentTaskTraining(
+                        task=task,
+                        hotkey=row[cst.HOTKEY],
+                        training_status=row[cst.TRAINING_STATUS],
+                        n_training_attempts=row[cst.N_TRAINING_ATTEMPTS],
+                        created_at=row[cst.CREATED_AT],
+                        updated_at=row[cst.UPDATED_AT],
+                    )
+                )
+            else:
+                missing_tasks.append(row[cst.TASK_ID])
+
+        if missing_tasks:
+            logger.warning(f"Tasks not found in batch load: {missing_tasks}")
+
+        return tournament_tasks
+
+
+async def update_tournament_task_training_status(task_id: str, hotkey: str, status: TrainingStatus, psql_db: PSQLDB):
+    """Update the training status of a specific task-hotkey pair"""
+    async with await psql_db.connection() as connection:
+        increment_clause = (
+            f", {cst.N_TRAINING_ATTEMPTS} = {cst.N_TRAINING_ATTEMPTS} + 1" if status == TrainingStatus.TRAINING else ""
+        )
+
+        query = f"""
+            UPDATE {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            SET {cst.TRAINING_STATUS} = $3{increment_clause}, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
+        """
+
+        await connection.execute(query, task_id, hotkey, status)
+        logger.info(f"Marked task-hotkey pair ({task_id}, {hotkey}) as {status}")
+
+
+async def get_training_attempts(task_id: str, hotkey: str, psql_db: PSQLDB) -> int:
+    """Get the number of training attempts for a task-hotkey pair"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.N_TRAINING_ATTEMPTS}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
+        """
+        result = await connection.fetchrow(query, task_id, hotkey)
+        return result[cst.N_TRAINING_ATTEMPTS] if result else 0
+
+
+async def get_tournament_training_repo_and_commit(hotkey: str, psql_db: PSQLDB) -> tuple[str | None, str | None]:
+    """Get the training_repo and training_commit_hash for a hotkey from tournament_participants table"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
+            FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+            WHERE {cst.HOTKEY} = $1
+            ORDER BY {cst.CREATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, hotkey)
+        if result:
+            return result[cst.TRAINING_REPO], result[cst.TRAINING_COMMIT_HASH]
+        return None, None
+
+
+async def get_tournament_training_stats(psql_db: PSQLDB) -> dict:
+    """Get statistics about tournament training status"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT
+                {cst.TRAINING_STATUS},
+                COUNT(*) as count,
+                AVG({cst.N_TRAINING_ATTEMPTS}) as avg_attempts,
+                MAX({cst.N_TRAINING_ATTEMPTS}) as max_attempts
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            GROUP BY {cst.TRAINING_STATUS}
+        """
+        results = await connection.fetch(query)
+
+        stats = {"total_pairs": 0, "pending": 0, "success": 0, "failure": 0, "avg_attempts": 0, "max_attempts": 0}
+
+        for row in results:
+            status = row[cst.TRAINING_STATUS]
+            count = row["count"]
+            avg_attempts = row["avg_attempts"] or 0
+            max_attempts = row["max_attempts"] or 0
+
+            stats["total_pairs"] += count
+            stats[status] = count
+            stats["avg_attempts"] = max(stats["avg_attempts"], avg_attempts)
+            stats["max_attempts"] = max(stats["max_attempts"], max_attempts)
+
+        return stats
+
+
+async def update_gpu_availability(trainer_ip: str, gpu_ids: list[int], hours_to_complete: int, psql_db: PSQLDB):
+    """Update GPU availability by setting used_until based on hours_to_complete"""
+    async with await psql_db.connection() as connection:
+        used_until = f"CURRENT_TIMESTAMP + INTERVAL '{hours_to_complete} hours'"
+
+        query = f"""
+            UPDATE {cst.TRAINERS_GPUS_TABLE}
+            SET {cst.USED_UNTIL} = {used_until}, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.TRAINER_IP} = $1 AND {cst.GPU_ID} = ANY($2)
+        """
+
+        await connection.execute(query, trainer_ip, gpu_ids)
+        logger.info(f"Updated GPU availability for trainer {trainer_ip}, GPUs {gpu_ids} to be used for {hours_to_complete} hours")
+
+
+async def get_tasks_with_all_training_completed(psql_db: PSQLDB) -> list[str]:
+    """Get task IDs where all training tasks (task_id, hotkey pairs) have completed (success or failure) and task is in training status"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT DISTINCT t1.{cst.TASK_ID}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE} t1
+            JOIN {cst.TASKS_TABLE} {cst.TASKS_TABLE} ON t1.{cst.TASK_ID} = {cst.TASKS_TABLE}.{cst.TASK_ID}
+            WHERE {cst.TASKS_TABLE}.{cst.STATUS} = 'training'
+            AND {cst.TASKS_TABLE}.{cst.CREATED_AT} >= NOW() - INTERVAL '1 month'
+            AND NOT EXISTS (
+                SELECT 1
+                FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE} t2
+                WHERE t2.{cst.TASK_ID} = t1.{cst.TASK_ID}
+                AND t2.{cst.TRAINING_STATUS} NOT IN ('success', 'failure')
+            )
+        """
+        results = await connection.fetch(query)
+        return [row[cst.TASK_ID] for row in results]
