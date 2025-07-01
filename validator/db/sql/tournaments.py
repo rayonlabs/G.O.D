@@ -400,7 +400,16 @@ async def get_tournament_training_tasks(
     psql_db: PSQLDB,
     status: TrainingStatus
     ) -> list[TournamentTaskTraining]:
-    """Fetch pending tournament tasks in reverse chronological order (newest first) so we can pop() from the end"""
+    """
+    Fetch tournament tasks with specific training status in reverse chronological order.
+    
+    Args:
+        psql_db: Database connection
+        status: Training status to filter by
+        
+    Returns:
+        List of TournamentTaskTraining objects ordered by creation time (newest first)
+    """
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TASK_ID}, {cst.HOTKEY}, {cst.TRAINING_STATUS}, {cst.N_TRAINING_ATTEMPTS},
@@ -421,6 +430,8 @@ async def get_tournament_training_tasks(
         tasks_dict = {task.task_id: task for task in tasks}
 
         tournament_tasks = []
+        missing_tasks = []
+        
         for row in results:
             task = tasks_dict.get(row[cst.TASK_ID])
             if task:
@@ -433,7 +444,10 @@ async def get_tournament_training_tasks(
                     updated_at=row[cst.UPDATED_AT]
                 ))
             else:
-                logger.warning(f"Task {row[cst.TASK_ID]} not found in batch load")
+                missing_tasks.append(row[cst.TASK_ID])
+
+        if missing_tasks:
+            logger.warning(f"Tasks not found in batch load: {missing_tasks}")
 
         return tournament_tasks
 

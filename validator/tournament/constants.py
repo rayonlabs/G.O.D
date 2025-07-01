@@ -1,1 +1,15 @@
 MAX_TRAINING_ATTEMPTS = 3
+
+# Orchestrator cycle intervals (in seconds)
+FETCH_TASKS_CYCLE_INTERVAL = 20 * 60  # 20 minutes
+PROCESS_PENDING_TASKS_CYCLE_INTERVAL = 20 * 60  # 20 minutes
+MONITOR_TRAINING_TASKS_CYCLE_INTERVAL = 20 * 60  # 20 minutes
+MOVE_COMPLETED_TASKS_CYCLE_INTERVAL = 20 * 60  # 20 minutes
+
+# Retry intervals (in seconds)
+GPU_AVAILABILITY_CHECK_RETRY_INTERVAL = 15 * 60  # 15 minutes
+TRAINING_START_RETRY_INTERVAL = 15 * 60  # 15 minutes
+
+# Trainer requests
+TRAINER_HTTP_TIMEOUT = 30.0  # seconds
+EXPECTED_TRAINING_START_MESSAGE = "Started Training!"

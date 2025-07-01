@@ -42,7 +42,7 @@ async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
     Returns:
         List of GPUInfo objects from the trainer
     """
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=cst.TRAINER_HTTP_TIMEOUT) as client:
         url = f"http://{trainer_ip}{GET_GPU_AVAILABILITY_ENDPOINT}"
         logger.info(f"Fetching GPU availability from trainer at {url}")
 
@@ -59,24 +59,39 @@ async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
 async def start_training_task(trainer_ip: str, training_request: TrainerProxyRequest) -> bool:
     """
     Ask trainer to start training.
+    
+    Args:
+        trainer_ip: IP address of the trainer
+        training_request: The training request to send
+        
+    Returns:
+        bool: True if training started successfully, False otherwise
     """
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=cst.TRAINER_HTTP_TIMEOUT) as client:
         url = f"http://{trainer_ip}{PROXY_TRAINING_IMAGE_ENDPOINT}"
         logger.info(f"Requesting training from trainer at {url}")
 
         response = await client.post(url, json=training_request.model_dump())
         response.raise_for_status()
 
-        return response.json()["message"] == "Started Training!"
+        return response.json()["message"] == cst.EXPECTED_TRAINING_START_MESSAGE
 
 
 async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str) -> TrainerTaskLog:
     """
     Get the details of a training task from a trainer.
+    
+    Args:
+        trainer_ip: IP address of the trainer
+        task_id: The task ID to get details for
+        hotkey: The hotkey of the miner
+        
+    Returns:
+        TrainerTaskLog: The task log from the trainer
     """
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=cst.TRAINER_HTTP_TIMEOUT) as client:
         url = f"http://{trainer_ip}{TASK_DETAILS_ENDPOINT}"
-        logger.info(f"Getting task details from trainer at {url}")
+        logger.debug(f"Getting task details from trainer at {url} for task {task_id}")
 
         response = await client.get(url, params={"task_id": task_id, "hotkey": hotkey})
         response.raise_for_status()
@@ -95,7 +110,7 @@ async def fetch_tournament_tasks_ready_to_train(config: Config):
         except Exception as e:
             logger.error(f"Error in tournament orchestrator cycles: {str(e)}")
         finally:
-            await asyncio.sleep(20 * 60)  # 20 minutes in seconds
+            await asyncio.sleep(cst.FETCH_TASKS_CYCLE_INTERVAL)
 
 
 async def _fetch_tournament_tasks_ready_to_train(config: Config):
@@ -144,14 +159,14 @@ async def process_pending_tournament_tasks(config: Config):
             logger.info(f"Fetched {len(pending_training_tasks)} pending tournament tasks")
 
             if not pending_training_tasks:
-                logger.info("No pending tasks found, waiting 20 minutes to avoid tight loop")
-                await asyncio.sleep(20 * 60)  # 20 minutes
+                logger.info("No pending tasks found, waiting to avoid tight loop")
+                await asyncio.sleep(cst.PROCESS_PENDING_TASKS_CYCLE_INTERVAL)
                 continue
 
             await schedule_tasks_for_training(pending_training_tasks, config)
         except Exception as e:
             logger.error(f"Error in process_pending_tournament_tasks cycle: {str(e)}")
-            await asyncio.sleep(20 * 60)  # 20 minutes
+            await asyncio.sleep(cst.PROCESS_PENDING_TASKS_CYCLE_INTERVAL)
 
 
 async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTaskTraining], config: Config):
@@ -178,8 +193,8 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
         suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
         if not suitable_gpus_result:
-            logger.info(f"No suitable GPUs found for requirement {required_gpus.value}, waiting 30 minutes before retry")
-            await asyncio.sleep(15 * 60)
+            logger.info(f"No suitable GPUs found for requirement {required_gpus.value}, waiting before retry")
+            await asyncio.sleep(cst.GPU_AVAILABILITY_CHECK_RETRY_INTERVAL)
             continue
 
         trainer_ip, gpu_ids = suitable_gpus_result
@@ -203,11 +218,11 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                     )
             else:
                 logger.error(f"Failed to start training for task {training_task.task.task_id} on trainer {trainer_ip}")
-                await asyncio.sleep(15 * 60)
+                await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
                 continue
         except Exception as e:
             logger.error(f"Exception while scheduling training: {str(e)}")
-            await asyncio.sleep(15 * 60)
+            await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
             continue
 
     logger.info(f"Completed scheduling cycle, {len(pending_training_tasks)} tasks remaining")
@@ -216,6 +231,10 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) -> tuple[str, list[int]] | None:
     """
     Check if there are any suitable GPUs across all trainers for the given GPU requirement.
+
+    Args:
+        config: Configuration object for database access
+        required_gpus: Required GPU specification
 
     Returns:
         tuple[str, list[int]] | None: (trainer_ip, gpu_ids) if suitable GPUs found, None otherwise
@@ -230,9 +249,11 @@ async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) ->
                 return trainer.trainer_ip, gpu_ids
 
         logger.info(f"No suitable GPUs found across all trainers for requirement {required_gpus.value}")
+        return None
 
     except Exception as e:
         logger.error(f"Error checking suitable GPUs: {str(e)}")
+        return None
 
 
 async def _create_training_request(task: AnyTypeRawTask, hotkey: str, available_gpu_ids: list[int], config: Config) -> TrainerProxyRequest:
@@ -320,7 +341,7 @@ async def monitor_training_tasks(config: Config):
         except Exception as e:
             logger.error(f"Error in monitor_training_tasks cycle: {str(e)}")
         finally:
-            await asyncio.sleep(20 * 60)  # 20 minutes
+            await asyncio.sleep(cst.MONITOR_TRAINING_TASKS_CYCLE_INTERVAL)
 
 
 async def _monitor_training_tasks(config: Config):
@@ -356,7 +377,8 @@ async def _monitor_training_tasks(config: Config):
                     if task_log:
                         trainer_ip = trainer.trainer_ip
                         break
-                except Exception:
+                except Exception as e:
+                    logger.info(f"Could not get task details from trainer {trainer.trainer_ip}: {str(e)}")
                     continue
 
             if not trainer_ip or not task_log:
@@ -443,7 +465,7 @@ async def move_completed_tasks_to_preevaluation(config: Config):
         except Exception as e:
             logger.error(f"Error in move_completed_tasks_to_preevaluation cycle: {str(e)}")
         finally:
-            await asyncio.sleep(20 * 60)  # 20 minutes
+            await asyncio.sleep(cst.MOVE_COMPLETED_TASKS_CYCLE_INTERVAL)
 
 
 async def _move_completed_tasks_to_preevaluation(config: Config):
@@ -484,6 +506,7 @@ async def run_tournament_orchestrator_cycles():
     config = load_config()
     await try_db_connections(config)
 
+    logger.info("Starting tournament orchestrator cycles")
     await asyncio.gather(
         fetch_tournament_tasks_ready_to_train(config),
         process_pending_tournament_tasks(config),
