@@ -77,7 +77,7 @@ def main():
     try:
         print("Clearing old cache files...", flush=True)
         clear_old_cache("/cache", max_age_hours=24)
-        clear_old_cache("/checkpoints", max_age_hours=24)
+        clear_old_cache(local_folder, max_age_hours=24)
     except Exception as e:
         print(f"Error during cache cleanup: {e}", flush=True)
         pass
