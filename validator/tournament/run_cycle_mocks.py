@@ -133,8 +133,7 @@ async def mock_task_evaluation(task_id: str, config: Config):
 
     if assigned_nodes:
         for node in assigned_nodes:
-            # Generate random score (lower is better for loss)
-            mock_score = random.uniform(0.1, 2.0)
+            mock_score = random.uniform(0.1, 3.0)
             mock_test_loss = random.uniform(0.1, 2.0)
             mock_synth_loss = random.uniform(0.1, 2.0)
 

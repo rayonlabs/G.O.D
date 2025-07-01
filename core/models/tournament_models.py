@@ -88,6 +88,8 @@ class TournamentData(BaseModel):
     tournament_type: TournamentType
     status: TournamentStatus = TournamentStatus.PENDING
     current_round_id: str | None = None
+    base_winner_hotkey: str | None = None
+    winner_hotkey: str | None = None
 
 
 class TournamentRoundData(BaseModel):
