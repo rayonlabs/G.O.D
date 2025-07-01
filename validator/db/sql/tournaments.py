@@ -369,8 +369,11 @@ async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
         return list(trainers.values())
 
 
-async def add_tournament_task_hotkey_trainings(task_hotkey_triples: list[tuple[str, str, datetime]], psql_db: PSQLDB):
-    """Add task-hotkey pairs to tournament_task_hotkey_trainings table using batch insert"""
+async def add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples: list[tuple[str, str, datetime]], psql_db: PSQLDB):
+    """
+    Add task-hotkey pairs to the tournament_task_hotkey_trainings table using batch insert.
+    Each task-hotkey pair defines a training task that we'll send to a trainer later.
+    """
     async with await psql_db.connection() as connection:
         async with connection.transaction():
             if not task_hotkey_triples:

@@ -123,7 +123,7 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
             tasks_to_update.append(task)
 
     if task_hotkey_triples:
-        await tournament_sql.add_tournament_task_hotkey_trainings(task_hotkey_triples, config.psql_db)
+            await tournament_sql.add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples, config.psql_db)
 
     for task in tasks_to_update:
         task.status = TaskStatus.TRAINING
