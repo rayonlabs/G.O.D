@@ -2,6 +2,7 @@ import base64
 import os
 import shutil
 import tempfile
+import time
 from io import BytesIO
 
 from datasets import get_dataset_config_names
@@ -11,7 +12,6 @@ from PIL import Image
 from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 
-from validator.evaluation.common import retry_on_5xx
 from validator.utils.logging import get_logger
 
 
@@ -19,9 +19,25 @@ logger = get_logger(__name__)
 hf_api = HfApi()
 
 
-@retry_on_5xx()
 def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalLM) -> bool:
-    original_config = AutoConfig.from_pretrained(original_repo, token=os.environ.get("HUGGINGFACE_TOKEN"))
+    max_retries = 3
+    base_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            original_config = AutoConfig.from_pretrained(original_repo, token=os.environ.get("HUGGINGFACE_TOKEN"))
+            break
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise e
+            
+            error_msg = str(e).lower()
+            if any(pattern in error_msg for pattern in ["connection", "timeout", "5xx", "too many requests", "couldn't connect"]):
+                delay = base_delay * (2 ** attempt)
+                logger.info(f"HuggingFace connection issue (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {delay}s...")
+                time.sleep(delay)
+            else:
+                raise e
     finetuned_config = finetuned_model.config
 
     try:
