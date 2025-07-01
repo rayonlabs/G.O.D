@@ -56,9 +56,9 @@ async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
         return gpu_infos
 
 
-async def request_training(trainer_ip: str, training_request: TrainerProxyRequest) -> bool:
+async def start_training_task(trainer_ip: str, training_request: TrainerProxyRequest) -> bool:
     """
-    Request training from a trainer.
+    Ask trainer to start training.
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         url = f"http://{trainer_ip}{PROXY_TRAINING_IMAGE_ENDPOINT}"
@@ -187,7 +187,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
         try:
             training_task = pending_training_tasks[-1]
             training_request = await _create_training_request(training_task.task, training_task.hotkey, gpu_ids, config)
-            training_success = await request_training(trainer_ip, training_request)
+            training_success = await start_training_task(trainer_ip, training_request)
 
             if training_success:
                 await tournament_sql.update_tournament_task_training_status(
