@@ -89,7 +89,7 @@ class TrainerProxyRequest(BaseModel):
     local_repo_path: str = Field(default=None, include_in_schema=False)
 
 
-class TrainerTaskLog(TrainerProxyRequest):
+class TrainerTaskDetails(TrainerProxyRequest):
     status: TaskStatus
     started_at: datetime | None
     finished_at: datetime | None

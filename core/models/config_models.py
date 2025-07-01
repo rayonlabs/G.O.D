@@ -54,7 +54,6 @@ class TrainerConfig:
     wandb_token: str
     huggingface_username: str
     huggingface_token: str
-    frontend_api_key: str
 
 
 @dataclass

@@ -77,13 +77,10 @@ def generate_miner_config(dev: bool = False) -> dict[str, Any]:
 def generate_trainer_config() -> dict[str, Any]:
     print("\n🤖 Let's configure your Trainer! 🛠️\n")
 
-    frontend_api_key = generate_secure_password()
-
     config = TrainerConfig(
         wandb_token=input("📊 Enter wandb token (default: default): ") or "default",
         huggingface_token=input("🤗 Enter huggingface token (default: default): ") or "default",
-        huggingface_username=input("🏗️ Enter your huggingface username where you would like to save the models: "),
-        frontend_api_key=frontend_api_key
+        huggingface_username=input("🏗️ Enter your huggingface username where you would like to save the models: ")
     )
 
     return vars(config)
