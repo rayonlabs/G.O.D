@@ -6,6 +6,7 @@ from datetime import datetime
 
 import numpy as np
 from fiber.chain.models import Node
+from huggingface_hub import HfApi
 
 import validator.core.constants as cts
 from core.models.payload_models import DiffusionLosses
@@ -679,16 +680,14 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
 
 
 def get_hf_commit_timestamp(repo_url: str) -> datetime | None:
-    """Get latest commit timestamp from HuggingFace repo."""
     try:
         repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
-        api_url = f"https://huggingface.co/api/models/{repo_path}/commits?limit=1"
+        api = HfApi()
         
-        response = requests.get(api_url, timeout=10)
-        commits = response.json()
-        
-        if commits and (date_str := commits[0].get("date")):
-            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        commits = api.list_repo_commits(repo_path)
+        if commits:
+            return commits[0].created_at
+            
     except Exception as e:
         logger.error(f"Failed to get commit timestamp for {repo_url}: {e}")
     return None
