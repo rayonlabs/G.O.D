@@ -13,9 +13,9 @@ from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentTask
+from core.models.tournament_models import TournamentTaskTraining
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import GPUInfo
-from core.models.utility_models import TournamentTaskTraining
 from core.models.utility_models import TrainerInfo
 from core.models.utility_models import TrainingStatus
 from validator.db.database import PSQLDB

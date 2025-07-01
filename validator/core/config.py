@@ -34,6 +34,7 @@ class Config:
     refresh_nodes: bool
     httpx_client: httpx.AsyncClient
     set_metagraph_weights_with_high_updated_to_not_dereg: bool
+    tournament_base_contestant_hotkey: str
     testnet: bool = os.getenv("SUBTENSOR_NETWORK", "").lower() == "test"
     debug: bool = os.getenv("ENV", "prod").lower() != "prod"
 
@@ -71,16 +72,16 @@ def load_config() -> Config:
             substrate = None
         keypair = chain_utils.load_hotkey_keypair(wallet_name=wallet_name, hotkey_name=hotkey_name)
         logger.info(f"This is my own keypair {keypair}")
-        
+
         # Debug logging for keypair
         logger.info(f"🔍 CONFIG DEBUG: keypair type: {type(keypair)}")
         logger.info(f"🔍 CONFIG DEBUG: keypair module: {keypair.__class__.__module__}")
         logger.info(f"🔍 CONFIG DEBUG: keypair class: {keypair.__class__.__name__}")
-        if hasattr(keypair, '_mock_name'):
+        if hasattr(keypair, "_mock_name"):
             logger.error(f"🚨 CONFIG: Keypair is a Mock object: {keypair}")
-        if hasattr(keypair, 'ss58_address'):
+        if hasattr(keypair, "ss58_address"):
             logger.info(f"🔍 CONFIG DEBUG: ss58_address type: {type(keypair.ss58_address)}")
-            if hasattr(keypair.ss58_address, '_mock_name'):
+            if hasattr(keypair.ss58_address, "_mock_name"):
                 logger.error(f"🚨 CONFIG: ss58_address is a Mock object: {keypair.ss58_address}")
 
         httpx_limits = httpx.Limits(max_connections=500, max_keepalive_connections=100)
@@ -89,6 +90,8 @@ def load_config() -> Config:
         set_metagraph_weights_with_high_updated_to_not_dereg = bool(
             os.getenv("SET_METAGRAPH_WEIGHTS_WITH_HIGH_UPDATED_TO_NOT_DEREG", "false").lower() == "true"
         )
+
+        tournament_base_contestant_hotkey = os.getenv("TOURNAMENT_BASE_CONTESTANT_HOTKEY")
 
         _config = Config(
             substrate=substrate,
@@ -102,5 +105,6 @@ def load_config() -> Config:
             httpx_client=httpx_client,
             debug=dev_env,
             set_metagraph_weights_with_high_updated_to_not_dereg=set_metagraph_weights_with_high_updated_to_not_dereg,
+            tournament_base_contestant_hotkey=tournament_base_contestant_hotkey,
         )
     return _config

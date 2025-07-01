@@ -11,7 +11,7 @@ from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskType
-from validator.core import constants as cst
+from validator.core.config import Config
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
 from validator.db import constants as db_cst
@@ -82,34 +82,35 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
     return miner_results
 
 
-async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType) -> TournamentParticipant | None:
+async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, config: Config) -> TournamentParticipant | None:
     """Get a BASE contestant as the last tournament winner."""
 
-    latest_winner = await get_latest_tournament_winner_participant(psql_db, tournament_type)
+    latest_winner = await get_latest_tournament_winner_participant(psql_db, tournament_type, config)
     if latest_winner:
         logger.info(f"Using latest tournament winner as BASE: {latest_winner.hotkey}")
         return latest_winner
 
+    logger.warning(f"No previous tournament winner found for type {tournament_type.value}, no BASE contestant available")
+    return None
+
 
 async def get_latest_tournament_winner_participant(
-    psql_db: PSQLDB, tournament_type: TournamentType
+    psql_db: PSQLDB, tournament_type: TournamentType, config: Config
 ) -> TournamentParticipant | None:
-    """Get the winner of the most recently completed tournament from the tournament table."""
-
+    """Get the winner participant from the latest completed tournament of the given type."""
     latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
     if not latest_tournament:
+        logger.warning(f"No completed tournaments found for type {tournament_type.value}")
         return None
 
-    tournament_id = latest_tournament.tournament_id
     winner_hotkey = latest_tournament.winner_hotkey
-
     if not winner_hotkey:
-        logger.warning(f"Tournament {tournament_id} is completed but has no winner_hotkey stored")
+        logger.warning(f"Tournament {latest_tournament.tournament_id} is completed but has no winner_hotkey stored")
         return None
 
     logger.info(f"Found latest tournament winner: {winner_hotkey}")
-    winner_participant = await get_tournament_participant(tournament_id, winner_hotkey, psql_db)
-    if winner_participant.hotkey == cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY:
+    winner_participant = await get_tournament_participant(latest_tournament.tournament_id, winner_hotkey, psql_db)
+    if winner_participant.hotkey == config.tournament_base_contestant_hotkey:
         winner_participant.hotkey = latest_tournament.base_winner_hotkey
 
     return winner_participant
@@ -227,7 +228,7 @@ async def draw_group_stage_table(rounds_data, winners_by_round, psql_db):
 
 
 async def get_knockout_winners(
-    completed_round: TournamentRoundData, round_tasks: list[TournamentTask], psql_db: PSQLDB
+    completed_round: TournamentRoundData, round_tasks: list[TournamentTask], psql_db: PSQLDB, config: Config
 ) -> list[str]:
     """Get winners from knockout round."""
     winners = []
@@ -241,7 +242,7 @@ async def get_knockout_winners(
     else:
         # Boss round. You need to beat the boss by 5% to win the task.
         # Best of 3 wins the round.
-        boss_hotkey = cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY
+        boss_hotkey = config.tournament_base_contestant_hotkey
         opponent_hotkey = None
         task_winners = []
 
@@ -347,11 +348,11 @@ async def get_group_winners(
     return all_winners
 
 
-async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLDB) -> list[str]:
+async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLDB, config: Config) -> list[str]:
     """Get winners from the completed round."""
     round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
 
     if completed_round.round_type == RoundType.KNOCKOUT:
-        return await get_knockout_winners(completed_round, round_tasks, psql_db)
+        return await get_knockout_winners(completed_round, round_tasks, psql_db, config)
     else:
         return await get_group_winners(completed_round, round_tasks, psql_db)

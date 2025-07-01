@@ -30,7 +30,7 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def print_tournament_summary(tournament_id: str, psql_db: PSQLDB):
+async def print_tournament_summary(tournament_id: str, psql_db: PSQLDB, config: Config):
     """Print a visual summary of the tournament progression and winners.
     Helps visualize the tournament. AI generated, we can remove once we ship"""
 
@@ -92,7 +92,7 @@ async def print_tournament_summary(tournament_id: str, psql_db: PSQLDB):
                     round_participants.extend([pair.hotkey1, pair.hotkey2])
 
         if round_data.status == RoundStatus.COMPLETED:
-            winners = await get_round_winners(round_data, psql_db)
+            winners = await get_round_winners(round_data, psql_db, config)
             if winners:
                 logger.info(f"  Winners: {', '.join(winners)}")
                 winners_by_round[i] = winners
@@ -119,7 +119,7 @@ async def print_tournament_summary(tournament_id: str, psql_db: PSQLDB):
     if tournament.status == TournamentStatus.COMPLETED:
         final_round = rounds[-1] if rounds else None
         if final_round and final_round.status == RoundStatus.COMPLETED:
-            final_winners = await get_round_winners(final_round, psql_db)
+            final_winners = await get_round_winners(final_round, psql_db, config)
             if final_winners:
                 logger.info("🏆 TOURNAMENT CHAMPION 🏆")
                 logger.info(f"Winner: {final_winners[0]}")
@@ -186,7 +186,7 @@ async def main():
 
         # Step 1: Create basic tournament in DB
         logger.info("Step 1: Creating basic tournament...")
-        tournament_id = await create_basic_tournament(TournamentType.TEXT, config.psql_db)
+        tournament_id = await create_basic_tournament(TournamentType.TEXT, config.psql_db, config)
         logger.info(f"Created basic tournament: {tournament_id}")
 
         # Step 2: Run mocks until tournament is completed
@@ -206,7 +206,7 @@ async def main():
 
         # Step 3: Print tournament summary
         logger.info("Step 3: Printing tournament summary...")
-        await print_tournament_summary(tournament_id, config.psql_db)
+        await print_tournament_summary(tournament_id, config.psql_db, config)
 
     except Exception as e:
         logger.error(f"Error running tournament mocks: {e}")

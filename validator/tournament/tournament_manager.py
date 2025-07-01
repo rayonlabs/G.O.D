@@ -1,3 +1,4 @@
+import asyncio
 import math
 import random
 
@@ -18,7 +19,6 @@ from core.models.tournament_models import TournamentType
 from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
 from core.models.utility_models import TaskStatus
-from validator.core import constants as cst
 from validator.core.config import Config
 from validator.db.database import PSQLDB
 from validator.db.sql.nodes import get_all_nodes
@@ -42,6 +42,7 @@ from validator.db.sql.tournaments import update_round_status
 from validator.db.sql.tournaments import update_tournament_participant_training_repo
 from validator.db.sql.tournaments import update_tournament_status
 from validator.db.sql.tournaments import update_tournament_winner_hotkey
+from validator.tournament import constants as t_cst
 from validator.tournament.task_creator import create_image_tournament_round
 from validator.tournament.task_creator import create_text_tournament_round
 from validator.tournament.utils import get_base_contestant
@@ -52,18 +53,18 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def organise_tournament_round(nodes: list[Node]) -> Round:
+def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
     nodes_copy = nodes.copy()
     random.shuffle(nodes_copy)
 
-    if len(nodes_copy) <= cst.MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND:
+    if len(nodes_copy) <= t_cst.MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND:
         hotkeys = [node.hotkey for node in nodes_copy]
 
         if len(hotkeys) % 2 == 1:
-            if cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY not in hotkeys:
-                hotkeys.append(cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY)
+            if config.tournament_base_contestant_hotkey not in hotkeys:
+                hotkeys.append(config.tournament_base_contestant_hotkey)
             else:
-                hotkeys.remove(cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY)
+                hotkeys.remove(config.tournament_base_contestant_hotkey)
 
         random.shuffle(hotkeys)
         pairs = []
@@ -72,9 +73,9 @@ def organise_tournament_round(nodes: list[Node]) -> Round:
         random.shuffle(pairs)
         return KnockoutRound(pairs=pairs)
     else:
-        num_groups = math.ceil(len(nodes_copy) / cst.EXPECTED_GROUP_SIZE)
-        if len(nodes_copy) / num_groups < cst.MIN_GROUP_SIZE:
-            num_groups = math.ceil(len(nodes_copy) / cst.EXPECTED_GROUP_SIZE - 1)
+        num_groups = math.ceil(len(nodes_copy) / t_cst.EXPECTED_GROUP_SIZE)
+        if len(nodes_copy) / num_groups < t_cst.MIN_GROUP_SIZE:
+            num_groups = math.ceil(len(nodes_copy) / t_cst.EXPECTED_GROUP_SIZE - 1)
 
         groups = [[] for _ in range(num_groups)]
         base_size = len(nodes_copy) // num_groups
@@ -97,7 +98,7 @@ async def _create_first_round(
     tournament_id: str, tournament_type: TournamentType, nodes: list[Node], psql_db: PSQLDB, config: Config
 ):
     round_id = generate_round_id(tournament_id, 1)
-    round_structure = organise_tournament_round(nodes)
+    round_structure = organise_tournament_round(nodes, config)
 
     round_type = RoundType.KNOCKOUT if isinstance(round_structure, KnockoutRound) else RoundType.GROUP
 
@@ -137,7 +138,7 @@ async def _create_tournament_tasks(
 
     tasks = []
     if isinstance(round_structure, GroupRound):
-        group_task_count = cst.TEXT_TASKS_PER_GROUP if tournament_type == TournamentType.TEXT else cst.IMAGE_TASKS_PER_GROUP
+        group_task_count = t_cst.TEXT_TASKS_PER_GROUP if tournament_type == TournamentType.TEXT else t_cst.IMAGE_TASKS_PER_GROUP
 
         for i, group in enumerate(round_structure.groups):
             group_id = f"{round_id}_group_{i + 1:03d}"
@@ -223,16 +224,16 @@ async def create_next_round(
     next_round_is_final = len(winners) == 1
 
     if len(winners) == 2:
-        if cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY in winners:
+        if config.tournament_base_contestant_hotkey in winners:
             next_round_is_final = True
     elif len(winners) % 2 == 1:
-        if cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY not in winners:
-            winners.append(cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY)
+        if config.tournament_base_contestant_hotkey not in winners:
+            winners.append(config.tournament_base_contestant_hotkey)
         else:
             if len(winners) == 1:
                 next_round_is_final = True
             else:
-                winners = [w for w in winners if w != cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY]
+                winners = [w for w in winners if w != config.tournament_base_contestant_hotkey]
 
     winner_nodes = []
     for hotkey in winners:
@@ -244,7 +245,7 @@ async def create_next_round(
         logger.error("No winner nodes found, cannot create next round")
         return
 
-    round_structure = organise_tournament_round(winner_nodes)
+    round_structure = organise_tournament_round(winner_nodes, config)
 
     round_type = RoundType.KNOCKOUT if isinstance(round_structure, KnockoutRound) else RoundType.GROUP
 
@@ -279,7 +280,7 @@ async def create_next_round(
 async def advance_tournament(tournament: TournamentData, completed_round: TournamentRoundData, config, psql_db: PSQLDB):
     logger.info(f"Advancing tournament {tournament.tournament_id} from round {completed_round.round_id}")
 
-    winners = await get_round_winners(completed_round, psql_db)
+    winners = await get_round_winners(completed_round, psql_db, config)
     logger.info(f"Round winners: {winners}")
 
     if len(winners) == 1 and completed_round.is_final_round:
@@ -301,11 +302,11 @@ async def complete_tournament(tournament_id: str, psql_db: PSQLDB):
     logger.info(f"Completed tournament {tournament_id}")
 
 
-async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQLDB) -> str:
+async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQLDB, config: Config) -> str:
     """Create a basic tournament in the database without participants or rounds."""
     tournament_id = generate_tournament_id()
 
-    base_contestant = await get_base_contestant(psql_db, tournament_type)
+    base_contestant = await get_base_contestant(psql_db, tournament_type, config)
     base_winner_hotkey = base_contestant.hotkey if base_contestant else None
 
     logger.info(f"Base winner hotkey: {base_winner_hotkey}")
@@ -322,7 +323,7 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
     if base_winner_hotkey:
         base_participant = TournamentParticipant(
             tournament_id=tournament_id,
-            hotkey=cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY,
+            hotkey=config.tournament_base_contestant_hotkey,
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
         )
@@ -338,7 +339,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
     all_nodes = await get_all_nodes(psql_db)
 
-    eligible_nodes = [node for node in all_nodes if node.hotkey != cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY]
+    eligible_nodes = [node for node in all_nodes if node.hotkey != config.tournament_base_contestant_hotkey]
 
     if not eligible_nodes:
         logger.warning("No eligible nodes found for tournament")
@@ -395,7 +396,7 @@ async def create_first_round_for_active_tournament(tournament_id: str, config: C
 
     participant_nodes = []
     for participant in participants:
-        if participant.hotkey == cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY:
+        if participant.hotkey == config.tournament_base_contestant_hotkey:
             continue
 
         node = await get_node_by_hotkey(participant.hotkey, psql_db)
@@ -417,31 +418,34 @@ async def create_first_round_for_active_tournament(tournament_id: str, config: C
 async def process_pending_tournaments(config: Config) -> list[str]:
     """
     Process all pending tournaments by populating participants and activating them.
-    Returns list of tournament IDs that were activated.
     """
-    logger.info("Processing pending tournaments...")
+    while True:
+        logger.info("Processing pending tournaments...")
 
-    pending_tournaments = await get_tournaments_with_status(TournamentStatus.PENDING, config.psql_db)
+        try:
+            pending_tournaments = await get_tournaments_with_status(TournamentStatus.PENDING, config.psql_db)
 
-    logger.info(f"Found {len(pending_tournaments)} pending tournaments")
+            logger.info(f"Found {len(pending_tournaments)} pending tournaments")
 
-    activated_tournaments = []
+            activated_tournaments = []
 
-    for tournament in pending_tournaments:
-        logger.info(f"Processing pending tournament {tournament.tournament_id}")
+            for tournament in pending_tournaments:
+                logger.info(f"Processing pending tournament {tournament.tournament_id}")
 
-        num_participants = await populate_tournament_participants(tournament.tournament_id, config, config.psql_db)
+                num_participants = await populate_tournament_participants(tournament.tournament_id, config, config.psql_db)
 
-        if num_participants > 0:
-            await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, config.psql_db)
-            activated_tournaments.append(tournament.tournament_id)
-            logger.info(f"Activated tournament {tournament.tournament_id} with {num_participants} participants")
-        else:
-            logger.warning(f"Tournament {tournament.tournament_id} has no participants, skipping activation")
+                if num_participants > 0:
+                    await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, config.psql_db)
+                    activated_tournaments.append(tournament.tournament_id)
+                    logger.info(f"Activated tournament {tournament.tournament_id} with {num_participants} participants")
+                else:
+                    logger.warning(f"Tournament {tournament.tournament_id} has no participants, skipping activation")
 
-    logger.info(f"Activated tournaments: {activated_tournaments}")
-
-    return activated_tournaments
+            logger.info(f"Activated tournaments: {activated_tournaments}")
+        except Exception as e:
+            logger.error(f"Error processing pending tournaments: {e}")
+        finally:
+            await asyncio.sleep(t_cst.TOURNAMENT_PENDING_CYCLE_INTERVAL)
 
 
 async def process_active_tournaments(config: Config):
@@ -450,23 +454,29 @@ async def process_active_tournaments(config: Config):
     """
     logger.info("Processing active tournaments...")
 
-    active_tournaments = await get_tournaments_with_status(TournamentStatus.ACTIVE, config.psql_db)
-    for tournament in active_tournaments:
-        logger.info(f"Processing active tournament {tournament.tournament_id}")
-        rounds = await get_tournament_rounds(tournament.tournament_id, config.psql_db)
-        if not rounds:
-            logger.info(f"Tournament {tournament.tournament_id} has no rounds, creating first round...")
-            await create_first_round_for_active_tournament(tournament.tournament_id, config, config.psql_db)
-        else:
-            current_round = rounds[-1]
+    while True:
+        try:
+            active_tournaments = await get_tournaments_with_status(TournamentStatus.ACTIVE, config.psql_db)
+            for tournament in active_tournaments:
+                logger.info(f"Processing active tournament {tournament.tournament_id}")
+                rounds = await get_tournament_rounds(tournament.tournament_id, config.psql_db)
+                if not rounds:
+                    logger.info(f"Tournament {tournament.tournament_id} has no rounds, creating first round...")
+                    await create_first_round_for_active_tournament(tournament.tournament_id, config, config.psql_db)
+                else:
+                    current_round = rounds[-1]
 
-            if current_round.status in [RoundStatus.PENDING, RoundStatus.ACTIVE]:
-                if await check_if_round_is_completed(current_round, config.psql_db):
-                    await update_round_status(current_round.round_id, RoundStatus.COMPLETED, config.psql_db)
-                    logger.info(
-                        f"Tournament {tournament.tournament_id} round {current_round.round_id} is completed, advancing..."
-                    )
-                    await advance_tournament(tournament, current_round, config, config.psql_db)
+                    if current_round.status in [RoundStatus.PENDING, RoundStatus.ACTIVE]:
+                        if await check_if_round_is_completed(current_round, config.psql_db):
+                            await update_round_status(current_round.round_id, RoundStatus.COMPLETED, config.psql_db)
+                            logger.info(
+                                f"Tournament {tournament.tournament_id} round {current_round.round_id} is completed, advancing..."
+                            )
+                            await advance_tournament(tournament, current_round, config, config.psql_db)
+        except Exception as e:
+            logger.error(f"Error processing active tournaments: {e}")
+        finally:
+            await asyncio.sleep(t_cst.TOURNAMENT_ACTIVE_CYCLE_INTERVAL)
 
 
 async def check_if_round_is_completed(round_data, psql_db: PSQLDB):
@@ -496,10 +506,16 @@ async def check_if_round_is_completed(round_data, psql_db: PSQLDB):
 
 
 async def process_prepped_tournament_tasks(config: Config):
-    logger.info("Processing prepped tournament tasks...")
+    while True:
+        logger.info("Processing prepped tournament tasks...")
 
-    prepped_tasks = await get_tasks_with_status(TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only")
+        try:
+            prepped_tasks = await get_tasks_with_status(TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only")
 
-    for task in prepped_tasks:
-        await update_task_status(task.task_id, TaskStatus.READY, config.psql_db)
-        logger.info(f"Set task {task.task_id} status to ready")
+            for task in prepped_tasks:
+                await update_task_status(task.task_id, TaskStatus.READY, config.psql_db)
+                logger.info(f"Set task {task.task_id} status to ready")
+        except Exception as e:
+            logger.error(f"Error processing prepped tournament tasks: {e}")
+        finally:
+            await asyncio.sleep(t_cst.TOURNAMENT_PREP_TASK_CYCLE_INTERVAL)
