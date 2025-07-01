@@ -3,26 +3,83 @@
 
 from collections import Counter
 
+import numpy as np
+
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
+from core.models.utility_models import TaskType
 from validator.core import constants as cst
+from validator.core.models import MinerResultsImage
+from validator.core.models import MinerResultsText
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.submissions_and_scoring import get_task_winners
+from validator.db.sql.tasks import get_task
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_participant
 from validator.db.sql.tournaments import get_tournament_tasks
+from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[MinerResultsText | MinerResultsImage]:
+    """
+    Fetch task results from database and convert to MinerResults objects for ranking.
+    """
+    scores_dicts = await get_all_scores_and_losses_for_task(task_id, psql_db)
+
+    if not scores_dicts:
+        logger.warning(f"No scores found for task {task_id}")
+        return []
+
+    task_object = await get_task(task_id, psql_db)
+    if not task_object:
+        logger.warning(f"Could not get task object for task {task_id}")
+        return []
+
+    task_type = task_object.task_type
+
+    miner_results = []
+    for score_dict in scores_dicts:
+        hotkey = score_dict[db_cst.HOTKEY]
+        test_loss = score_dict.get(db_cst.TEST_LOSS)
+        synth_loss = score_dict.get(db_cst.SYNTH_LOSS)
+
+        # Skip invalid results
+        if test_loss is None or np.isnan(test_loss):
+            continue
+
+        # Create appropriate MinerResults object
+        if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+            miner_result = MinerResultsText(
+                hotkey=hotkey,
+                test_loss=test_loss,
+                synth_loss=synth_loss if synth_loss is not None and not np.isnan(synth_loss) else 1000.0,
+                is_finetune=True,  # assume all finetuned
+                task_type=task_type,
+            )
+        else:
+            # For image tasks
+            miner_result = MinerResultsImage(
+                hotkey=hotkey,
+                test_loss=test_loss,
+                synth_loss=synth_loss if synth_loss is not None and not np.isnan(synth_loss) else 1000.0,
+                is_finetune=True,
+            )
+
+        miner_results.append(miner_result)
+
+    return miner_results
 
 
 async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType) -> TournamentParticipant | None:
@@ -176,6 +233,7 @@ async def get_knockout_winners(
     winners = []
 
     if not completed_round.is_final_round:
+        # Use simple quality score comparison for regular knockout rounds
         for task in round_tasks:
             winner = await get_task_winner(task.task_id, psql_db)
             if winner:
@@ -186,27 +244,56 @@ async def get_knockout_winners(
         boss_hotkey = cst.TOURNAMENT_BASE_CONTESTANT_HOTKEY
         opponent_hotkey = None
         task_winners = []
+
         for task in round_tasks:
             logger.info(f"Processing boss round task {task.task_id}")
+
+            task_object = await get_task(task.task_id, psql_db)
+
+            miner_results = await get_task_results_for_ranking(task.task_id, psql_db)
+            if not miner_results:
+                logger.warning(f"No valid results for boss round task {task.task_id}")
+                continue
+
+            ranked_results = calculate_miner_ranking_and_scores(miner_results)
+
             boss_loss = None
             opponent_loss = None
-            scores_dicts = await get_all_scores_and_losses_for_task(task.task_id, psql_db)
-            logger.info(f"Boss round task {task.task_id}: Found {len(scores_dicts)} score entries")
-            if scores_dicts:
-                for score_dict in scores_dicts:
-                    if score_dict[db_cst.HOTKEY] == boss_hotkey:
-                        boss_loss = score_dict[db_cst.TEST_LOSS]
-                    else:
-                        opponent_loss = score_dict[db_cst.TEST_LOSS]
-                        opponent_hotkey = score_dict[db_cst.HOTKEY]
-            if boss_loss is not None and opponent_loss is not None:
-                logger.info(f"Boss round task {task.task_id}: Boss loss: {boss_loss}, Opponent loss: {opponent_loss}")
-                if opponent_loss < boss_loss * 0.95:
-                    task_winners.append(opponent_hotkey)
-                    logger.info(f"Opponent wins task {task.task_id}")
+            opponent_hotkey = None
+
+            for result in ranked_results:
+                if result.hotkey == boss_hotkey:
+                    boss_loss = result.adjusted_loss
                 else:
+                    if opponent_hotkey is None:
+                        opponent_hotkey = result.hotkey
+                        opponent_loss = result.adjusted_loss
+
+            if boss_loss is None or opponent_loss is None:
+                logger.warning(f"Boss round task {task.task_id} missing boss or opponent loss")
+                continue
+
+            logger.info(f"Boss round task {task.task_id}: Boss loss: {boss_loss:.6f}, Opponent loss: {opponent_loss:.6f}")
+
+            if task_object.task_type == TaskType.GRPOTASK:
+                if boss_loss * 1.05 > opponent_loss:
                     task_winners.append(boss_hotkey)
-                    logger.info(f"Boss wins task {task.task_id}")
+                    logger.info(f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} > {opponent_loss * 1.05:.6f}")
+                else:
+                    task_winners.append(opponent_hotkey)
+                    logger.info(f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= {boss_loss * 1.05:.6f}")
+            else:
+                if boss_loss * 0.95 < opponent_loss:
+                    task_winners.append(boss_hotkey)
+                    logger.info(
+                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} < {opponent_loss * 0.95:.6f}"
+                    )
+                else:
+                    task_winners.append(opponent_hotkey)
+                    logger.info(
+                        f"{task_object.task_type} task: Opponent wins (lower is better): "
+                        f"{opponent_loss:.6f} <= {boss_loss * 0.95:.6f}"
+                    )
 
         boss_round_winner = Counter(task_winners).most_common(1)[0][0]
         logger.info(f"Boss round winner: {boss_round_winner}")

@@ -205,11 +205,7 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
     valid_miners = len(real_synth_miners)
     valid_ratios = 0
 
-    miners_with_ratios = [
-        (result, result.synth_loss / result.test_loss)
-        for result in real_synth_miners
-        if result.test_loss > 0
-    ]
+    miners_with_ratios = [(result, result.synth_loss / result.test_loss) for result in real_synth_miners if result.test_loss > 0]
 
     valid_ratios = sum(1 for _, ratio in miners_with_ratios if ratio <= max_ratio)
     ratio = valid_ratios / valid_miners if valid_miners > 0 else 0
@@ -279,11 +275,8 @@ def calculate_miner_ranking_and_scores(
 
         ranked_results = []
         for result in valid_results:
-            adjusted_loss = calculate_weighted_loss(
-                result.test_loss,
-                result.synth_loss,
-                use_max_of_synth_test=use_max_approach
-            )
+            adjusted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss, use_max_of_synth_test=use_max_approach)
+            result.adjusted_loss = adjusted_loss
             ranked_results.append((result, adjusted_loss))
             logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
 
@@ -302,7 +295,10 @@ def calculate_miner_ranking_and_scores(
                 ranking_type = "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
-        ranked_results = [(result, result.test_loss) for result in valid_results]
+        ranked_results = []
+        for result in valid_results:
+            result.adjusted_loss = result.test_loss  # Store the adjusted loss
+            ranked_results.append((result, result.test_loss))
 
         if is_grpo_task:
             # For GRPO, sort in reverse order (higher value is better)
@@ -609,9 +605,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
             logger.error(f"Failed to delete file {file_path} from MinIO: {e}")
 
 
-async def _update_scores(
-    task: AnyTypeRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
-) -> None:
+async def _update_scores(task: AnyTypeRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db) -> None:
     assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
         with LogContext(miner_hotkey=result.hotkey):
@@ -664,7 +658,6 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
     return loss_groups
 
 
-
 async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
@@ -690,7 +683,8 @@ def zero_duplicate_scores(
 ) -> list[MinerResultsText | MinerResultsImage]:
     # Count remaining valid submissions after filtering duplicates
     remaining_valid_count = sum(
-        1 for result in task_results
+        1
+        for result in task_results
         if result.is_finetune and not np.isnan(result.test_loss) and keep_submission.get(result.hotkey, False)
     )
 
@@ -776,7 +770,7 @@ async def process_miners_pool(
                                 miner.hotkey,
                                 score_reason=f"Evaluation failed: {str(eval_result)[:350]}",
                                 task_type=task.task_type,
-                                )
+                            )
                         )
                         continue
                     elif task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
@@ -826,15 +820,13 @@ async def process_miners_pool(
                 [
                     _create_failed_miner_result(
                         miner.hotkey, score_reason=f"Evaluation failed: {str(e)[:350]}", task_type=task.task_type
-                        )
+                    )
                     for miner in miners
                     if miner.hotkey not in [r.hotkey for r in results]
                 ]
             )
 
     return results
-
-
 
 
 async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: Config) -> AnyTypeRawTask:
