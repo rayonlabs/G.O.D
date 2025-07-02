@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import asyncio
 
 from core.models.tournament_models import TournamentType
@@ -13,8 +11,7 @@ logger = get_logger(__name__)
 
 
 async def main():
-    """Main function to run the tournament to test"""
-    logger.info("Starting tournament mocks...")
+    logger.info("Starting tournament...")
 
     config = load_config()
 
