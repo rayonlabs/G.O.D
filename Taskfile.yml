@@ -20,9 +20,17 @@ tasks:
     cmds:
       - python -m core.create_config --miner
 
+  trainer-config:
+    cmds:
+      - python -m core.create_config --trainer
+
   miner:
     cmds:
       - ENV=DEV uvicorn miner.server:app --reload --host 0.0.0.0 --port 7999 --env-file .1.env --log-level debug
+
+  trainer:
+    cmds:
+      - ENV=DEV uvicorn trainer.asgi:app --reload --host 0.0.0.0 --port 8001 --env-file .trainer.env --log-level debug
 
   dbdown:
     cmds:

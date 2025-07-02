@@ -13,6 +13,7 @@ from pydantic import model_validator
 from core import constants as cst
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import GPUType
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
@@ -38,6 +39,7 @@ class MinerTaskOffer(BaseModel):
     model_params_count: int | None = None
 
     model_config = ConfigDict(protected_namespaces=())
+
 
 
 class TrainRequest(BaseModel):
@@ -85,6 +87,7 @@ class TrainerProxyRequest(BaseModel):
     github_branch: str | None = None
     github_commit_hash: str | None = None
     local_repo_path: str = Field(default=None, include_in_schema=False)
+
 
 
 class TrainerTaskLog(TrainerProxyRequest):
