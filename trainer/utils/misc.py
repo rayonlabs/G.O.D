@@ -1,9 +1,13 @@
-from git import Repo, GitCommandError, InvalidGitRepositoryError
 import os
-import pynvml
 from urllib.parse import urlparse
 
-from core.models.utility_models import GPUType, GPUInfo
+import pynvml
+from git import GitCommandError
+from git import InvalidGitRepositoryError
+from git import Repo
+
+from core.models.utility_models import GPUInfo
+from core.models.utility_models import GPUType
 from trainer.tasks import get_running_tasks
 
 
@@ -94,7 +98,7 @@ async def get_gpu_info() -> list[GPUInfo]:
                 busy_gpu_ids.add(gpu_id)
 
 
-    gpu_infos: List[GPUInfo] = []
+    gpu_infos: list[GPUInfo] = []
     for gpu_id in range(device_count):
         if gpu_id not in index_to_type:
             continue 
@@ -104,6 +108,7 @@ async def get_gpu_info() -> list[GPUInfo]:
             gpu_type=index_to_type[gpu_id],
             vram_gb=index_to_vram[gpu_id],
             available=gpu_id not in busy_gpu_ids,
+            used_until=None,
         )
         gpu_infos.append(gpu_info)
 
