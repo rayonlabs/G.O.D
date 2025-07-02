@@ -52,6 +52,10 @@ pm2 start \
     --name weight_setter
 
 # Start the tournament orchestrator service using opentelemetry-instrument
+OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf" \
+OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4317" \
+OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED="true" \
+OTEL_PYTHON_LOG_CORRELATION="true" \
 pm2 start \
     "opentelemetry-instrument \
     --logs_exporter otlp \
@@ -62,6 +66,10 @@ pm2 start \
     --name tournament_orchestrator
 
 # start the tournament cycle 
+OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf" \
+OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4317" \
+OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED="true" \
+OTEL_PYTHON_LOG_CORRELATION="true" \
 pm2 start \
     "opentelemetry-instrument \
     --logs_exporter otlp \
