@@ -43,7 +43,13 @@ async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
         List of GPUInfo objects from the trainer
     """
     async with httpx.AsyncClient(timeout=cst.TRAINER_HTTP_TIMEOUT) as client:
-        url = f"http://{trainer_ip}{GET_GPU_AVAILABILITY_ENDPOINT}"
+        # Default to port 8001 if no port is specified
+        if ":" not in trainer_ip:
+            trainer_ip_with_port = f"{trainer_ip}:8001"
+        else:
+            trainer_ip_with_port = trainer_ip
+            
+        url = f"http://{trainer_ip_with_port}{GET_GPU_AVAILABILITY_ENDPOINT}"
         logger.info(f"Fetching GPU availability from trainer at {url}")
 
         response = await client.get(url)
@@ -70,7 +76,13 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
         bool: True if training started successfully, False otherwise
     """
     async with httpx.AsyncClient(timeout=cst.TRAINER_HTTP_TIMEOUT) as client:
-        url = f"http://{trainer_ip}{PROXY_TRAINING_IMAGE_ENDPOINT}"
+        # Default to port 8001 if no port is specified
+        if ":" not in trainer_ip:
+            trainer_ip_with_port = f"{trainer_ip}:8001"
+        else:
+            trainer_ip_with_port = trainer_ip
+            
+        url = f"http://{trainer_ip_with_port}{PROXY_TRAINING_IMAGE_ENDPOINT}"
         logger.info(f"Requesting training from trainer at {url}")
 
         response = await client.post(url, json=training_request.model_dump())
@@ -92,7 +104,13 @@ async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str) 
         TrainerTaskLog: The task log from the trainer
     """
     async with httpx.AsyncClient(timeout=cst.TRAINER_HTTP_TIMEOUT) as client:
-        url = f"http://{trainer_ip}{TASK_DETAILS_ENDPOINT}"
+        # Default to port 8001 if no port is specified
+        if ":" not in trainer_ip:
+            trainer_ip_with_port = f"{trainer_ip}:8001"
+        else:
+            trainer_ip_with_port = trainer_ip
+            
+        url = f"http://{trainer_ip_with_port}{TASK_DETAILS_ENDPOINT}"
         logger.debug(f"Getting task details from trainer at {url} for task {task_id}")
 
         response = await client.get(url, params={"task_id": task_id, "hotkey": hotkey})
