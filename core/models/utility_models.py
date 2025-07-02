@@ -177,6 +177,7 @@ class GPUType(str, Enum):
 
 class TrainingStatus(str, Enum):
     PENDING = "pending"
+    TRAINING = "training"
     SUCCESS = "success"
     FAILURE = "failure"
 
