@@ -173,5 +173,6 @@ def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetTyp
     print(f"Transformed dataset to include both chatml.intel and DPO field names:")
     print(f"Final fields: {list(transformed_data[0].keys()) if transformed_data else []}")
     print(f"Mapped {dataset_type.field_prompt} to both 'question' and 'prompt' to satisfy all requirements")
+    print(f"Saved dataset to {dataset_path}")
 
 

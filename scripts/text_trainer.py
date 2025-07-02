@@ -224,7 +224,10 @@ async def main():
     
     dataset_path = copy_dataset_if_needed(dataset_path, args.file_format)
 
+    print(args.file_format, flush=True)
+
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
+        print("Adapting columns for DPO dataset...", flush=True)
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
 
     output_dir = f"/workspace/axolotl/outputs/{args.task_id}/{args.expected_repo_name}"

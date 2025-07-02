@@ -432,11 +432,13 @@ async def start_training_task(task: TrainerProxyRequest):
                 container.kill()
                 container.remove(force=True)
                 log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
-                logger.info(f"Cleaning up")
-                delete_image_and_cleanup(tag)
-                logger.info("Cleaned up Docker resources.")
+                
             except Exception as cleanup_err:
                 log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
+
+        logger.info(f"Cleaning up")
+        delete_image_and_cleanup(tag)
+        logger.info("Cleaned up Docker resources.")
 
         if success:
             try:
