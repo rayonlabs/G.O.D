@@ -1,5 +1,5 @@
 FROM diagonalge/kohya_latest:latest
-
+accelerate launch --num_processes 1 -m  axolotl.cli.train /workspace/test.yml
 RUN mkdir -p /dataset/configs \
     /dataset/outputs \
     /dataset/images && \

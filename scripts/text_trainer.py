@@ -258,9 +258,9 @@ async def main():
         with open(output_path, "w") as f:
             json.dump(dataset, f, indent=2)
 
-        print(f"✅ Copied dataset from:\n  {full_dataset_path}\nto:\n  {output_path}")
+        print(f"Copied dataset from:\n  {full_dataset_path}\nto:\n  {output_path}")
 
-    extract_and_copy_dataset(config_path, f"/mnt/testdir/newtest.json")
+    extract_and_copy_dataset(config_path, f"/workspace/{args.task_id}_train_data.json")
         
     run_training(config_path)
 
