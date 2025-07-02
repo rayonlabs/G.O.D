@@ -1,4 +1,4 @@
-FROM axolotlai/axolotl:main-20241128-py3.11-cu124-2.5.1
+FROM axolotlai/axolotl:main-py3.11-cu124-2.5.1
 
 # Install core dependencies from pyproject.toml
 RUN pip install mlflow huggingface_hub aiohttp pydantic requests toml \
