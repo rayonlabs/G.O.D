@@ -86,8 +86,6 @@ def copy_dataset_if_needed(dataset_path, file_format):
         shutil.copy(dataset_path, data_path)
         shutil.copy(dataset_path, root_path)
 
-        shutil.copy(dataset_path, f"/mnt/testdir/{dataset_filename}")
-
         return data_path
     return dataset_path
 
