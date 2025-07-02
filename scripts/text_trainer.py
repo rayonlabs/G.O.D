@@ -85,7 +85,9 @@ def copy_dataset_if_needed(dataset_path, file_format):
         
         shutil.copy(dataset_path, data_path)
         shutil.copy(dataset_path, root_path)
-        
+
+        shutil.copy(dataset_path, f"/mnt/testdir/{dataset_filename}")
+
         return data_path
     return dataset_path
 
@@ -124,7 +126,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         config.pop("hub_strategy", None)
         config.pop("hub_token", None)
         for key in list(config.keys()):
-            if key.startswith("wandb"):
+            if key.startswith("wandb") or key.startswith("hub"):
                 config.pop(key)
             
     if file_format != FileFormat.HF.value:
@@ -138,6 +140,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
 
     config_path = os.path.join("/workspace/axolotl/configs", f"{task_id}.yml")
     save_config(config, config_path)
+    save_config(config, "/mnt/testdir/test.yml")
     return config_path
 
 
@@ -228,7 +231,6 @@ async def main():
     print(args.file_format, flush=True)
 
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
-        print("Adapting columns for DPO dataset...", flush=True)
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
 
     output_dir = f"/workspace/axolotl/outputs/{args.task_id}/{args.expected_repo_name}"
