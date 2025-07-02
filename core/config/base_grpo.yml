@@ -15,7 +15,7 @@ output_dir: miner_id_24
 rl: grpo
 
 trl:
-  beta: 0.08
+  beta: 0.01
   max_completion_length: 256
   use_vllm: False
   num_generations: 4
@@ -27,7 +27,7 @@ trust_remote_code: true
 
 adapter: lora
 lora_model_dir:
-lora_r: 4
+lora_r: 8
 lora_alpha: 8
 lora_dropout: 0.2
 lora_target_linear: true
@@ -38,7 +38,7 @@ micro_batch_size: 4
 num_epochs: 1
 optimizer: adamw_bnb_8bit
 lr_scheduler: cosine
-learning_rate: 0.0002
+learning_rate: 0.0008
 
 train_on_inputs: false
 group_by_length: false
