@@ -187,7 +187,7 @@ class GPUInfo(BaseModel):
     gpu_type: GPUType = Field(..., description="GPU Type")
     vram_gb: int = Field(..., description="GPU VRAM in GB")
     available: bool = Field(..., description="GPU Availability")
-    used_until: datetime | None = Field(..., description="GPU Used Until")
+    used_until: datetime | None = Field(default=None, description="GPU Used Until")
 
 
 class TrainerInfo(BaseModel):

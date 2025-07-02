@@ -108,7 +108,6 @@ async def get_gpu_info() -> list[GPUInfo]:
             gpu_type=index_to_type[gpu_id],
             vram_gb=index_to_vram[gpu_id],
             available=gpu_id not in busy_gpu_ids,
-            used_until=None,
         )
         gpu_infos.append(gpu_info)
 
