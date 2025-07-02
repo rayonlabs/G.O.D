@@ -25,6 +25,7 @@ from core.models.payload_models import TrainRequestText
 from core.models.payload_models import TrainResponse
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskType
+from core.models.tournament_models import TournamentType
 from core.utils import download_s3_file
 from miner.config import WorkerConfig
 from miner.dependencies import get_worker_config
@@ -243,7 +244,7 @@ async def task_offer_image(
         raise HTTPException(status_code=500, detail=f"Error processing task offer: {str(e)}")
 
 
-async def get_training_repo(task_id: str) -> TrainingRepoResponse:
+async def get_training_repo(task_type: TournamentType) -> TrainingRepoResponse:
     return TrainingRepoResponse(
         github_repo="https://github.com/rayonlabs/G.O.D", commit_hash="9d14a63e4d1f065a203f51b19c2f6066933dd3a5"
     )
@@ -281,7 +282,7 @@ def factory_router() -> APIRouter:
     )
 
     router.add_api_route(
-        "/training_repo",
+        "/training_repo/{task_type}",
         get_training_repo,
         tags=["Subnet"],
         methods=["GET"],

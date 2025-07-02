@@ -340,6 +340,12 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
 async def populate_tournament_participants(tournament_id: str, config: Config, psql_db: PSQLDB) -> int:
     logger.info(f"Populating participants for tournament {tournament_id}")
 
+    # Get tournament to determine its type
+    tournament = await get_tournament(tournament_id, psql_db)
+    if not tournament:
+        logger.error(f"Tournament {tournament_id} not found")
+        return 0
+
     all_nodes = await get_all_nodes(psql_db)
 
     eligible_nodes = [node for node in all_nodes if node.hotkey != config.tournament_base_contestant_hotkey]
@@ -360,7 +366,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         )
 
         batch_results = await asyncio.gather(
-            *[_process_single_node(node, tournament_id, config, psql_db) for node in batch], return_exceptions=True
+            *[_process_single_node(node, tournament_id, tournament.tournament_type, config, psql_db) for node in batch], return_exceptions=True
         )
 
         for result in batch_results:
@@ -373,10 +379,10 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
     return successful_participants
 
 
-async def _process_single_node(node: Node, tournament_id: str, config: Config, psql_db: PSQLDB) -> bool:
+async def _process_single_node(node: Node, tournament_id: str, tournament_type: TournamentType, config: Config, psql_db: PSQLDB) -> bool:
     """Process a single node to add it as a tournament participant if it responds with a training repo."""
     try:
-        training_repo_response = await _get_miner_training_repo(node, config)
+        training_repo_response = await _get_miner_training_repo(node, config, tournament_type)
 
         if training_repo_response:
             participant = TournamentParticipant(tournament_id=tournament_id, hotkey=node.hotkey)
@@ -399,10 +405,10 @@ async def _process_single_node(node: Node, tournament_id: str, config: Config, p
         return False
 
 
-async def _get_miner_training_repo(node: Node, config: Config) -> TrainingRepoResponse | None:
+async def _get_miner_training_repo(node: Node, config: Config, tournament_type: TournamentType) -> TrainingRepoResponse | None:
     """Get training repo from a miner, similar to how submissions are fetched in the main validator cycle."""
     try:
-        url = cst.TRAINING_REPO_ENDPOINT
+        url = f"{cst.TRAINING_REPO_ENDPOINT}/{tournament_type.value}"
         response = await process_non_stream_fiber_get(url, config, node)
 
         if response and isinstance(response, dict):
