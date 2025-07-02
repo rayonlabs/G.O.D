@@ -198,9 +198,14 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
     Process tasks from the list and schedule them for training.
     Only pop tasks when we're 100% sure GPUs are available.
     """
+    # Track failed attempts for this scheduling session
+    failed_attempts = {}
+    MAX_SCHEDULING_ATTEMPTS = 3
+    
     while pending_training_tasks:
         oldest_task_training = pending_training_tasks[-1]
         task = oldest_task_training.task
+        task_key = f"{task.task_id}_{oldest_task_training.hotkey}"
 
         # Check max attempts
         if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
@@ -250,11 +255,31 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
             else:
                 logger.error(f"Failed to start training for task {training_task.task.task_id} on trainer {trainer_ip}")
-                await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
+                # Track failed attempts for this scheduling session
+                failed_attempts[task_key] = failed_attempts.get(task_key, 0) + 1
+                
+                if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
+                    logger.warning(
+                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}), popping from queue"
+                    )
+                    pending_training_tasks.pop()
+                else:
+                    logger.info(f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed, scheduling attempt {failed_attempts[task_key]}/{MAX_SCHEDULING_ATTEMPTS}")
+                    await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
                 continue
         except Exception as e:
             logger.error(f"Exception while scheduling training: {str(e)}")
-            await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
+            # Track failed attempts for this scheduling session
+            failed_attempts[task_key] = failed_attempts.get(task_key, 0) + 1
+            
+            if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
+                logger.warning(
+                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}) due to exception, popping from queue"
+                )
+                pending_training_tasks.pop()
+            else:
+                logger.info(f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed due to exception, scheduling attempt {failed_attempts[task_key]}/{MAX_SCHEDULING_ATTEMPTS}")
+                await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
             continue
 
     logger.info(f"Completed scheduling cycle, {len(pending_training_tasks)} tasks remaining")
