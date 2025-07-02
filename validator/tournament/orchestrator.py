@@ -2,9 +2,6 @@ import asyncio
 
 import httpx
 from dotenv import load_dotenv
-from trainer.endpoints import GET_GPU_AVAILABILITY_ENDPOINT
-from trainer.endpoints import PROXY_TRAINING_IMAGE_ENDPOINT
-from trainer.endpoints import TASK_DETAILS_ENDPOINT
 
 import validator.tournament.constants as cst
 from core.models.payload_models import TrainerProxyRequest
@@ -12,16 +9,16 @@ from core.models.payload_models import TrainerTaskLog
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
 from core.models.tournament_models import GpuRequirement
-
 from core.models.tournament_models import TournamentTaskTraining
-
 from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
-
 from core.models.utility_models import TrainingStatus
+from trainer.endpoints import GET_GPU_AVAILABILITY_ENDPOINT
+from trainer.endpoints import PROXY_TRAINING_IMAGE_ENDPOINT
+from trainer.endpoints import TASK_DETAILS_ENDPOINT
 from validator.core.config import Config
 from validator.core.config import load_config
 from validator.core.models import AnyTypeRawTask
@@ -113,7 +110,7 @@ async def fetch_tournament_tasks_ready_to_train(config: Config):
             logger.info("Fetching tournament tasks ready to train")
             await _fetch_tournament_tasks_ready_to_train(config)
         except Exception as e:
-            logger.error(f"Error in tournament orchestrator cycles: {str(e)}")
+            logger.error(f"Error in tournament orchestrator cycles: {str(e)}", exc_info=True)
         finally:
             await asyncio.sleep(cst.FETCH_TASKS_CYCLE_INTERVAL)
 
@@ -174,7 +171,7 @@ async def process_pending_tournament_tasks(config: Config):
 
             await schedule_tasks_for_training(pending_training_tasks, config)
         except Exception as e:
-            logger.error(f"Error in process_pending_tournament_tasks cycle: {str(e)}")
+            logger.error(f"Error in process_pending_tournament_tasks cycle: {str(e)}", exc_info=True)
             await asyncio.sleep(cst.PROCESS_PENDING_TASKS_CYCLE_INTERVAL)
 
 
@@ -360,7 +357,7 @@ async def monitor_training_tasks(config: Config):
             logger.info("Monitoring training tasks")
             await _monitor_training_tasks(config)
         except Exception as e:
-            logger.error(f"Error in monitor_training_tasks cycle: {str(e)}")
+            logger.error(f"Error in monitor_training_tasks cycle: {str(e)}", exc_info=True)
         finally:
             await asyncio.sleep(cst.MONITOR_TRAINING_TASKS_CYCLE_INTERVAL)
 
@@ -488,7 +485,7 @@ async def move_completed_tasks_to_preevaluation(config: Config):
             logger.info("Moving completed tournament tasks to preevaluation")
             await _move_completed_tasks_to_preevaluation(config)
         except Exception as e:
-            logger.error(f"Error in move_completed_tasks_to_preevaluation cycle: {str(e)}")
+            logger.error(f"Error in move_completed_tasks_to_preevaluation cycle: {str(e)}", exc_info=True)
         finally:
             await asyncio.sleep(cst.MOVE_COMPLETED_TASKS_CYCLE_INTERVAL)
 
