@@ -60,3 +60,14 @@ pm2 start \
     --service_name tournament_orchestrator \
     python -u -m validator.tournament.orchestrator" \
     --name tournament_orchestrator
+
+# start the tournament cycle 
+pm2 start \
+    "opentelemetry-instrument \
+    --logs_exporter otlp \
+    --traces_exporter none \
+    --metrics_exporter otlp \
+    --service_name tournament_cycle \
+    python -u -m validator.tournament.cycle" \
+    --name tournament_cycle
+

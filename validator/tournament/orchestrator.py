@@ -12,12 +12,15 @@ from core.models.payload_models import TrainerTaskLog
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
 from core.models.tournament_models import GpuRequirement
+
+from core.models.tournament_models import TournamentTaskTraining
+
 from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
-from core.models.tournament_models import TournamentTaskTraining
+
 from core.models.utility_models import TrainingStatus
 from validator.core.config import Config
 from validator.core.config import load_config
@@ -59,11 +62,13 @@ async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
 async def start_training_task(trainer_ip: str, training_request: TrainerProxyRequest) -> bool:
     """
     Ask trainer to start training.
-    
+
+
     Args:
         trainer_ip: IP address of the trainer
         training_request: The training request to send
-        
+
+
     Returns:
         bool: True if training started successfully, False otherwise
     """
@@ -80,12 +85,12 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
 async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str) -> TrainerTaskLog:
     """
     Get the details of a training task from a trainer.
-    
+
     Args:
         trainer_ip: IP address of the trainer
         task_id: The task ID to get details for
         hotkey: The hotkey of the miner
-        
+
     Returns:
         TrainerTaskLog: The task log from the trainer
     """
@@ -138,7 +143,9 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
             tasks_to_update.append(task)
 
     if task_hotkey_triples:
-            await tournament_sql.add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples, config.psql_db)
+
+        await tournament_sql.add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples, config.psql_db)
+
 
     for task in tasks_to_update:
         task.status = TaskStatus.TRAINING
@@ -155,7 +162,9 @@ async def process_pending_tournament_tasks(config: Config):
             pending_training_tasks = await tournament_sql.get_tournament_training_tasks(
                 config.psql_db,
                 TrainingStatus.PENDING,
+
                 )
+
             logger.info(f"Fetched {len(pending_training_tasks)} pending tournament tasks")
 
             if not pending_training_tasks:
@@ -180,7 +189,11 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
         # Check max attempts
         if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
-            logger.warning(f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), marking as failed")
+
+            logger.warning(
+                f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), marking as failed"
+            )
+
             await tournament_sql.update_tournament_task_training_status(
                 task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
             )
@@ -210,12 +223,16 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 )
                 await tournament_sql.update_gpu_availability(
                     trainer_ip, gpu_ids, training_task.task.hours_to_complete, config.psql_db
-                    )
+
+                )
+
                 pending_training_tasks.pop()
                 logger.info(
                     f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} for training "
                     f"on trainer {trainer_ip} with GPUs {gpu_ids} for {training_task.task.hours_to_complete} hours"
+
                     )
+
             else:
                 logger.error(f"Failed to start training for task {training_task.task.task_id} on trainer {trainer_ip}")
                 await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
@@ -256,7 +273,11 @@ async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) ->
         return None
 
 
-async def _create_training_request(task: AnyTypeRawTask, hotkey: str, available_gpu_ids: list[int], config: Config) -> TrainerProxyRequest:
+
+async def _create_training_request(
+    task: AnyTypeRawTask, hotkey: str, available_gpu_ids: list[int], config: Config
+) -> TrainerProxyRequest:
+
     """
     Create a TrainerProxyRequest based on the task type.
 
@@ -393,7 +414,11 @@ async def _monitor_training_tasks(config: Config):
             # Check if task completed (success or failure)
             if task_log.status in [TaskStatus.SUCCESS, TaskStatus.FAILURE]:
                 any_completed = True
-                logger.info(f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} completed with status {task_log.status}")
+
+                logger.info(
+                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} completed with status {task_log.status}"
+                )
+
 
                 # Update task status in database
                 if task_log.status == TaskStatus.SUCCESS:

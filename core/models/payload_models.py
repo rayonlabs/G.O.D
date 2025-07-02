@@ -89,7 +89,6 @@ class TrainerProxyRequest(BaseModel):
     local_repo_path: str = Field(default=None, include_in_schema=False)
 
 
-
 class TrainerTaskLog(TrainerProxyRequest):
     status: TaskStatus
     started_at: datetime | None
@@ -100,6 +99,11 @@ class TrainerTaskLog(TrainerProxyRequest):
 class TrainResponse(BaseModel):
     message: str
     task_id: UUID
+
+
+class TrainingRepoResponse(BaseModel):
+    github_repo: str = Field(..., description="The GitHub repository URL")
+    commit_hash: str = Field(..., description="The commit hash of the repository")
 
 
 class JobStatusPayload(BaseModel):

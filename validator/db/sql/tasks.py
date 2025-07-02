@@ -40,6 +40,7 @@ async def add_task(task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
             task.task_id = task_record[cst.TASK_ID]
             return task
 
+
 async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dict:
     """Insert the base task record and return it"""
     query_tasks = f"""
@@ -79,6 +80,7 @@ async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dic
         task.termination_at,
     )
 
+
 async def _insert_task_specific_data(connection: Connection, task: AnyTypeRawTask, task_record: dict) -> None:
     """Insert task type specific data based on the task type"""
     if isinstance(task, InstructTextRawTask):
@@ -89,6 +91,7 @@ async def _insert_task_specific_data(connection: Connection, task: AnyTypeRawTas
         await _insert_dpo_task(connection, task, task_record)
     elif isinstance(task, GrpoRawTask):
         await _insert_grpo_task(connection, task, task_record)
+
 
 async def _insert_instruct_text_task(connection: Connection, task: InstructTextRawTask, task_record: dict) -> None:
     query = f"""
@@ -151,6 +154,7 @@ async def _insert_dpo_task(connection: Connection, task: DpoRawTask, task_record
         task.file_format,
     )
 
+
 async def _insert_grpo_task(connection: Connection, task: GrpoRawTask, task_record: dict) -> None:
     query_grpo = f"""
         INSERT INTO {cst.GRPO_TASKS_TABLE}
@@ -180,10 +184,7 @@ async def _insert_grpo_task(connection: Connection, task: GrpoRawTask, task_reco
             LIMIT 1
         """
         reward_id = await connection.fetchval(
-            query_reward_functions,
-            reward_function.reward_func,
-            reward_function.func_hash,
-            reward_function.is_generic
+            query_reward_functions, reward_function.reward_func, reward_function.func_hash, reward_function.is_generic
         )
 
         query_grpo_task_functions = f"""
@@ -191,12 +192,7 @@ async def _insert_grpo_task(connection: Connection, task: GrpoRawTask, task_reco
             ({cst.TASK_ID}, {cst.REWARD_ID}, {cst.REWARD_WEIGHT})
             VALUES ($1, $2, $3)
         """
-        await connection.execute(
-            query_grpo_task_functions,
-            task_record[cst.TASK_ID],
-            reward_id,
-            reward_function.reward_weight
-        )
+        await connection.execute(query_grpo_task_functions, task_record[cst.TASK_ID], reward_id, reward_function.reward_weight)
 
 
 async def get_nodes_assigned_to_task(task_id: str, psql_db: PSQLDB) -> list[Node]:
@@ -221,15 +217,15 @@ async def get_tasks_with_status(
     status: TaskStatus,
     psql_db: PSQLDB,
     include_not_ready_tasks: bool = False,
-    tournament_filter: Literal["all", "only", "exclude"] = "all"
+    tournament_filter: Literal["all", "only", "exclude"] = "all",
 ) -> list[AnyTypeRawTask]:
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
     )
     if tournament_filter == "exclude":
-        tournament_tasks_clause = f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+        tournament_tasks_clause = f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     elif tournament_filter == "only":
-        tournament_tasks_clause = f"AND {cst.TASK_ID} IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+        tournament_tasks_clause = f"AND {cst.TASK_ID} IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     elif tournament_filter == "all":
         tournament_tasks_clause = ""
 
@@ -333,6 +329,17 @@ async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
     """
     rows = await connection.fetch(query, table_name)
     return {row["column_name"] for row in rows}
+
+
+async def update_task_status(task_id: str, status: TaskStatus, psql_db: PSQLDB) -> None:
+    async with await psql_db.connection() as connection:
+        connection: Connection
+        query = f"""
+            UPDATE {cst.TASKS_TABLE}
+            SET {cst.STATUS} = $1
+            WHERE {cst.TASK_ID} = $2
+        """
+        await connection.execute(query, status.value, task_id)
 
 
 async def update_task(updated_task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
@@ -462,7 +469,9 @@ async def get_synthetic_set_for_task(task_id: str, psql_db: PSQLDB):
 async def get_current_task_stats(psql_db: PSQLDB, include_tournament_tasks=False) -> NetworkStats:
     async with await psql_db.connection() as connection:
         tournament_tasks_clause = (
-            "" if include_tournament_tasks else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+            ""
+            if include_tournament_tasks
+            else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
         )
         query = f"""
             SELECT
@@ -493,7 +502,9 @@ async def get_current_task_stats(psql_db: PSQLDB, include_tournament_tasks=False
 
 async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=False) -> DetailedNetworkStats:
     tournament_tasks_clause = (
-        "" if include_tournament_tasks else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+        ""
+        if include_tournament_tasks
+        else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
     async with await psql_db.connection() as connection:
         query = f"""
@@ -544,7 +555,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=Fals
             TaskType.INSTRUCTTEXTTASK.value: "instruct",
             TaskType.DPOTASK.value: "dpo",
             TaskType.GRPOTASK.value: "grpo",
-            TaskType.IMAGETASK.value: "image"
+            TaskType.IMAGETASK.value: "image",
         }
 
         for row in type_rows:
@@ -554,7 +565,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=Fals
                     "training": row["training_count"],
                     "preevaluation": row["preevaluation_count"],
                     "evaluating": row["evaluating_count"],
-                    "success": row["success_count"]
+                    "success": row["success_count"],
                 }.items():
                     setattr(stats, f"{prefix}_{status}", count)
 
@@ -563,7 +574,9 @@ async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=Fals
 
 async def get_tasks_exceeding_termination_time(psql_db: PSQLDB, include_tournament_tasks=False) -> list[RawTask]:
     tournament_tasks_clause = (
-        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+        ""
+        if include_tournament_tasks
+        else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -712,6 +725,7 @@ async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> li
         """
         rows = await connection.fetch(query, task_id)
         return [dict(row) for row in rows]
+
 
 async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
     """Get a task by ID along with its winning submissions and task-specific details"""
@@ -969,7 +983,9 @@ async def _create_task_from_data(
 
 async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0, include_tournament_tasks=False) -> list[Task]:
     tournament_tasks_clause = (
-        "" if include_tournament_tasks else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+        ""
+        if include_tournament_tasks
+        else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -1264,11 +1280,8 @@ async def add_reward_functions(task_id: UUID, reward_functions: list[RewardFunct
         connection: Connection
         for reward_function in reward_functions:
             reward_id = await connection.fetchval(
-                reward_functions_query,
-                reward_function.reward_func,
-                reward_function.func_hash,
-                reward_function.is_generic
-                )
+                reward_functions_query, reward_function.reward_func, reward_function.func_hash, reward_function.is_generic
+            )
             await connection.execute(grpo_task_functions_query, task_id, reward_id, reward_function.reward_weight)
 
 
@@ -1281,12 +1294,15 @@ async def get_reward_functions(task_id: UUID, psql_db: PSQLDB, connection: Conne
             WHERE gtf.{cst.TASK_ID} = $1
         """
         rows = await conn.fetch(query, task_id)
-        return [RewardFunction(
-            reward_func=row[cst.REWARD_FUNC],
-            func_hash=row[cst.FUNC_HASH],
-            is_generic=row[cst.IS_GENERIC],
-            reward_weight=row[cst.REWARD_WEIGHT]
-            ) for row in rows]
+        return [
+            RewardFunction(
+                reward_func=row[cst.REWARD_FUNC],
+                func_hash=row[cst.FUNC_HASH],
+                is_generic=row[cst.IS_GENERIC],
+                reward_weight=row[cst.REWARD_WEIGHT],
+            )
+            for row in rows
+        ]
 
     if connection is not None:
         return await _get_reward_functions(connection)
@@ -1307,11 +1323,9 @@ async def _get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: in
 
     async with await psql_db.connection() as conn:
         rows = await conn.fetch(query, num_rewards)
-        return [RewardFunction(
-            reward_func=row[cst.REWARD_FUNC],
-            is_generic=row[cst.IS_GENERIC],
-            reward_weight=1.0
-            ) for row in rows]
+        return [
+            RewardFunction(reward_func=row[cst.REWARD_FUNC], is_generic=row[cst.IS_GENERIC], reward_weight=1.0) for row in rows
+        ]
 
 
 async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_lookup_days: float = 30) -> dict[str, dict]:
@@ -1375,11 +1389,19 @@ async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_looku
 
 
 async def get_successful_matching_tasks(
-    model_repo: str, ds_repo: str, field_instruction: str, field_input: str, field_output: str, psql_db: PSQLDB, include_tournament_tasks=False
+    model_repo: str,
+    ds_repo: str,
+    field_instruction: str,
+    field_input: str,
+    field_output: str,
+    psql_db: PSQLDB,
+    include_tournament_tasks=False,
 ) -> list[InstructTextTask]:
     """Get most recent successful task with matching model_id and dataset within last 7 days"""
     tournament_tasks_clause = (
-        "" if include_tournament_tasks else f"AND t.{cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+        ""
+        if include_tournament_tasks
+        else f"AND t.{cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
     async with await psql_db.connection() as connection:
         connection: Connection

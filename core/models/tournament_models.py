@@ -2,7 +2,8 @@ import secrets
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from pydantic import Field
 
 from core.models.utility_models import TaskType, TrainingStatus
 from validator.core.models import AnyTypeRawTask
@@ -13,6 +14,7 @@ from validator.core.constants import (
     TOURNAMENT_DPO_GPU_MULTIPLIER,
     TOURNAMENT_GRPO_GPU_MULTIPLIER,
 )
+
 
 
 class TournamentStatus(str, Enum):
@@ -48,7 +50,7 @@ class GpuRequirement(str, Enum):
 
 def generate_tournament_id() -> str:
     hash_part = secrets.token_hex(8)
-    date_part = datetime.now().strftime('%Y%m%d')
+    date_part = datetime.now().strftime("%Y%m%d")
     return f"tourn_{hash_part}_{date_part}"
 
 
@@ -67,14 +69,14 @@ def generate_pair_id(round_id: str, pair_number: int) -> str:
 def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int) -> GpuRequirement:
     if task_type == TaskType.IMAGETASK:
         return GpuRequirement.A100
-    
+
     params_b = model_params_count / 1_000_000_000
-    
+
     if task_type == TaskType.DPOTASK:
         params_b *= TOURNAMENT_DPO_GPU_MULTIPLIER
     elif task_type == TaskType.GRPOTASK:
         params_b *= TOURNAMENT_GRPO_GPU_MULTIPLIER
-    
+
     if params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100:
         return GpuRequirement.H100_1X
     elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100:
@@ -90,6 +92,8 @@ class TournamentData(BaseModel):
     tournament_type: TournamentType
     status: TournamentStatus = TournamentStatus.PENDING
     current_round_id: str | None = None
+    base_winner_hotkey: str | None = None
+    winner_hotkey: str | None = None
 
 
 class TournamentRoundData(BaseModel):
@@ -119,6 +123,8 @@ class TournamentParticipant(BaseModel):
     hotkey: str
     eliminated_in_round_id: str | None = None
     final_position: int | None = None
+    training_repo: str | None = None
+    training_commit_hash: str | None = None
 
 
 class TournamentTask(BaseModel):
@@ -132,6 +138,7 @@ class TournamentTask(BaseModel):
 
 class Group(BaseModel):
     member_ids: list[str]
+    task_ids: list[str] | None = None
 
 
 class GroupRound(BaseModel):
@@ -139,7 +146,9 @@ class GroupRound(BaseModel):
 
 
 class KnockoutRound(BaseModel):
+    # pairs of hotkeys
     pairs: list[tuple[str, str]]
+    tasks: list[str] | None = None
 
 
 Round = GroupRound | KnockoutRound
@@ -151,6 +160,7 @@ class TournamentRound(BaseModel):
     is_final_round: bool = False
 
 
+
 class TournamentTaskTraining(BaseModel):
     task: AnyTypeRawTask
     hotkey: str
@@ -158,3 +168,4 @@ class TournamentTaskTraining(BaseModel):
     n_training_attempts: int
     created_at: datetime
     updated_at: datetime
+
