@@ -97,6 +97,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         config = yaml.safe_load(file)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
+    print(f"Dataset entry created: {config['datasets']}", flush=True)
     config["base_model"] = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
 
     config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"

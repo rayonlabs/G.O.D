@@ -77,4 +77,5 @@ def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetTyp
 
     print(f"Transformed dataset to include chatml.intel field names:")
     print(f"Final fields: {list(output_data[0].keys()) if output_data else []}")
+    print(f"Dataset saved to {dataset_path}", flush=True)
 
