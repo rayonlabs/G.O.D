@@ -186,7 +186,7 @@ class TrainingStatus(str, Enum):
 
 
 class TournamentTaskTraining(BaseModel):
-    task: AnyTypeRawTask
+    task: "AnyTypeRawTask"
     hotkey: str
     training_status: TrainingStatus
     n_training_attempts: int
