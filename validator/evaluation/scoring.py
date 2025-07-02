@@ -684,7 +684,7 @@ def get_hf_commit_timestamp(repo_url: str) -> datetime | None:
         repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
         api = HfApi()
         
-        commits = api.list_repo_commits(repo_path)
+        commits = api.list_repo_commits(repo_path, timeout=5.0)
         if commits:
             return commits[0].created_at
             
