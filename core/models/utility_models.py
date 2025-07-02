@@ -1,13 +1,15 @@
 import uuid
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
-from validator.core.models import AnyTypeRawTask
+if TYPE_CHECKING:
+    from validator.core.models import AnyTypeRawTask
 
 
 class FileFormat(str, Enum):
