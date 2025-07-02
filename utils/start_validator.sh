@@ -70,3 +70,4 @@ pm2 start \
     --service_name tournament_cycle \
     python -u -m validator.tournament.cycle" \
     --name tournament_cycle
+

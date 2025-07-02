@@ -23,6 +23,7 @@ ENV DATASET_DIR="/dataset/images"
 
 COPY core /workspace/core
 COPY miner /workspace/miner
+COPY trainer /workspace/trainer
 COPY scripts /workspace/scripts
 
 RUN chmod +x /workspace/scripts/run_image_trainer.sh

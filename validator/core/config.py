@@ -57,7 +57,8 @@ def load_config() -> Config:
         else:
             netuid = int(netuid)
 
-        redis_host = "localhost"
+        redis_host = os.getenv("REDIS_HOST", "localhost")
+        redis_port = int(os.getenv("REDIS_PORT", "6379"))
 
         refresh_nodes: bool = os.getenv("REFRESH_NODES", "true").lower() == "true"
         if refresh_nodes:
@@ -97,7 +98,7 @@ def load_config() -> Config:
             substrate=substrate,
             keypair=keypair,
             psql_db=PSQLDB(),
-            redis_db=Redis(host=redis_host),
+            redis_db=Redis(host=redis_host, port=redis_port),
             subtensor_network=subtensor_network,
             subtensor_address=subtensor_address,
             netuid=netuid,

@@ -6,7 +6,7 @@ import json
 from typing import Dict, Any
 
 import core.constants as cst
-from core.models.utility_models import DPODatasetType
+from core.models.utility_models import DpoDatasetType
 
 
 def _dpo_format_prompt(item: dict, format_str: str) -> str:
@@ -84,13 +84,13 @@ def _dpo_format_rejected(item: dict, format_str: str) -> str:
     return result
 
 
-def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DPODatasetType, apply_formatting: bool = True):
+def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetType, apply_formatting: bool = True):
     """
     Transform a DPO JSON dataset file to match axolotl's expected column names.
 
     Args:
         dataset_path: Path to the JSON dataset file
-        dataset_type: DPODatasetType object with field mappings
+        dataset_type: DpoDatasetType object with field mappings
         apply_formatting: If True, apply formatting templates to the content
     """
     with open(dataset_path, 'r') as f:

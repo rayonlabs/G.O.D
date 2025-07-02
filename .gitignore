@@ -10,6 +10,7 @@ sam_vit_l_0b3195.pth
 *.gguf
 *.session.sql
 nohup.out
+task_history.json
 
 tvenv/*
 axolotl/*
