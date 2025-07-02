@@ -50,3 +50,13 @@ pm2 start \
 pm2 start \
     "python -m validator.core.weight_setting" \
     --name weight_setter
+
+# Start the tournament orchestrator service using opentelemetry-instrument
+pm2 start \
+    "opentelemetry-instrument \
+    --logs_exporter otlp \
+    --traces_exporter none \
+    --metrics_exporter otlp \
+    --service_name tournament_orchestrator \
+    python -u -m validator.tournament.orchestrator" \
+    --name tournament_orchestrator
