@@ -240,10 +240,6 @@ async def main():
         args.expected_repo_name,
     )
 
-    import yaml
-    import json
-    import os
-
     def extract_and_copy_dataset(config_path: str, output_path: str):
         # Load the YAML config
         with open(config_path, "r") as f:
