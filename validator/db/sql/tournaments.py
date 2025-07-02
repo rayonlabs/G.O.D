@@ -577,7 +577,7 @@ async def add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples: lis
             query = f"""
                 INSERT INTO {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
                 ({cst.TASK_ID}, {cst.HOTKEY}, {cst.CREATED_AT})
-                SELECT * FROM unnest($1::text[], $2::text[], $3::timestamptz[])
+                SELECT * FROM unnest($1::uuid[], $2::text[], $3::timestamptz[])
                 ON CONFLICT ({cst.TASK_ID}, {cst.HOTKEY}) DO NOTHING
             """
 
