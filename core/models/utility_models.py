@@ -181,15 +181,6 @@ class TrainingStatus(str, Enum):
     FAILURE = "failure"
 
 
-class TournamentTaskTraining(BaseModel):
-    task: "AnyTypeRawTask"
-    hotkey: str
-    training_status: TrainingStatus
-    n_training_attempts: int
-    created_at: datetime
-    updated_at: datetime
-
-
 class GPUInfo(BaseModel):
     gpu_id: int = Field(..., description="GPU ID")
     gpu_type: GPUType = Field(..., description="GPU Type")
