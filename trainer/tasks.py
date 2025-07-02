@@ -3,14 +3,14 @@ from datetime import datetime
 from pathlib import Path
 
 from core.models.utility_models import TaskStatus
-from core.models.payload_models import TrainerProxyRequest, TrainerTaskDetails
+from core.models.payload_models import TrainerProxyRequest, TrainerTaskLog
 from trainer import constants as cst
 
-task_history: list[TrainerTaskDetails] = []
+task_history: list[TrainerTaskLog] = []
 TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
 
 def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
-    log_entry = TrainerTaskDetails(
+    log_entry = TrainerTaskLog(
         **task.dict(),
         status=TaskStatus.TRAINING,
         started_at=datetime.utcnow(),
@@ -28,7 +28,7 @@ def complete_task(task_id: str, hotkey: str, success: bool = True):
     task.finished_at = datetime.utcnow()
     save_task_history()
 
-def get_task(task_id: str, hotkey: str) -> TrainerTaskDetails | None:
+def get_task(task_id: str, hotkey: str) -> TrainerTaskLog | None:
     for task in task_history:
         if (
             task.training_data.task_id == task_id
@@ -44,7 +44,7 @@ def log_task(task_id: str, hotkey: str, message: str):
         task.logs.append(timestamped_message)
         save_task_history()
 
-def get_running_tasks() -> list[TrainerTaskDetails]:
+def get_running_tasks() -> list[TrainerTaskLog]:
     return [t for t in task_history if t.status == TaskStatus.TRAINING]
 
 def save_task_history():
@@ -57,5 +57,5 @@ def load_task_history():
         with open(TASK_HISTORY_FILE, "r") as f:
             data = json.load(f)
             task_history.clear()
-            task_history.extend(TrainerTaskDetails(**item) for item in data)
+            task_history.extend(TrainerTaskLog(**item) for item in data)
 

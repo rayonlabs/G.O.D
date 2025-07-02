@@ -3,7 +3,7 @@ from fastapi import APIRouter
 import asyncio
 
 from core.models.payload_models import TrainerProxyRequest
-from core.models.payload_models import TrainerTaskDetails
+from core.models.payload_models import TrainerTaskLog
 from trainer import constants as cst
 from validator.utils.logging import get_logger
 from trainer.image_manager import start_training_task
@@ -44,7 +44,7 @@ async def get_available_gpus() -> list[GPUInfo]:
     return gpu_info
 
 
-async def get_task_details(task_id: str, hotkey: str) -> TrainerTaskDetails:
+async def get_task_details(task_id: str, hotkey: str) -> TrainerTaskLog:
     return get_task(task_id, hotkey)
 
 
