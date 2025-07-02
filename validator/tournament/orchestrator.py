@@ -17,7 +17,7 @@ from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
-from core.models.utility_models import TournamentTaskTraining
+from core.models.tournament_models import TournamentTaskTraining
 from core.models.utility_models import TrainingStatus
 from validator.core.config import Config
 from validator.core.config import load_config
