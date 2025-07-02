@@ -32,6 +32,7 @@ START_TRAINING_GRPO_ENDPOINT = "/start_training_grpo/"
 TASK_OFFER_ENDPOINT = "/task_offer/"
 TASK_OFFER_IMAGE_ENDPOINT = "/task_offer_image/"
 SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
+TRAINING_REPO_ENDPOINT = "/training_repo"
 
 # TODO update when live
 DEV_CONTENT_BASE_URL = "https://dev.content.gradients.io"
