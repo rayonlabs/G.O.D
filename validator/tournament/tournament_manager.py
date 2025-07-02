@@ -4,6 +4,8 @@ import random
 
 from fiber.chain.models import Node
 
+import validator.core.constants as cst
+from core.models.payload_models import TrainingRepoResponse
 from core.models.tournament_models import Group
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import KnockoutRound
@@ -47,6 +49,7 @@ from validator.tournament.task_creator import create_image_tournament_round
 from validator.tournament.task_creator import create_text_tournament_round
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_round_winners
+from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import get_logger
 
 
@@ -334,7 +337,7 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
     return tournament_id
 
 
-async def populate_tournament_participants(tournament_id: str, config: Config, psql_db: PSQLDB, max_nodes: int = 4) -> int:
+async def populate_tournament_participants(tournament_id: str, config: Config, psql_db: PSQLDB) -> int:
     logger.info(f"Populating participants for tournament {tournament_id}")
 
     all_nodes = await get_all_nodes(psql_db)
@@ -346,34 +349,71 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         return 0
 
     logger.info(f"Found {len(eligible_nodes)} eligible nodes in database")
-    eligible_nodes = eligible_nodes[:max_nodes]
 
     successful_participants = 0
 
-    for node in eligible_nodes:
-        try:
-            # Mock the training repo fetch for now
-            if successful_participants < max_nodes:  # Limit participants for testing
-                mock_repo = "https://github.com/rayonlabs/G.O.D"
-                mock_commit = "9d14a63e4d1f065a203f51b19c2f6066933dd3a5"
+    batch_size = t_cst.TOURNAMENT_PARTICIPANT_PING_BATCH_SIZE
+    for i in range(0, len(eligible_nodes), batch_size):
+        batch = eligible_nodes[i : i + batch_size]
+        logger.info(
+            f"Processing batch {i // batch_size + 1}/{(len(eligible_nodes) + batch_size - 1) // batch_size} with {len(batch)} nodes"
+        )
 
-                # Add participant to tournament
-                participant = TournamentParticipant(tournament_id=tournament_id, hotkey=node.hotkey)
-                await add_tournament_participants([participant], psql_db)
+        batch_results = await asyncio.gather(
+            *[_process_single_node(node, tournament_id, config, psql_db) for node in batch], return_exceptions=True
+        )
 
-                await update_tournament_participant_training_repo(tournament_id, node.hotkey, mock_repo, mock_commit, psql_db)
-
+        for result in batch_results:
+            if isinstance(result, Exception):
+                logger.warning(f"Exception in batch processing: {result}")
+            elif result:
                 successful_participants += 1
-                logger.info(f"Added participant {node.hotkey} with training repo {mock_repo}@{mock_commit}")
-            else:
-                logger.info(f"Skipping {node.hotkey} - tournament participant limit reached")
-
-        except Exception as e:
-            logger.warning(f"Failed to fetch training repo from {node.hotkey}: {str(e)}")
-            continue
 
     logger.info(f"Successfully populated {successful_participants} participants for tournament {tournament_id}")
     return successful_participants
+
+
+async def _process_single_node(node: Node, tournament_id: str, config: Config, psql_db: PSQLDB) -> bool:
+    """Process a single node to add it as a tournament participant if it responds with a training repo."""
+    try:
+        training_repo_response = await _get_miner_training_repo(node, config)
+
+        if training_repo_response:
+            participant = TournamentParticipant(tournament_id=tournament_id, hotkey=node.hotkey)
+            await add_tournament_participants([participant], psql_db)
+
+            await update_tournament_participant_training_repo(
+                tournament_id, node.hotkey, training_repo_response.github_repo, training_repo_response.commit_hash, psql_db
+            )
+
+            logger.info(
+                f"Added participant {node.hotkey} with training repo {training_repo_response.github_repo}@{training_repo_response.commit_hash}"
+            )
+            return True
+        else:
+            logger.info(f"Skipping {node.hotkey} - no training repo response received")
+            return False
+
+    except Exception as e:
+        logger.warning(f"Failed to get training repo from {node.hotkey}: {str(e)}")
+        return False
+
+
+async def _get_miner_training_repo(node: Node, config: Config) -> TrainingRepoResponse | None:
+    """Get training repo from a miner, similar to how submissions are fetched in the main validator cycle."""
+    try:
+        url = cst.TRAINING_REPO_ENDPOINT
+        response = await process_non_stream_fiber_get(url, config, node)
+
+        if response and isinstance(response, dict):
+            return TrainingRepoResponse(**response)
+        else:
+            logger.warning(f"Invalid response format from {node.hotkey}: {response}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Failed to get training repo from {node.hotkey}: {e}")
+        return None
 
 
 async def create_first_round_for_active_tournament(tournament_id: str, config: Config, psql_db: PSQLDB) -> bool:
