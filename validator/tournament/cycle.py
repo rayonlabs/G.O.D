@@ -3,7 +3,6 @@ import asyncio
 from validator.core.config import load_config
 from validator.tournament.tournament_manager import process_active_tournaments
 from validator.tournament.tournament_manager import process_pending_tournaments
-from validator.tournament.tournament_manager import process_prepped_tournament_tasks
 from validator.utils.logging import get_logger
 from validator.utils.util import try_db_connections
 
@@ -22,8 +21,6 @@ async def cycle():
     await asyncio.gather(
         # this gets the submissions and populates the tournament participants
         process_pending_tournaments(config),
-        # this skips the LOOKING_FOR_NODES status and sets the tasks to ready
-        process_prepped_tournament_tasks(config),
         # this advances the tournament till completion
         process_active_tournaments(config),
     )

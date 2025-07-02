@@ -27,8 +27,6 @@ from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_node_by_hotkey
 from validator.db.sql.tasks import assign_node_to_task
 from validator.db.sql.tasks import get_task
-from validator.db.sql.tasks import get_tasks_with_status
-from validator.db.sql.tasks import update_task_status
 from validator.db.sql.tournaments import add_tournament_participants
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import create_tournament
@@ -366,7 +364,8 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         )
 
         batch_results = await asyncio.gather(
-            *[_process_single_node(node, tournament_id, tournament.tournament_type, config, psql_db) for node in batch], return_exceptions=True
+            *[_process_single_node(node, tournament_id, tournament.tournament_type, config, psql_db) for node in batch],
+            return_exceptions=True,
         )
 
         for result in batch_results:
@@ -379,7 +378,9 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
     return successful_participants
 
 
-async def _process_single_node(node: Node, tournament_id: str, tournament_type: TournamentType, config: Config, psql_db: PSQLDB) -> bool:
+async def _process_single_node(
+    node: Node, tournament_id: str, tournament_type: TournamentType, config: Config, psql_db: PSQLDB
+) -> bool:
     """Process a single node to add it as a tournament participant if it responds with a training repo."""
     try:
         training_repo_response = await _get_miner_training_repo(node, config, tournament_type)
@@ -549,19 +550,3 @@ async def check_if_round_is_completed(round_data, psql_db: PSQLDB):
     else:
         logger.info(f"Round {round_data.round_id} not ready for completion yet")
         return False
-
-
-async def process_prepped_tournament_tasks(config: Config):
-    while True:
-        logger.info("Processing prepped tournament tasks...")
-
-        try:
-            prepped_tasks = await get_tasks_with_status(TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only")
-
-            for task in prepped_tasks:
-                await update_task_status(task.task_id, TaskStatus.READY, config.psql_db)
-                logger.info(f"Set task {task.task_id} status to ready")
-        except Exception as e:
-            logger.error(f"Error processing prepped tournament tasks: {e}")
-        finally:
-            await asyncio.sleep(t_cst.TOURNAMENT_PREP_TASK_CYCLE_INTERVAL)
