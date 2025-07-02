@@ -8,6 +8,8 @@ pm2 delete validator || true
 pm2 delete validator_api || true
 pm2 delete validator_cycle || true
 pm2 delete weight_setter || true
+pm2 delete tournament_orchestrator || true
+pm2 delete tournament_cycle || true
 
 # Load variables from .vali.env
 set -a # Automatically export all variables
