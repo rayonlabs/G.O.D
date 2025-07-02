@@ -52,9 +52,7 @@ async def try_db_connections(config: Config) -> None:
     await config.psql_db.pool.execute("SELECT 1=1 as one")
     logger.info("PostgreSQL connected successfully")
 
-    logger.info("Attempting to connect to Redis")
-    await config.redis_db.ping()
-    logger.info("Redis connected successfully")
+# Redis connection removed
 
 
 async def save_json_to_temp_file(data: list[dict], prefix: str, dump_json: bool = True) -> tuple[str, int]:
