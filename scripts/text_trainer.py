@@ -120,9 +120,6 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         if huggingface_token:
             os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
     else:
-        config.pop("hub_model_id", None)
-        config.pop("hub_strategy", None)
-        config.pop("hub_token", None)
         for key in list(config.keys()):
             if key.startswith("wandb") or key.startswith("hub"):
                 config.pop(key)
@@ -242,7 +239,33 @@ async def main():
         output_dir,
         args.expected_repo_name,
     )
-    
+
+    import yaml
+    import json
+    import os
+
+    def extract_and_copy_dataset(config_path: str, output_path: str):
+        # Load the YAML config
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+
+        # Extract dataset path
+        dataset_info = config["datasets"][0]
+        base_path = dataset_info["path"]
+        file_name = dataset_info["data_files"][0]
+        full_dataset_path = os.path.join(base_path, file_name)
+
+        # Load and re-save JSON
+        with open(full_dataset_path, "r") as f:
+            dataset = json.load(f)
+
+        with open(output_path, "w") as f:
+            json.dump(dataset, f, indent=2)
+
+        print(f"✅ Copied dataset from:\n  {full_dataset_path}\nto:\n  {output_path}")
+
+    extract_and_copy_dataset(config_path, f"/mnt/testdir/newtest.json")
+        
     run_training(config_path)
 
     patch_model_metadata(output_dir, args.model)
