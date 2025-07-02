@@ -1,10 +1,13 @@
 import uuid
+from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+
+from validator.core.models import AnyTypeRawTask
 
 
 class FileFormat(str, Enum):
@@ -174,9 +177,30 @@ class GPUType(str, Enum):
     A6000 = "A6000"
 
 
+class TrainingStatus(str, Enum):
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+class TournamentTaskTraining(BaseModel):
+    task: AnyTypeRawTask
+    hotkey: str
+    training_status: TrainingStatus
+    n_training_attempts: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class GPUInfo(BaseModel):
     gpu_id: int = Field(..., description="GPU ID")
     gpu_type: GPUType = Field(..., description="GPU Type")
     vram_gb: int = Field(..., description="GPU VRAM in GB")
     available: bool = Field(..., description="GPU Availability")
+    used_until: datetime | None = Field(..., description="GPU Used Until")
+
+
+class TrainerInfo(BaseModel):
+    trainer_ip: str = Field(..., description="Trainer IP address")
+    gpus: list[GPUInfo] = Field(..., description="List of GPUs available on this trainer")
 
