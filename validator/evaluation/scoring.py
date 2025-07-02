@@ -679,17 +679,17 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
 
 
 
-def get_hf_commit_timestamp(repo_url: str) -> datetime | None:
+def get_hf_upload_timestamp(repo_url: str) -> datetime | None:
     try:
         repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
         api = HfApi()
         
-        commits = api.list_repo_commits(repo_path, timeout=5.0)
-        if commits:
-            return commits[0].created_at
+        model_info = api.model_info(repo_path, timeout=5.0)
+        if model_info and model_info.lastModified:
+            return model_info.lastModified
             
     except Exception as e:
-        logger.error(f"Failed to get commit timestamp for {repo_url}: {e}")
+        logger.error(f"Failed to get upload timestamp for {repo_url}: {e}")
     return None
 
 
@@ -701,8 +701,8 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
         if len(submissions) > 1:
             logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
             
-            # Get commit timestamps and keep only the earliest
-            submissions_with_timestamps = [(hotkey, repo, get_hf_commit_timestamp(repo)) 
+            # Get upload timestamps and keep only the earliest
+            submissions_with_timestamps = [(hotkey, repo, get_hf_upload_timestamp(repo)) 
                                          for hotkey, repo in submissions]
             valid_timestamps = [(h, r, t) for h, r, t in submissions_with_timestamps if t]
             
