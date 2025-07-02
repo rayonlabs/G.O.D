@@ -13,11 +13,9 @@ from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentTask
-
 from core.models.tournament_models import TournamentTaskTraining
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import GPUInfo
-
 from core.models.utility_models import TrainerInfo
 from core.models.utility_models import TrainingStatus
 from validator.db.database import PSQLDB
@@ -148,7 +146,7 @@ async def add_tournament_tasks(tasks: list[TournamentTask], psql_db: PSQLDB):
 async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData | None:
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.CURRENT_ROUND_ID}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1
         """
@@ -158,7 +156,6 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
                 tournament_id=result[cst.TOURNAMENT_ID],
                 tournament_type=result[cst.TOURNAMENT_TYPE],
                 status=result[cst.TOURNAMENT_STATUS],
-                current_round_id=result[cst.CURRENT_ROUND_ID],
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
             )
@@ -168,7 +165,7 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
 async def get_latest_completed_tournament(psql_db: PSQLDB, tournament_type: TournamentType) -> TournamentData | None:
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.CURRENT_ROUND_ID}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'completed'
             ORDER BY {cst.UPDATED_AT} DESC
@@ -180,7 +177,6 @@ async def get_latest_completed_tournament(psql_db: PSQLDB, tournament_type: Tour
                 tournament_id=result[cst.TOURNAMENT_ID],
                 tournament_type=result[cst.TOURNAMENT_TYPE],
                 status=result[cst.TOURNAMENT_STATUS],
-                current_round_id=result[cst.CURRENT_ROUND_ID],
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
             )
@@ -335,17 +331,6 @@ async def cancel_all_active_tournaments(psql_db: PSQLDB) -> int:
         return int(cancelled_count)
 
 
-async def update_tournament_current_round(tournament_id: str, round_id: str, psql_db: PSQLDB):
-    async with await psql_db.connection() as connection:
-        query = f"""
-            UPDATE {cst.TOURNAMENTS_TABLE} 
-            SET {cst.CURRENT_ROUND_ID} = $2, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
-            WHERE {cst.TOURNAMENT_ID} = $1
-        """
-        await connection.execute(query, tournament_id, round_id)
-        logger.info(f"Updated tournament {tournament_id} current round to {round_id}")
-
-
 async def update_tournament_base_winner_hotkey(tournament_id: str, base_winner_hotkey: str, psql_db: PSQLDB):
     async with await psql_db.connection() as connection:
         query = f"""
@@ -371,7 +356,7 @@ async def update_tournament_winner_hotkey(tournament_id: str, winner_hotkey: str
 async def get_tournaments_with_status(status: TournamentStatus, psql_db: PSQLDB) -> list[TournamentData]:
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.CURRENT_ROUND_ID}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_STATUS} = $1
             ORDER BY {cst.CREATED_AT} DESC
@@ -382,7 +367,6 @@ async def get_tournaments_with_status(status: TournamentStatus, psql_db: PSQLDB)
                 tournament_id=row[cst.TOURNAMENT_ID],
                 tournament_type=row[cst.TOURNAMENT_TYPE],
                 status=row[cst.TOURNAMENT_STATUS],
-                current_round_id=row[cst.CURRENT_ROUND_ID],
                 base_winner_hotkey=row[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=row[cst.WINNER_HOTKEY],
             )
@@ -446,7 +430,6 @@ async def get_miners_for_tournament(task_id: str, psql_db: PSQLDB) -> list[Node]
         return [Node(**dict(row)) for row in result]
 
 
-
 async def update_tournament_participant_training_repo(
     tournament_id: str, hotkey: str, training_repo: str, training_commit_hash: str, psql_db: PSQLDB
 ):
@@ -505,7 +488,6 @@ async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> li
         ]
 
 
-
 async def add_trainer_gpus(trainer_ip: str, gpu_infos: list[GPUInfo], psql_db: PSQLDB):
     """Add or update GPU information for a trainer"""
     async with await psql_db.connection() as connection:
@@ -530,14 +512,7 @@ async def add_trainer_gpus(trainer_ip: str, gpu_infos: list[GPUInfo], psql_db: P
                     used_until = datetime.now(timezone.utc) + timedelta(hours=48)
 
                 await connection.execute(
-
-                    insert_query,
-                    trainer_ip,
-                    gpu_info.gpu_id,
-                    gpu_info.gpu_type,
-                    gpu_info.vram_gb,
-                    used_until
-
+                    insert_query, trainer_ip, gpu_info.gpu_id, gpu_info.gpu_type, gpu_info.vram_gb, used_until
                 )
 
             logger.info(f"Added {len(gpu_infos)} GPUs for trainer {trainer_ip}")
@@ -571,11 +546,9 @@ async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
             if trainer_ip not in trainers:
                 trainers[trainer_ip] = TrainerInfo(trainer_ip=trainer_ip, gpus=[])
 
-
             # Determine availability based on used_until
             used_until = row[cst.USED_UNTIL]
             available = used_until is None or used_until < datetime.now(timezone.utc)
-
 
             trainers[trainer_ip].gpus.append(
                 GPUInfo(
@@ -586,7 +559,6 @@ async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
                     used_until=used_until,
                 )
             )
-
 
         return list(trainers.values())
 
@@ -616,7 +588,6 @@ async def add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples: lis
             await connection.execute(query, task_ids, hotkeys, timestamps)
 
             logger.info(f"Added {len(task_hotkey_triples)} task-hotkey training triples in batch")
-
 
 
 async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus) -> list[TournamentTaskTraining]:
@@ -652,7 +623,6 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
         tournament_tasks = []
         missing_tasks = []
 
-
         for row in results:
             task = tasks_dict.get(row[cst.TASK_ID])
             if task:
@@ -667,8 +637,6 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
                     )
                 )
 
-        
-
             else:
                 missing_tasks.append(row[cst.TASK_ID])
 
@@ -682,9 +650,7 @@ async def update_tournament_task_training_status(task_id: str, hotkey: str, stat
     """Update the training status of a specific task-hotkey pair"""
     async with await psql_db.connection() as connection:
         increment_clause = (
-
             f", {cst.N_TRAINING_ATTEMPTS} = {cst.N_TRAINING_ATTEMPTS} + 1" if status == TrainingStatus.TRAINING else ""
-
         )
 
         query = f"""
@@ -739,27 +705,18 @@ async def get_tournament_training_stats(psql_db: PSQLDB) -> dict:
         """
         results = await connection.fetch(query)
 
-
-        stats = {
-            'total_pairs': 0,
-            'pending': 0,
-            'success': 0,
-            'failure': 0,
-            'avg_attempts': 0,
-            'max_attempts': 0
-        }
+        stats = {"total_pairs": 0, "pending": 0, "success": 0, "failure": 0, "avg_attempts": 0, "max_attempts": 0}
 
         for row in results:
             status = row[cst.TRAINING_STATUS]
-            count = row['count']
-            avg_attempts = row['avg_attempts'] or 0
-            max_attempts = row['max_attempts'] or 0
+            count = row["count"]
+            avg_attempts = row["avg_attempts"] or 0
+            max_attempts = row["max_attempts"] or 0
 
-            stats['total_pairs'] += count
+            stats["total_pairs"] += count
             stats[status] = count
-            stats['avg_attempts'] = max(stats['avg_attempts'], avg_attempts)
-            stats['max_attempts'] = max(stats['max_attempts'], max_attempts)
-
+            stats["avg_attempts"] = max(stats["avg_attempts"], avg_attempts)
+            stats["max_attempts"] = max(stats["max_attempts"], max_attempts)
 
         return stats
 

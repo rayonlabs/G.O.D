@@ -5,16 +5,14 @@ from enum import Enum
 from pydantic import BaseModel
 from pydantic import Field
 
-from core.models.utility_models import TaskType, TrainingStatus
+from core.models.utility_models import TaskType
+from core.models.utility_models import TrainingStatus
+from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100
+from validator.core.constants import TOURNAMENT_GRPO_GPU_MULTIPLIER
 from validator.core.models import AnyTypeRawTask
-from validator.core.constants import (
-    TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100,
-    TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100,
-    TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100,
-    TOURNAMENT_DPO_GPU_MULTIPLIER,
-    TOURNAMENT_GRPO_GPU_MULTIPLIER,
-)
-
 
 
 class TournamentStatus(str, Enum):
@@ -91,7 +89,6 @@ class TournamentData(BaseModel):
     tournament_id: str
     tournament_type: TournamentType
     status: TournamentStatus = TournamentStatus.PENDING
-    current_round_id: str | None = None
     base_winner_hotkey: str | None = None
     winner_hotkey: str | None = None
 
@@ -160,7 +157,6 @@ class TournamentRound(BaseModel):
     is_final_round: bool = False
 
 
-
 class TournamentTaskTraining(BaseModel):
     task: AnyTypeRawTask
     hotkey: str
@@ -168,4 +164,3 @@ class TournamentTaskTraining(BaseModel):
     n_training_attempts: int
     created_at: datetime
     updated_at: datetime
-
