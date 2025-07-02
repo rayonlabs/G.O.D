@@ -39,7 +39,7 @@ def _dpo_format_rejected(row, format_str):
     return result
 
 
-def _adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetType, apply_formatting: bool = False):
+def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetType, apply_formatting: bool = False):
     """
     Transform a DPO JSON dataset file to match axolotl's `chatml.argilla` expected column names.
 
