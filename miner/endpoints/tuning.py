@@ -18,7 +18,7 @@ from pydantic import ValidationError
 import core.constants as cst
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
-from core.models.utility_models import Submission
+from core.models.utility_models import MinerSubmission
 from validator.utils.hash_verification import calculate_model_hash
 from core.models.payload_models import TrainRequestGrpo
 from core.models.payload_models import TrainRequestImage
@@ -161,7 +161,7 @@ async def get_latest_model_submission(task_id: str) -> Submission:
 
         model_hash = calculate_model_hash(repo_id)
         
-        return Submission(repo=repo_id, model_hash=model_hash)
+        return MinerSubmission(repo=repo_id, model_hash=model_hash)
 
     except FileNotFoundError as e:
         logger.error(f"No submission found for task {task_id}: {str(e)}")
