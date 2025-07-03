@@ -39,6 +39,14 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
         
         # Find all files in directory
         all_files = os.listdir(local_path)
+        logger.info(f"All files in {repo_id}: {all_files}")
+        
+        # Check subdirectories
+        subdirs = [f for f in all_files if os.path.isdir(os.path.join(local_path, f))]
+        logger.info(f"Subdirectories found: {subdirs}")
+        for subdir in subdirs:
+            subdir_files = os.listdir(os.path.join(local_path, subdir))
+            logger.info(f"Files in {subdir}/: {subdir_files}")
         
         import glob
         sharded_patterns = [
@@ -48,6 +56,7 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
             "checkpoint/last.safetensors",
             "checkpoint/last-*.safetensors",
             "checkpoint/checkpoint-*.safetensors",
+            "last-*.safetensors",
             "diffusion_pytorch_model.safetensors",
             "unet/diffusion_pytorch_model.safetensors",
             "vae/diffusion_pytorch_model.safetensors",
@@ -59,6 +68,7 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
         for pattern in sharded_patterns:
             pattern_path = os.path.join(local_path, pattern)
             matched_files = glob.glob(pattern_path)
+            logger.info(f"Pattern '{pattern}' matched: {[os.path.relpath(f, local_path) for f in matched_files]}")
             for file_path in matched_files:
                 relative_path = os.path.relpath(file_path, local_path)
                 files_to_hash.append(relative_path)
