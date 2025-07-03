@@ -236,13 +236,14 @@ class TestEdgeCases:
         test_cases = [
             ("0" * 64, True),  # All zeros
             ("f" * 64, True),  # All f's  
-            ("A" * 64, False), # Uppercase not allowed
+            ("A" * 64, True),  # Uppercase hex is valid
             ("g" + "0" * 63, False), # Invalid hex char
             ("0" * 63, False), # Too short
             ("0" * 65, False), # Too long
             ("", False), # Empty
             (None, False), # None
             (123, False), # Wrong type
+            ("xyz" + "0" * 61, False), # Invalid chars
         ]
         
         for test_hash, expected in test_cases:
