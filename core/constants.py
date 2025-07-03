@@ -56,7 +56,7 @@ RAYONLABS_HF_USERNAME = "rayonlabs"
 CUSTOM_DATASET_TYPE = "custom"
 
 # DPO default dataset type
-DPO_DEFAULT_DATASET_TYPE = "chatml.intel"  # Going back to chatml.intel
+DPO_DEFAULT_DATASET_TYPE = "chatml.default" 
 # Field names must match exactly what Axolotl's formatter expects
 DPO_DEFAULT_FIELD_PROMPT = "question"  # chatml.intel expects 'question'
 DPO_DEFAULT_FIELD_SYSTEM = "system"
