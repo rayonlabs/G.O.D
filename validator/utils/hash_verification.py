@@ -40,7 +40,6 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
         logger.info(f"All files in {repo_id}: {all_files}")
         
         subdirs = [f for f in all_files if os.path.isdir(os.path.join(local_path, f))]
-        subdirs = [f for f in all_files if os.path.isdir(os.path.join(local_path, f))]
         logger.info(f"Subdirectories found: {subdirs}")
         for subdir in subdirs:
             subdir_files = os.listdir(os.path.join(local_path, subdir))
@@ -71,7 +70,6 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
                 relative_path = os.path.relpath(file_path, local_path)
                 files_to_hash.append(relative_path)
         
-        # Remove duplicates and sort for consistency
         files_to_hash = sorted(list(set(files_to_hash)))
         
         hashed_files = []
