@@ -13,6 +13,7 @@ import subprocess
 import asyncio
 import argparse
 import pandas as pd
+from transformers import AutoTokenizer
 from pathlib import Path
 
 
@@ -98,9 +99,8 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
     print(f"Dataset entry created: {config['datasets']}", flush=True)
-    config["base_model"] = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
-
-    config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"
+    model_path = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
+    config["base_model"] = model_path
     config["mlflow_experiment_name"] = dataset
     os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir
@@ -132,6 +132,10 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
                 ds["path"] = "/workspace/axolotl/data"
                 
             ds["data_files"] = [os.path.basename(dataset)]
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
+        config["special_tokens"] = {"pad_token": tokenizer.eos_token}
 
     config_path = os.path.join("/workspace/axolotl/configs", f"{task_id}.yml")
     save_config(config, config_path)
