@@ -219,10 +219,7 @@ async def _let_miners_know_to_start_training(task: AnyTypeRawTask, nodes: list[N
 async def _find_and_select_miners_for_task(task: AnyTypeRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
-            if await tournaments_sql.is_task_in_tournament(task.task_id, config.psql_db):
-                logger.info("This task is in a tournament - picking miners from the tournament")
-                nodes = await tournaments_sql.get_miners_for_tournament(task.task_id, config.psql_db)
-            elif IS_PROD_ENV:
+            if IS_PROD_ENV:
                 logger.info("Filtering for only nodes that have scored on prod")
                 nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
             else:
