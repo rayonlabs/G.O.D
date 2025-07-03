@@ -40,25 +40,27 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
         # Find all files in directory
         all_files = os.listdir(local_path)
         
-        # Add sharded model files and image model patterns
         import glob
         sharded_patterns = [
             "model-*.safetensors",
             "pytorch_model-*.bin", 
             "pytorch_model-*.safetensors",
-            "checkpoint/*.safetensors",  # Diffusion checkpoint files
-            "*.ckpt",  # Legacy checkpoint files
-            "diffusion_pytorch_model.safetensors",  # Diffusion models
-            "unet/*.safetensors",  # UNet components
-            "vae/*.safetensors",  # VAE components  
-            "text_encoder/*.safetensors",  # Text encoder components
+            "checkpoint/last.safetensors",
+            "checkpoint/checkpoint-*.safetensors",
+            "diffusion_pytorch_model.safetensors",
+            "unet/diffusion_pytorch_model.safetensors",
+            "vae/diffusion_pytorch_model.safetensors",
+            "text_encoder/pytorch_model.bin",
+            "text_encoder_2/pytorch_model.bin",
         ]
         
         files_to_hash = specific_files.copy()
         for pattern in sharded_patterns:
             pattern_path = os.path.join(local_path, pattern)
-            sharded_files = [os.path.basename(f) for f in glob.glob(pattern_path)]
-            files_to_hash.extend(sharded_files)
+            matched_files = glob.glob(pattern_path)
+            for file_path in matched_files:
+                relative_path = os.path.relpath(file_path, local_path)
+                files_to_hash.append(relative_path)
         
         # Remove duplicates and sort for consistency
         files_to_hash = sorted(list(set(files_to_hash)))
