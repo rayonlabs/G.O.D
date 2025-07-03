@@ -472,7 +472,7 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> Min
         response = await process_non_stream_fiber_get(url, config, miner)
         
         if isinstance(response, dict):
-            return MinerSubmission(repo=response["repo"], model_hash=response["model_hash"])
+            return MinerSubmission(repo=response["repo"], model_hash=response.get("model_hash"))
         else:
             repo = str(response)
             if repo == "None":
