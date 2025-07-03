@@ -285,6 +285,7 @@ class Submission(BaseModel):
     task_id: UUID
     hotkey: str
     repo: str
+    model_hash: str | None = None
     created_on: datetime | None = None
     updated_on: datetime | None = None
 
