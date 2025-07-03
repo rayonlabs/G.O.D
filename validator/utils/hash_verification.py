@@ -26,7 +26,6 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
             
         hasher = hashlib.sha256()
         
-        # Specific files to hash
         specific_files = [
             "adapter_model.bin",
             "adapter_model.safetensors",
@@ -37,11 +36,10 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
             "config.json",
         ]
         
-        # Find all files in directory
         all_files = os.listdir(local_path)
         logger.info(f"All files in {repo_id}: {all_files}")
         
-        # Check subdirectories
+        subdirs = [f for f in all_files if os.path.isdir(os.path.join(local_path, f))]
         subdirs = [f for f in all_files if os.path.isdir(os.path.join(local_path, f))]
         logger.info(f"Subdirectories found: {subdirs}")
         for subdir in subdirs:
