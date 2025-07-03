@@ -13,6 +13,7 @@ import subprocess
 import asyncio
 import argparse
 import pandas as pd
+from transformers import AutoTokenizer
 from pathlib import Path
 
 
@@ -85,7 +86,7 @@ def copy_dataset_if_needed(dataset_path, file_format):
         
         shutil.copy(dataset_path, data_path)
         shutil.copy(dataset_path, root_path)
-        
+
         return data_path
     return dataset_path
 
@@ -97,9 +98,8 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         config = yaml.safe_load(file)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
-    config["base_model"] = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
-
-    config["dataset_prepared_path"] = "/workspace/axolotl/data_prepared"
+    model_path = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
+    config["base_model"] = model_path
     config["mlflow_experiment_name"] = dataset
     os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir
@@ -119,11 +119,8 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         if huggingface_token:
             os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
     else:
-        config.pop("hub_model_id", None)
-        config.pop("hub_strategy", None)
-        config.pop("hub_token", None)
         for key in list(config.keys()):
-            if key.startswith("wandb"):
+            if key.startswith("wandb") or key.startswith("hub"):
                 config.pop(key)
             
     if file_format != FileFormat.HF.value:
@@ -135,8 +132,13 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
                 
             ds["data_files"] = [os.path.basename(dataset)]
 
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
+        config["special_tokens"] = {"pad_token": tokenizer.eos_token}
+
     config_path = os.path.join("/workspace/axolotl/configs", f"{task_id}.yml")
     save_config(config, config_path)
+    save_config(config, "/mnt/testdir/test.yml")
     return config_path
 
 
@@ -224,6 +226,8 @@ async def main():
     
     dataset_path = copy_dataset_if_needed(dataset_path, args.file_format)
 
+    print(args.file_format, flush=True)
+
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
 
@@ -238,7 +242,7 @@ async def main():
         output_dir,
         args.expected_repo_name,
     )
-    
+        
     run_training(config_path)
 
     patch_model_metadata(output_dir, args.model)

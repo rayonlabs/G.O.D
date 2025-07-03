@@ -159,7 +159,7 @@ async def run_trainer_container_text(
             command=command,
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.TEXT_CONTAINER_SAVE_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"}
+                cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"},
             },
             remove=False,
             name=container_name,
@@ -285,7 +285,7 @@ async def upload_repo_to_hf(
             cst.VOLUME_NAMES[1]: {
                 "bind": "/cache",
                 "mode": "rw"
-            }
+            } 
         }
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
@@ -432,11 +432,13 @@ async def start_training_task(task: TrainerProxyRequest):
                 container.kill()
                 container.remove(force=True)
                 log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
-                logger.info(f"Cleaning up")
-                delete_image_and_cleanup(tag)
-                logger.info("Cleaned up Docker resources.")
+                
             except Exception as cleanup_err:
                 log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
+
+        logger.info(f"Cleaning up")
+        delete_image_and_cleanup(tag)
+        logger.info("Cleaned up Docker resources.")
 
         if success:
             try:
