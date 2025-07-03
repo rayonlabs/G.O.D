@@ -46,6 +46,7 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
             "pytorch_model-*.bin", 
             "pytorch_model-*.safetensors",
             "checkpoint/last.safetensors",
+            "checkpoint/last-*.safetensors",
             "checkpoint/checkpoint-*.safetensors",
             "diffusion_pytorch_model.safetensors",
             "unet/diffusion_pytorch_model.safetensors",
