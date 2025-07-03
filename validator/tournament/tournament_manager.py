@@ -23,10 +23,9 @@ from core.models.tournament_models import generate_tournament_id
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.db.database import PSQLDB
+from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_node_by_hotkey
-from validator.db.sql.tasks import assign_node_to_task
-from validator.db.sql.tasks import get_task
 from validator.db.sql.tournaments import add_tournament_participants
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import create_tournament
@@ -122,7 +121,7 @@ async def _create_first_round(
     tasks = await _create_tournament_tasks(tournament_id, round_id, round_structure, tournament_type, False, config)
     await add_tournament_tasks(tasks, psql_db)
 
-    await assign_nodes_to_tournament_tasks(round_id, round_structure, psql_db)
+    await assign_nodes_to_tournament_tasks(tournament_id, round_id, round_structure, psql_db)
 
     await update_round_status(round_id, RoundStatus.ACTIVE, psql_db)
 
@@ -183,7 +182,7 @@ async def _create_tournament_tasks(
     return tasks
 
 
-async def assign_nodes_to_tournament_tasks(round_id: str, round_structure: Round, psql_db: PSQLDB) -> None:
+async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, round_structure: Round, psql_db: PSQLDB) -> None:
     """Assign nodes to tournament tasks for the given round."""
 
     if isinstance(round_structure, GroupRound):
@@ -197,8 +196,14 @@ async def assign_nodes_to_tournament_tasks(round_id: str, round_structure: Round
                 for hotkey in group.member_ids:
                     node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
-                        await assign_node_to_task(task.task_id, node, psql_db)
-                        logger.info(f"Assigned {hotkey} to group task {task.task_id}")
+                        await task_sql.assign_node_to_task(task.task_id, node, psql_db)
+
+                        expected_repo_name = f"tournament-{tournament_id}-{task.task_id}-{hotkey[:8]}"
+                        await task_sql.set_expected_repo_name(task.task_id, node, psql_db, expected_repo_name)
+
+                        logger.info(
+                            f"Assigned {hotkey} to group task {task.task_id} with expected_repo_name: {expected_repo_name}"
+                        )
     else:
         round_tasks = await get_tournament_tasks(round_id, psql_db)
 
@@ -211,8 +216,14 @@ async def assign_nodes_to_tournament_tasks(round_id: str, round_structure: Round
                 for hotkey in pair:
                     node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
-                        await assign_node_to_task(pair_task.task_id, node, psql_db)
-                        logger.info(f"Assigned {hotkey} to pair task {pair_task.task_id}")
+                        await task_sql.assign_node_to_task(pair_task.task_id, node, psql_db)
+
+                        expected_repo_name = f"tournament-{tournament_id}-{pair_task.task_id}-{hotkey[:8]}"
+                        await task_sql.set_expected_repo_name(pair_task.task_id, node, psql_db, expected_repo_name)
+
+                        logger.info(
+                            f"Assigned {hotkey} to pair task {pair_task.task_id} with expected_repo_name: {expected_repo_name}"
+                        )
 
 
 async def create_next_round(
@@ -271,7 +282,7 @@ async def create_next_round(
     )
     await add_tournament_tasks(tasks, psql_db)
 
-    await assign_nodes_to_tournament_tasks(next_round_id, round_structure, psql_db)
+    await assign_nodes_to_tournament_tasks(tournament.tournament_id, next_round_id, round_structure, psql_db)
 
     await update_round_status(next_round_id, RoundStatus.ACTIVE, psql_db)
 
@@ -538,7 +549,7 @@ async def check_if_round_is_completed(round_data, psql_db: PSQLDB):
 
     all_tasks_completed = True
     for task in round_tasks:
-        task_obj = await get_task(task.task_id, psql_db)
+        task_obj = await task_sql.get_task(task.task_id, psql_db)
         if task_obj and task_obj.status != TaskStatus.SUCCESS.value:
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
