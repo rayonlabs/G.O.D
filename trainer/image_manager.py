@@ -327,7 +327,7 @@ def get_task_type(request: TrainerProxyRequest) -> TaskType:
     raise ValueError(f"Unsupported training_data type: {type(training_data)}")
     
 
-async def start_training_task(task: TrainerProxyRequest):
+async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
     training_data = task.training_data
     success = False
     container = None
@@ -338,7 +338,7 @@ async def start_training_task(task: TrainerProxyRequest):
     try:
         await create_volumes_if_dont_exist()
 
-        dockerfile_path = f"{task.local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}" if task_type == TaskType.IMAGETASK else f"{task.local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
+        dockerfile_path = f"{local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}" if task_type == TaskType.IMAGETASK else f"{local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
 
         logger.info("Running Cache Download Container")
         log_task(training_data.task_id, task.hotkey, "Downloading data")
@@ -365,7 +365,7 @@ async def start_training_task(task: TrainerProxyRequest):
             build_docker_image,
             dockerfile_path=dockerfile_path,
             is_image_task=(task_type == TaskType.IMAGETASK),
-            context_path=task.local_repo_path,
+            context_path=local_repo_path,
         )
 
         log_task(training_data.task_id, task.hotkey, f"Docker image built with tag: {tag}")

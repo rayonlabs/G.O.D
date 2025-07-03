@@ -30,10 +30,9 @@ async def start_training(req: TrainerProxyRequest) -> Response:
         branch=req.github_branch,
         commit_hash=req.github_commit_hash
     )
-    req.local_repo_path = local_repo_path
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
 
-    asyncio.create_task(start_training_task(req))
+    asyncio.create_task(start_training_task(req, local_repo_path))
     start_task(req)
     
     return {"message": "Started Training!", "task_id": req.training_data.task_id}

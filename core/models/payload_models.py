@@ -86,7 +86,6 @@ class TrainerProxyRequest(BaseModel):
     hotkey: str
     github_branch: str | None = None
     github_commit_hash: str | None = None
-    local_repo_path: str = Field(default=None, include_in_schema=False)
 
 
 class TrainerTaskLog(TrainerProxyRequest):
