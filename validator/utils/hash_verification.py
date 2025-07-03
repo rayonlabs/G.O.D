@@ -26,7 +26,8 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
             
         hasher = hashlib.sha256()
         
-        files_to_hash = [
+        # Specific files to hash
+        specific_files = [
             "adapter_model.bin",
             "adapter_model.safetensors",
             "pytorch_model.bin",
@@ -35,6 +36,32 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
             "adapter_config.json",
             "config.json",
         ]
+        
+        # Find all files in directory
+        all_files = os.listdir(local_path)
+        
+        # Add sharded model files and image model patterns
+        import glob
+        sharded_patterns = [
+            "model-*.safetensors",
+            "pytorch_model-*.bin", 
+            "pytorch_model-*.safetensors",
+            "checkpoint/*.safetensors",  # Diffusion checkpoint files
+            "*.ckpt",  # Legacy checkpoint files
+            "diffusion_pytorch_model.safetensors",  # Diffusion models
+            "unet/*.safetensors",  # UNet components
+            "vae/*.safetensors",  # VAE components  
+            "text_encoder/*.safetensors",  # Text encoder components
+        ]
+        
+        files_to_hash = specific_files.copy()
+        for pattern in sharded_patterns:
+            pattern_path = os.path.join(local_path, pattern)
+            sharded_files = [os.path.basename(f) for f in glob.glob(pattern_path)]
+            files_to_hash.extend(sharded_files)
+        
+        # Remove duplicates and sort for consistency
+        files_to_hash = sorted(list(set(files_to_hash)))
         
         hashed_files = []
         for filename in files_to_hash:
