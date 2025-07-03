@@ -3,7 +3,7 @@ import asyncio
 from unittest.mock import Mock, patch
 from validator.utils.hash_verification import calculate_model_hash, verify_model_hash, is_valid_model_hash
 from validator.evaluation.scoring import handle_duplicate_submissions, group_by_losses
-from core.models.utility_models import Submission, TaskType
+from core.models.utility_models import MinerSubmission, TaskType
 import numpy as np
 
 
@@ -12,7 +12,7 @@ class MockMinerResult:
         self.hotkey = hotkey
         self.test_loss = test_loss
         self.synth_loss = synth_loss
-        self.submission = Submission(repo=repo, model_hash=model_hash) if repo else None
+        self.submission = MinerSubmission(repo=repo, model_hash=model_hash) if repo else None
         self.task_type = task_type
 
 
