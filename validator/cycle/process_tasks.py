@@ -261,7 +261,9 @@ def _attempt_delay_task(task: AnyTypeRawTask):
 
 
 async def _find_miners_for_task(config: Config):
-    pending_tasks = await tasks_sql.get_tasks_with_status(status=TaskStatus.LOOKING_FOR_NODES, psql_db=config.psql_db)
+    pending_tasks = await tasks_sql.get_tasks_with_status(
+        status=TaskStatus.LOOKING_FOR_NODES, psql_db=config.psql_db, tournament_filter="exclude"
+    )
     await asyncio.gather(
         *[_find_and_select_miners_for_task(task, config) for task in pending_tasks[: cst.MAX_CONCURRENT_MINER_ASSIGNMENTS]]
     )
@@ -345,7 +347,9 @@ async def _move_back_to_looking_for_nodes(task: AnyTypeRawTask, config: Config):
 
 
 async def _handle_delayed_tasks(config: Config):
-    finished_delay_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.DELAYED, psql_db=config.psql_db)
+    finished_delay_tasks = await tasks_sql.get_tasks_with_status(
+        TaskStatus.DELAYED, psql_db=config.psql_db, tournament_filter="exclude"
+    )
     logger.info(f"We have {len(finished_delay_tasks)} that we're ready to offer to miners again")
     await asyncio.gather(*[_move_back_to_looking_for_nodes(task, config) for task in finished_delay_tasks])
 
