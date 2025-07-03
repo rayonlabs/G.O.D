@@ -231,4 +231,3 @@ cython_debug/
 .http
 
 **/.claude/settings.local.json
-validator/tests/test_hash_verification.py
