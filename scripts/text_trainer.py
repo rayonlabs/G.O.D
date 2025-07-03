@@ -98,7 +98,6 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         config = yaml.safe_load(file)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
-    print(f"Dataset entry created: {config['datasets']}", flush=True)
     model_path = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
     config["base_model"] = model_path
     config["mlflow_experiment_name"] = dataset
@@ -243,28 +242,6 @@ async def main():
         output_dir,
         args.expected_repo_name,
     )
-
-    def extract_and_copy_dataset(config_path: str, output_path: str):
-        # Load the YAML config
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
-
-        # Extract dataset path
-        dataset_info = config["datasets"][0]
-        base_path = dataset_info["path"]
-        file_name = dataset_info["data_files"][0]
-        full_dataset_path = os.path.join(base_path, file_name)
-
-        # Load and re-save JSON
-        with open(full_dataset_path, "r") as f:
-            dataset = json.load(f)
-
-        with open(output_path, "w") as f:
-            json.dump(dataset, f, indent=2)
-
-        print(f"Copied dataset from:\n  {full_dataset_path}\nto:\n  {output_path}")
-
-    extract_and_copy_dataset(config_path, f"/workspace/{args.task_id}_train_data.json")
         
     run_training(config_path)
 
