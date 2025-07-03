@@ -18,7 +18,7 @@ from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ChatTemplateDatasetType
-from core.models.utility_models import Submission
+from core.models.utility_models import MinerSubmission
 from core.models.utility_models import InstructTextDatasetType
 from validator.utils.hash_verification import verify_model_hash
 from core.models.utility_models import TaskStatus
@@ -466,18 +466,18 @@ def _calculate_weighted_loss_for_image_eval(eval_result: EvaluationResultImage) 
     return None
 
 
-async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> Submission | None:
+async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> MinerSubmission | None:
     url = f"{cts.SUBMISSION_ENDPOINT}{task_id}"
     try:
         response = await process_non_stream_fiber_get(url, config, miner)
         
         if isinstance(response, dict):
-            return Submission(**response)
+            return MinerSubmission(repo=response["repo"], model_hash=response["model_hash"])
         else:
             repo = str(response)
             if repo == "None":
                 return None
-            return Submission(repo=repo, model_hash=None)
+            return MinerSubmission(repo=repo, model_hash=None)
             
     except Exception as e:
         logger.error(f"Failed to get submission for miner {miner.hotkey}: {e}")
@@ -802,7 +802,7 @@ async def process_miners_pool(
 
 
     miner_repos: dict[str, str] = {}
-    miner_submissions: dict[str, Submission] = {}
+    miner_submissions: dict[str, MinerSubmission] = {}
     failed_results = []
     
     for miner in miners:

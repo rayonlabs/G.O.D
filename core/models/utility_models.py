@@ -47,7 +47,7 @@ class WinningSubmission(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
 
-class Submission(BaseModel):
+class MinerSubmission(BaseModel):
     repo: str
     model_hash: str | None = None
 
