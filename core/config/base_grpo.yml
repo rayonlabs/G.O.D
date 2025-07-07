@@ -15,7 +15,7 @@ output_dir: miner_id_24
 rl: grpo
 
 trl:
-  beta: 0.04
+  beta: 0.08
   max_completion_length: 256
   use_vllm: False
   num_generations: 4
@@ -27,9 +27,9 @@ trust_remote_code: true
 
 adapter: lora
 lora_model_dir:
-lora_r: 8
-lora_alpha: 16
-lora_dropout: 0.05
+lora_r: 4
+lora_alpha: 8
+lora_dropout: 0.2
 lora_target_linear: true
 lora_fan_in_fan_out:
 
