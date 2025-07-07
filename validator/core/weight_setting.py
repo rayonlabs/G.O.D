@@ -422,6 +422,20 @@ async def get_node_weights_from_period_scores(
                            f"contribution={contribution:.6f}, "
                            f"total_weight={all_node_weights[node_id]:.6f}")
 
+    tournament_weight_reduction = 1 - cts.WEIGHT_FOR_TOURN
+    for i in range(len(all_node_weights)):
+        all_node_weights[i] = all_node_weights[i] * tournament_weight_reduction
+    
+    if cts.EMISSION_BURN_HOTKEY:
+        burn_node_id = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)
+        if burn_node_id is not None:
+            all_node_weights[burn_node_id] = cts.WEIGHT_FOR_TOURN
+            logger.info(f"Assigned tournament weight {cts.WEIGHT_FOR_TOURN} to burn hotkey {cts.EMISSION_BURN_HOTKEY} (node ID: {burn_node_id})")
+        else:
+            logger.warning(f"EMISSION_BURN_HOTKEY {cts.EMISSION_BURN_HOTKEY} not found in node list")
+    else:
+        logger.warning("EMISSION_BURN_HOTKEY not configured")
+
     logger.info("=== FINAL NODE WEIGHTS ===")
     for node_id, weight in enumerate(all_node_weights):
         if weight > 0:

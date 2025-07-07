@@ -125,6 +125,7 @@ IMAGE_GEN_ENDPOINT = "https://api.nineteen.ai/v1/text-to-image"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
+EMISSION_BURN_HOTKEY = os.getenv("EMISSION_BURN_HOTKEY")
 
 
 # Task Stuff
@@ -266,6 +267,8 @@ CHAIN_WEIGHT_DIVISOR = 65535
 
 # GRPO evaluation
 TRL_GRPO_FIELD_PROMPT = GRPO_DEFAULT_FIELD_PROMPT
+
+WEIGHT_FOR_TOURN = 0.05
 
 # Default, fixed Hyperparameters
 BETA_DPO = 0.1
