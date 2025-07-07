@@ -138,7 +138,6 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
 
     config_path = os.path.join("/workspace/axolotl/configs", f"{task_id}.yml")
     save_config(config, config_path)
-    save_config(config, "/mnt/testdir/test.yml")
     return config_path
 
 
