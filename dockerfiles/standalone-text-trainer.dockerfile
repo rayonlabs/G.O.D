@@ -22,6 +22,7 @@ COPY miner /workspace/miner
 COPY trainer /workspace/trainer
 COPY scripts /workspace/scripts
 COPY core/config/base.yml /workspace/axolotl/base.yml
+COPY core/config/base_grpo.yml /workspace/axolotl/base_grpo.yml
 
 RUN chmod +x /workspace/scripts/run_text_trainer.sh
 RUN chmod +x /workspace/scripts/text_trainer.py
