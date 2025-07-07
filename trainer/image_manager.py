@@ -1,22 +1,28 @@
-import os
-import docker
-import uuid
-import json
 import asyncio
-from docker.models.containers import Container
-from docker.errors import BuildError, APIError
+import json
+import os
+import uuid
 
-from trainer import constants as cst
-from validator.utils.logging import get_all_context_tags
-from validator.utils.logging import get_logger
-from validator.utils.logging import stream_image_build_logs, stream_container_logs
-from trainer.tasks import log_task, complete_task
+import docker
+from docker.errors import APIError
+from docker.errors import BuildError
+from docker.models.containers import Container
+
 from core.models.payload_models import TrainerProxyRequest
-from core.models.payload_models import TrainRequestImage, TrainRequestText
-from core.models.utility_models import InstructTextDatasetType
+from core.models.payload_models import TrainRequestImage
+from core.models.payload_models import TrainRequestText
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
+from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskType
+from trainer import constants as cst
+from trainer.tasks import complete_task
+from trainer.tasks import log_task
+from validator.utils.logging import get_all_context_tags
+from validator.utils.logging import get_logger
+from validator.utils.logging import stream_container_logs
+from validator.utils.logging import stream_image_build_logs
 
 
 logger = get_logger(__name__)
@@ -91,7 +97,7 @@ async def run_trainer_container_image(
         "--hours-to-complete", str(hours_to_complete),
         "--expected-repo-name", expected_repo_name
     ]
-    
+
     container_name = f"image-trainer-{uuid.uuid4().hex}"
 
     try:
@@ -119,7 +125,7 @@ async def run_trainer_container_image(
     except Exception as e:
         logger.error(e)
         return e
-    
+
 
 async def run_trainer_container_text(
     task_id: str,
@@ -150,7 +156,7 @@ async def run_trainer_container_text(
         "--hours-to-complete", str(hours_to_complete),
         "--expected-repo-name", expected_repo_name
     ]
-    
+
     container_name = f"text-trainer-{uuid.uuid4().hex}"
 
     try:
@@ -285,7 +291,7 @@ async def upload_repo_to_hf(
             cst.VOLUME_NAMES[1]: {
                 "bind": "/cache",
                 "mode": "rw"
-            } 
+            }
         }
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
@@ -321,11 +327,13 @@ def get_task_type(request: TrainerProxyRequest) -> TaskType:
             return TaskType.DPOTASK
         elif isinstance(training_data.dataset_type, InstructTextDatasetType):
             return TaskType.INSTRUCTTEXTTASK
+        elif isinstance(training_data.dataset_type, GrpoDatasetType):
+            return TaskType.GRPOTASK
         else:
             raise ValueError(f"Unsupported dataset_type for text task: {type(training_data.dataset_type)}")
 
     raise ValueError(f"Unsupported training_data type: {type(training_data)}")
-    
+
 
 async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
     training_data = task.training_data
@@ -360,7 +368,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             log_task(training_data.task_id, task.hotkey, message)
             complete_task(training_data.task_id, task.hotkey, success=False)
             raise exc
-  
+
         tag = await asyncio.to_thread(
             build_docker_image,
             dockerfile_path=dockerfile_path,
@@ -420,7 +428,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                 log_task(training_data.task_id, task.hotkey, f"Training failed with status code {status_code}")
         else:
             log_task(training_data.task_id, task.hotkey, f"Timeout reached ({timeout_seconds}s). Killing container...")
-            success = True  
+            success = True
 
     except Exception as e:
         log_task(training_data.task_id, task.hotkey, f"Fatal error during training: {e}")
@@ -432,11 +440,11 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                 container.kill()
                 container.remove(force=True)
                 log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
-                
+
             except Exception as cleanup_err:
                 log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
 
-        logger.info(f"Cleaning up")
+        logger.info("Cleaning up")
         delete_image_and_cleanup(tag)
         logger.info("Cleaned up Docker resources.")
 
@@ -458,6 +466,3 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                 success = False
 
         complete_task(training_data.task_id, task.hotkey, success=success)
-
-
-
