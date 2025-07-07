@@ -277,7 +277,6 @@ CHAIN_WEIGHT_DIVISOR = 65535
 # GRPO evaluation
 TRL_GRPO_FIELD_PROMPT = GRPO_DEFAULT_FIELD_PROMPT
 
-# Tournament weight constant
 WEIGHT_FOR_TOURN = 0.05
 
 # Default, fixed Hyperparameters
