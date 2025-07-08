@@ -179,6 +179,37 @@ def run_training(config_path):
     print(config)
     print(config_path)
     print(200*"-")
+    
+    # Debug: Show first 5 rows of the dataset
+    import json
+    dataset_path = config["datasets"][0]["path"]
+    data_files = config["datasets"][0]["data_files"]
+    full_dataset_path = os.path.join(dataset_path, data_files[0])
+    
+    print(f"Loading dataset from: {full_dataset_path}")
+    try:
+        with open(full_dataset_path, 'r') as f:
+            data = json.load(f)
+        
+        print(f"Dataset has {len(data)} rows")
+        print("First 5 rows:")
+        for i, row in enumerate(data[:5]):
+            print(f"Row {i}: {row}")
+        
+        # Check if 'prompt' field exists
+        if data:
+            first_row = data[0]
+            print(f"Available fields in first row: {list(first_row.keys())}")
+            if 'prompt' in first_row:
+                print("✅ 'prompt' field found!")
+            else:
+                print("❌ 'prompt' field NOT found!")
+                print(f"Available fields: {list(first_row.keys())}")
+    except Exception as e:
+        print(f"Error loading dataset: {e}")
+    
+    print(200*"-")
+
     training_command = [
     "accelerate", "launch",
     "-m", "axolotl.cli.train",
