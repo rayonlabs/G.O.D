@@ -15,6 +15,11 @@ import uuid
 import yaml
 from transformers import AutoTokenizer
 
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.append(project_root)
+
 import trainer.constants as train_cst
 from core.config.config_handler import create_dataset_entry
 from core.config.config_handler import save_config
@@ -27,11 +32,6 @@ from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskType
 from miner.logic.job_handler import _adapt_columns_for_grpo_dataset
 from miner.logic.job_handler import create_reward_funcs_file
-
-
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
-sys.path.append(project_root)
 
 
 def patch_model_metadata(output_dir: str, base_model_id: str):
