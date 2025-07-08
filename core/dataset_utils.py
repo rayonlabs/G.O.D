@@ -8,9 +8,6 @@ from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import GrpoDatasetType
 
 
-logger = get_logger(__name__)
-
-
 def _dpo_format_prompt(row, format_str):
     result = format_str
     if "{prompt}" in format_str and cst.DPO_DEFAULT_FIELD_PROMPT in row and pd.notna(row[cst.DPO_DEFAULT_FIELD_PROMPT]):
@@ -78,9 +75,9 @@ def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetTyp
     with open(dataset_path, 'w') as f:
         json.dump(output_data, f, indent=2)
 
-    logger.info("Transformed dataset to include chatml.intel field names:")
-    logger.info(f"Final fields: {list(output_data[0].keys()) if output_data else []}")
-    logger.info(f"Dataset saved to {dataset_path}")
+    print("Transformed dataset to include chatml.intel field names:")
+    print(f"Final fields: {list(output_data[0].keys()) if output_data else []}")
+    print(f"Dataset saved to {dataset_path}")
 
 
 def adapt_columns_for_grpo_dataset(dataset_path: str, dataset_type: GrpoDatasetType):
@@ -94,12 +91,8 @@ def adapt_columns_for_grpo_dataset(dataset_path: str, dataset_type: GrpoDatasetT
     with open(dataset_path, 'r') as f:
         data = json.load(f)
     df = pd.DataFrame(data)
-    logger.info(200*"-", flush=True)
-    logger.info(f"field_prompt: {dataset_type.field_prompt}", flush=True)
-    logger.info(f"GRPO_DEFAULT_FIELD_PROMPT: {cst.GRPO_DEFAULT_FIELD_PROMPT}", flush=True)
-    logger.info(200*"-", flush=True)
-    print(200*"-", flush=True)
     df = df.rename(columns={dataset_type.field_prompt: cst.GRPO_DEFAULT_FIELD_PROMPT})
     output_data = df.to_dict(orient='records')
     with open(dataset_path, 'w') as f:
         json.dump(output_data, f, indent=2)
+    print(f"Transformed dataset to adapt to axolotl's `{cst.GRPO_DEFAULT_FIELD_PROMPT}` expected column name.")
