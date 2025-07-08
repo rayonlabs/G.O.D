@@ -175,6 +175,10 @@ def run_training(config_path):
     training_env["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
     training_env["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
+    print(200*"-")
+    print(config)
+    print(config_path)
+    print(200*"-")
     training_command = [
     "accelerate", "launch",
     "-m", "axolotl.cli.train",
