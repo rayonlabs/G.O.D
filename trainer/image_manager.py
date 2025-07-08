@@ -447,8 +447,6 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         logger.info("Cleaning up")
         delete_image_and_cleanup(tag)
         logger.info("Cleaned up Docker resources.")
-        logger.info(f"Environment variables for HF upload: HUGGINGFACE_USERNAME={os.getenv('HUGGINGFACE_USERNAME')}")
-        logger.info(200*"-")
 
         if success:
             try:

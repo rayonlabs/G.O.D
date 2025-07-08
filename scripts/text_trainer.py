@@ -27,7 +27,7 @@ import trainer.constants as train_cst
 from core.config.config_handler import create_dataset_entry
 from core.config.config_handler import save_config
 from core.config.config_handler import update_flash_attention
-from core.dpo_utils import adapt_columns_for_dpo_dataset
+from core.dataset_utils import adapt_columns_for_dpo_dataset
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType

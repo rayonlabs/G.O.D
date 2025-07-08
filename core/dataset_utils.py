@@ -1,11 +1,13 @@
-"""
-Utility functions for DPO dataset processing and formatting
-"""
-
 import json
+
 import pandas as pd
+from fiber.logging_utils import get_logger
+
 import core.constants as cst
 from core.models.utility_models import DpoDatasetType
+
+
+logger = get_logger(__name__)
 
 
 def _dpo_format_prompt(row, format_str):
@@ -75,7 +77,6 @@ def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetTyp
     with open(dataset_path, 'w') as f:
         json.dump(output_data, f, indent=2)
 
-    print(f"Transformed dataset to include chatml.intel field names:")
-    print(f"Final fields: {list(output_data[0].keys()) if output_data else []}")
-    print(f"Dataset saved to {dataset_path}", flush=True)
-
+    logger.info("Transformed dataset to include chatml.intel field names:")
+    logger.info(f"Final fields: {list(output_data[0].keys()) if output_data else []}")
+    logger.info(f"Dataset saved to {dataset_path}")
