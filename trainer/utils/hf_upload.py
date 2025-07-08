@@ -1,9 +1,11 @@
 import os
-from huggingface_hub import HfApi, login
-import os
-import time
 import shutil
+import time
 from datetime import datetime
+
+from huggingface_hub import HfApi
+from huggingface_hub import login
+
 
 def clear_old_cache(directory: str, max_age_hours: int = 24):
     now = time.time()
@@ -36,6 +38,14 @@ def clear_old_cache(directory: str, max_age_hours: int = 24):
 
 
 def main():
+    # Debug: Print all environment variables
+    print("Debug: All environment variables:")
+    for key, value in os.environ.items():
+        if "TOKEN" in key or "PASSWORD" in key:
+            print(f"  {key}: ***")
+        else:
+            print(f"  {key}: {value}")
+
     hf_token = os.getenv("HUGGINGFACE_TOKEN")
     hf_user = os.getenv("HUGGINGFACE_USERNAME")
     wandb_token = os.getenv("WANDB_TOKEN")
