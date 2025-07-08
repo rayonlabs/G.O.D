@@ -95,4 +95,11 @@ def adapt_columns_for_grpo_dataset(dataset_path: str, dataset_type: GrpoDatasetT
     output_data = df.to_dict(orient='records')
     with open(dataset_path, 'w') as f:
         json.dump(output_data, f, indent=2)
+    
+    # re-load the dataset and print first and last 5 rows
+    with open(dataset_path, 'r') as f:
+        data = json.load(f)
+    df = pd.DataFrame(data)
     print(f"Transformed dataset to adapt to axolotl's `{cst.GRPO_DEFAULT_FIELD_PROMPT}` expected column name.")
+    print(df.head(5))
+    print(df.tail(5))
