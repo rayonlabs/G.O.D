@@ -250,8 +250,7 @@ async def main():
 
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
-    elif args.file_format == FileFormat.JSON.value and args.task_type == TaskType.GRPOTASK.value:
-        print("before adapt_columns_for_grpo_dataset")
+    elif args.file_format == FileFormat.S3.value and args.task_type == TaskType.GRPOTASK.value:
         adapt_columns_for_grpo_dataset(dataset_path, dataset_type)
 
     output_dir = f"/workspace/axolotl/outputs/{args.task_id}/{args.expected_repo_name}"
