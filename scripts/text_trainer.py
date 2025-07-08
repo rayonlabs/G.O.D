@@ -322,15 +322,14 @@ async def main():
     base_dataset_path = f"{train_cst.CACHE_PATH}/{args.task_id}/datasets"
     dataset_path = f"{base_dataset_path}/{args.task_id}_train_data.json" if args.file_format == FileFormat.S3.value else f"{base_dataset_path}/{args.dataset.replace('/', '--')}"
 
-
-    dataset_path = copy_dataset_if_needed(dataset_path, args.file_format)
-
     print(args.file_format, flush=True)
 
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
     elif args.file_format == FileFormat.S3.value and args.task_type == TaskType.GRPOTASK.value:
         adapt_columns_for_grpo_dataset(dataset_path, dataset_type)
+
+    dataset_path = copy_dataset_if_needed(dataset_path, args.file_format)
 
     output_dir = f"/workspace/axolotl/outputs/{args.task_id}/{args.expected_repo_name}"
 
