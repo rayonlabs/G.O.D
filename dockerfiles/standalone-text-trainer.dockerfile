@@ -6,7 +6,7 @@ RUN pip install mlflow huggingface_hub aiohttp pydantic requests toml \
     fastapi uvicorn httpx loguru python-dotenv \
     scipy numpy datasets tenacity minio \
     transformers pandas==2.2.3 tiktoken==0.8.0 sentencepiece==0.2.0 peft Pillow==11.1.0 PyYAML \
-    requests huggingface_hub
+    requests huggingface_hub textstat==0.7.7 langcheck detoxify
 
 WORKDIR /workspace/axolotl
 RUN mkdir -p /workspace/axolotl/configs \

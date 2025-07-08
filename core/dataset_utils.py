@@ -1,7 +1,6 @@
 import json
 
 import pandas as pd
-from fiber.logging_utils import get_logger
 
 import core.constants as cst
 from core.models.utility_models import DpoDatasetType
@@ -94,16 +93,8 @@ def adapt_columns_for_grpo_dataset(dataset_path: str, dataset_type: GrpoDatasetT
     df = df.rename(columns={dataset_type.field_prompt: cst.GRPO_DEFAULT_FIELD_PROMPT})
     # Remove records where the prompt field is empty or None
     df = df[df[cst.GRPO_DEFAULT_FIELD_PROMPT].notna() & (df[cst.GRPO_DEFAULT_FIELD_PROMPT] != "")]
-    # Keep only the prompt column
-    df = df[[cst.GRPO_DEFAULT_FIELD_PROMPT]]
     output_data = df.to_dict(orient='records')
     with open(dataset_path, 'w') as f:
         json.dump(output_data, f, indent=2)
-    
-    # re-load the dataset and print first and last 5 rows
-    with open(dataset_path, 'r') as f:
-        data = json.load(f)
-    df = pd.DataFrame(data)
+
     print(f"Transformed dataset to adapt to axolotl's `{cst.GRPO_DEFAULT_FIELD_PROMPT}` expected column name.")
-    print(json.dumps(df.head(5).to_dict(orient='records'), indent=2))
-    print(json.dumps(df.tail(5).to_dict(orient='records'), indent=2))

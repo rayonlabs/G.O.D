@@ -97,21 +97,15 @@ def copy_dataset_if_needed(dataset_path, file_format):
 def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None,
                 huggingface_username=None, huggingface_token=None, disable_upload=True):
     """Create the axolotl config file with appropriate settings."""
-    print(200*"-")
     if isinstance(dataset_type, InstructTextDatasetType | DpoDatasetType):
-        print("InstructTextDatasetType | DpoDatasetType")
         config_path = "/workspace/axolotl/base.yml"
     elif isinstance(dataset_type, GrpoDatasetType):
-        print("GrpoDatasetType")
         config_path = "/workspace/axolotl/base_grpo.yml"
     else:
         raise ValueError(f"Unsupported dataset type: {type(dataset_type)}")
 
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
-    
-    print(200*"-")
-    print(config)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
     model_path = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
@@ -175,79 +169,6 @@ def run_training(config_path):
     training_env["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
     training_env["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
-    print(200*"-")
-    print(config)
-    print(config_path)
-    print(200*"-")
-    
-    # Debug: Show first 5 rows of the dataset
-    import json
-    dataset_path = config["datasets"][0]["path"]
-    data_files = config["datasets"][0]["data_files"]
-    full_dataset_path = os.path.join(dataset_path, data_files[0])
-    
-    print(f"Loading dataset from: {full_dataset_path}")
-    try:
-        with open(full_dataset_path, 'r') as f:
-            data = json.load(f)
-        
-        print(f"Dataset has {len(data)} rows")
-        print("First 5 rows:")
-        for i, row in enumerate(data[:5]):
-            print(f"Row {i}: {row}")
-        
-        # Check if 'prompt' field exists
-        if data:
-            first_row = data[0]
-            print(f"Available fields in first row: {list(first_row.keys())}")
-            if 'prompt' in first_row:
-                print("✅ 'prompt' field found!")
-            else:
-                print("❌ 'prompt' field NOT found!")
-                print(f"Available fields: {list(first_row.keys())}")
-    except Exception as e:
-        print(f"Error loading dataset: {e}")
-    
-    # Debug: Check dataset in /workspace/input_data/
-    input_data_path = os.path.join("/workspace/input_data", data_files[0])
-    print(f"\nChecking dataset in: {input_data_path}")
-    try:
-        with open(input_data_path, 'r') as f:
-            data = json.load(f)
-        
-        print(f"Input data dataset has {len(data)} rows")
-        if data:
-            first_row = data[0]
-            print(f"Available fields in first row: {list(first_row.keys())}")
-            if 'prompt' in first_row:
-                print("✅ 'prompt' field found in input_data!")
-            else:
-                print("❌ 'prompt' field NOT found in input_data!")
-                print(f"Available fields: {list(first_row.keys())}")
-    except Exception as e:
-        print(f"Error loading input_data dataset: {e}")
-    
-    # Debug: Check dataset in /workspace/axolotl/
-    axolotl_path = os.path.join("/workspace/axolotl", data_files[0])
-    print(f"\nChecking dataset in: {axolotl_path}")
-    try:
-        with open(axolotl_path, 'r') as f:
-            data = json.load(f)
-        
-        print(f"Axolotl dataset has {len(data)} rows")
-        if data:
-            first_row = data[0]
-            print(f"Available fields in first row: {list(first_row.keys())}")
-            if 'prompt' in first_row:
-                print("✅ 'prompt' field found in axolotl!")
-            else:
-                print("❌ 'prompt' field NOT found in axolotl!")
-                print(f"Available fields: {list(first_row.keys())}")
-    except Exception as e:
-        print(f"Error loading axolotl dataset: {e}")
-    
-    print(200*"-")
-
     training_command = [
     "accelerate", "launch",
     "-m", "axolotl.cli.train",
@@ -303,8 +224,6 @@ async def main():
         "/workspace/axolotl"
     ]:
         os.makedirs(directory, exist_ok=True)
-    print(200*"-")
-    print(args)
     try:
         dataset_type_dict = json.loads(args.dataset_type)
 
@@ -321,8 +240,6 @@ async def main():
 
     base_dataset_path = f"{train_cst.CACHE_PATH}/{args.task_id}/datasets"
     dataset_path = f"{base_dataset_path}/{args.task_id}_train_data.json" if args.file_format == FileFormat.S3.value else f"{base_dataset_path}/{args.dataset.replace('/', '--')}"
-
-    print(args.file_format, flush=True)
 
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
