@@ -35,7 +35,7 @@ from validator.core.models import PeriodScore
 from validator.core.models import TaskResults
 from validator.db.sql.nodes import get_vali_node_id
 from validator.evaluation.scoring import get_period_scores_from_results
-from validator.utils.logging import get_logger
+from validator.utils.logging import get_logger, LogContext
 from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import try_db_connections
 from validator.utils.util import upload_file_to_minio
@@ -416,11 +416,13 @@ async def get_node_weights_from_period_scores(
             if node_id is not None:
                 contribution = node_result.normalised_score * node_result.weight_multiplier
                 all_node_weights[node_id] = all_node_weights[node_id] + contribution
-                logger.info(f"Node ID {node_id} (hotkey: {node_result.hotkey[:8]}...): "
-                           f"normalized_score={node_result.normalised_score:.6f}, "
-                           f"weight_multiplier={node_result.weight_multiplier:.6f}, "
-                           f"contribution={contribution:.6f}, "
-                           f"total_weight={all_node_weights[node_id]:.6f}")
+                
+                with LogContext(miner_hotkey=node_result.hotkey):
+                    logger.info(f"Node ID {node_id} (hotkey: {node_result.hotkey[:8]}...): "
+                               f"normalized_score={node_result.normalised_score:.6f}, "
+                               f"weight_multiplier={node_result.weight_multiplier:.6f}, "
+                               f"contribution={contribution:.6f}, "
+                               f"total_weight={all_node_weights[node_id]:.6f}")
 
     tournament_weight_reduction = 1 - cts.WEIGHT_FOR_TOURN
     for i in range(len(all_node_weights)):
@@ -430,9 +432,11 @@ async def get_node_weights_from_period_scores(
         burn_node_id = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)
         if burn_node_id is not None:
             all_node_weights[burn_node_id] = cts.WEIGHT_FOR_TOURN
-            logger.info(f"Assigned tournament weight {cts.WEIGHT_FOR_TOURN} to burn hotkey {cts.EMISSION_BURN_HOTKEY} (node ID: {burn_node_id})")
+            with LogContext(miner_hotkey=cts.EMISSION_BURN_HOTKEY):
+                logger.info(f"Assigned tournament weight {cts.WEIGHT_FOR_TOURN} to burn hotkey {cts.EMISSION_BURN_HOTKEY} (node ID: {burn_node_id})")
         else:
-            logger.warning(f"EMISSION_BURN_HOTKEY {cts.EMISSION_BURN_HOTKEY} not found in node list")
+            with LogContext(miner_hotkey=cts.EMISSION_BURN_HOTKEY):
+                logger.warning(f"EMISSION_BURN_HOTKEY {cts.EMISSION_BURN_HOTKEY} not found in node list")
     else:
         logger.warning("EMISSION_BURN_HOTKEY not configured")
 
