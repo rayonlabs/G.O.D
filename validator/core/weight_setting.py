@@ -102,24 +102,42 @@ def detect_suspicious_nodes(task_results: list[TaskResults], task_types: TaskTyp
         weight_multiplier=1.0  # Temporary multiplier just for comparison
     )
 
+    # Count synth jobs per hotkey
+    synth_job_counts = {}
+    for task in period_tasks_synth:
+        for node_score in task.node_scores:
+            if node_score.hotkey not in synth_job_counts:
+                synth_job_counts[node_score.hotkey] = 0
+            synth_job_counts[node_score.hotkey] += 1
+
     suspicious_hotkeys = set()
     synth_by_hotkey = {score.hotkey: score for score in synth_scores}
 
     for organic_score in organic_scores:
-        if organic_score.hotkey in synth_by_hotkey:
-            synth_score = synth_by_hotkey[organic_score.hotkey]
+        hotkey = organic_score.hotkey
+        synth_job_count = synth_job_counts.get(hotkey, 0)
+        
+        min_required_synth_jobs = cts.MIN_SYNTH_JOBS_REQUIRED_PER_DAY * days
+        if synth_job_count < min_required_synth_jobs:
+            logger.info(
+                f"Node {hotkey} has only {synth_job_count} synth jobs (requires {min_required_synth_jobs} for {days} days) "
+                f"for {type_set} in {days}-day period - flagging as suspicious"
+            )
+            suspicious_hotkeys.add(hotkey)
+        elif hotkey in synth_by_hotkey:
+            synth_score = synth_by_hotkey[hotkey]
             if organic_score.average_score > (synth_score.average_score + 0.5 * synth_score.std_score):
                 logger.info(
-                    f"Node {organic_score.hotkey} has a much higher organic vs synth score "
+                    f"Node {hotkey} has a much higher organic vs synth score "
                     f"for {type_set} in {days}-day period - flagging as suspicious"
                 )
-                suspicious_hotkeys.add(organic_score.hotkey)
+                suspicious_hotkeys.add(hotkey)
         else:
             logger.info(
-                f"Node {organic_score.hotkey} has organic scores but no synth scores "
+                f"Node {hotkey} has organic scores but no synth scores "
                 f"for {task_types} in {days}-day period - flagging as suspicious"
             )
-            suspicious_hotkeys.add(organic_score.hotkey)
+            suspicious_hotkeys.add(hotkey)
 
     return suspicious_hotkeys
 
