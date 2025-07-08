@@ -97,15 +97,21 @@ def copy_dataset_if_needed(dataset_path, file_format):
 def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None,
                 huggingface_username=None, huggingface_token=None, disable_upload=True):
     """Create the axolotl config file with appropriate settings."""
+    print(200*"-")
     if isinstance(dataset_type, InstructTextDatasetType | DpoDatasetType):
+        print("InstructTextDatasetType | DpoDatasetType")
         config_path = "/workspace/axolotl/base.yml"
     elif isinstance(dataset_type, GrpoDatasetType):
+        print("GrpoDatasetType")
         config_path = "/workspace/axolotl/base_grpo.yml"
     else:
         raise ValueError(f"Unsupported dataset type: {type(dataset_type)}")
 
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
+    
+    print(200*"-")
+    print(config)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
     model_path = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"

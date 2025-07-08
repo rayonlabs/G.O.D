@@ -94,6 +94,8 @@ def adapt_columns_for_grpo_dataset(dataset_path: str, dataset_type: GrpoDatasetT
     df = df.rename(columns={dataset_type.field_prompt: cst.GRPO_DEFAULT_FIELD_PROMPT})
     # Remove records where the prompt field is empty or None
     df = df[df[cst.GRPO_DEFAULT_FIELD_PROMPT].notna() & (df[cst.GRPO_DEFAULT_FIELD_PROMPT] != "")]
+    # Keep only the prompt column
+    df = df[[cst.GRPO_DEFAULT_FIELD_PROMPT]]
     output_data = df.to_dict(orient='records')
     with open(dataset_path, 'w') as f:
         json.dump(output_data, f, indent=2)
