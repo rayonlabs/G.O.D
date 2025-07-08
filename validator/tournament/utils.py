@@ -287,7 +287,7 @@ async def get_knockout_winners(
                 if boss_loss * 0.95 < opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} < {opponent_loss * 0.95:.6f}"
+                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} < {opponent_loss * 1.05:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)

@@ -121,12 +121,18 @@ async def add_tournament_participants(participants: list[TournamentParticipant],
         async with connection.transaction():
             query = f"""
                 INSERT INTO {cst.TOURNAMENT_PARTICIPANTS_TABLE} 
-                ({cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.CREATED_AT})
-                VALUES ($1, $2, CURRENT_TIMESTAMP)
+                ({cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.CREATED_AT})
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
                 ON CONFLICT ({cst.TOURNAMENT_ID}, {cst.HOTKEY}) DO NOTHING
             """
             for participant in participants:
-                await connection.execute(query, participant.tournament_id, participant.hotkey)
+                await connection.execute(
+                    query,
+                    participant.tournament_id,
+                    participant.hotkey,
+                    participant.training_repo,
+                    participant.training_commit_hash,
+                )
             logger.info(f"Added {len(participants)} participants to tournament")
 
 
@@ -214,6 +220,29 @@ async def get_tournament_rounds(tournament_id: str, psql_db: PSQLDB) -> list[Tou
             ORDER BY {cst.ROUND_NUMBER} ASC
         """
         results = await connection.fetch(query, tournament_id)
+        return [
+            TournamentRoundData(
+                round_id=row[cst.ROUND_ID],
+                tournament_id=row[cst.TOURNAMENT_ID],
+                round_number=row[cst.ROUND_NUMBER],
+                round_type=row[cst.ROUND_TYPE],
+                is_final_round=row[cst.IS_FINAL_ROUND],
+                status=row[cst.ROUND_STATUS],
+            )
+            for row in results
+        ]
+
+
+async def get_tournament_rounds_with_status(status: str, psql_db: PSQLDB) -> list[TournamentRoundData]:
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.ROUND_ID}, {cst.TOURNAMENT_ID}, {cst.ROUND_NUMBER}, {cst.ROUND_TYPE}, 
+                   {cst.IS_FINAL_ROUND}, {cst.ROUND_STATUS}
+            FROM {cst.TOURNAMENT_ROUNDS_TABLE}
+            WHERE {cst.ROUND_STATUS} = $1
+            ORDER BY {cst.TOURNAMENT_ID}, {cst.ROUND_NUMBER} ASC
+        """
+        results = await connection.fetch(query, status)
         return [
             TournamentRoundData(
                 round_id=row[cst.ROUND_ID],
@@ -724,16 +753,25 @@ async def get_tournament_training_stats(psql_db: PSQLDB) -> dict:
 async def update_gpu_availability(trainer_ip: str, gpu_ids: list[int], hours_to_complete: int, psql_db: PSQLDB):
     """Update GPU availability by setting used_until based on hours_to_complete"""
     async with await psql_db.connection() as connection:
-        used_until = f"CURRENT_TIMESTAMP + INTERVAL '{hours_to_complete} hours'"
-
-        query = f"""
-            UPDATE {cst.TRAINERS_GPUS_TABLE}
-            SET {cst.USED_UNTIL} = {used_until}, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
-            WHERE {cst.TRAINER_IP} = $1 AND {cst.GPU_ID} = ANY($2)
-        """
+        if hours_to_complete == 0:
+            # Reset GPU availability by setting used_until to NULL
+            query = f"""
+                UPDATE {cst.TRAINERS_GPUS_TABLE}
+                SET {cst.USED_UNTIL} = NULL, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+                WHERE {cst.TRAINER_IP} = $1 AND {cst.GPU_ID} = ANY($2)
+            """
+        else:
+            # Set GPU as used for specified hours
+            used_until = f"CURRENT_TIMESTAMP + INTERVAL '{hours_to_complete} hours'"
+            query = f"""
+                UPDATE {cst.TRAINERS_GPUS_TABLE}
+                SET {cst.USED_UNTIL} = {used_until}, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+                WHERE {cst.TRAINER_IP} = $1 AND {cst.GPU_ID} = ANY($2)
+            """
 
         await connection.execute(query, trainer_ip, gpu_ids)
-        logger.info(f"Updated GPU availability for trainer {trainer_ip}, GPUs {gpu_ids} to be used for {hours_to_complete} hours")
+        action = "reset" if hours_to_complete == 0 else f"used for {hours_to_complete} hours"
+        logger.info(f"Updated GPU availability for trainer {trainer_ip}, GPUs {gpu_ids} - {action}")
 
 
 async def get_tasks_with_all_training_completed(psql_db: PSQLDB) -> list[str]:

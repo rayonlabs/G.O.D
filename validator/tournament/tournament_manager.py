@@ -30,8 +30,12 @@ from validator.db.sql.tournaments import add_tournament_participants
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import create_tournament
 from validator.db.sql.tournaments import get_tournament
+from validator.db.sql.tournaments import get_tournament_group_members
+from validator.db.sql.tournaments import get_tournament_groups
+from validator.db.sql.tournaments import get_tournament_pairs
 from validator.db.sql.tournaments import get_tournament_participants
 from validator.db.sql.tournaments import get_tournament_rounds
+from validator.db.sql.tournaments import get_tournament_rounds_with_status
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_tournaments_with_status
 from validator.db.sql.tournaments import insert_tournament_groups_with_members
@@ -118,14 +122,7 @@ async def _create_first_round(
     else:
         await insert_tournament_pairs(round_id, round_structure.pairs, psql_db)
 
-    tasks = await _create_tournament_tasks(tournament_id, round_id, round_structure, tournament_type, False, config)
-    await add_tournament_tasks(tasks, psql_db)
-
-    await assign_nodes_to_tournament_tasks(tournament_id, round_id, round_structure, psql_db)
-
-    await update_round_status(round_id, RoundStatus.ACTIVE, psql_db)
-
-    logger.info(f"Created first round {round_id} with {len(tasks)} tasks")
+    logger.info(f"Created first round {round_id}")
 
 
 async def _create_tournament_tasks(
@@ -277,16 +274,7 @@ async def create_next_round(
     else:
         await insert_tournament_pairs(next_round_id, round_structure.pairs, psql_db)
 
-    tasks = await _create_tournament_tasks(
-        tournament.tournament_id, next_round_id, round_structure, tournament.tournament_type, next_round_is_final, config
-    )
-    await add_tournament_tasks(tasks, psql_db)
-
-    await assign_nodes_to_tournament_tasks(tournament.tournament_id, next_round_id, round_structure, psql_db)
-
-    await update_round_status(next_round_id, RoundStatus.ACTIVE, psql_db)
-
-    logger.info(f"Created next round {next_round_id} with {len(tasks)} tasks")
+    logger.info(f"Created next round {next_round_id}")
 
 
 async def advance_tournament(tournament: TournamentData, completed_round: TournamentRoundData, config, psql_db: PSQLDB):
@@ -506,6 +494,63 @@ async def process_pending_tournaments(config: Config) -> list[str]:
             await asyncio.sleep(t_cst.TOURNAMENT_PENDING_CYCLE_INTERVAL)
 
 
+async def process_pending_rounds(config: Config):
+    """
+    Process all pending rounds by creating tasks and assigning nodes to them.
+    """
+    logger.info("Processing pending rounds...")
+
+    while True:
+        try:
+            pending_rounds = await get_tournament_rounds_with_status(RoundStatus.PENDING, config.psql_db)
+
+            logger.info(f"Found {len(pending_rounds)} pending rounds")
+
+            for round_data in pending_rounds:
+                logger.info(f"Processing pending round {round_data.round_id}")
+
+                try:
+                    tournament = await get_tournament(round_data.tournament_id, config.psql_db)
+
+                    if round_data.round_type == RoundType.GROUP:
+                        groups_data = await get_tournament_groups(round_data.round_id, config.psql_db)
+                        groups = []
+                        for group_data in groups_data:
+                            members = await get_tournament_group_members(group_data.group_id, config.psql_db)
+                            member_ids = [member.hotkey for member in members]
+                            groups.append(Group(member_ids=member_ids))
+                        round_structure = GroupRound(groups=groups)
+                    else:
+                        pairs = await get_tournament_pairs(round_data.round_id, config.psql_db)
+                        round_structure = KnockoutRound(pairs=[(pair.hotkey1, pair.hotkey2) for pair in pairs])
+
+                    tasks = await _create_tournament_tasks(
+                        round_data.tournament_id,
+                        round_data.round_id,
+                        round_structure,
+                        tournament.tournament_type,
+                        round_data.is_final_round,
+                        config,
+                    )
+                    await add_tournament_tasks(tasks, config.psql_db)
+
+                    await assign_nodes_to_tournament_tasks(
+                        round_data.tournament_id, round_data.round_id, round_structure, config.psql_db
+                    )
+
+                    await update_round_status(round_data.round_id, RoundStatus.ACTIVE, config.psql_db)
+
+                    logger.info(f"Successfully processed pending round {round_data.round_id} with {len(tasks)} tasks")
+
+                except Exception as e:
+                    logger.error(f"Error processing pending round {round_data.round_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing pending rounds: {e}")
+        finally:
+            await asyncio.sleep(t_cst.TOURNAMENT_PENDING_ROUND_CYCLE_INTERVAL)
+
+
 async def process_active_tournaments(config: Config):
     """
     Process all active tournaments by advancing them if needed.
@@ -524,7 +569,7 @@ async def process_active_tournaments(config: Config):
                 else:
                     current_round = rounds[-1]
 
-                    if current_round.status in [RoundStatus.PENDING, RoundStatus.ACTIVE]:
+                    if current_round.status == RoundStatus.ACTIVE:
                         if await check_if_round_is_completed(current_round, config.psql_db):
                             await update_round_status(current_round.round_id, RoundStatus.COMPLETED, config.psql_db)
                             logger.info(

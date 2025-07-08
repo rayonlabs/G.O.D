@@ -29,7 +29,7 @@ async def main():
 
         # Step 1: Create basic tournament in DB
         logger.info("Step 1: Creating basic tournament...")
-        tournament_id = await create_basic_tournament(TournamentType.TEXT, config.psql_db, config)
+        tournament_id = await create_basic_tournament(TournamentType.IMAGE, config.psql_db, config)
         logger.info(f"Created basic tournament: {tournament_id}")
 
     except Exception as e:

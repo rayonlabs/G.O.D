@@ -4,6 +4,8 @@ from core.constants import GRPO_DEFAULT_FIELD_PROMPT
 from core.constants import NETUID
 
 
+RAYONLABS_HF_USERNAME = "rayonlabs"
+
 SUCCESS = "success"
 ACCOUNT_ID = "account_id"
 MESSAGE = "message"
