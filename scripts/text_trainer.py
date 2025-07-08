@@ -208,6 +208,44 @@ def run_training(config_path):
     except Exception as e:
         print(f"Error loading dataset: {e}")
     
+    # Debug: Check dataset in /workspace/input_data/
+    input_data_path = os.path.join("/workspace/input_data", data_files[0])
+    print(f"\nChecking dataset in: {input_data_path}")
+    try:
+        with open(input_data_path, 'r') as f:
+            data = json.load(f)
+        
+        print(f"Input data dataset has {len(data)} rows")
+        if data:
+            first_row = data[0]
+            print(f"Available fields in first row: {list(first_row.keys())}")
+            if 'prompt' in first_row:
+                print("✅ 'prompt' field found in input_data!")
+            else:
+                print("❌ 'prompt' field NOT found in input_data!")
+                print(f"Available fields: {list(first_row.keys())}")
+    except Exception as e:
+        print(f"Error loading input_data dataset: {e}")
+    
+    # Debug: Check dataset in /workspace/axolotl/
+    axolotl_path = os.path.join("/workspace/axolotl", data_files[0])
+    print(f"\nChecking dataset in: {axolotl_path}")
+    try:
+        with open(axolotl_path, 'r') as f:
+            data = json.load(f)
+        
+        print(f"Axolotl dataset has {len(data)} rows")
+        if data:
+            first_row = data[0]
+            print(f"Available fields in first row: {list(first_row.keys())}")
+            if 'prompt' in first_row:
+                print("✅ 'prompt' field found in axolotl!")
+            else:
+                print("❌ 'prompt' field NOT found in axolotl!")
+                print(f"Available fields: {list(first_row.keys())}")
+    except Exception as e:
+        print(f"Error loading axolotl dataset: {e}")
+    
     print(200*"-")
 
     training_command = [
