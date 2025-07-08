@@ -24,7 +24,7 @@ COPY scripts /workspace/scripts
 COPY core/config/base.yml /workspace/axolotl/base.yml
 COPY core/config/base_grpo.yml /workspace/axolotl/base_grpo.yml
 
-RUN python3 /workspace/core/download_grpo_reward_models.py
+RUN python3 /workspace/core/manual_reward_funcs.py
 
 RUN chmod +x /workspace/scripts/run_text_trainer.sh
 RUN chmod +x /workspace/scripts/text_trainer.py
