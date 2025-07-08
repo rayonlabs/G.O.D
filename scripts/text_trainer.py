@@ -224,8 +224,8 @@ async def main():
         "/workspace/axolotl"
     ]:
         os.makedirs(directory, exist_ok=True)
-    print(args)
     print(200*"-")
+    print(args)
     try:
         dataset_type_dict = json.loads(args.dataset_type)
 
