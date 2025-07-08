@@ -339,6 +339,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
     training_data = task.training_data
     success = False
     container = None
+    tag = None
     timeout_seconds = training_data.hours_to_complete * 3600
     task_type = get_task_type(task)
     logger.info(f"Task Type: {task_type}")
@@ -445,8 +446,11 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                 log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
 
         logger.info("Cleaning up")
-        delete_image_and_cleanup(tag)
-        logger.info("Cleaned up Docker resources.")
+        if tag:
+            delete_image_and_cleanup(tag)
+            logger.info("Cleaned up Docker resources.")
+        else:
+            logger.info("No Docker image to clean up.")
 
         if success:
             try:
