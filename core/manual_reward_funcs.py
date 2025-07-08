@@ -301,41 +301,177 @@ if __name__ == "__main__":
         "I love the smell of rain on a hot day.",
     ]
 
-    print(f"reward_specific_char_count: \n{reward_specific_char_count(completions)}")
-    print(f"reward_specific_word_count: \n{reward_specific_word_count(completions)}")
-    print(f"reward_long_completions: \n{reward_long_completions(completions)}")
-    print(f"reward_short_completions: \n{reward_short_completions(completions)}")
-    print(f"reward_high_unique_words_percentage: \n{reward_high_unique_words_percentage(completions)}")
-    print(f"reward_low_unique_words_percentage: \n{reward_low_unique_words_percentage(completions)}")
-    print(f"reward_think_answer_format: \n{reward_think_answer_format(completions)}")
-    print(f"reward_reasoning_keywords: \n{reward_reasoning_keywords(completions)}")
+    try:
+        print(f"reward_specific_char_count: \n{reward_specific_char_count(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_specific_char_count: {e}")
 
-    print(f"reward_high_difficult_words_percentage: \n{reward_high_difficult_words_percentage(completions)}")
-    print(f"reward_low_difficult_words_percentage: \n{reward_low_difficult_words_percentage(completions)}")
-    print(f"reward_long_sentences: \n{reward_long_sentences(completions)}")
-    print(f"reward_short_sentences: \n{reward_short_sentences(completions)}")
-    print(f"reward_long_words: \n{reward_long_words(completions)}")
-    print(f"reward_short_words: \n{reward_short_words(completions)}")
-    print(f"reward_high_syllables_per_word: \n{reward_high_syllables_per_word(completions)}")
-    print(f"reward_low_syllables_per_word: \n{reward_low_syllables_per_word(completions)}")
-    print(f"reward_high_readability: \n{reward_high_readability(completions)}")
-    print(f"reward_low_readability: \n{reward_low_readability(completions)}")
-    print(f"reward_flesch_kincaid_grade: \n{reward_flesch_kincaid_grade(completions)}")
+    try:
+        print(f"reward_specific_word_count: \n{reward_specific_word_count(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_specific_word_count: {e}")
 
-    print(f"reward_positive_sentiment: \n{reward_positive_sentiment(completions)}")
-    print(f"reward_negative_sentiment: \n{reward_negative_sentiment(completions)}")
-    print(f"reward_high_fluency: \n{reward_high_fluency(completions)}")
-    print(f"reward_low_fluency: \n{reward_low_fluency(completions)}")
+    try:
+        print(f"reward_long_completions: \n{reward_long_completions(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_long_completions: {e}")
 
-    print(f"reward_high_toxicity_score: \n{reward_high_toxicity_score(completions)}")
-    print(f"reward_low_toxicity_score: \n{reward_low_toxicity_score(completions)}")
-    print(f"reward_high_severe_toxicity_score: \n{reward_high_severe_toxicity_score(completions)}")
-    print(f"reward_low_severe_toxicity_score: \n{reward_low_severe_toxicity_score(completions)}")
-    print(f"reward_high_obscene_score: \n{reward_high_obscene_score(completions)}")
-    print(f"reward_low_obscene_score: \n{reward_low_obscene_score(completions)}")
-    print(f"reward_high_threat_score: \n{reward_high_threat_score(completions)}")
-    print(f"reward_low_threat_score: \n{reward_low_threat_score(completions)}")
-    print(f"reward_high_insult_score: \n{reward_high_insult_score(completions)}")
-    print(f"reward_low_insult_score: \n{reward_low_insult_score(completions)}")
-    print(f"reward_high_identity_attack_score: \n{reward_high_identity_attack_score(completions)}")
-    print(f"reward_low_identity_attack_score: \n{reward_low_identity_attack_score(completions)}")
+    try:
+        print(f"reward_short_completions: \n{reward_short_completions(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_short_completions: {e}")
+
+    try:
+        print(f"reward_high_unique_words_percentage: \n{reward_high_unique_words_percentage(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_unique_words_percentage: {e}")
+
+    try:
+        print(f"reward_low_unique_words_percentage: \n{reward_low_unique_words_percentage(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_unique_words_percentage: {e}")
+
+    try:
+        print(f"reward_think_answer_format: \n{reward_think_answer_format(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_think_answer_format: {e}")
+
+    try:
+        print(f"reward_reasoning_keywords: \n{reward_reasoning_keywords(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_reasoning_keywords: {e}")
+
+    try:
+        print(f"reward_high_difficult_words_percentage: \n{reward_high_difficult_words_percentage(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_difficult_words_percentage: {e}")
+
+    try:
+        print(f"reward_low_difficult_words_percentage: \n{reward_low_difficult_words_percentage(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_difficult_words_percentage: {e}")
+
+    try:
+        print(f"reward_long_sentences: \n{reward_long_sentences(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_long_sentences: {e}")
+
+    try:
+        print(f"reward_short_sentences: \n{reward_short_sentences(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_short_sentences: {e}")
+
+    try:
+        print(f"reward_long_words: \n{reward_long_words(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_long_words: {e}")
+
+    try:
+        print(f"reward_short_words: \n{reward_short_words(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_short_words: {e}")
+
+    try:
+        print(f"reward_high_syllables_per_word: \n{reward_high_syllables_per_word(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_syllables_per_word: {e}")
+
+    try:
+        print(f"reward_low_syllables_per_word: \n{reward_low_syllables_per_word(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_syllables_per_word: {e}")
+
+    try:
+        print(f"reward_high_readability: \n{reward_high_readability(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_readability: {e}")
+
+    try:
+        print(f"reward_low_readability: \n{reward_low_readability(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_readability: {e}")
+
+    try:
+        print(f"reward_flesch_kincaid_grade: \n{reward_flesch_kincaid_grade(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_flesch_kincaid_grade: {e}")
+
+    try:
+        print(f"reward_positive_sentiment: \n{reward_positive_sentiment(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_positive_sentiment: {e}")
+
+    try:
+        print(f"reward_negative_sentiment: \n{reward_negative_sentiment(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_negative_sentiment: {e}")
+
+    try:
+        print(f"reward_high_fluency: \n{reward_high_fluency(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_fluency: {e}")
+
+    try:
+        print(f"reward_low_fluency: \n{reward_low_fluency(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_fluency: {e}")
+
+    try:
+        print(f"reward_high_toxicity_score: \n{reward_high_toxicity_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_toxicity_score: {e}")
+
+    try:
+        print(f"reward_low_toxicity_score: \n{reward_low_toxicity_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_toxicity_score: {e}")
+
+    try:
+        print(f"reward_high_severe_toxicity_score: \n{reward_high_severe_toxicity_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_severe_toxicity_score: {e}")
+
+    try:
+        print(f"reward_low_severe_toxicity_score: \n{reward_low_severe_toxicity_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_severe_toxicity_score: {e}")
+
+    try:
+        print(f"reward_high_obscene_score: \n{reward_high_obscene_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_obscene_score: {e}")
+
+    try:
+        print(f"reward_low_obscene_score: \n{reward_low_obscene_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_obscene_score: {e}")
+
+    try:
+        print(f"reward_high_threat_score: \n{reward_high_threat_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_threat_score: {e}")
+
+    try:
+        print(f"reward_low_threat_score: \n{reward_low_threat_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_threat_score: {e}")
+
+    try:
+        print(f"reward_high_insult_score: \n{reward_high_insult_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_insult_score: {e}")
+
+    try:
+        print(f"reward_low_insult_score: \n{reward_low_insult_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_insult_score: {e}")
+
+    try:
+        print(f"reward_high_identity_attack_score: \n{reward_high_identity_attack_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_high_identity_attack_score: {e}")
+
+    try:
+        print(f"reward_low_identity_attack_score: \n{reward_low_identity_attack_score(completions)}")
+    except Exception as e:
+        print(f"❌ Error in reward_low_identity_attack_score: {e}")
