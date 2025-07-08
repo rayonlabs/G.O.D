@@ -94,11 +94,11 @@ def adapt_columns_for_grpo_dataset(dataset_path: str, dataset_type: GrpoDatasetT
     with open(dataset_path, 'r') as f:
         data = json.load(f)
     df = pd.DataFrame(data)
-    logger.info(200*"-")
-    logger.info(f"field_prompt: {dataset_type.field_prompt}")
-    logger.info(f"GRPO_DEFAULT_FIELD_PROMPT: {cst.GRPO_DEFAULT_FIELD_PROMPT}")
-    logger.info(200*"-")
-    print(200*"-")
+    logger.info(200*"-", flush=True)
+    logger.info(f"field_prompt: {dataset_type.field_prompt}", flush=True)
+    logger.info(f"GRPO_DEFAULT_FIELD_PROMPT: {cst.GRPO_DEFAULT_FIELD_PROMPT}", flush=True)
+    logger.info(200*"-", flush=True)
+    print(200*"-", flush=True)
     df = df.rename(columns={dataset_type.field_prompt: cst.GRPO_DEFAULT_FIELD_PROMPT})
     output_data = df.to_dict(orient='records')
     with open(dataset_path, 'w') as f:
