@@ -5,6 +5,7 @@ from fiber.logging_utils import get_logger
 
 import core.constants as cst
 from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import GrpoDatasetType
 
 
 logger = get_logger(__name__)
@@ -80,3 +81,25 @@ def adapt_columns_for_dpo_dataset(dataset_path: str, dataset_type: DpoDatasetTyp
     logger.info("Transformed dataset to include chatml.intel field names:")
     logger.info(f"Final fields: {list(output_data[0].keys()) if output_data else []}")
     logger.info(f"Dataset saved to {dataset_path}")
+
+
+def adapt_columns_for_grpo_dataset(dataset_path: str, dataset_type: GrpoDatasetType):
+    """
+    Transform a GRPO JSON dataset file to match axolotl's `prompt` expected column name.
+
+    Args:
+        dataset_path: Path to the JSON dataset file
+        dataset_type: GrpoDatasetType with field mappings
+    """
+    with open(dataset_path, 'r') as f:
+        data = json.load(f)
+    df = pd.DataFrame(data)
+    logger.info(200*"-")
+    logger.info(f"field_prompt: {dataset_type.field_prompt}")
+    logger.info(f"GRPO_DEFAULT_FIELD_PROMPT: {cst.GRPO_DEFAULT_FIELD_PROMPT}")
+    logger.info(200*"-")
+    print(200*"-")
+    df = df.rename(columns={dataset_type.field_prompt: cst.GRPO_DEFAULT_FIELD_PROMPT})
+    output_data = df.to_dict(orient='records')
+    with open(dataset_path, 'w') as f:
+        json.dump(output_data, f, indent=2)

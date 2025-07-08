@@ -25,12 +25,12 @@ from core.config.config_handler import create_dataset_entry
 from core.config.config_handler import save_config
 from core.config.config_handler import update_flash_attention
 from core.dataset_utils import adapt_columns_for_dpo_dataset
+from core.dataset_utils import adapt_columns_for_grpo_dataset
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskType
-from miner.logic.job_handler import _adapt_columns_for_grpo_dataset
 from miner.logic.job_handler import create_reward_funcs_file
 
 
@@ -251,7 +251,7 @@ async def main():
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
     elif args.file_format == FileFormat.JSON.value and args.task_type == TaskType.GRPOTASK.value:
-        _adapt_columns_for_grpo_dataset(dataset_path, dataset_type)
+        adapt_columns_for_grpo_dataset(dataset_path, dataset_type)
 
     output_dir = f"/workspace/axolotl/outputs/{args.task_id}/{args.expected_repo_name}"
 
