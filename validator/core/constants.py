@@ -255,6 +255,9 @@ SEVEN_DAY_SCORE_WEIGHT = 0.4
 THREE_DAY_SCORE_WEIGHT = 0.3
 ONE_DAY_SCORE_WEIGHT = 0.3
 
+TOURNAMENT_TEXT_WEIGHT = 0.6
+TOURNAMENT_IMAGE_WEIGHT = 0.4
+
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
 CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data

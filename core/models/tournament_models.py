@@ -164,3 +164,29 @@ class TournamentTaskTraining(BaseModel):
     n_training_attempts: int
     created_at: datetime
     updated_at: datetime
+
+
+class TournamentTaskScore(BaseModel):
+    task_id: str
+    group_id: str | None
+    pair_id: str | None
+    winner: str | None
+    participant_scores: list[dict]
+
+
+class TournamentRoundResult(BaseModel):
+    round_id: str
+    round_number: int
+    round_type: str
+    is_final_round: bool
+    tasks: list[TournamentTaskScore]
+
+
+class TournamentResults(BaseModel):
+    tournament_id: str
+    rounds: list[TournamentRoundResult]
+
+
+class TournamentScore(BaseModel):
+    hotkey: str
+    score: float
