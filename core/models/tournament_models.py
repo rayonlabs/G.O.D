@@ -196,3 +196,35 @@ class TournamentTypeResult(BaseModel):
     scores: list[TournamentScore]
     prev_winner_hotkey: str | None
     prev_winner_won_final: bool
+
+
+class DetailedTournamentTaskScore(BaseModel):
+    task_id: str
+    group_id: str | None
+    pair_id: str | None
+    winner: str | None
+    participant_scores: list[dict]
+    task_type: TaskType | None = None
+
+
+class DetailedTournamentRoundResult(BaseModel):
+    round_id: str
+    round_number: int
+    round_type: str
+    is_final_round: bool
+    status: str
+    participants: list[str]
+    tasks: list[DetailedTournamentTaskScore]
+
+
+class TournamentDetailsResponse(BaseModel):
+    tournament_id: str
+    tournament_type: TournamentType
+    status: TournamentStatus
+    base_winner_hotkey: str | None
+    winner_hotkey: str | None
+    participants: list[TournamentParticipant]
+    rounds: list[DetailedTournamentRoundResult]
+    final_scores: list[TournamentScore]
+    text_tournament_weight: float
+    image_tournament_weight: float
