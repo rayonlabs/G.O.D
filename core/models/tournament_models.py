@@ -190,3 +190,9 @@ class TournamentResults(BaseModel):
 class TournamentScore(BaseModel):
     hotkey: str
     score: float
+
+
+class TournamentTypeResult(BaseModel):
+    scores: list[TournamentScore]
+    prev_winner_hotkey: str | None
+    prev_winner_won_final: bool
