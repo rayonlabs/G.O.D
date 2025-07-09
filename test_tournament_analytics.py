@@ -220,7 +220,7 @@ def get_mock_task_details(task_id):
     return MOCK_TASK_DETAILS.get(task_id)
 
 
-def get_mock_tasks_for_round(round_id):
+def get_mock_tasks_for_round(round_id, psql_db):
     """Return appropriate tasks for round"""
     return [task for task in MOCK_TASKS if task.round_id == round_id]
 
