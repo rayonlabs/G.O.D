@@ -162,7 +162,9 @@ class TestCalculateTournamentTypeScores:
         
         with pytest.mock.patch('validator.evaluation.tournament_scoring.get_latest_completed_tournament', return_value=None):
             result = await calculate_tournament_type_scores(TournamentType.TEXT, mock_db)
-            assert result == {}
+            assert result.scores == []
+            assert result.prev_winner_hotkey is None
+            assert result.prev_winner_won_final is False
     
     @pytest.mark.asyncio
     async def test_excludes_prev_winner_from_regular_scoring(self):
@@ -210,8 +212,10 @@ class TestCalculateTournamentTypeScores:
             result = await calculate_tournament_type_scores(TournamentType.TEXT, mock_db)
             
             # Only hotkey2 should be included, prev_winner excluded
-            assert "prev_winner" not in result
-            assert result == {"hotkey2": 0.6}  # round 1 * text weight 0.6
+            score_dict = {score.hotkey: score.score for score in result.scores}
+            assert "prev_winner" not in score_dict
+            assert score_dict == {"hotkey2": 0.6}  # round 1 * text weight 0.6
+            assert result.prev_winner_hotkey == "prev_winner"
     
     @pytest.mark.asyncio
     async def test_scores_weighted_by_round_number(self):
@@ -267,7 +271,8 @@ class TestCalculateTournamentTypeScores:
             result = await calculate_tournament_type_scores(TournamentType.TEXT, mock_db)
             
             # hotkey1 should have (1 + 2) * 0.6 = 1.8 (round 1 + round 2, text weight = 0.6)
-            assert result == {"hotkey1": 1.8}
+            score_dict = {score.hotkey: score.score for score in result.scores}
+            assert score_dict == {"hotkey1": 1.8}
 
 
 class TestGetTournamentScores:
