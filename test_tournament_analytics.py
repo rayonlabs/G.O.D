@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pytest
 from unittest.mock import AsyncMock, patch
 from datetime import datetime
@@ -274,6 +275,11 @@ def mock_constants():
 async def test_tournament_with_group_and_final_rounds(mock_config, mock_tournament_sql, mock_task_sql, mock_tournament_scoring, mock_constants):
     """Test tournament with group stage and final knockout, including 5% rule"""
     result = await get_tournament_details(MOCK_TOURNAMENT_ID, mock_config)
+    
+    # Print the actual JSON response
+    print("\n=== ACTUAL ENDPOINT JSON RESPONSE ===")
+    print(json.dumps(result.model_dump(), indent=2))
+    print("=== END JSON RESPONSE ===\n")
     
     # Basic tournament info
     assert result.tournament_id == MOCK_TOURNAMENT_ID
