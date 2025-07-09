@@ -148,13 +148,14 @@ async def analyze_weight_distribution():
         else:
             print(f"✅ Image miners within 1% of expected allocation")
         
-        expected_text = INSTRUCT_TEXT_TASK_SCORE_WEIGHT * 100
-        actual_text = text_weight/total_weight*100
-        text_difference = actual_text - expected_text
+        # Calculate expected combined text percentage (instruct + dpo + grpo)
+        expected_combined_text = (INSTRUCT_TEXT_TASK_SCORE_WEIGHT + 0.15 + (1 - INSTRUCT_TEXT_TASK_SCORE_WEIGHT - IMAGE_TASK_SCORE_WEIGHT - 0.15)) * 100  # instruct + dpo + grpo
+        actual_combined_text = combined_text_weight/total_weight*100
+        combined_text_difference = actual_combined_text - expected_combined_text
         
-        print(f"\nExpected text: {expected_text:.1f}%")
-        print(f"Actual text: {actual_text:.2f}%")
-        print(f"Difference: {text_difference:+.2f} percentage points")
+        print(f"\nExpected combined text (instruct+dpo+grpo): {expected_combined_text:.1f}%")
+        print(f"Actual combined text: {actual_combined_text:.2f}%")
+        print(f"Difference: {combined_text_difference:+.2f} percentage points")
         
         # Show top miners by category
         print(f"\n=== Top Miners by Category ===")
