@@ -1,11 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from core.models.utility_models import TaskType
-from core.models.tournament_models import TournamentType, TournamentData, TournamentTaskScore, TournamentRoundResult, TournamentResults
+from core.models.tournament_models import TournamentType, TournamentData, TournamentTaskScore, TournamentRoundResult, TournamentResults, TournamentScore, TournamentTypeResult
 from validator.evaluation.tournament_scoring import (
     calculate_final_round_winner,
     calculate_tournament_type_scores,
-    get_tournament_scores,
     tournament_scores_to_weights,
     get_tournament_weights
 )
@@ -100,28 +99,60 @@ class TestCalculateFinalRoundWinner:
 
 class TestTournamentScoresToWeights:
     def test_empty_scores(self):
-        result = tournament_scores_to_weights({})
+        result = tournament_scores_to_weights([], None, False)
         assert result == {}
     
     def test_all_zero_scores_excluded(self):
-        scores = {"hotkey1": 0, "hotkey2": 0, "hotkey3": 0}
-        result = tournament_scores_to_weights(scores)
+        scores = [
+            TournamentScore(hotkey="hotkey1", score=0),
+            TournamentScore(hotkey="hotkey2", score=0),
+            TournamentScore(hotkey="hotkey3", score=0)
+        ]
+        result = tournament_scores_to_weights(scores, None, False)
         assert result == {}
     
     def test_zero_scores_excluded_from_ranking(self):
-        scores = {"hotkey1": 10.0, "hotkey2": 0.0, "hotkey3": 5.0}
-        result = tournament_scores_to_weights(scores)
+        scores = [
+            TournamentScore(hotkey="hotkey1", score=10.0),
+            TournamentScore(hotkey="hotkey2", score=0.0),
+            TournamentScore(hotkey="hotkey3", score=5.0)
+        ]
+        result = tournament_scores_to_weights(scores, None, False)
         # hotkey2 should be excluded, only hotkey1 and hotkey3 ranked
         assert "hotkey2" not in result
         assert len(result) == 2
         assert result["hotkey1"] > result["hotkey3"]
     
     def test_tied_participants_get_same_weight(self):
-        scores = {"hotkey1": 10.0, "hotkey2": 10.0, "hotkey3": 5.0}
-        result = tournament_scores_to_weights(scores)
+        scores = [
+            TournamentScore(hotkey="hotkey1", score=10.0),
+            TournamentScore(hotkey="hotkey2", score=10.0),
+            TournamentScore(hotkey="hotkey3", score=5.0)
+        ]
+        result = tournament_scores_to_weights(scores, None, False)
         # Both tied participants should get same weight
         assert result["hotkey1"] == result["hotkey2"]
         assert result["hotkey1"] > result["hotkey3"]
+    
+    def test_prev_winner_placed_first_when_won_final(self):
+        scores = [
+            TournamentScore(hotkey="hotkey1", score=10.0),
+            TournamentScore(hotkey="hotkey2", score=5.0)
+        ]
+        result = tournament_scores_to_weights(scores, "prev_winner", True)
+        # prev_winner should be ranked first
+        assert result["prev_winner"] > result["hotkey1"]
+        assert result["hotkey1"] > result["hotkey2"]
+    
+    def test_prev_winner_placed_second_when_lost_final(self):
+        scores = [
+            TournamentScore(hotkey="hotkey1", score=10.0),
+            TournamentScore(hotkey="hotkey2", score=5.0)
+        ]
+        result = tournament_scores_to_weights(scores, "prev_winner", False)
+        # prev_winner should be ranked second (between hotkey1 and hotkey2)
+        assert result["hotkey1"] > result["prev_winner"]
+        assert result["prev_winner"] > result["hotkey2"]
 
 
 class TestCalculateTournamentTypeScores:
