@@ -160,7 +160,7 @@ class TestCalculateTournamentTypeScores:
     async def test_no_tournament_found(self):
         mock_db = MagicMock()
         
-        with pytest.mock.patch('validator.evaluation.tournament_scoring.get_latest_completed_tournament', return_value=None):
+        with patch('validator.evaluation.tournament_scoring.get_latest_completed_tournament', return_value=None):
             result = await calculate_tournament_type_scores(TournamentType.TEXT, mock_db)
             assert result.scores == []
             assert result.prev_winner_hotkey is None
