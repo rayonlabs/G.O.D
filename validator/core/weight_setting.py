@@ -220,25 +220,28 @@ def get_period_scores_from_task_results(task_results: list[TaskResults]) -> list
             organic_proportion = organic_proportions[task_types_key]
             synth_proportion = 1 - organic_proportion
 
-            period_tasks_organic = filter_tasks_by_period(filtered_tasks[f"{task_types_key}_organic"], cutoff)
-            scores_organic = get_period_scores_from_results(
-                    period_tasks_organic,
-                    weight_multiplier=period_weight * task_weight * organic_proportion
-                )
+            if organic_proportion > 0:
+                period_tasks_organic = filter_tasks_by_period(filtered_tasks[f"{task_types_key}_organic"], cutoff)
+                scores_organic = get_period_scores_from_results(
+                        period_tasks_organic,
+                        weight_multiplier=period_weight * task_weight * organic_proportion
+                    )
 
-            for organic_score in scores_organic:
-                    if organic_score.hotkey in suspicious_hotkeys[task_types_key]:
-                        logger.info(f"Setting {task_types_key} organic score to zero for suspicious node {organic_score.hotkey} in {period_name} period")
-                        organic_score.weight_multiplier = 0.0
+                for organic_score in scores_organic:
+                        if organic_score.hotkey in suspicious_hotkeys[task_types_key]:
+                            logger.info(f"Setting {task_types_key} organic score to zero for suspicious node {organic_score.hotkey} in {period_name} period")
+                            organic_score.weight_multiplier = 0.0
+                
+                all_period_scores.extend(scores_organic)
 
-            period_tasks_synth = filter_tasks_by_period(filtered_tasks[f"{task_types_key}_synth"], cutoff)
-            scores_synth = get_period_scores_from_results(
-                    period_tasks_synth,
-                    weight_multiplier=period_weight * task_weight * synth_proportion
-                )
+            if synth_proportion > 0:
+                period_tasks_synth = filter_tasks_by_period(filtered_tasks[f"{task_types_key}_synth"], cutoff)
+                scores_synth = get_period_scores_from_results(
+                        period_tasks_synth,
+                        weight_multiplier=period_weight * task_weight * synth_proportion
+                    )
 
-            all_period_scores.extend(scores_organic)
-            all_period_scores.extend(scores_synth)
+                all_period_scores.extend(scores_synth)
 
     return all_period_scores
 
