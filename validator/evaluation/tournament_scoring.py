@@ -1,50 +1,6 @@
-from core.models.utility_models import TaskType
 from core.models.tournament_models import TournamentType, TournamentTaskScore, TournamentScore, TournamentTypeResult
 from validator.db.sql.tournaments import get_latest_completed_tournament, get_tournament_full_results
 import validator.core.constants as cts
-
-
-def calculate_final_round_winner(task: TournamentTaskScore, prev_winner_hotkey: str, task_type: TaskType) -> str | None:
-    if len(task.participant_scores) < 2:
-        return None
-    
-    prev_winner_score = None
-    contender_score = None
-    contender_hotkey = None
-    
-    for score_data in task.participant_scores:
-        hotkey = score_data.get('hotkey')
-        test_loss = score_data.get('test_loss')
-        synth_loss = score_data.get('synth_loss')
-        
-        if not test_loss or not synth_loss:
-            continue
-            
-        if hotkey == prev_winner_hotkey:
-            prev_winner_score = (test_loss, synth_loss)
-        elif contender_hotkey is None:
-            contender_hotkey = hotkey
-            contender_score = (test_loss, synth_loss)
-    
-    if not (prev_winner_score and contender_score and contender_hotkey):
-        return None
-    
-    prev_test, prev_synth = prev_winner_score
-    cont_test, cont_synth = contender_score
-    
-    prev_loss = max(prev_test, prev_synth)
-    cont_loss = max(cont_test, cont_synth)
-    
-    if task_type == TaskType.GRPOTASK:
-        if cont_loss > prev_loss * 1.05:
-            return contender_hotkey
-        else:
-            return prev_winner_hotkey
-    else:
-        if cont_loss * 1.05 < prev_loss:
-            return contender_hotkey
-        else:
-            return prev_winner_hotkey
 
 
 async def calculate_tournament_type_scores(tournament_type: TournamentType, psql_db) -> TournamentTypeResult:
@@ -64,17 +20,10 @@ async def calculate_tournament_type_scores(tournament_type: TournamentType, psql
         is_final_round = round_result.is_final_round
         
         for task in round_result.tasks:
-            if is_final_round and prev_winner_hotkey:
-                from validator.db.sql.tasks import get_task
-                task_obj = await get_task(task.task_id, psql_db)
-                if task_obj:
-                    winner = calculate_final_round_winner(task, prev_winner_hotkey, task_obj.task_type)
-                    if winner == prev_winner_hotkey:
-                        prev_winner_won_final = True
-                else:
-                    winner = task.winner
-            else:
-                winner = task.winner
+            winner = task.winner
+            
+            if is_final_round and prev_winner_hotkey and winner == prev_winner_hotkey:
+                prev_winner_won_final = True
             
             if winner and winner != prev_winner_hotkey:
                 if winner not in score_dict:
