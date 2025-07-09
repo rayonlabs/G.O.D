@@ -292,7 +292,8 @@ def reward_low_identity_attack_score(completions, **kwargs):
     return [1 - score for score in results['identity_attack']]
 
 
-if __name__ == "__main__":
+def test_download_all_rewards():
+    """Test all reward functions and trigger model downloads."""
     completions = [
         "",
         "The sky is blue and the grass is green.",
@@ -475,3 +476,7 @@ if __name__ == "__main__":
         print(f"reward_low_identity_attack_score: \n{reward_low_identity_attack_score(completions)}")
     except Exception as e:
         print(f"❌ Error in reward_low_identity_attack_score: {e}")
+
+
+if __name__ == "__main__":
+    test_download_all_rewards()
