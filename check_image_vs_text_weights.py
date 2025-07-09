@@ -5,16 +5,18 @@ Script to identify image vs text miners and compare their weight distributions
 
 import sys
 import os
+import asyncio
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from validator.core.weight_setting import get_final_weights
+from validator.core.weight_setting import _get_weights_to_set, get_node_weights_from_period_scores
 from validator.core.constants import IMAGE_TASK_SCORE_WEIGHT, INSTRUCT_TEXT_TASK_SCORE_WEIGHT
 from validator.db.src.sql.scores import ScoreTable
 from validator.db.src.database import get_database
+from validator.core.config import Config
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-def check_image_vs_text_weights():
+async def check_image_vs_text_weights():
     """Check actual weight distribution between image and text miners"""
     
     print("=== Image vs Text Miner Weight Analysis ===")
@@ -22,8 +24,28 @@ def check_image_vs_text_weights():
     print(f"Expected INSTRUCT_TEXT_TASK_SCORE_WEIGHT: {INSTRUCT_TEXT_TASK_SCORE_WEIGHT} (40%)")
     print()
     
-    # Get current weights
-    weights = get_final_weights()
+    # Get current weights using the actual weight setting functions
+    config = Config()
+    period_scores, task_results = await _get_weights_to_set(config)
+    
+    print(f"Found {len(period_scores)} period scores")
+    print(f"Found {len(task_results)} task results")
+    
+    # Convert period scores to weights
+    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(
+        config.substrate, config.netuid, period_scores
+    )
+    
+    # Create hotkey to weight mapping
+    from validator.core.fetch_nodes import get_nodes_for_netuid
+    all_nodes = get_nodes_for_netuid(config.substrate, config.netuid)
+    node_id_to_hotkey = {node.node_id: node.hotkey for node in all_nodes}
+    
+    weights = {}
+    for node_id, weight in zip(all_node_ids, all_node_weights):
+        if node_id in node_id_to_hotkey:
+            weights[node_id_to_hotkey[node_id]] = weight
+    
     total_weight = sum(weights.values())
     print(f"Total miners with weights: {len(weights)}")
     print(f"Total weight distributed: {total_weight:.6f}")
