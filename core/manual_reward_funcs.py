@@ -1,4 +1,3 @@
-from time import sleep
 
 
 def reward_specific_char_count(completions, **kwargs):
@@ -309,8 +308,6 @@ def test_download_all_rewards():
         print(f"reward_specific_char_count: \n{reward_specific_char_count(completions)}")
     except Exception as e:
         print(f"❌ Error in reward_specific_char_count: {e}")
-
-    sleep(10*60)
 
     try:
         print(f"reward_specific_word_count: \n{reward_specific_word_count(completions)}")
