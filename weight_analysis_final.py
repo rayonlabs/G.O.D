@@ -28,6 +28,10 @@ async def analyze_weight_distribution():
     try:
         # Get the actual weights using the same method as the validator
         config = load_config()
+        
+        # Connect to the database
+        await config.psql_db.connect()
+        
         period_scores, task_results = await _get_weights_to_set(config)
         
         print(f"Found {len(period_scores)} period scores")
