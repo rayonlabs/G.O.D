@@ -265,7 +265,7 @@ async def analyze_weight_distribution():
         for period_score in period_scores:
             if period_score.hotkey in dpo_hotkeys_with_scores:
                 dpo_miners_in_period_scores += 1
-                print(f"  {period_score.hotkey}: weight_multiplier={period_score.weight_multiplier:.6f}, normalized_score={period_score.normalized_score:.6f}")
+                print(f"  {period_score.hotkey}: weight_multiplier={period_score.weight_multiplier:.6f}, normalised_score={period_score.normalised_score:.6f}")
         
         print(f"DPO miners found in period_scores: {dpo_miners_in_period_scores}")
         
