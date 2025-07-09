@@ -206,7 +206,7 @@ class MockConfig:
         self.psql_db = AsyncMock()
 
 
-def get_mock_participant_scores(task_id):
+def get_mock_participant_scores(task_id, psql_db):
     """Return appropriate scores based on task_id"""
     if task_id == MOCK_GROUP_TASK_ID:
         return MOCK_GROUP_PARTICIPANT_SCORES
@@ -215,7 +215,7 @@ def get_mock_participant_scores(task_id):
     return []
 
 
-def get_mock_task_details(task_id):
+def get_mock_task_details(task_id, psql_db):
     """Return appropriate task details based on task_id"""
     return MOCK_TASK_DETAILS.get(task_id)
 
