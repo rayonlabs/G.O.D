@@ -61,9 +61,10 @@ async def analyze_weight_distribution():
         miner_task_counts = defaultdict(lambda: defaultdict(int))
         
         for task_result in task_results:
-            hotkey = task_result.hotkey
-            task_type = task_result.task_type
-            miner_task_counts[hotkey][task_type] += 1
+            task_type = task_result.task.task_type
+            for node_score in task_result.node_scores:
+                hotkey = node_score.hotkey
+                miner_task_counts[hotkey][task_type] += 1
         
         print(f"Miners with recent tasks: {len(miner_task_counts)}")
         
@@ -170,10 +171,10 @@ async def analyze_weight_distribution():
         synthetic_counts = defaultdict(int)
         
         for task_result in task_results:
-            task_type = task_result.task_type
+            task_type = task_result.task.task_type
             task_type_counts[task_type] += 1
             
-            if task_result.is_organic:
+            if task_result.task.is_organic:
                 organic_counts[task_type] += 1
             else:
                 synthetic_counts[task_type] += 1
