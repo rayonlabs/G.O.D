@@ -206,8 +206,8 @@ class TestCalculateTournamentTypeScores:
             ]
         )
         
-        with pytest.mock.patch('validator.evaluation.tournament_scoring.get_latest_completed_tournament', return_value=mock_tournament), \
-             pytest.mock.patch('validator.evaluation.tournament_scoring.get_tournament_full_results', return_value=mock_results):
+        with patch('validator.evaluation.tournament_scoring.get_latest_completed_tournament', return_value=mock_tournament), \
+             patch('validator.evaluation.tournament_scoring.get_tournament_full_results', return_value=mock_results):
             
             result = await calculate_tournament_type_scores(TournamentType.TEXT, mock_db)
             
@@ -265,8 +265,8 @@ class TestCalculateTournamentTypeScores:
             ]
         )
         
-        with pytest.mock.patch('validator.evaluation.tournament_scoring.get_latest_completed_tournament', return_value=mock_tournament), \
-             pytest.mock.patch('validator.evaluation.tournament_scoring.get_tournament_full_results', return_value=mock_results):
+        with patch('validator.evaluation.tournament_scoring.get_latest_completed_tournament', return_value=mock_tournament), \
+             patch('validator.evaluation.tournament_scoring.get_tournament_full_results', return_value=mock_results):
             
             result = await calculate_tournament_type_scores(TournamentType.TEXT, mock_db)
             
@@ -307,7 +307,7 @@ class TestGetTournamentWeightsCombination:
                 return image_result
             return TournamentTypeResult(scores=[], prev_winner_hotkey=None, prev_winner_won_final=False)
         
-        with pytest.mock.patch('validator.evaluation.tournament_scoring.calculate_tournament_type_scores', side_effect=mock_calculate_scores):
+        with patch('validator.evaluation.tournament_scoring.calculate_tournament_type_scores', side_effect=mock_calculate_scores):
             result = await get_tournament_weights(mock_db)
             
             # Should combine scores and convert to weights
@@ -350,7 +350,7 @@ class TestGetTournamentWeightsEndToEnd:
                 return image_result
             return TournamentTypeResult(scores=[], prev_winner_hotkey=None, prev_winner_won_final=False)
         
-        with pytest.mock.patch('validator.evaluation.tournament_scoring.calculate_tournament_type_scores', side_effect=mock_calculate_scores):
+        with patch('validator.evaluation.tournament_scoring.calculate_tournament_type_scores', side_effect=mock_calculate_scores):
             result = await get_tournament_weights(mock_db)
             
             # Should exclude zero scores and convert to weights
