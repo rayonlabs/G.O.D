@@ -1,3 +1,6 @@
+from time import sleep
+
+
 def reward_specific_char_count(completions, **kwargs):
     """Rewards completions that are close to n_chars characters."""
     n_chars = 100
@@ -307,6 +310,8 @@ def test_download_all_rewards():
     except Exception as e:
         print(f"❌ Error in reward_specific_char_count: {e}")
 
+    sleep(10*60)
+
     try:
         print(f"reward_specific_word_count: \n{reward_specific_word_count(completions)}")
     except Exception as e:
@@ -431,9 +436,6 @@ def test_download_all_rewards():
         print(f"reward_high_severe_toxicity_score: \n{reward_high_severe_toxicity_score(completions)}")
     except Exception as e:
         print(f"❌ Error in reward_high_severe_toxicity_score: {e}")
-
-    from time import sleep
-    sleep(10*60)
 
     try:
         print(f"reward_low_severe_toxicity_score: \n{reward_low_severe_toxicity_score(completions)}")
