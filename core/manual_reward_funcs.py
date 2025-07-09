@@ -432,6 +432,9 @@ def test_download_all_rewards():
     except Exception as e:
         print(f"❌ Error in reward_high_severe_toxicity_score: {e}")
 
+    from time import sleep
+    sleep(10*60)
+
     try:
         print(f"reward_low_severe_toxicity_score: \n{reward_low_severe_toxicity_score(completions)}")
     except Exception as e:
