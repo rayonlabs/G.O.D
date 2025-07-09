@@ -82,22 +82,26 @@ async def analyze_weight_distribution():
                 
             primary_task = max(task_counts.items(), key=lambda x: x[1])[0]
             
-            if primary_task == 'image':
+            if primary_task == 'ImageTask':
                 image_miners.add(hotkey)
-            elif primary_task == 'instruct':
+            elif primary_task in ['InstructTextTask', 'ChatTask']:
                 text_miners.add(hotkey)
-            elif primary_task == 'dpo':
+            elif primary_task == 'DpoTask':
                 dpo_miners.add(hotkey)
-            elif primary_task == 'grpo':
+            elif primary_task == 'GrpoTask':
                 grpo_miners.add(hotkey)
             else:
                 other_miners.add(hotkey)
         
+        # Create combined text miners (instruct + dpo + grpo + chat)
+        all_text_miners = text_miners | dpo_miners | grpo_miners
+        
         print(f"\nMiner Classification:")
         print(f"  Image miners: {len(image_miners)}")
-        print(f"  Text miners: {len(text_miners)}")
+        print(f"  Instruct/Chat miners: {len(text_miners)}")
         print(f"  DPO miners: {len(dpo_miners)}")
         print(f"  GRPO miners: {len(grpo_miners)}")
+        print(f"  Combined text miners: {len(all_text_miners)}")
         print(f"  Other miners: {len(other_miners)}")
         
         # Calculate weight distribution
@@ -105,20 +109,27 @@ async def analyze_weight_distribution():
         text_weight = sum(weights.get(hotkey, 0) for hotkey in text_miners)
         dpo_weight = sum(weights.get(hotkey, 0) for hotkey in dpo_miners)
         grpo_weight = sum(weights.get(hotkey, 0) for hotkey in grpo_miners)
+        combined_text_weight = sum(weights.get(hotkey, 0) for hotkey in all_text_miners)
         other_weight = sum(weights.get(hotkey, 0) for hotkey in other_miners)
         
         # Weight for miners without recent tasks
         inactive_miners = set(weights.keys()) - set(miner_task_counts.keys())
         inactive_weight = sum(weights.get(hotkey, 0) for hotkey in inactive_miners)
         
-        print(f"\n=== Actual Weight Distribution ===")
+        print(f"\n=== Actual Weight Distribution (Individual) ===")
         print(f"Image miners: {image_weight:.6f} ({image_weight/total_weight*100:.2f}%)")
-        print(f"Text miners: {text_weight:.6f} ({text_weight/total_weight*100:.2f}%)")
+        print(f"Instruct/Chat miners: {text_weight:.6f} ({text_weight/total_weight*100:.2f}%)")
         print(f"DPO miners: {dpo_weight:.6f} ({dpo_weight/total_weight*100:.2f}%)")
         print(f"GRPO miners: {grpo_weight:.6f} ({grpo_weight/total_weight*100:.2f}%)")
         print(f"Other miners: {other_weight:.6f} ({other_weight/total_weight*100:.2f}%)")
         print(f"Inactive miners: {inactive_weight:.6f} ({inactive_weight/total_weight*100:.2f}%)")
-        print(f"Total: {image_weight + text_weight + dpo_weight + grpo_weight + other_weight + inactive_weight:.6f}")
+        
+        print(f"\n=== Combined Weight Distribution ===")
+        print(f"Image miners: {image_weight:.6f} ({image_weight/total_weight*100:.2f}%)")
+        print(f"All text miners: {combined_text_weight:.6f} ({combined_text_weight/total_weight*100:.2f}%)")
+        print(f"Other miners: {other_weight:.6f} ({other_weight/total_weight*100:.2f}%)")
+        print(f"Inactive miners: {inactive_weight:.6f} ({inactive_weight/total_weight*100:.2f}%)")
+        print(f"Total: {image_weight + combined_text_weight + other_weight + inactive_weight:.6f}")
         
         print(f"\n=== Expected vs Actual ===")
         expected_image = IMAGE_TASK_SCORE_WEIGHT * 100
