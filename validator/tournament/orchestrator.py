@@ -25,6 +25,7 @@ from validator.core.models import AnyTypeRawTask
 from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql
 from validator.evaluation.scoring import _get_dataset_type
+from validator.utils.logging import LogContext
 from validator.utils.logging import get_logger
 from validator.utils.util import try_db_connections
 
@@ -210,68 +211,70 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
     while pending_training_tasks:
         oldest_task_training = pending_training_tasks[-1]
-        task = oldest_task_training.task
-        task_key = f"{task.task_id}_{oldest_task_training.hotkey}"
+        with LogContext(task_id=oldest_task_training.task.task_id, hotkey=oldest_task_training.hotkey):
+            task = oldest_task_training.task
+            task_key = f"{task.task_id}_{oldest_task_training.hotkey}"
 
-        # Check max attempts
-        if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
-            logger.warning(
-                f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), marking as failed"
-            )
+            # Check max attempts
+            if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
+                logger.warning(
+                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), marking as failed"
+                )
 
-            await tournament_sql.update_tournament_task_training_status(
-                task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
-            )
-            pending_training_tasks.pop()
-            continue
+                await tournament_sql.update_tournament_task_training_status(
+                    task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
+                )
+                pending_training_tasks.pop()
+                continue
 
-        # Determine required GPUs for this task
-        required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
-        logger.info(f"Task {task.task_id} requires {required_gpus.value}")
-        suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
+            # Determine required GPUs for this task
+            required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+            logger.info(f"Task {task.task_id} requires {required_gpus.value}")
+            suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
-        if not suitable_gpus_result:
-            logger.info(f"No suitable GPUs found for requirement {required_gpus.value}, waiting before retry")
-            await asyncio.sleep(cst.GPU_AVAILABILITY_CHECK_RETRY_INTERVAL)
-            continue
+            if not suitable_gpus_result:
+                logger.info(f"No suitable GPUs found for requirement {required_gpus.value}, waiting before retry")
+                await asyncio.sleep(cst.GPU_AVAILABILITY_CHECK_RETRY_INTERVAL)
+                continue
 
-        trainer_ip, gpu_ids = suitable_gpus_result
+            trainer_ip, gpu_ids = suitable_gpus_result
 
         try:
             training_task = pending_training_tasks[-1]
-            training_request = await _create_training_request(training_task.task, training_task.hotkey, gpu_ids, config)
-            training_success = await start_training_task(trainer_ip, training_request)
+            with LogContext(task_id=training_task.task.task_id, hotkey=training_task.hotkey):
+                training_request = await _create_training_request(training_task.task, training_task.hotkey, gpu_ids, config)
+                training_success = await start_training_task(trainer_ip, training_request)
 
-            if training_success:
-                await tournament_sql.update_tournament_task_training_status(
-                    training_task.task.task_id, training_task.hotkey, TrainingStatus.TRAINING, config.psql_db
-                )
-                await tournament_sql.update_gpu_availability(
-                    trainer_ip, gpu_ids, training_task.task.hours_to_complete, config.psql_db
-                )
-
-                pending_training_tasks.pop()
-                logger.info(
-                    f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} for training "
-                    f"on trainer {trainer_ip} with GPUs {gpu_ids} for {training_task.task.hours_to_complete} hours"
-                )
-
-            else:
-                logger.error(f"Failed to start training for task {training_task.task.task_id} on trainer {trainer_ip}")
-                # Track failed attempts for this scheduling session
-                failed_attempts[task_key] = failed_attempts.get(task_key, 0) + 1
-
-                if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
-                    logger.warning(
-                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}), popping from queue"
+                if training_success:
+                    await tournament_sql.update_tournament_task_training_status(
+                        training_task.task.task_id, training_task.hotkey, TrainingStatus.TRAINING, config.psql_db
                     )
+                    await tournament_sql.update_gpu_availability(
+                        trainer_ip, gpu_ids, training_task.task.hours_to_complete, config.psql_db
+                    )
+
                     pending_training_tasks.pop()
-                else:
                     logger.info(
-                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed, scheduling attempt {failed_attempts[task_key]}/{MAX_SCHEDULING_ATTEMPTS}"
+                        f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} for training "
+                        f"on trainer {trainer_ip} with GPUs {gpu_ids} for {training_task.task.hours_to_complete} hours"
                     )
-                    await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
-                continue
+
+                else:
+                    logger.error(f"Failed to start training for task {training_task.task.task_id} on trainer {trainer_ip}")
+                    # Track failed attempts for this scheduling session
+                    failed_attempts[task_key] = failed_attempts.get(task_key, 0) + 1
+
+                    if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
+                        logger.warning(
+                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}), popping from queue"
+                        )
+                        pending_training_tasks.pop()
+                    else:
+                        logger.info(
+                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed, scheduling attempt {failed_attempts[task_key]}/{MAX_SCHEDULING_ATTEMPTS}"
+                        )
+                        await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
+                    continue
         except Exception as e:
             logger.error(f"Exception while scheduling training: {str(e)}")
             # Track failed attempts for this scheduling session
@@ -449,53 +452,58 @@ async def _monitor_training_tasks(config: Config):
 
     # Check each training task
     for training_task in training_tasks:
-        try:
-            # Try to find which trainer has this task running
-            trainer_ip = None
-            task_log = None
+        with LogContext(task_id=training_task.task.task_id, hotkey=training_task.hotkey):
+            try:
+                # Try to find which trainer has this task running
+                trainer_ip = None
+                task_log = None
 
-            for trainer in trainers:
-                try:
-                    task_log = await get_training_task_details(
-                        trainer.trainer_ip, str(training_task.task.task_id), training_task.hotkey
+                for trainer in trainers:
+                    try:
+                        task_log = await get_training_task_details(
+                            trainer.trainer_ip, str(training_task.task.task_id), training_task.hotkey
+                        )
+                        if task_log:
+                            trainer_ip = trainer.trainer_ip
+                            break
+                    except Exception as e:
+                        logger.info(f"Could not get task details from trainer {trainer.trainer_ip}: {str(e)}")
+                        continue
+
+                if not trainer_ip or not task_log:
+                    logger.warning(
+                        f"Could not find trainer for task {training_task.task.task_id} with hotkey {training_task.hotkey}"
                     )
-                    if task_log:
-                        trainer_ip = trainer.trainer_ip
-                        break
-                except Exception as e:
-                    logger.info(f"Could not get task details from trainer {trainer.trainer_ip}: {str(e)}")
-                    continue
-
-            if not trainer_ip or not task_log:
-                logger.warning(f"Could not find trainer for task {training_task.task.task_id} with hotkey {training_task.hotkey}")
-                # Move task back to PENDING since trainer may have restarted or lost the task
-                await tournament_sql.update_tournament_task_training_status(
-                    training_task.task.task_id, training_task.hotkey, TrainingStatus.PENDING, config.psql_db
-                )
-                logger.info(f"Moved task {training_task.task.task_id} with hotkey {training_task.hotkey} back to PENDING status")
-                continue
-
-            # Check if task completed (success or failure)
-            if task_log.status in [TaskStatus.SUCCESS, TaskStatus.FAILURE]:
-                any_completed = True
-
-                logger.info(
-                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} completed with status {task_log.status}"
-                )
-
-                # Update task status in database
-                if task_log.status == TaskStatus.SUCCESS:
-                    await tournament_sql.update_tournament_task_training_status(
-                        training_task.task.task_id, training_task.hotkey, TrainingStatus.SUCCESS, config.psql_db
-                    )
-                else:  # FAILURE
+                    # Move task back to PENDING since trainer may have restarted or lost the task
                     await tournament_sql.update_tournament_task_training_status(
                         training_task.task.task_id, training_task.hotkey, TrainingStatus.PENDING, config.psql_db
                     )
+                    logger.info(
+                        f"Moved task {training_task.task.task_id} with hotkey {training_task.hotkey} back to PENDING status"
+                    )
+                    continue
 
-        except Exception as e:
-            logger.error(f"Error checking task {training_task.task.task_id} with hotkey {training_task.hotkey}: {str(e)}")
-            continue
+                # Check if task completed (success or failure)
+                if task_log.status in [TaskStatus.SUCCESS, TaskStatus.FAILURE]:
+                    any_completed = True
+
+                    logger.info(
+                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} completed with status {task_log.status}"
+                    )
+
+                    # Update task status in database
+                    if task_log.status == TaskStatus.SUCCESS:
+                        await tournament_sql.update_tournament_task_training_status(
+                            training_task.task.task_id, training_task.hotkey, TrainingStatus.SUCCESS, config.psql_db
+                        )
+                    else:  # FAILURE
+                        await tournament_sql.update_tournament_task_training_status(
+                            training_task.task.task_id, training_task.hotkey, TrainingStatus.PENDING, config.psql_db
+                        )
+
+            except Exception as e:
+                logger.error(f"Error checking task {training_task.task.task_id} with hotkey {training_task.hotkey}: {str(e)}")
+                continue
 
     # If any tasks completed, update all trainers' GPU availability
     if any_completed:
@@ -580,12 +588,13 @@ async def _move_completed_tasks_to_preevaluation(config: Config):
 
     # Move tasks to preevaluation
     for task in tasks_to_move:
-        try:
-            task.status = TaskStatus.PREEVALUATION
-            await task_sql.update_task(task, config.psql_db)
-            logger.info(f"Moved task {task.task_id} from training to preevaluation status")
-        except Exception as e:
-            logger.error(f"Error moving task {task.task_id} to preevaluation: {str(e)}")
+        with LogContext(task_id=task.task_id):
+            try:
+                task.status = TaskStatus.PREEVALUATION
+                await task_sql.update_task(task, config.psql_db)
+                logger.info(f"Moved task {task.task_id} from training to preevaluation status")
+            except Exception as e:
+                logger.error(f"Error moving task {task.task_id} to preevaluation: {str(e)}")
 
     logger.info(f"Successfully moved {len(tasks_to_move)} tasks to preevaluation status")
 
