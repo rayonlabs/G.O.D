@@ -240,12 +240,62 @@ async def analyze_weight_distribution():
             print(f"  Node scores: {len(sample_dpo.node_scores)}")
             if sample_dpo.node_scores:
                 print(f"  Sample node score: {sample_dpo.node_scores[0].hotkey} = {sample_dpo.node_scores[0].quality_score}")
+            
+            # Check all DPO node scores
+            print(f"  All DPO node scores in this task:")
+            for node_score in sample_dpo.node_scores:
+                print(f"    {node_score.hotkey}: {node_score.quality_score}")
+        
+        # Analyze DPO scores across all tasks
+        print(f"\n=== DPO Score Analysis ===")
+        dpo_hotkeys_with_scores = set()
+        dpo_score_distribution = []
+        
+        for task in dpo_tasks:
+            for node_score in task.node_scores:
+                dpo_hotkeys_with_scores.add(node_score.hotkey)
+                dpo_score_distribution.append(node_score.quality_score)
+        
+        print(f"Unique DPO miners with scores: {len(dpo_hotkeys_with_scores)}")
+        print(f"DPO score distribution: min={min(dpo_score_distribution):.2f}, max={max(dpo_score_distribution):.2f}, avg={sum(dpo_score_distribution)/len(dpo_score_distribution):.2f}")
+        
+        # Check if these DPO miners are in the period_scores
+        print(f"\n=== DPO Miners in Period Scores ===")
+        dpo_miners_in_period_scores = 0
+        for period_score in period_scores:
+            if period_score.hotkey in dpo_hotkeys_with_scores:
+                dpo_miners_in_period_scores += 1
+                print(f"  {period_score.hotkey}: weight_multiplier={period_score.weight_multiplier:.6f}, normalized_score={period_score.normalized_score:.6f}")
+        
+        print(f"DPO miners found in period_scores: {dpo_miners_in_period_scores}")
         
         # Check if DPO miners have weights
         print(f"\nDPO miners with weights:")
         for hotkey in dpo_miners:
             weight = weights.get(hotkey, 0)
-            print(f"  {hotkey}: {weight:.6f}")
+            in_period_scores = any(ps.hotkey == hotkey for ps in period_scores)
+            in_dpo_tasks = hotkey in dpo_hotkeys_with_scores
+            print(f"  {hotkey}: weight={weight:.6f}, in_period_scores={in_period_scores}, in_dpo_tasks={in_dpo_tasks}")
+        
+        # Check what's happening with DPO period scores
+        print(f"\n=== Period Score Analysis ===")
+        task_type_period_scores = defaultdict(list)
+        for period_score in period_scores:
+            # Try to match period scores to task types based on which miners are doing what
+            for task_type, miners in task_type_breakdown.items():
+                if period_score.hotkey in miners:
+                    task_type_period_scores[task_type].append(period_score)
+        
+        for task_type, scores in task_type_period_scores.items():
+            if scores:
+                total_weight = sum(score.weight_multiplier * score.normalized_score for score in scores)
+                print(f"{task_type}: {len(scores)} period scores, total_weight={total_weight:.6f}")
+                if task_type == 'DpoTask':
+                    print(f"  DPO period score details:")
+                    for score in scores[:3]:  # Show first 3
+                        print(f"    {score.hotkey}: weight_multiplier={score.weight_multiplier:.6f}, normalized_score={score.normalized_score:.6f}")
+            else:
+                print(f"{task_type}: 0 period scores")
         
         for task_type in sorted(task_type_counts.keys()):
             count = task_type_counts[task_type]
