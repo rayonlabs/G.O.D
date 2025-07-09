@@ -288,7 +288,7 @@ async def analyze_weight_distribution():
         
         for task_type, scores in task_type_period_scores.items():
             if scores:
-                total_weight = sum(score.weight_multiplier * score.normalized_score for score in scores)
+                total_weight = sum(score.weight_multiplier * score.normalised_score for score in scores)
                 print(f"{task_type}: {len(scores)} period scores, total_weight={total_weight:.6f}")
                 if task_type == 'DpoTask':
                     print(f"  DPO period score details:")
