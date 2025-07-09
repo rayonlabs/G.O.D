@@ -9,7 +9,6 @@ from huggingface_hub import hf_hub_download
 from huggingface_hub import snapshot_download
 from transformers import CLIPTokenizer
 
-from core.manual_reward_funcs import test_download_all_rewards
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
@@ -174,7 +173,6 @@ async def main():
             args.file_format
         )
         model_path = await download_axolotl_base_model(args.model, model_dir)
-        test_download_all_rewards()
 
     print(f"All files saved in: {base_dir}", flush=True)
     print(f"Model path: {model_path}", flush=True)

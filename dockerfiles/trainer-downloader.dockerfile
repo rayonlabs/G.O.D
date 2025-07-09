@@ -1,8 +1,8 @@
-FROM axolotlai/axolotl:main-py3.11-cu124-2.5.1
+FROM python:3.10-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir huggingface_hub aiohttp pydantic transformers textstat==0.7.7 langcheck detoxify
+RUN pip install --no-cache-dir huggingface_hub aiohttp pydantic transformers
 
 COPY trainer/ trainer/
 COPY core/ core/
