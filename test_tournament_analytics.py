@@ -257,7 +257,7 @@ def mock_task_sql():
 
 @pytest.fixture
 def mock_tournament_scoring():
-    with patch('validator.endpoints.tournament_analytics.calculate_tournament_type_scores') as mock:
+    with patch('validator.evaluation.tournament_scoring.calculate_tournament_type_scores') as mock:
         mock.return_value = MOCK_TOURNAMENT_TYPE_RESULT
         yield mock
 
@@ -357,7 +357,7 @@ def test_five_percent_rule_scenario():
     improvement = (prev_winner_loss - new_winner_loss) / prev_winner_loss
     
     assert improvement > 0.05, f"New winner improvement {improvement:.2%} should be > 5%"
-    assert improvement == 0.10, f"Expected exactly 10% improvement, got {improvement:.2%}"
+    assert abs(improvement - 0.10) < 0.001, f"Expected ~10% improvement, got {improvement:.2%}"
     
     # For the 5% rule, new winner needs loss < prev_winner_loss * 0.95
     required_loss = prev_winner_loss * 0.95  # 0.1900
@@ -379,7 +379,7 @@ if __name__ == "__main__":
         
         with patch('validator.endpoints.tournament_analytics.tournament_sql') as mock_sql, \
              patch('validator.endpoints.tournament_analytics.task_sql') as mock_task_sql, \
-             patch('validator.endpoints.tournament_analytics.calculate_tournament_type_scores') as mock_scoring, \
+             patch('validator.evaluation.tournament_scoring.calculate_tournament_type_scores') as mock_scoring, \
              patch('validator.endpoints.tournament_analytics.cts') as mock_cts:
             
             # Setup mocks
