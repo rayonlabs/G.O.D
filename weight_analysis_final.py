@@ -12,7 +12,7 @@ from collections import defaultdict
 # Add the project root to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from validator.core.config import Config
+from validator.core.config import load_config
 from validator.core.weight_setting import _get_weights_to_set, get_node_weights_from_period_scores
 from fiber.chain import fetch_nodes
 from validator.core.constants import IMAGE_TASK_SCORE_WEIGHT, INSTRUCT_TEXT_TASK_SCORE_WEIGHT
@@ -27,7 +27,7 @@ async def analyze_weight_distribution():
     
     try:
         # Get the actual weights using the same method as the validator
-        config = Config()
+        config = load_config()
         period_scores, task_results = await _get_weights_to_set(config)
         
         print(f"Found {len(period_scores)} period scores")
@@ -39,7 +39,7 @@ async def analyze_weight_distribution():
         )
         
         # Get node mapping
-        all_nodes = get_nodes_for_netuid(config.substrate, config.netuid)
+        all_nodes = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
         node_id_to_hotkey = {node.node_id: node.hotkey for node in all_nodes}
         
         # Create hotkey to weight mapping
