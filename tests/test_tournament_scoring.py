@@ -272,7 +272,9 @@ class TestCalculateTournamentTypeScores:
             
             # hotkey1 should have (1 + 2) * 0.6 = 1.8 (round 1 + round 2, text weight = 0.6)
             score_dict = {score.hotkey: score.score for score in result.scores}
-            assert score_dict == {"hotkey1": 1.8}
+            assert len(score_dict) == 1
+            assert "hotkey1" in score_dict
+            assert abs(score_dict["hotkey1"] - 1.8) < 0.001
 
 
 class TestGetTournamentWeightsCombination:
