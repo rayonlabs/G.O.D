@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from core.models.utility_models import TaskType
 from core.models.tournament_models import TournamentType, TournamentData, TournamentTaskScore, TournamentRoundResult, TournamentResults, TournamentScore, TournamentTypeResult
 from validator.evaluation.tournament_scoring import (
@@ -275,35 +275,82 @@ class TestCalculateTournamentTypeScores:
             assert score_dict == {"hotkey1": 1.8}
 
 
-class TestGetTournamentScores:
+class TestGetTournamentWeightsCombination:
     @pytest.mark.asyncio
     async def test_combines_text_and_image_scores(self):
         mock_db = MagicMock()
         
+        # Mock text tournament result
+        text_result = TournamentTypeResult(
+            scores=[
+                TournamentScore(hotkey="hotkey1", score=1.8),
+                TournamentScore(hotkey="hotkey2", score=0.6)
+            ],
+            prev_winner_hotkey="prev_winner",
+            prev_winner_won_final=True
+        )
+        
+        # Mock image tournament result
+        image_result = TournamentTypeResult(
+            scores=[
+                TournamentScore(hotkey="hotkey1", score=0.8),
+                TournamentScore(hotkey="hotkey3", score=0.4)
+            ],
+            prev_winner_hotkey=None,
+            prev_winner_won_final=False
+        )
+        
         async def mock_calculate_scores(tournament_type, db):
             if tournament_type == TournamentType.TEXT:
-                return {"hotkey1": 1.8, "hotkey2": 0.6}
+                return text_result
             elif tournament_type == TournamentType.IMAGE:
-                return {"hotkey1": 0.8, "hotkey3": 0.4}
-            return {}
+                return image_result
+            return TournamentTypeResult(scores=[], prev_winner_hotkey=None, prev_winner_won_final=False)
         
         with pytest.mock.patch('validator.evaluation.tournament_scoring.calculate_tournament_type_scores', side_effect=mock_calculate_scores):
-            result = await get_tournament_scores(mock_db)
+            result = await get_tournament_weights(mock_db)
             
-            # hotkey1 should have 1.8 + 0.8 = 2.6 (text + image)
-            # hotkey2 should have 0.6 (text only)
-            # hotkey3 should have 0.4 (image only)
-            assert result == {"hotkey1": 2.6, "hotkey2": 0.6, "hotkey3": 0.4}
+            # Should combine scores and convert to weights
+            # hotkey1: 1.8 + 0.8 = 2.6
+            # hotkey2: 0.6
+            # hotkey3: 0.4
+            # Plus prev_winner should be inserted first
+            assert "prev_winner" in result
+            assert "hotkey1" in result
+            assert "hotkey2" in result
+            assert "hotkey3" in result
 
 
-class TestGetTournamentWeights:
+class TestGetTournamentWeightsEndToEnd:
     @pytest.mark.asyncio
     async def test_end_to_end_conversion(self):
         mock_db = MagicMock()
         
-        mock_scores = {"hotkey1": 10.0, "hotkey2": 5.0, "hotkey3": 0.0}
+        # Mock both tournament types returning results
+        text_result = TournamentTypeResult(
+            scores=[
+                TournamentScore(hotkey="hotkey1", score=10.0),
+                TournamentScore(hotkey="hotkey2", score=5.0),
+                TournamentScore(hotkey="hotkey3", score=0.0)
+            ],
+            prev_winner_hotkey=None,
+            prev_winner_won_final=False
+        )
         
-        with pytest.mock.patch('validator.evaluation.tournament_scoring.get_tournament_scores', return_value=mock_scores):
+        image_result = TournamentTypeResult(
+            scores=[],
+            prev_winner_hotkey=None,
+            prev_winner_won_final=False
+        )
+        
+        async def mock_calculate_scores(tournament_type, db):
+            if tournament_type == TournamentType.TEXT:
+                return text_result
+            elif tournament_type == TournamentType.IMAGE:
+                return image_result
+            return TournamentTypeResult(scores=[], prev_winner_hotkey=None, prev_winner_won_final=False)
+        
+        with pytest.mock.patch('validator.evaluation.tournament_scoring.calculate_tournament_type_scores', side_effect=mock_calculate_scores):
             result = await get_tournament_weights(mock_db)
             
             # Should exclude zero scores and convert to weights
