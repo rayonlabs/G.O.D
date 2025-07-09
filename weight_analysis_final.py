@@ -227,6 +227,26 @@ async def analyze_weight_distribution():
         
         total_tasks = sum(task_type_counts.values())
         
+        # Debug DPO specifically
+        print(f"\n=== DPO Task Debug ===")
+        dpo_tasks = [task for task in task_results if task.task.task_type == 'DpoTask']
+        print(f"DPO tasks found: {len(dpo_tasks)}")
+        
+        if dpo_tasks:
+            sample_dpo = dpo_tasks[0]
+            print(f"Sample DPO task:")
+            print(f"  Task ID: {sample_dpo.task.task_id}")
+            print(f"  Is organic: {sample_dpo.task.is_organic}")
+            print(f"  Node scores: {len(sample_dpo.node_scores)}")
+            if sample_dpo.node_scores:
+                print(f"  Sample node score: {sample_dpo.node_scores[0].hotkey} = {sample_dpo.node_scores[0].quality_score}")
+        
+        # Check if DPO miners have weights
+        print(f"\nDPO miners with weights:")
+        for hotkey in dpo_miners:
+            weight = weights.get(hotkey, 0)
+            print(f"  {hotkey}: {weight:.6f}")
+        
         for task_type in sorted(task_type_counts.keys()):
             count = task_type_counts[task_type]
             organic = organic_counts[task_type]
