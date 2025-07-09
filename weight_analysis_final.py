@@ -68,6 +68,35 @@ async def analyze_weight_distribution():
         
         print(f"Miners with recent tasks: {len(miner_task_counts)}")
         
+        # Analyze miner specialization
+        print(f"\n=== Miner Specialization Analysis ===")
+        multi_task_miners = 0
+        specialized_miners = 0
+        task_type_breakdown = defaultdict(lambda: defaultdict(int))
+        
+        for hotkey, task_counts in miner_task_counts.items():
+            if len(task_counts) > 1:
+                multi_task_miners += 1
+                print(f"Multi-task miner {hotkey}: {dict(task_counts)}")
+            else:
+                specialized_miners += 1
+            
+            # Track what each miner does
+            for task_type, count in task_counts.items():
+                task_type_breakdown[task_type][hotkey] = count
+        
+        print(f"Multi-task miners: {multi_task_miners}")
+        print(f"Specialized miners: {specialized_miners}")
+        
+        # Show task type breakdown
+        print(f"\n=== Task Type Breakdown by Miners ===")
+        for task_type, miners in task_type_breakdown.items():
+            print(f"{task_type}: {len(miners)} unique miners")
+            # Show top miners for this task type
+            top_miners = sorted(miners.items(), key=lambda x: x[1], reverse=True)[:3]
+            for hotkey, count in top_miners:
+                print(f"  {hotkey}: {count} tasks")
+        
         # Classify miners by their primary task type
         image_miners = set()
         text_miners = set()
@@ -75,12 +104,17 @@ async def analyze_weight_distribution():
         grpo_miners = set()
         other_miners = set()
         
+        print(f"\n=== Miner Classification Details ===")
         for hotkey, task_counts in miner_task_counts.items():
             # Find the most common task type for this miner
             if not task_counts:
                 continue
                 
             primary_task = max(task_counts.items(), key=lambda x: x[1])[0]
+            
+            # Show classification reasoning for first few miners
+            if len(image_miners) + len(text_miners) + len(dpo_miners) + len(grpo_miners) + len(other_miners) < 10:
+                print(f"Miner {hotkey}: {dict(task_counts)} -> classified as {primary_task}")
             
             if primary_task == 'ImageTask':
                 image_miners.add(hotkey)
