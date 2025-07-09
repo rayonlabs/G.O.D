@@ -1,14 +1,3 @@
-import os
-
-
-def configure_safetensors():
-    """Configure environment to use safetensors instead of torch.load."""
-    os.environ['SAFETENSORS_FAST_GPU'] = '1'
-    os.environ['TRANSFORMERS_OFFLINE'] = '0'
-    # Force transformers to prefer safetensors
-    os.environ['TRANSFORMERS_SAFE_SERIALIZATION'] = '1'
-
-
 def reward_specific_char_count(completions, **kwargs):
     """Rewards completions that are close to n_chars characters."""
     n_chars = 100
@@ -181,7 +170,6 @@ def reward_flesch_kincaid_grade(completions, **kwargs):
 
 def reward_positive_sentiment(completions, **kwargs):
     """Rewards completions with more positive sentiment."""
-    configure_safetensors()
     import langcheck
     scores = langcheck.metrics.sentiment(completions)
     return scores.metric_values
@@ -189,7 +177,6 @@ def reward_positive_sentiment(completions, **kwargs):
 
 def reward_negative_sentiment(completions, **kwargs):
     """Rewards completions with more negative sentiment."""
-    configure_safetensors()
     import langcheck
     scores = langcheck.metrics.sentiment(completions)
     return [-s for s in scores.metric_values]
@@ -197,7 +184,6 @@ def reward_negative_sentiment(completions, **kwargs):
 
 def reward_high_fluency(completions, **kwargs):
     """Rewards completions that are fluent."""
-    configure_safetensors()
     import langcheck
     scores = langcheck.metrics.fluency(completions)
     return scores.metric_values
@@ -205,7 +191,6 @@ def reward_high_fluency(completions, **kwargs):
 
 def reward_low_fluency(completions, **kwargs):
     """Rewards completions that are less fluent."""
-    configure_safetensors()
     import langcheck
     scores = langcheck.metrics.fluency(completions)
     return [-s for s in scores.metric_values]
