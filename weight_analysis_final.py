@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from validator.core.config import Config
 from validator.core.weight_setting import _get_weights_to_set, get_node_weights_from_period_scores
-from validator.core.fetch_nodes import get_nodes_for_netuid
+from fiber.chain import fetch_nodes
 from validator.core.constants import IMAGE_TASK_SCORE_WEIGHT, INSTRUCT_TEXT_TASK_SCORE_WEIGHT
 
 async def analyze_weight_distribution():
