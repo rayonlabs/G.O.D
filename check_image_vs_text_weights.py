@@ -63,12 +63,12 @@ async def check_image_vs_text_weights():
         
         print(f"Found {len(scores)} scores in last 7 days")
         
-        # Categorize miners by task type
+        # Categorize miners by task type using task_results instead of scores
         miner_task_counts = defaultdict(lambda: defaultdict(int))
         
-        for score in scores:
-            hotkey = score.hotkey
-            task_type = score.task_type
+        for task_result in task_results:
+            hotkey = task_result.hotkey
+            task_type = task_result.task_type
             miner_task_counts[hotkey][task_type] += 1
         
         print(f"Found {len(miner_task_counts)} unique miners in recent tasks")
@@ -153,4 +153,4 @@ async def check_image_vs_text_weights():
             print(f"  {task_type}: {count} tasks ({count/total_tasks*100:.1f}%)")
 
 if __name__ == "__main__":
-    check_image_vs_text_weights()
+    asyncio.run(check_image_vs_text_weights())
