@@ -261,6 +261,7 @@ async def main():
     )
 
     import time
+    print("Waiting 10 minutes before training...")
     time.sleep(10*60)
     run_training(config_path)
 
