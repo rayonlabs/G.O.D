@@ -153,6 +153,11 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
             linear_score = normalised_input
             node_period_score.normalised_score = (cts.SIGMOID_WEIGHT * sigmoid_score) + (cts.LINEAR_WEIGHT * linear_score)
 
+    total_score = sum(ps.normalised_score for ps in period_scores)
+    if total_score > 0:
+        for node_period_score in period_scores:
+            node_period_score.normalised_score = node_period_score.normalised_score / total_score
+
     return period_scores
 
 
