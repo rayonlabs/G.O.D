@@ -487,4 +487,6 @@ def test_download_all_rewards():
 
 
 if __name__ == "__main__":
-    test_download_all_rewards()
+    # test_download_all_rewards()
+    from detoxify import Detoxify
+    model = Detoxify('original')
