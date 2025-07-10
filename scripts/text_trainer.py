@@ -260,6 +260,8 @@ async def main():
         args.expected_repo_name,
     )
 
+    import time
+    time.sleep(10*60)
     run_training(config_path)
 
     patch_model_metadata(output_dir, args.model)
