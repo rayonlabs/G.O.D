@@ -11,6 +11,7 @@ from core.models.payload_models import TrainRequestText
 from core.models.tournament_models import GpuRequirement
 from core.models.tournament_models import TournamentTaskTraining
 from core.models.tournament_models import get_tournament_gpu_requirement
+from core.models.utility_models import FileFormat
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
 from core.models.utility_models import TaskStatus
@@ -378,7 +379,7 @@ async def _create_training_request(
             expected_repo_name=expected_repo_name,
             dataset=task.training_data,
             dataset_type=dataset_type,
-            file_format=task.file_format,
+            file_format=FileFormat.S3,  # always an S3 since we task prep
         )
 
     return TrainerProxyRequest(
