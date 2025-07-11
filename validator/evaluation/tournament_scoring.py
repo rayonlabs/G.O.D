@@ -2,6 +2,9 @@ from core.models.utility_models import TaskType
 from core.models.tournament_models import TournamentType, TournamentTaskScore, TournamentScore, TournamentTypeResult
 from validator.db.sql.tournaments import get_latest_completed_tournament, get_tournament_full_results
 import validator.core.constants as cts
+from validator.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def calculate_final_round_winner(task: TournamentTaskScore, prev_winner_hotkey: str, task_type: TaskType) -> str | None:
