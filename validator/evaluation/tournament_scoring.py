@@ -164,6 +164,11 @@ async def get_tournament_weights(psql_db) -> dict[str, float]:
     text_result = await calculate_tournament_type_scores(TournamentType.TEXT, psql_db)
     image_result = await calculate_tournament_type_scores(TournamentType.IMAGE, psql_db)
     
+    logger.info(f"DEBUG: text_result.scores = {text_result.scores}")
+    logger.info(f"DEBUG: image_result.scores = {image_result.scores}")
+    logger.info(f"DEBUG: text_result.prev_winner_hotkey = {text_result.prev_winner_hotkey}")
+    logger.info(f"DEBUG: image_result.prev_winner_hotkey = {image_result.prev_winner_hotkey}")
+    
     # Combine scores from both tournament types
     combined_scores = {}
     all_tournament_scores = text_result.scores + image_result.scores
@@ -184,4 +189,10 @@ async def get_tournament_weights(psql_db) -> dict[str, float]:
     prev_winner_hotkey = text_result.prev_winner_hotkey or image_result.prev_winner_hotkey
     prev_winner_won_final = text_result.prev_winner_won_final or image_result.prev_winner_won_final
     
-    return tournament_scores_to_weights(combined_score_list, prev_winner_hotkey, prev_winner_won_final)
+    logger.info(f"DEBUG: combined_score_list = {combined_score_list}")
+    logger.info(f"DEBUG: prev_winner_hotkey = {prev_winner_hotkey}")
+    logger.info(f"DEBUG: prev_winner_won_final = {prev_winner_won_final}")
+    
+    result = tournament_scores_to_weights(combined_score_list, prev_winner_hotkey, prev_winner_won_final)
+    logger.info(f"DEBUG: final tournament_scores_to_weights result = {result}")
+    return result

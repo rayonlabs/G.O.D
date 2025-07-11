@@ -389,6 +389,8 @@ async def get_node_weights_from_period_scores(
     
     logger.info("=== TOURNAMENT WEIGHT CALCULATIONS ===")
     tournament_weights = await get_tournament_weights(psql_db)
+    logger.info(f"DEBUG: tournament_weights returned: {tournament_weights}")
+    logger.info(f"DEBUG: tournament_weights length: {len(tournament_weights)}")
     if tournament_weights:
         for hotkey, weight in tournament_weights.items():
             node_id = hotkey_to_node_id.get(hotkey)
