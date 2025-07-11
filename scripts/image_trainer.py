@@ -3,12 +3,13 @@
 Standalone script for image model training (SDXL or Flux)
 """
 
-import os
-import toml
-import sys
-import subprocess
-import asyncio
 import argparse
+import asyncio
+import os
+import subprocess
+import sys
+
+import toml
 
 
 # Add project root to python path to import modules
@@ -16,11 +17,11 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
+import core.constants as cst
+import trainer.constants as train_cst
 from core.config.config_handler import save_config_toml
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.models.utility_models import ImageModelType
-import core.constants as cst
-import trainer.constants as train_cst
 
 
 def get_model_path(base_dir: str) -> str:
@@ -70,19 +71,19 @@ def create_config(task_id, model, model_type, expected_repo_name):
 
 def run_training(model_type, config_path):
     print(f"Starting training with config: {config_path}", flush=True)
-    
+
     training_command = [
-        "accelerate", "launch", 
-        "--dynamo_backend", "no", 
-        "--dynamo_mode", "default", 
-        "--mixed_precision", "bf16", 
-        "--num_processes", "1", 
-        "--num_machines", "1", 
-        "--num_cpu_threads_per_process", "2", 
+        "accelerate", "launch",
+        "--dynamo_backend", "no",
+        "--dynamo_mode", "default",
+        "--mixed_precision", "bf16",
+        "--num_processes", "1",
+        "--num_machines", "1",
+        "--num_cpu_threads_per_process", "2",
         f"/app/sd-scripts/{model_type}_train_network.py",
         "--config_file", config_path
     ]
-    
+
     try:
         print("Starting training subprocess...\n", flush=True)
         process = subprocess.Popen(
@@ -128,7 +129,7 @@ async def main():
 
 
     model_path = get_model_path(f"{train_cst.CACHE_PATH}/{args.task_id}/models/")
-    
+
     # Create config file
     config_path = create_config(
         args.task_id,
@@ -136,15 +137,15 @@ async def main():
         args.model_type,
         args.expected_repo_name,
     )
-    
+
     # Prepare dataset
     print("Preparing dataset...", flush=True)
-    
+
     # Set DIFFUSION_DATASET_DIR to environment variable if available
     original_dataset_dir = cst.DIFFUSION_DATASET_DIR
     if os.environ.get("DATASET_DIR"):
         cst.DIFFUSION_DATASET_DIR = os.environ.get("DATASET_DIR")
-    
+
     prepare_dataset(
         training_images_zip_path=f"{train_cst.CACHE_PATH}/{args.task_id}/datasets/{args.task_id}.zip",
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
@@ -152,10 +153,10 @@ async def main():
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,
         job_id=args.task_id,
     )
-    
+
     # Restore original value
     cst.DIFFUSION_DATASET_DIR = original_dataset_dir
-    
+
     # Run training
     run_training(args.model_type, config_path)
 

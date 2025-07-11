@@ -13,6 +13,7 @@ services:
       - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
       - ./config/grafana-validator-general.json:/var/lib/grafana/dashboards/grafana-validator-general.json
       - ./config/grafana-validator-errors.json:/var/lib/grafana/dashboards/grafana-validator-errors.json
+      - ./config/grafana-tournament.json:/var/lib/grafana/dashboards/grafana-tournament.json
     ports:
       - ${GRAFANA_PORT:-3000}:3000
 

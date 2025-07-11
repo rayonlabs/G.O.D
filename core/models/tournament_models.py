@@ -178,6 +178,7 @@ class DetailedTournamentTaskScore(TournamentTaskScore):
     task_type: TaskType | None = None
 
 
+
 class TournamentRoundResult(BaseModel):
     round_id: str
     round_number: int
@@ -219,3 +220,4 @@ class TournamentDetailsResponse(BaseModel):
     final_scores: list[TournamentScore]
     text_tournament_weight: float
     image_tournament_weight: float
+

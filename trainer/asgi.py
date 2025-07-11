@@ -1,11 +1,13 @@
-import os
-import asyncio
 import uvicorn
-
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from trainer.endpoints import factory_router
 from validator.utils.logging import get_logger
+
+
+load_dotenv(".trainer.env")
 
 logger = get_logger(__name__)
 

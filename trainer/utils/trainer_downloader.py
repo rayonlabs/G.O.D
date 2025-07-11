@@ -1,14 +1,19 @@
 import argparse
+import asyncio
 import os
 import shutil
 import tempfile
-import asyncio
+
+from huggingface_hub import HfApi
+from huggingface_hub import hf_hub_download
+from huggingface_hub import snapshot_download
 from transformers import CLIPTokenizer
-from transformers import T5TokenizerFast
-from huggingface_hub import snapshot_download, hf_hub_download, HfApi
+
+from core.models.utility_models import FileFormat
+from core.models.utility_models import TaskType
 from core.utils import download_s3_file
-from core.models.utility_models import FileFormat, TaskType
 from trainer import constants as cst
+
 
 hf_api = HfApi()
 
@@ -125,7 +130,8 @@ async def main():
         choices=[
             TaskType.IMAGETASK.value,
             TaskType.INSTRUCTTEXTTASK.value,
-            TaskType.DPOTASK.value
+            TaskType.DPOTASK.value,
+            TaskType.GRPOTASK.value
         ]
     )
     parser.add_argument("--dataset", required=True)
