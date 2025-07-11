@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 
 import yaml
 from datasets import load_dataset
@@ -481,65 +482,77 @@ async def load_and_merge_multiple_datasets(
     if len(dataset_sizes) == 0:
         raise ValueError("No valid dataset sizes found")
 
-    avg_size = sum(dataset_sizes) // len(dataset_sizes)
+    selected_size = random.choice(dataset_sizes)
     min_size = min(dataset_sizes)
     max_size = max(dataset_sizes)
     total_available = sum(dataset_sizes)
     logger.info(f"Dataset sizes: {dataset_sizes}")
-    logger.info(f"Min size: {min_size}, Average size: {avg_size}, Max size: {max_size}, Total available: {total_available}")
+    logger.info(f"Min size: {min_size}, Selected size: {selected_size}, Max size: {max_size}, Total available: {total_available}")
 
-    # Calculate max samples per dataset (50% of total)
-    max_samples_per_dataset = total_available // 2
-
-    # Calculate how many samples we can take from each dataset
-    available_per_dataset = []
-    for size in dataset_sizes:
-        available = min(size, max_samples_per_dataset)
-        available_per_dataset.append(available)
-
-    total_available_balanced = sum(available_per_dataset)
-    logger.info(f"After applying 50% cap, available samples per dataset: {available_per_dataset}")
-    logger.info(f"Total available for balanced sampling: {total_available_balanced}")
-
-    # Now calculate equal samples from what's available
-    samples_per_dataset = total_available_balanced // len(dataset_sizes)
-    remainder = total_available_balanced % len(dataset_sizes)
+    # Use selected_size as our target total, divide equally among datasets
+    samples_per_dataset = selected_size // len(dataset_sizes)
+    remainder = selected_size % len(dataset_sizes)
 
 
     logger.info(f"Taking {samples_per_dataset} samples from each dataset (with {remainder} extra distributed)")
 
-    final_samples = []
-    start_idx = 0
-
-    for i, size in enumerate(dataset_sizes):
-        dataset_name = dataset_ids[i] if i < len(dataset_ids) else f"Dataset_{i}"
-        end_idx = start_idx + size
-        dataset_samples = all_samples[start_idx:end_idx]
-
-        # Shuffle samples from this dataset
-        random.shuffle(dataset_samples)
-
-        # Take appropriate number of samples (respecting both equal distribution and max cap)
-        num_to_take = samples_per_dataset + (1 if i < remainder else 0)
-        num_to_take = min(num_to_take, len(dataset_samples), max_samples_per_dataset)
-
-        logger.info(f"Dataset {i} ({dataset_name}): has {len(dataset_samples)} samples, taking {num_to_take}")
-
-        # Take appropriate number of samples
-        num_to_take = samples_per_dataset + (1 if i < remainder else 0)
-        num_to_take = min(num_to_take, len(dataset_samples))
-
-        logger.info(f"Dataset {i}: has {len(dataset_samples)} samples, taking {num_to_take}")
-
-
-        final_samples.extend(dataset_samples[:num_to_take])
-        start_idx = end_idx
-
-    # Final shuffle to mix samples from all datasets
+    selected_indices = _collect_sample_indices(
+        dataset_sizes, samples_per_dataset, remainder, selected_size
+    )
+    
+    final_samples = [all_samples[idx] for idx in selected_indices]
     random.shuffle(final_samples)
-
+    
     logger.info(f"Merged {len(dataset_sizes)} datasets, returning {len(final_samples)} samples")
     return final_samples
+
+
+def _collect_sample_indices(dataset_sizes, samples_per_dataset, remainder, target_size):
+    selected_indices = []
+    dataset_ranges = []
+    start_idx = 0
+    
+    for i, size in enumerate(dataset_sizes):
+        end_idx = start_idx + size
+        dataset_ranges.append((start_idx, end_idx))
+        
+        dataset_indices = list(range(start_idx, end_idx))
+        random.shuffle(dataset_indices)
+        
+        num_to_take = samples_per_dataset + (1 if i < remainder else 0)
+        num_to_take = min(num_to_take, len(dataset_indices))
+        
+        selected_indices.extend(dataset_indices[:num_to_take])
+        logger.info(f"Dataset {i}: has {size} samples, taking {num_to_take}")
+        
+        start_idx = end_idx
+    
+    shortage = target_size - len(selected_indices)
+    if shortage > 0 and random.random() < 0.5:
+        additional_indices = _collect_additional_indices(
+            selected_indices, dataset_ranges, shortage
+        )
+        selected_indices.extend(additional_indices)
+        logger.info(f"Added {len(additional_indices)} additional samples")
+    
+    return selected_indices
+
+
+def _collect_additional_indices(already_selected, dataset_ranges, shortage):
+    selected_set = set(already_selected)
+    all_available_indices = []
+    
+    for start, end in dataset_ranges:
+        for idx in range(start, end):
+            if idx not in selected_set:
+                all_available_indices.append(idx)
+    
+    if not all_available_indices:
+        logger.info("No remaining samples to draw from")
+        return []
+    
+    random.shuffle(all_available_indices)
+    return all_available_indices[:shortage]
 
 
 def unstandardize_samples_to_task_columns(samples: list[dict], task: AnyTextTypeRawTask) -> list[dict]:
