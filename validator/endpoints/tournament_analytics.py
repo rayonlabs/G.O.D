@@ -130,6 +130,6 @@ async def get_latest_tournaments_details(
 
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Tournament Analytics"], dependencies=[Depends(get_api_key)])
-    router.add_api_route(GET_TOURNAMENT_DETAILS_ENDPOINT, get_tournament_details, methods=["GET"])
     router.add_api_route(GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT, get_latest_tournaments_details, methods=["GET"])
+    router.add_api_route(GET_TOURNAMENT_DETAILS_ENDPOINT, get_tournament_details, methods=["GET"])
     return router
