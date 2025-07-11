@@ -1,4 +1,6 @@
+
 from core.models.utility_models import TaskType
+
 from core.models.tournament_models import TournamentType, TournamentTaskScore, TournamentScore, TournamentTypeResult
 from validator.db.sql.tournaments import get_latest_completed_tournament, get_tournament_full_results
 import validator.core.constants as cts
@@ -67,17 +69,12 @@ async def calculate_tournament_type_scores(tournament_type: TournamentType, psql
         is_final_round = round_result.is_final_round
         
         for task in round_result.tasks:
-            if is_final_round and prev_winner_hotkey:
-                from validator.db.sql.tasks import get_task
-                task_obj = await get_task(task.task_id, psql_db)
-                if task_obj:
-                    winner = calculate_final_round_winner(task, prev_winner_hotkey, task_obj.task_type)
-                    if winner == prev_winner_hotkey:
-                        prev_winner_won_final = True
-                else:
-                    winner = task.winner
-            else:
-                winner = task.winner
+
+            winner = task.winner
+            
+            if is_final_round and prev_winner_hotkey and winner == prev_winner_hotkey:
+                prev_winner_won_final = True
+
             
             if winner and winner != prev_winner_hotkey:
                 if winner not in score_dict:

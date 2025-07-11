@@ -174,12 +174,23 @@ class TournamentTaskScore(BaseModel):
     participant_scores: list[dict]
 
 
+class DetailedTournamentTaskScore(TournamentTaskScore):
+    task_type: TaskType | None = None
+
+
+
 class TournamentRoundResult(BaseModel):
     round_id: str
     round_number: int
     round_type: str
     is_final_round: bool
     tasks: list[TournamentTaskScore]
+
+
+class DetailedTournamentRoundResult(TournamentRoundResult):
+    status: str
+    participants: list[str]
+    tasks: list[DetailedTournamentTaskScore]
 
 
 class TournamentResults(BaseModel):
@@ -196,3 +207,17 @@ class TournamentTypeResult(BaseModel):
     scores: list[TournamentScore]
     prev_winner_hotkey: str | None
     prev_winner_won_final: bool
+
+
+class TournamentDetailsResponse(BaseModel):
+    tournament_id: str
+    tournament_type: TournamentType
+    status: TournamentStatus
+    base_winner_hotkey: str | None
+    winner_hotkey: str | None
+    participants: list[TournamentParticipant]
+    rounds: list[DetailedTournamentRoundResult]
+    final_scores: list[TournamentScore]
+    text_tournament_weight: float
+    image_tournament_weight: float
+

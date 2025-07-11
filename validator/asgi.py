@@ -21,6 +21,7 @@ from validator.endpoints.auditing import factory_router as auditing_router
 from validator.endpoints.health import factory_router as health_router
 from validator.endpoints.miner_details import factory_router as miner_details_router
 from validator.endpoints.tasks import factory_router as tasks_router
+from validator.endpoints.tournament_analytics import factory_router as tournament_analytics_router
 from validator.endpoints.tournament_orchestrator import factory_router as tournament_orchestrator_router
 from validator.utils.logging import get_logger
 from validator.utils.miner_analytics import miner_performance_cache_worker
@@ -63,6 +64,7 @@ def factory() -> FastAPI:
     app.include_router(tasks_router())
     app.include_router(auditing_router())
     app.include_router(miner_details_router())
+    app.include_router(tournament_analytics_router())
     app.include_router(tournament_orchestrator_router())
     app.add_middleware(
         CORSMiddleware,
