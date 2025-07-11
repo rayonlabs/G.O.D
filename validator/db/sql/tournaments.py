@@ -15,11 +15,15 @@ from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentTaskTraining
 from core.models.tournament_models import TournamentType
+from core.models.tournament_models import TournamentResults
+from core.models.tournament_models import TournamentRoundResult
+from core.models.tournament_models import TournamentTaskScore
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import TrainerInfo
 from core.models.utility_models import TrainingStatus
 from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
+from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task, get_task_winners
 from validator.utils.logging import get_logger
 
 
@@ -792,3 +796,42 @@ async def get_tasks_with_all_training_completed(psql_db: PSQLDB) -> list[str]:
         """
         results = await connection.fetch(query)
         return [row[cst.TASK_ID] for row in results]
+
+
+async def get_tournament_full_results(tournament_id: str, psql_db: PSQLDB) -> TournamentResults:
+    rounds = await get_tournament_rounds(tournament_id, psql_db)
+    
+    round_results = []
+    
+    for round_data in rounds:
+        tasks = await get_tournament_tasks(round_data.round_id, psql_db)
+        
+        task_scores = []
+        task_ids = [task.task_id for task in tasks]
+        if task_ids:
+            task_winners = await get_task_winners(task_ids, psql_db)
+            
+            for task in tasks:
+                participant_scores = await get_all_scores_and_losses_for_task(task.task_id, psql_db)
+                task_score = TournamentTaskScore(
+                    task_id=str(task.task_id),
+                    group_id=task.group_id,
+                    pair_id=task.pair_id,
+                    winner=task_winners.get(str(task.task_id)),
+                    participant_scores=participant_scores
+                )
+                task_scores.append(task_score)
+        
+        round_result = TournamentRoundResult(
+            round_id=round_data.round_id,
+            round_number=round_data.round_number,
+            round_type=round_data.round_type,
+            is_final_round=round_data.is_final_round,
+            tasks=task_scores
+        )
+        round_results.append(round_result)
+    
+    return TournamentResults(
+        tournament_id=tournament_id,
+        rounds=round_results
+    )

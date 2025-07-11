@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
+from validator.evaluation.tournament_scoring import get_tournament_weights
 
 
 load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
@@ -361,7 +362,7 @@ def get_miner_performance_breakdown(hotkey: str, task_results: list[TaskResults]
 
 
 async def get_node_weights_from_period_scores(
-    substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore]
+    substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore], psql_db
 ) -> tuple[list[int], list[float]]:
     """
     Get the node ids and weights from the node results.
@@ -385,6 +386,21 @@ async def get_node_weights_from_period_scores(
                            f"weight_multiplier={node_result.weight_multiplier:.6f}, "
                            f"contribution={contribution:.6f}, "
                            f"total_weight={all_node_weights[node_id]:.6f}")
+    
+    logger.info("=== TOURNAMENT WEIGHT CALCULATIONS ===")
+    tournament_weights = await get_tournament_weights(psql_db)
+    if tournament_weights:
+        for hotkey, weight in tournament_weights.items():
+            node_id = hotkey_to_node_id.get(hotkey)
+            if node_id is not None:
+                tournament_contribution = weight * cts.WEIGHT_FOR_TOURN
+                all_node_weights[node_id] = all_node_weights[node_id] + tournament_contribution
+                logger.info(f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
+                           f"tournament_weight={weight:.6f}, "
+                           f"tournament_contribution={tournament_contribution:.6f}, "
+                           f"total_weight={all_node_weights[node_id]:.6f}")
+    else:
+        logger.info("No tournament weights found")
     
     logger.info("=== FINAL NODE WEIGHTS ===")
     for node_id, weight in enumerate(all_node_weights):
@@ -435,7 +451,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
         logger.info("No nodes to set weights for. Skipping weight setting.")
         return False
 
-    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(config.substrate, config.netuid, node_results)
+    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(config.substrate, config.netuid, node_results, config.psql_db)
     logger.info("Weights calculated, about to set...")
 
     success = await set_weights(config, all_node_ids, all_node_weights, validator_node_id)
