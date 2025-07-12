@@ -13,6 +13,7 @@ from core.models.utility_models import ImageModelType
 
 from validator.core import constants as cst
 from validator.core.models import Img2ImgPayload
+from validator.evaluation.common import retry_on_5xx
 from validator.evaluation.utils import adjust_image_size
 from validator.evaluation.utils import base64_to_image
 from validator.evaluation.utils import download_from_huggingface
@@ -62,6 +63,7 @@ def validate_dataset_path(dataset_path: str) -> str:
     return dataset_path
 
 
+@retry_on_5xx()
 def find_latest_lora_submission_name(repo_id: str) -> str:
     repo_files = hf_api.list_repo_files(repo_id)
     model_files = [file for file in repo_files if file.startswith(cst.DIFFUSION_HF_DEFAULT_FOLDER)]
@@ -86,6 +88,7 @@ def find_latest_lora_submission_name(repo_id: str) -> str:
     return None
 
 
+@retry_on_5xx()
 def is_safetensors_available(repo_id: str, model_type: str) -> tuple[bool, str | None]:
     files_metadata = hf_api.list_repo_tree(repo_id=repo_id, repo_type="model")
     check_size_in_gb = 6 if model_type == "sdxl" else 10

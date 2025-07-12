@@ -12,6 +12,7 @@ from PIL import Image
 from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 
+from validator.evaluation.common import retry_on_5xx
 from validator.utils.logging import get_logger
 
 
@@ -73,6 +74,7 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     )
     return architecture_same and architecture_classes_match
 
+@retry_on_5xx()
 def check_for_lora(model_id: str) -> bool:
     """
     Check if a Hugging Face model has LoRA adapters by looking for adapter_config.json.
