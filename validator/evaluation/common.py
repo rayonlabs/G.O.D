@@ -10,11 +10,6 @@ import yaml
 from axolotl.utils.dict import DictDefault
 from datasets import Dataset
 from peft import AutoPeftModelForCausalLM
-from requests.exceptions import HTTPError
-from tenacity import retry
-from tenacity import retry_if_exception
-from tenacity import stop_after_attempt
-from tenacity import wait_exponential
 from transformers import AutoModelForCausalLM
 from transformers import AutoTokenizer
 from transformers import TrainerCallback
@@ -23,6 +18,7 @@ from core.config.config_handler import create_dataset_entry
 from validator.core import constants as cst
 from validator.core.models import EvaluationArgs
 from validator.utils.logging import get_logger
+from validator.utils.util import retry_on_5xx
 
 
 logger = get_logger(__name__)
@@ -76,35 +72,6 @@ class ProgressLoggerCallback(TrainerCallback):
         return control
 
 
-def should_retry_model_loading_on_exception(e):
-    ephemeral_error_patterns = [
-        "does not appear to have a file named",
-        "does not appear to have files named",
-        "Too Many Requests for url",
-    ]
-
-    while e is not None:
-        if isinstance(e, HTTPError):
-            if e.response is None:
-                logger.error(f"HTTPError with no response: {e}, cause: {e.__cause__}")
-                return True
-            elif 500 <= e.response.status_code < 600:
-                return True
-        if any(pattern in str(e) for pattern in ephemeral_error_patterns):
-            return True
-        e = e.__cause__
-    return False
-
-
-def retry_on_5xx():
-    return retry(
-        stop=stop_after_attempt(5),
-        wait=wait_exponential(multiplier=2.5, min=30, max=600),
-        retry=retry_if_exception(should_retry_model_loading_on_exception),
-        reraise=True,
-    )
-
-
 def create_finetuned_cache_dir():
     """Create and return a dedicated cache directory for finetuned models."""
     finetuned_cache_dir = os.path.join(cst.DOCKER_EVAL_HF_CACHE_DIR, "finetuned_repos")
@@ -128,7 +95,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
-            pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
+            pattern = re.search(r"shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)", error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 return AutoModelForCausalLM.from_pretrained(
@@ -169,7 +136,7 @@ def load_finetuned_model(repo: str) -> AutoPeftModelForCausalLM:
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
-            pattern = re.search(r'shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)', error_msg)
+            pattern = re.search(r"shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)", error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 return AutoPeftModelForCausalLM.from_pretrained(

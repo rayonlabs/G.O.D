@@ -10,10 +10,8 @@ from huggingface_hub import snapshot_download
 from PIL import Image
 
 from core.models.utility_models import ImageModelType
-
 from validator.core import constants as cst
 from validator.core.models import Img2ImgPayload
-from validator.evaluation.common import retry_on_5xx
 from validator.evaluation.utils import adjust_image_size
 from validator.evaluation.utils import base64_to_image
 from validator.evaluation.utils import download_from_huggingface
@@ -21,6 +19,7 @@ from validator.evaluation.utils import image_to_base64
 from validator.evaluation.utils import list_supported_images
 from validator.evaluation.utils import read_prompt_file
 from validator.utils import comfy_api_gate as api_gate
+from validator.utils.util import retry_on_5xx
 
 
 logger = get_logger(__name__)
@@ -105,7 +104,6 @@ def is_safetensors_available(repo_id: str, model_type: str) -> tuple[bool, str |
     return False, None
 
 
-
 def download_base_model(repo_id: str, model_type: str, safetensors_filename: str | None = None) -> str:
     download_dir = cst.CHECKPOINTS_SAVE_PATH if model_type == ImageModelType.SDXL.value else cst.UNET_SAVE_PATH
     if safetensors_filename:
@@ -140,25 +138,26 @@ def calculate_l2_loss(test_image: Image.Image, generated_image: Image.Image) -> 
     return l2_loss
 
 
-def edit_workflow(payload: dict, edit_elements: Img2ImgPayload, text_guided: bool, model_type: str, is_safetensors: bool = True) -> dict:
+def edit_workflow(
+    payload: dict, edit_elements: Img2ImgPayload, text_guided: bool, model_type: str, is_safetensors: bool = True
+) -> dict:
     if model_type == ImageModelType.SDXL.value:
         if is_safetensors:
             payload["Checkpoint_loader"]["inputs"]["ckpt_name"] = edit_elements.ckpt_name
         else:
             payload["Checkpoint_loader"]["inputs"]["model_path"] = edit_elements.ckpt_name
-        payload["Sampler"]["inputs"]["cfg"] = edit_elements.cfg  
+        payload["Sampler"]["inputs"]["cfg"] = edit_elements.cfg
 
     else:
         payload["Checkpoint_loader"]["inputs"]["unet_name"] = edit_elements.ckpt_name
         payload["CFG"]["inputs"]["guidance"] = edit_elements.cfg
-    
 
     payload["Sampler"]["inputs"]["steps"] = edit_elements.steps
     payload["Sampler"]["inputs"]["denoise"] = edit_elements.denoise
     payload["Image_loader"]["inputs"]["image"] = edit_elements.base_image
     payload["Lora_loader"]["inputs"]["lora_name"] = edit_elements.lora_name
     if text_guided:
-            payload["Prompt"]["inputs"]["text"] = edit_elements.prompt
+        payload["Prompt"]["inputs"]["text"] = edit_elements.prompt
     else:
         payload["Prompt"]["inputs"]["text"] = ""
 
@@ -172,7 +171,11 @@ def inference(image_base64: str, params: Img2ImgPayload, use_prompt: bool = Fals
     params.base_image = image_base64
 
     lora_payload = edit_workflow(
-        payload=params.comfy_template, edit_elements=params, text_guided=use_prompt, model_type=params.model_type, is_safetensors=params.is_safetensors
+        payload=params.comfy_template,
+        edit_elements=params,
+        text_guided=use_prompt,
+        model_type=params.model_type,
+        is_safetensors=params.is_safetensors,
     )
     lora_gen = api_gate.generate(lora_payload)[0]
     lora_gen_loss = calculate_l2_loss(base64_to_image(image_base64), lora_gen)
@@ -235,7 +238,9 @@ def main():
     is_safetensors, safetensors_filename = is_safetensors_available(base_model_repo, model_type)
     # Base model download
     logger.info("Downloading base model")
-    model_name_or_path, model_path = download_base_model(base_model_repo, model_type=model_type, safetensors_filename=safetensors_filename)
+    model_name_or_path, model_path = download_base_model(
+        base_model_repo, model_type=model_type, safetensors_filename=safetensors_filename
+    )
     logger.info("Base model downloaded")
 
     lora_repos = [m.strip() for m in trained_lora_model_repos.split(",") if m.strip()]
@@ -260,7 +265,7 @@ def main():
                 denoise=generation_params["denoise"],
                 comfy_template=lora_comfy_template if is_safetensors else diffusers_comfy_template,
                 is_safetensors=is_safetensors,
-                model_type=model_type
+                model_type=model_type,
             )
 
             loss_data = eval_loop(test_dataset_path, img2img_payload)

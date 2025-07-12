@@ -12,8 +12,8 @@ from PIL import Image
 from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 
-from validator.evaluation.common import retry_on_5xx
 from validator.utils.logging import get_logger
+from validator.utils.util import retry_on_5xx
 
 
 logger = get_logger(__name__)
@@ -23,7 +23,7 @@ hf_api = HfApi()
 def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalLM) -> bool:
     max_retries = 3
     base_delay = 2
-    
+
     for attempt in range(max_retries):
         try:
             original_config = AutoConfig.from_pretrained(original_repo, token=os.environ.get("HUGGINGFACE_TOKEN"))
@@ -31,10 +31,10 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
         except Exception as e:
             if attempt == max_retries - 1:
                 raise e
-            
+
             error_msg = str(e).lower()
             if any(pattern in error_msg for pattern in ["connection", "timeout", "5xx", "too many requests", "couldn't connect"]):
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2**attempt)
                 logger.info(f"HuggingFace connection issue (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {delay}s...")
                 time.sleep(delay)
             else:
@@ -69,10 +69,9 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
                 architecture_same = False
                 break
 
-    logger.info(
-        f"Architecture same: {architecture_same}, Architecture classes match: {architecture_classes_match}"
-    )
+    logger.info(f"Architecture same: {architecture_same}, Architecture classes match: {architecture_classes_match}")
     return architecture_same and architecture_classes_match
+
 
 @retry_on_5xx()
 def check_for_lora(model_id: str) -> bool:
@@ -86,11 +85,10 @@ def check_for_lora(model_id: str) -> bool:
         bool: True if it's a LoRA adapter, False otherwise
     """
     try:
-        return 'adapter_config.json' in hf_api.list_repo_files(model_id)
+        return "adapter_config.json" in hf_api.list_repo_files(model_id)
     except Exception as e:
         logger.error(f"Error checking for LoRA adapters: {e}")
         return False
-
 
 
 def get_default_dataset_config(dataset_name: str) -> str | None:
