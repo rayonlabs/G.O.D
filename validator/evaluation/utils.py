@@ -13,7 +13,7 @@ from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 
 from validator.utils.logging import get_logger
-from validator.utils.util import retry_on_5xx
+from validator.utils.retry_utils import retry_on_5xx
 
 
 logger = get_logger(__name__)

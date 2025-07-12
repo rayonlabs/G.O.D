@@ -18,7 +18,7 @@ from core.config.config_handler import create_dataset_entry
 from validator.core import constants as cst
 from validator.core.models import EvaluationArgs
 from validator.utils.logging import get_logger
-from validator.utils.util import retry_on_5xx
+from validator.utils.retry_utils import retry_on_5xx
 
 
 logger = get_logger(__name__)

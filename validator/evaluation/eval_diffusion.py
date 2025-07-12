@@ -19,7 +19,7 @@ from validator.evaluation.utils import image_to_base64
 from validator.evaluation.utils import list_supported_images
 from validator.evaluation.utils import read_prompt_file
 from validator.utils import comfy_api_gate as api_gate
-from validator.utils.util import retry_on_5xx
+from validator.utils.retry_utils import retry_on_5xx
 
 
 logger = get_logger(__name__)

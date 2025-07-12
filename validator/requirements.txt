@@ -7,8 +7,3 @@ debugpy
 textstat==0.7.7
 langcheck==0.9.0
 detoxify
-redis==5.0.8
-asyncpg==0.29.0
-httpx==0.27.0
-websocket-client
-substrateinterface
