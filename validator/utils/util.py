@@ -25,6 +25,10 @@ from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
 
 
+
+from validator.utils.retry_utils import retry_on_5xx
+from validator.utils.retry_utils import should_retry_model_loading_on_exception
+
 logger = get_logger(__name__)
 
 retry_http_with_backoff = retry(
@@ -182,8 +186,3 @@ def hide_sensitive_data_till_finished(task: AnyTypeTask) -> AnyTypeTask:
         task.training_data = None
         task.ds = "Hidden"
     return task
-
-
-# These functions have been moved to retry_utils.py
-from validator.utils.retry_utils import retry_on_5xx
-from validator.utils.retry_utils import should_retry_model_loading_on_exception
