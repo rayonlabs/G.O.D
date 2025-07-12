@@ -835,3 +835,33 @@ async def get_tournament_full_results(tournament_id: str, psql_db: PSQLDB) -> To
         tournament_id=tournament_id,
         rounds=round_results
     )
+
+
+async def update_eliminated_participants(tournament_id: str, round_id: str, eliminated_hotkeys: list[str], psql_db: PSQLDB):
+    """Update the eliminated_in_round_id field for participants who were eliminated in a specific round"""
+    if not eliminated_hotkeys:
+        return
+    
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+            SET {cst.ELIMINATED_IN_ROUND_ID} = $3
+            WHERE {cst.TOURNAMENT_ID} = $1
+            AND {cst.HOTKEY} = ANY($2::text[])
+        """
+        await connection.execute(query, tournament_id, eliminated_hotkeys, round_id)
+        logger.info(f"Updated elimination status for {len(eliminated_hotkeys)} participants in round {round_id}")
+
+
+async def update_participant_final_positions(tournament_id: str, position_map: dict[str, int], psql_db: PSQLDB):
+    """Update final positions for participants at the end of a tournament"""
+    async with await psql_db.connection() as connection:
+        for hotkey, position in position_map.items():
+            query = f"""
+                UPDATE {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+                SET {cst.FINAL_POSITION} = $3
+                WHERE {cst.TOURNAMENT_ID} = $1
+                AND {cst.HOTKEY} = $2
+            """
+            await connection.execute(query, tournament_id, hotkey, position)
+        logger.info(f"Updated final positions for {len(position_map)} participants in tournament {tournament_id}")

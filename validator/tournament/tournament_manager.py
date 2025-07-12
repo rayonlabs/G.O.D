@@ -45,6 +45,8 @@ from validator.db.sql.tournaments import update_round_status
 from validator.db.sql.tournaments import update_tournament_participant_training_repo
 from validator.db.sql.tournaments import update_tournament_status
 from validator.db.sql.tournaments import update_tournament_winner_hotkey
+from validator.db.sql.tournaments import update_eliminated_participants
+from validator.db.sql.tournaments import update_participant_final_positions
 from validator.tournament import constants as t_cst
 from validator.tournament.task_creator import create_image_tournament_round
 from validator.tournament.task_creator import create_text_tournament_round
