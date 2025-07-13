@@ -50,6 +50,7 @@ from validator.tournament.task_creator import create_image_tournament_round
 from validator.tournament.task_creator import create_text_tournament_round
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_round_winners
+from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import LogContext
 from validator.utils.logging import get_logger
@@ -292,6 +293,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             winner = winners[0]
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}")
+            await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
         else:
             await create_next_round(tournament, completed_round, winners, config, psql_db)
 
