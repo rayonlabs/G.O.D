@@ -37,7 +37,7 @@ def sample_instruct_task():
     return InstructTextRawTask(
         is_organic=False,
         task_id=uuid4(),
-        status=TaskStatus.COMPLETED,
+        status=TaskStatus.SUCCESS,
         model_id="microsoft/DialoGPT-medium",
         ds="tatsu-lab/alpaca",
         account_id=NULL_ACCOUNT_ID,
@@ -170,7 +170,7 @@ if __name__ == "__main__":
         sample_task = InstructTextRawTask(
             is_organic=False,
             task_id=uuid4(),
-            status=TaskStatus.COMPLETED,
+            status=TaskStatus.SUCCESS,
             model_id="microsoft/DialoGPT-medium",
             ds="tatsu-lab/alpaca",
             account_id=NULL_ACCOUNT_ID,
