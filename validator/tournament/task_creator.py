@@ -44,7 +44,7 @@ async def create_text_tournament_round(
     return TournamentRound(round_structure=round_data, tasks=[str(task.task_id) for task in tasks], is_final_round=is_final_round)
 
 
-async def create_image_tournament_round(round_data: Round, config: Config) -> TournamentRound:
+async def create_image_tournament_round(round_data: Round, config: Config, is_final_round: bool = False) -> TournamentRound:
     image_models = _get_image_models(config.keypair)
     tasks = []
 
@@ -58,6 +58,13 @@ async def create_image_tournament_round(round_data: Round, config: Config) -> To
             gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
             logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
             tasks.append(task)
+    elif is_final_round:
+        logger.info("Creating final image tournament (3 image tasks)")
+        for i in range(3):
+            task = await create_synthetic_image_task(config, image_models)
+            gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+            logger.info(f"    Image {i+1}: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
+            tasks.append(task)
     else:
         num_pairs = len(round_data.pairs)
         logger.info(f"Creating image tournament for {num_pairs} knockout pairs (1 per pair)")
@@ -69,7 +76,7 @@ async def create_image_tournament_round(round_data: Round, config: Config) -> To
             logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
             tasks.append(task)
 
-    return TournamentRound(round_structure=round_data, tasks=[str(task.task_id) for task in tasks], is_final_round=False)
+    return TournamentRound(round_structure=round_data, tasks=[str(task.task_id) for task in tasks], is_final_round=is_final_round)
 
 
 async def _create_group_text_tasks(round_data: GroupRound, config: Config, is_final_round: bool) -> list[RawTask]:

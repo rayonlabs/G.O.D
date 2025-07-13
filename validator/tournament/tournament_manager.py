@@ -134,7 +134,7 @@ async def _create_tournament_tasks(
     if tournament_type == TournamentType.TEXT:
         tournament_round = await create_text_tournament_round(round_structure, config, is_final)
     else:
-        tournament_round = await create_image_tournament_round(round_structure, config)
+        tournament_round = await create_image_tournament_round(round_structure, config, is_final)
 
     tasks = []
     if isinstance(round_structure, GroupRound):
