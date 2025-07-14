@@ -1,9 +1,11 @@
 import secrets
 from datetime import datetime
 from enum import Enum
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
@@ -65,6 +67,7 @@ def generate_pair_id(round_id: str, pair_number: int) -> str:
 
 
 def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int) -> GpuRequirement:
+    return GpuRequirement.A100
     if task_type == TaskType.IMAGETASK:
         return GpuRequirement.A100
 
@@ -132,6 +135,13 @@ class TournamentTask(BaseModel):
     pair_id: str | None = None
     gpu_requirement: GpuRequirement | None = None
 
+    @field_validator("task_id", mode="before")
+    @classmethod
+    def ensure_str(cls, v):
+        if isinstance(v, UUID):
+            return str(v)
+        return v
+
 
 class Group(BaseModel):
     member_ids: list[str]
@@ -178,7 +188,6 @@ class DetailedTournamentTaskScore(TournamentTaskScore):
     task_type: TaskType | None = None
 
 
-
 class TournamentRoundResult(BaseModel):
     round_id: str
     round_number: int
@@ -220,4 +229,3 @@ class TournamentDetailsResponse(BaseModel):
     final_scores: list[TournamentScore]
     text_tournament_weight: float
     image_tournament_weight: float
-
