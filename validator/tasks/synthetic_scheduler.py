@@ -1,10 +1,12 @@
 import asyncio
 import random
+import os
 from ast import literal_eval
 from datetime import datetime
 from datetime import timedelta
 from typing import Any
 from typing import AsyncGenerator
+from datasets import load_dataset
 
 from substrateinterface import Keypair
 
@@ -16,6 +18,7 @@ from core.models.utility_models import Message
 from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from core.models.utility_models import FileFormat
 from validator.augmentation.augmentation import load_prompts
 from validator.core.config import Config
 from validator.core.constants import END_OF_REASONING_TAG
@@ -28,6 +31,7 @@ from validator.core.models import Dataset
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
+from validator.core.models import ChatRawTask
 from validator.core.models import RawTask
 from validator.core.models import RewardFunction
 from validator.db.sql.tasks import _get_generic_reward_functions_from_db
@@ -40,6 +44,8 @@ from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
 from validator.utils.reward_functions import validate_reward_function
 from validator.utils.util import retry_with_backoff
+from validator.utils.util import save_json_to_temp_file
+from validator.utils.util import upload_file_to_minio
 
 
 logger = get_logger(__name__)
@@ -152,7 +158,7 @@ async def _get_columns_for_instruct_dataset(
 ) -> InstructTextDatasetColumnsResponse:
     from validator.utils.call_endpoint import call_content_service_fast
     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
-    logger.info(f"Getting columns for dataset {dataset_id}")
+    logger.info(f"Getting columns for dataset {dataset_id} - ACTUAL MAPPING CALL")
 
     response = await call_content_service_fast(url, keypair)
     if not isinstance(response, dict):
@@ -201,9 +207,9 @@ async def get_multiple_datasets(
             try:
                 from validator.utils.call_endpoint import call_content_service_fast
                 url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
-                logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id}")
+                logger.info(f"PRE-VALIDATION: Checking column mapping for dataset {dataset.dataset_id}")
                 await call_content_service_fast(url, keypair)
-                logger.info(f"Dataset {dataset.dataset_id} column mapping validated successfully")
+                logger.info(f"PRE-VALIDATION: Dataset {dataset.dataset_id} column mapping validated successfully")
             except Exception as e:
                 logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
                 failed_ids.add(dataset.dataset_id)
@@ -214,6 +220,63 @@ async def get_multiple_datasets(
 
     logger.info(f"Selected {len(selected_datasets)} unique datasets for task (validated)")
     return selected_datasets
+
+
+def is_chat_format(example: dict[str, Any]) -> bool:
+    return (
+        isinstance(example.get("conversations"), list) and
+        all("from" in msg and "value" in msg for msg in example["conversations"])
+    )
+
+
+def is_evol_format(example: dict[str, Any]) -> bool:
+    return (
+        isinstance(example.get("conversations"), list) and
+        all("role" in msg and "content" in msg for msg in example["conversations"])
+    )
+
+
+async def convert_instruct_dataset_to_chat_format(dataset_id: str, input_field: str, output_field: str) -> list[dict[str, Any]]:
+    dataset = load_dataset(dataset_id, split="train")
+    chat_data = []
+
+    for ex in dataset:
+        if is_chat_format(ex):
+            chat_data.append(ex)
+        elif is_evol_format(ex):
+            convs = []
+            for msg in ex["conversations"]:
+                role = msg["role"]
+                content = msg["content"]
+                if role == "user":
+                    convs.append({cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_USER, cst.STANDARD_CHAT_CONTENT_FIELD: content})
+                elif role == "assistant":
+                    convs.append({cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_ASSISTANT, cst.STANDARD_CHAT_CONTENT_FIELD: content})
+            if convs:
+                chat_data.append({cst.STANDARD_CHAT_MESSAGES_COLUMN: convs})
+        else:
+            inp = ex.get(input_field, "").strip()
+            out = ex.get(output_field, "").strip()
+            if inp and out:
+                chat_data.append({
+                    cst.STANDARD_CHAT_MESSAGES_COLUMN: [
+                        {cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_USER, cst.STANDARD_CHAT_CONTENT_FIELD: inp},
+                        {cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_ASSISTANT, cst.STANDARD_CHAT_CONTENT_FIELD: out}
+                    ]
+                })
+
+    return chat_data
+
+
+async def merge_and_upload_chat_datasets(dataset_ids: list[str], input_field: str, output_field: str) -> str:
+    merged_data = []
+    for ds_id in dataset_ids:
+        merged_data.extend(await convert_instruct_dataset_to_chat_format(ds_id, input_field, output_field))
+    dataset_json, _ = await save_json_to_temp_file(merged_data, prefix="chat_dataset_")
+    uploaded_url = await upload_file_to_minio(dataset_json, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_chat_data.json")
+    if os.path.exists(dataset_json):
+        os.remove(dataset_json)
+    return uploaded_url
 
 
 @retry_with_backoff
@@ -396,7 +459,9 @@ async def create_synthetic_instruct_text_task(
 ) -> RawTask:
     model_id = await anext(models)
 
+    logger.info("INSTRUCT_TASK: Starting dataset selection...")
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
+    logger.info(f"INSTRUCT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
 
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
@@ -421,9 +486,57 @@ async def create_synthetic_instruct_text_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"New task created with {len(selected_datasets)} datasets: {task}")
+    logger.info(f"INSTRUCT_TASK: Successfully created task with {len(selected_datasets)} datasets")
 
     task = await add_task(task, config.psql_db)
+    logger.info(f"INSTRUCT_TASK: Task saved to database with ID: {task.task_id}")
+
+    return task
+
+
+async def create_synthetic_chat_task(
+    config: Config,
+    models: AsyncGenerator[str, None],
+    datasets: AsyncGenerator[Dataset, None],
+) -> RawTask:
+    model_id = await anext(models)
+    
+    logger.info("CHAT_TASK: Starting dataset selection...")
+    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
+    logger.info(f"CHAT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
+    
+    primary_dataset = selected_datasets[0]
+    number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
+    columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
+    
+    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
+
+    chat_dataset_url = await merge_and_upload_chat_datasets(dataset_ids=[d.dataset_id for d in selected_datasets], input_field=columns.field_input, output_field=columns.field_output)
+    
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=number_of_hours)
+
+    task = ChatRawTask(
+        model_id=model_id,
+        ds=chat_dataset_url,
+        chat_template=cst.STANDARD_CHAT_TEMPLATE,
+        chat_column=cst.STANDARD_CHAT_MESSAGES_COLUMN,
+        chat_role_field=cst.STANDARD_CHAT_ROLE_FIELD,
+        chat_content_field=cst.STANDARD_CHAT_CONTENT_FIELD,
+        chat_user_reference=cst.STANDARD_CHAT_ROLE_USER,
+        chat_assistant_reference=cst.STANDARD_CHAT_ROLE_ASSISTANT,
+        status=TaskStatus.PENDING,
+        is_organic=False,
+        file_format=FileFormat.S3,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=number_of_hours,
+        account_id=cst.NULL_ACCOUNT_ID,
+    )
+    logger.info(f"CHAT_TASK: Successfully created task with {len(selected_datasets)} datasets")
+
+    task = await add_task(task, config.psql_db)
+    logger.info(f"CHAT_TASK: Task saved to database with ID: {task.task_id}")
 
     return task
 
@@ -450,17 +563,34 @@ async def _add_new_task_to_network_if_not_enough(
             "Current number of training tasks is less than the maximum amount of concurrent synthetic"
             " jobs we can have. New task incoming..."
         )
+        TASK_TYPES = [
+            (TaskType.INSTRUCTTEXTTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT),
+            (TaskType.IMAGETASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE),
+            (TaskType.DPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO),
+            (TaskType.GRPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO),
+        ]
+        selected_task_type = random.choices(
+            [t[0] for t in TASK_TYPES], 
+            weights=[t[1] for t in TASK_TYPES],
+            k=1
+        )[0]
 
-        selected_val = random.random()
-        if selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT:
-            await create_synthetic_instruct_text_task(config, models, instruct_datasets)
-        elif selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE:
+        if selected_task_type == TaskType.INSTRUCTTEXTTASK:
+            probability_of_chat_task = random.random()
+            if probability_of_chat_task < cst.PERCENTAGE_OF_INSTRUCT_TASKS_THAT_SHOULD_BE_CHAT:
+                logger.info(f"TASK_TYPE_SELECTION: Creating CHAT task (probability: {probability_of_chat_task:.3f})")
+                await create_synthetic_chat_task(config, models, instruct_datasets)
+            else:
+                logger.info(f"TASK_TYPE_SELECTION: Creating INSTRUCT task (probability: {probability_of_chat_task:.3f})")
+                await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+        elif selected_task_type == TaskType.CHATTASK:
+            logger.info("TASK_TYPE_SELECTION: Creating CHAT task (direct selection)")
+            await create_synthetic_chat_task(config, models, instruct_datasets)
+        elif selected_task_type == TaskType.IMAGETASK:
             await create_synthetic_image_task(config, image_models)
-        elif selected_val < (cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT +
-                             cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE +
-                             cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO):
+        elif selected_task_type == TaskType.DPOTASK:
             await create_synthetic_dpo_task(config, models, dpo_datasets)
-        else:
+        elif selected_task_type == TaskType.GRPOTASK:
             await create_synthetic_grpo_task(config, models, instruct_datasets)
 
 

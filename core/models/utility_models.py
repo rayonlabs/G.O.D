@@ -47,6 +47,11 @@ class WinningSubmission(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
 
+class MinerSubmission(BaseModel):
+    repo: str
+    model_hash: str | None = None
+
+
 class MinerTaskResult(BaseModel):
     hotkey: str
     quality_score: float
@@ -103,6 +108,15 @@ class DpoDatasetType(BaseModel):
     prompt_format: str | None = "{prompt}"
     chosen_format: str | None = "{chosen}"
     rejected_format: str | None = "{rejected}"
+    
+
+class ChatTemplateDatasetType(BaseModel):
+    chat_template: str | None = "chatml"
+    chat_column: str | None = "conversations"
+    chat_role_field: str | None = "from"
+    chat_content_field: str | None = "value"
+    chat_user_reference: str | None = "user"
+    chat_assistant_reference: str | None = "assistant"
 
 
 class ImageModelType(str, Enum):
@@ -118,9 +132,12 @@ class Job(BaseModel):
     expected_repo_name: str | None = None
 
 
+TextDatasetType = InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType
+
+
 class TextJob(Job):
     dataset: str
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
+    dataset_type: TextDatasetType
     file_format: FileFormat
 
 
@@ -159,6 +176,7 @@ class TaskType(str, Enum):
     IMAGETASK = "ImageTask"
     DPOTASK = "DpoTask"
     GRPOTASK = "GrpoTask"
+    CHATTASK = "ChatTask"
 
     def __hash__(self):
         return hash(str(self))

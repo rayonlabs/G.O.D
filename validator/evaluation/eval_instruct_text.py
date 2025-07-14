@@ -1,6 +1,8 @@
 import os
 import subprocess
 from pathlib import Path
+from pydantic import TypeAdapter
+import json
 
 import torch
 from accelerate.utils import find_executable_batch_size
@@ -15,6 +17,7 @@ from transformers import TrainingArguments
 
 from validator.core import constants as cst
 from validator.core.models import EvaluationArgs
+from core.models.utility_models import TextDatasetType
 from validator.evaluation.common import ProgressLoggerCallback
 from validator.evaluation.common import _load_and_update_evaluation_config
 from validator.evaluation.common import _log_dataset_and_model_info
@@ -148,6 +151,7 @@ def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
         log_memory_stats()
         finetuned_model.eval()
 
+
         results = evaluate_finetuned_model(
             evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
@@ -170,9 +174,13 @@ def main():
     dataset_type_str = os.environ.get("DATASET_TYPE", "")
     file_format_str = os.environ.get("FILE_FORMAT")
     models_str = os.environ.get("MODELS", "")  # Comma-separated list of LoRA repos
+    
     if not all([dataset, original_model, file_format_str, models_str]):
         logger.error("Missing required environment variables.")
         exit(1)
+
+    model_adapter = TypeAdapter(TextDatasetType)
+    dataset_type = model_adapter.validate_python(json.loads(dataset_type_str))
 
     repos = [m.strip() for m in models_str.split(",") if m.strip()]
 
@@ -181,7 +189,7 @@ def main():
             evaluation_args = EvaluationArgs(
                 dataset=dataset,
                 original_model=original_model,
-                dataset_type=dataset_type_str,
+                dataset_type=dataset_type,
                 file_format=file_format_str,
                 repo=repo
             )

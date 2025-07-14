@@ -16,6 +16,7 @@ from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import InstructTextDatasetType
 from core.utils import download_s3_file
@@ -96,12 +97,12 @@ async def run_evaluation_docker_text(
     dataset: str,
     models: list[str],
     original_model: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType,
     file_format: FileFormat,
     gpu_ids: list[int],
 ) -> DockerEvaluationResults:
 
-    if isinstance(dataset_type, InstructTextDatasetType):
+    if isinstance(dataset_type, (InstructTextDatasetType, ChatTemplateDatasetType)):
         command = ["python", "-m", "validator.evaluation.eval_instruct_text"]
     elif isinstance(dataset_type, DpoDatasetType):
         command = ["python", "-m", "validator.evaluation.eval_dpo"]

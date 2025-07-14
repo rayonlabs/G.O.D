@@ -16,7 +16,7 @@ from validator.core.constants import (
 )
 from validator.core.dependencies import get_config
 from validator.core.miner_models import MinerDetailsResponse, WeightingDetails
-from validator.core.weight_setting import _get_weights_to_set
+from validator.core.weight_setting import _get_leaderboard_data
 from validator.utils.logging import get_logger
 from validator.utils.miner_analytics import build_miner_details_response
 
@@ -42,7 +42,7 @@ async def get_miner_details(
     if not target_node:
         raise HTTPException(status_code=404, detail=f"Node not found for hotkey {hotkey}")
     
-    period_scores, task_results = await _get_weights_to_set(config)
+    period_scores, task_results = await _get_leaderboard_data(config)
     
     weighting_details = WeightingDetails(
         one_day_weight=ONE_DAY_SCORE_WEIGHT,

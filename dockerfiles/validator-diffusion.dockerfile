@@ -34,9 +34,11 @@ ENV BASE_MODEL_FILENAME=""
 ENV LORA_MODEL_FILENAMES=""
 
 WORKDIR /app
-COPY . .
 
+COPY validator/requirements.txt validator/requirements.txt
 RUN pip install -r validator/requirements.txt
+
+COPY . .
 
 RUN echo '#!/bin/bash\n\
 python /app/validator/evaluation/ComfyUI/main.py &\n\
