@@ -98,7 +98,11 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
             random.shuffle(datasets)
 
             for dataset in datasets:
-                logger.info(dataset)
+                logger.info(
+                    f"Dataset: {dataset.dataset_id} (rows: {dataset.num_rows}, "
+                    f"bytes: {dataset.num_bytes_parquet_files}, "
+                    f"dpo_available: {dataset.dpo_available})"
+                )
                 yield dataset
 
         except Exception as e:
@@ -151,6 +155,7 @@ async def _get_columns_for_instruct_dataset(
     keypair: Keypair,
 ) -> InstructTextDatasetColumnsResponse:
     from validator.utils.call_endpoint import call_content_service_fast
+
     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
     logger.info(f"Getting columns for dataset {dataset_id}")
 
@@ -181,7 +186,7 @@ async def get_multiple_datasets(
     datasets_generator: AsyncGenerator[Dataset, None],
     num_datasets: int | None = None,
     task_type: TaskType | None = None,
-    keypair: Keypair | None = None
+    keypair: Keypair | None = None,
 ) -> list[Dataset]:
     """Get multiple unique datasets from the generator, validating column availability."""
     if num_datasets is None:
@@ -200,6 +205,7 @@ async def get_multiple_datasets(
         if task_type and keypair and task_type != TaskType.DPOTASK:
             try:
                 from validator.utils.call_endpoint import call_content_service_fast
+
                 url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
                 logger.info(f"Pre-validating column mapping for dataset {dataset.dataset_id}")
                 await call_content_service_fast(url, keypair)
@@ -229,7 +235,10 @@ async def create_synthetic_dpo_task(
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.DPOTASK, keypair=config.keypair)
 
     primary_dataset = selected_datasets[0]
-    logger.info(f"Primary dataset: {primary_dataset}")
+    logger.info(
+        f"Primary dataset: {primary_dataset.dataset_id} "
+        f"(rows: {primary_dataset.num_rows}, bytes: {primary_dataset.num_bytes_parquet_files})"
+    )
 
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     assert primary_dataset.dpo_rejected_column, "we should have a reject column"
@@ -269,7 +278,7 @@ def process_reward_functions(result: str) -> list[str]:
     """
     valid_reward_functions = []
     try:
-        list_str = result[result.find('['):result.rfind(']') + 1]
+        list_str = result[result.find("[") : result.rfind("]") + 1]
         func_list = literal_eval(list_str)
         if not isinstance(func_list, list):
             raise ValueError("Expected a list")
@@ -295,7 +304,7 @@ async def _generate_generic_reward_functions_from_llm(keypair: Keypair, num_rewa
 
     messages = [
         Message(role=Role.SYSTEM, content=prompts.reward_function_generation_sys),
-        Message(role=Role.USER, content=prompts.reward_function_generation_user.format(num_rewards=num_rewards_with_margin))
+        Message(role=Role.USER, content=prompts.reward_function_generation_user.format(num_rewards=num_rewards_with_margin)),
     ]
 
     payload = convert_to_nineteen_payload(
@@ -311,11 +320,8 @@ async def _generate_generic_reward_functions_from_llm(keypair: Keypair, num_rewa
         valid_reward_functions = process_reward_functions(result)
 
     reward_functions = [
-        RewardFunction(
-            reward_func=valid_reward_function,
-            is_generic=True,
-            reward_weight=1.0
-        ) for valid_reward_function in valid_reward_functions[:num_rewards]
+        RewardFunction(reward_func=valid_reward_function, is_generic=True, reward_weight=1.0)
+        for valid_reward_function in valid_reward_functions[:num_rewards]
     ]
     return reward_functions
 
@@ -343,9 +349,10 @@ def _randomize_reward_weights(reward_functions: list[RewardFunction]) -> list[Re
             reward_func=reward_function.reward_func,
             func_hash=reward_function.func_hash,
             is_generic=reward_function.is_generic,
-            reward_weight=random.uniform(0.0, 10.0)
-            ) for reward_function in reward_functions
-            ]
+            reward_weight=random.uniform(0.0, 10.0),
+        )
+        for reward_function in reward_functions
+    ]
 
 
 @retry_with_backoff
@@ -456,9 +463,11 @@ async def _add_new_task_to_network_if_not_enough(
             await create_synthetic_instruct_text_task(config, models, instruct_datasets)
         elif selected_val < cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE:
             await create_synthetic_image_task(config, image_models)
-        elif selected_val < (cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT +
-                             cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE +
-                             cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO):
+        elif selected_val < (
+            cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
+            + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE
+            + cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
+        ):
             await create_synthetic_dpo_task(config, models, dpo_datasets)
         else:
             await create_synthetic_grpo_task(config, models, instruct_datasets)
