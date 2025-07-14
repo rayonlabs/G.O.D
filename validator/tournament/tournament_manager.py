@@ -46,11 +46,15 @@ from validator.db.sql.tournaments import update_tournament_participant_training_
 from validator.db.sql.tournaments import update_tournament_status
 from validator.db.sql.tournaments import update_tournament_winner_hotkey
 from validator.tournament import constants as t_cst
+from validator.tournament.boss_round_sync import _copy_task_to_general
+from validator.tournament.boss_round_sync import get_synced_task_id
+from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
 from validator.tournament.task_creator import create_image_tournament_round
+from validator.tournament.task_creator import create_new_task_of_same_type
 from validator.tournament.task_creator import create_text_tournament_round
+from validator.tournament.utils import check_if_task_has_zero_scores
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_round_winners
-from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import LogContext
 from validator.utils.logging import get_logger
@@ -281,12 +285,22 @@ async def create_next_round(
         logger.info(f"Created next round {next_round_id}")
 
 
-async def advance_tournament(tournament: TournamentData, completed_round: TournamentRoundData, config, psql_db: PSQLDB):
+async def advance_tournament(tournament: TournamentData, completed_round: TournamentRoundData, config: Config, psql_db: PSQLDB):
     with LogContext(tournament_id=tournament.tournament_id, round_id=completed_round.round_id):
         logger.info(f"Advancing tournament {tournament.tournament_id} from round {completed_round.round_id}")
 
         winners = await get_round_winners(completed_round, psql_db, config)
         logger.info(f"Round winners: {winners}")
+
+        if len(winners) == 0:
+            logger.warning(
+                f"No winners found for round {completed_round.round_id}. Setting base contestant as winner of the tournament."
+            )
+            winner = config.tournament_base_contestant_hotkey
+            await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
+            await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
+            logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
+            return
 
         if len(winners) == 1 and completed_round.is_final_round:
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
@@ -580,7 +594,7 @@ async def process_active_tournaments(config: Config):
                         current_round = rounds[-1]
 
                         if current_round.status == RoundStatus.ACTIVE:
-                            if await check_if_round_is_completed(current_round, config.psql_db):
+                            if await check_if_round_is_completed(current_round, config):
                                 await update_round_status(current_round.round_id, RoundStatus.COMPLETED, config.psql_db)
                                 logger.info(
                                     f"Tournament {tournament.tournament_id} round {current_round.round_id} is completed, advancing..."
@@ -592,11 +606,11 @@ async def process_active_tournaments(config: Config):
             await asyncio.sleep(t_cst.TOURNAMENT_ACTIVE_CYCLE_INTERVAL)
 
 
-async def check_if_round_is_completed(round_data, psql_db: PSQLDB):
+async def check_if_round_is_completed(round_data: TournamentRoundData, config: Config) -> bool:
     """Check if a round should be marked as completed based on task completion."""
     logger.info(f"Checking if round {round_data.round_id} should be completed...")
 
-    round_tasks = await get_tournament_tasks(round_data.round_id, psql_db)
+    round_tasks = await get_tournament_tasks(round_data.round_id, config.psql_db)
 
     if not round_tasks:
         logger.info(f"No tasks found for round {round_data.round_id}")
@@ -604,15 +618,50 @@ async def check_if_round_is_completed(round_data, psql_db: PSQLDB):
 
     all_tasks_completed = True
     for task in round_tasks:
-        task_obj = await task_sql.get_task(task.task_id, psql_db)
+        task_obj = await task_sql.get_task(task.task_id, config.psql_db)
         if task_obj and task_obj.status != TaskStatus.SUCCESS.value:
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
             break
 
-    if all_tasks_completed:
-        logger.info(f"All tasks in round {round_data.round_id} are completed, marking round as completed")
-        return True
-    else:
+    waiting_for_synced_tasks = False
+    if not all_tasks_completed:
         logger.info(f"Round {round_data.round_id} not ready for completion yet")
         return False
+    else:
+        for task in round_tasks:
+            synced_task_id = await get_synced_task_id(task.task_id, config.psql_db)
+            if synced_task_id:
+                synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
+                if synced_task_obj:
+                    if synced_task_obj.status == TaskStatus.SUCCESS.value:
+                        if await check_if_task_has_zero_scores(synced_task_id, config.psql_db):
+                            logger.info(f"Synced task {synced_task_id} also had all zero score. Replacing...")
+                            new_task = await create_new_task_of_same_type(task, config)
+                            new_tournament_task = TournamentTask(
+                                tournament_id=round_data.tournament_id,
+                                round_id=round_data.round_id,
+                                task_id=new_task.task_id,
+                                group_id=task.group_id,
+                                pair_id=task.pair_id,
+                            )
+                            await add_tournament_tasks([new_tournament_task], config.psql_db)
+                            logger.info(f"Created replacement task {new_task.task_id} for round {round_data.round_id}")
+                            await task_sql.delete_task(task.task_id, config.psql_db)
+                            logger.info(f"Deleted original task {task.task_id} from db.")
+                            waiting_for_synced_tasks = True
+                    else:
+                        logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
+                        waiting_for_synced_tasks = True
+            else:
+                if await check_if_task_has_zero_scores(task.task_id, config.psql_db):
+                    logger.info(f"Task {task.task_id} has all zero scores, copying to main cycle to check.")
+                    await _copy_task_to_general(task.task_id, config.psql_db)
+                    waiting_for_synced_tasks = True
+
+    if waiting_for_synced_tasks:
+        logger.info(f"Waiting for synced tasks to complete in round {round_data.round_id}")
+        return False
+    else:
+        logger.info(f"All tasks in round {round_data.round_id} are completed, marking round as completed")
+        return True

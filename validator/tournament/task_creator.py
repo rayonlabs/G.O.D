@@ -5,6 +5,7 @@ from core.models.tournament_models import KnockoutRound
 from core.models.tournament_models import Round
 from core.models.tournament_models import TournamentRound
 from core.models.tournament_models import get_tournament_gpu_requirement
+from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO
@@ -63,7 +64,7 @@ async def create_image_tournament_round(round_data: Round, config: Config, is_fi
         for i in range(3):
             task = await create_synthetic_image_task(config, image_models)
             gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
-            logger.info(f"    Image {i+1}: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
+            logger.info(f"    Image {i + 1}: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
             tasks.append(task)
     else:
         num_pairs = len(round_data.pairs)
@@ -171,3 +172,21 @@ async def _create_probability_based_text_tasks(round_data: KnockoutRound, config
         logger.info(f"    {task_type}: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}")
         tasks.append(task)
     return tasks
+
+
+async def create_new_task_of_same_type(task: RawTask, config: Config) -> RawTask:
+    if task.task_type == TaskType.IMAGETASK:
+        return await create_synthetic_image_task(config, _get_image_models(config.keypair))
+
+    models = _get_text_models(
+        config.keypair, smallest_size_b=task.model_params_count * 0.8, largest_size_b=task.model_params_count * 1.2
+    )
+    instruct_datasets = _get_instruct_text_datasets(config.keypair)
+    dpo_datasets = _get_dpo_datasets(config.keypair)
+
+    if task.task_type == TaskType.INSTRUCTTEXTTASK:
+        return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+    elif task.task_type == TaskType.DPOTASK:
+        return await create_synthetic_dpo_task(config, models, dpo_datasets)
+    elif task.task_type == TaskType.GRPOTASK:
+        return await create_synthetic_grpo_task(config, models, instruct_datasets)

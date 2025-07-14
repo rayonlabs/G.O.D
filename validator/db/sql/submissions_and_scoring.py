@@ -617,7 +617,7 @@ async def get_task_winner(task_id: UUID, psql_db: PSQLDB) -> str | None:
             FROM {cst.TASK_NODES_TABLE}
             WHERE {cst.TASK_ID} = $1
             AND {cst.NETUID} = $2
-            AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+            AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL AND {cst.TASK_NODE_QUALITY_SCORE} > 0
             ORDER BY {cst.TASK_NODE_QUALITY_SCORE} ASC  -- Lower score (loss) is better
             LIMIT 1
         """
@@ -644,7 +644,7 @@ async def get_task_winners(task_ids: list[UUID], psql_db: PSQLDB) -> dict[str, s
                 FROM {cst.TASK_NODES_TABLE}
                 WHERE {cst.TASK_ID} = ANY($1)
                 AND {cst.NETUID} = $2
-                AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+                AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL AND {cst.TASK_NODE_QUALITY_SCORE} > 0
             )
             SELECT task_id, {cst.HOTKEY}
             FROM task_winners
