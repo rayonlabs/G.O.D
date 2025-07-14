@@ -18,6 +18,8 @@ from pydantic import ValidationError
 import core.constants as cst
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
+from core.models.utility_models import MinerSubmission
+from validator.utils.hash_verification import calculate_model_hash
 from core.models.payload_models import TrainingRepoResponse
 from core.models.payload_models import TrainRequestGrpo
 from core.models.payload_models import TrainRequestImage
@@ -139,22 +141,29 @@ async def tune_model_diffusion(
     return {"message": "Training job enqueued.", "task_id": job.job_id}
 
 
-async def get_latest_model_submission(task_id: str) -> str:
+async def get_latest_model_submission(task_id: str) -> MinerSubmission:
     try:
-        # Temporary work around in order to not change the vali a lot
-        # Could send the task type from vali instead of matching file names
         config_filename = f"{task_id}.yml"
         config_path = os.path.join(cst.CONFIG_DIR, config_filename)
+        repo_id = None
+        
         if os.path.exists(config_path):
             with open(config_path, "r") as file:
                 config_data = yaml.safe_load(file)
-                return config_data.get("hub_model_id", None)
+                repo_id = config_data.get("hub_model_id", None)
         else:
             config_filename = f"{task_id}.toml"
             config_path = os.path.join(cst.CONFIG_DIR, config_filename)
             with open(config_path, "r") as file:
                 config_data = toml.load(file)
-                return config_data.get("huggingface_repo_id", None)
+                repo_id = config_data.get("huggingface_repo_id", None)
+
+        if repo_id is None:
+            raise HTTPException(status_code=404, detail=f"No model submission found for task {task_id}")
+
+        model_hash = calculate_model_hash(repo_id)
+        
+        return MinerSubmission(repo=repo_id, model_hash=model_hash)
 
     except FileNotFoundError as e:
         logger.error(f"No submission found for task {task_id}: {str(e)}")
@@ -177,10 +186,10 @@ async def task_offer(
         # You will want to optimise this as a miner
         global current_job_finish_time
         current_time = datetime.now()
-        if request.task_type not in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+        if request.task_type not in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK]:
             return MinerTaskResponse(
                 message=f"This endpoint only accepts text tasks: "
-                f"{TaskType.INSTRUCTTEXTTASK}, {TaskType.DPOTASK} and {TaskType.GRPOTASK}",
+                f"{TaskType.INSTRUCTTEXTTASK}, {TaskType.DPOTASK}, {TaskType.GRPOTASK} and {TaskType.CHATTASK}",
                 accepted=False,
             )
 
@@ -275,7 +284,7 @@ def factory_router() -> APIRouter:
         get_latest_model_submission,
         tags=["Subnet"],
         methods=["GET"],
-        response_model=str,
+        response_model=MinerSubmission,
         summary="Get Latest Model Submission",
         description="Retrieve the latest model submission for a given task ID",
         dependencies=[Depends(blacklist_low_stake), Depends(verify_get_request)],

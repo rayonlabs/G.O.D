@@ -32,7 +32,7 @@ from validator.core.miner_models import (
     TaskSubmissionResult,
     MinerPerformanceMetrics
 )
-from validator.core.weight_setting import get_miner_performance_breakdown, _get_weights_to_set
+from validator.core.weight_setting import get_miner_performance_breakdown, _get_leaderboard_data
 from validator.evaluation.scoring import get_task_work_score, calculate_adjusted_task_score
 from validator.utils.logging import get_logger
 from core.models.utility_models import TaskType
@@ -286,7 +286,7 @@ async def cache_all_miner_performance(config: Config) -> None:
     
     try:
         all_nodes: List[Node] = fetch_nodes.get_nodes_for_netuid(config.substrate, config.netuid)
-        period_scores, task_results = await _get_weights_to_set(config)
+        period_scores, task_results = await _get_leaderboard_data(config)
         
         weighting_details = WeightingDetails(
             one_day_weight=ONE_DAY_SCORE_WEIGHT,

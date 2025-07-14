@@ -15,6 +15,7 @@ from pydantic import model_validator
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructTextDatasetType
@@ -160,6 +161,22 @@ class InstructTextRawTask(RawTask):
     task_type: TaskType = TaskType.INSTRUCTTEXTTASK
 
 
+class ChatRawTask(RawTask):
+    """
+    Chat task data as stored in the database. It expand the RawTask with fields from the chat_tasks table.
+    """
+
+    chat_template: str | None = "chatml"
+    chat_column: str | None = "conversations"
+    chat_role_field: str | None = "from"
+    chat_content_field: str | None = "value"
+    chat_user_reference: str | None = "user"
+    chat_assistant_reference: str | None = "assistant"
+    synthetic_data: str | None = None
+    file_format: FileFormat = FileFormat.HF
+    task_type: TaskType = TaskType.CHATTASK
+
+
 class ImageRawTask(RawTask):
     """
     Image task data as stored in the database. It expand the RawTask with fields from the ImageTask table.
@@ -195,6 +212,10 @@ class DpoTask(DpoRawTask):
 
 
 class GrpoTask(GrpoRawTask):
+    trained_model_repository: str | None = None
+
+
+class ChatTask(ChatRawTask):
     trained_model_repository: str | None = None
 
 
@@ -264,6 +285,7 @@ class Submission(BaseModel):
     task_id: UUID
     hotkey: str
     repo: str
+    model_hash: str | None = None
     created_on: datetime | None = None
     updated_on: datetime | None = None
 
@@ -284,7 +306,7 @@ class MinerResultsText(MinerResults):
 
     @field_validator("task_type")
     def validate_task_type(cls, v):
-        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK}:
+        if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK}:
             raise ValueError("Must be INSTRUCTTEXTTASK, DPOTASK or GRPOTASK")
         return v
 
@@ -435,6 +457,10 @@ class GrpoTaskWithHotkeyDetails(GrpoTask):
     hotkey_details: list[HotkeyDetails]
 
 
+class ChatTaskWithHotkeyDetails(ChatTask):
+    hotkey_details: list[HotkeyDetails]
+
+
 class Dataset(BaseModel):
     dataset_id: str
     num_rows: int
@@ -448,7 +474,7 @@ class Dataset(BaseModel):
 class EvaluationArgs(BaseModel):
     dataset: str
     original_model: str
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType
     file_format: FileFormat
     repo: str
 
@@ -475,9 +501,9 @@ class EvaluationArgs(BaseModel):
 
 
 # Type aliases for common task type groupings
-AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask
+AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask | ChatRawTask
 AnyTypeRawTask = AnyTextTypeRawTask | ImageRawTask
-AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask
+AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask | ChatTask
 AnyTypeTaskWithHotkeyDetails = (
-    InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails
+    InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails | ChatTaskWithHotkeyDetails
 )
