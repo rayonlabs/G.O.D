@@ -84,7 +84,6 @@ async def run_trainer_container_image(
     dataset_zip: str,
     model_type: str,
     expected_repo_name: str,
-    hours_to_complete: int=1,
     gpu_ids: list[int]=[0]
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
@@ -94,7 +93,6 @@ async def run_trainer_container_image(
         "--model", model,
         "--dataset-zip", dataset_zip,
         "--model-type", model_type,
-        "--hours-to-complete", str(hours_to_complete),
         "--expected-repo-name", expected_repo_name
     ]
 
@@ -136,7 +134,6 @@ async def run_trainer_container_text(
     task_type: TaskType,
     file_format: FileFormat,
     expected_repo_name: str,
-    hours_to_complete: int=1,
     gpu_ids: list[int]=[0]
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
@@ -153,7 +150,6 @@ async def run_trainer_container_text(
         "--dataset-type", json.dumps(dataset_type.model_dump()),
         "--task-type", task_type,
         "--file-format", file_format,
-        "--hours-to-complete", str(hours_to_complete),
         "--expected-repo-name", expected_repo_name
     ]
 
@@ -340,7 +336,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
     success = False
     container = None
     tag = None
-    timeout_seconds = training_data.hours_to_complete * 3600
+    timeout_seconds = int(training_data.hours_to_complete * 3600)
     task_type = get_task_type(task)
     logger.info(f"Task Type: {task_type}")
 
@@ -388,7 +384,6 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     dataset_zip=training_data.dataset_zip,
                     model_type=training_data.model_type,
                     expected_repo_name=training_data.expected_repo_name,
-                    hours_to_complete=training_data.hours_to_complete,
                     gpu_ids=task.gpu_ids,
                 ),
                 timeout=60
@@ -404,7 +399,6 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     task_type=task_type,
                     file_format=training_data.file_format,
                     expected_repo_name=training_data.expected_repo_name,
-                    hours_to_complete=training_data.hours_to_complete,
                     gpu_ids=task.gpu_ids,
                 ),
                 timeout=60
