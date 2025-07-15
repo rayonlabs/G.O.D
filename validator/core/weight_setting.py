@@ -501,7 +501,7 @@ async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]
     for tournament_type, weight in tournament_weights.items():
         performance_diff = None
         
-        latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
+        latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type.value)
         if latest_tournament:
             if await check_boss_round_synthetic_tasks_complete(latest_tournament.tournament_id, psql_db):
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
@@ -520,8 +520,12 @@ async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]
         if performance_diff is not None:
             weighted_performance_diff += performance_diff * weight
             total_weight += weight
+        elif latest_tournament:
+            logger.info(f"No synthetic task data available for {tournament_type} tournaments, assuming perfect performance (0% difference)")
+            weighted_performance_diff += 0.0 * weight
+            total_weight += weight
         else:
-            logger.info(f"No usable {tournament_type} tournament data, will burn this tournament allocation")
+            logger.info(f"No {tournament_type} tournament data available, will burn this tournament allocation")
     
     if total_weight == 0:
         logger.info("No tournament data available, burning entire tournament allocation")
