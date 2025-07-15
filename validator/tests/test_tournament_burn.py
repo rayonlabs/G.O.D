@@ -116,7 +116,7 @@ class TestTournamentBurn:
     @pytest.mark.asyncio
     async def test_calculate_performance_difference_no_tasks(self, mock_psql_db):
         """Test performance difference calculation with no task pairs"""
-        with pytest.mock.patch('validator.core.weight_setting.get_boss_round_winner_task_pairs', return_value=[]):
+        with patch('validator.core.weight_setting.get_boss_round_winner_task_pairs', return_value=[]):
             result = await calculate_performance_difference("test_tournament", mock_psql_db)
             assert result == 0.0
     
@@ -137,7 +137,7 @@ class TestTournamentBurn:
             TaskScore(hotkey="winner_hotkey", test_loss=0.6, synth_loss=0.5, quality_score=0.7)
         ]
         
-        with pytest.mock.patch('validator.core.weight_setting.get_boss_round_winner_task_pairs', return_value=[task_pair]):
+        with patch('validator.core.weight_setting.get_boss_round_winner_task_pairs', return_value=[task_pair]):
             with pytest.mock.patch('validator.core.weight_setting.get_task_scores_as_models', side_effect=[tournament_scores, synthetic_scores]):
                 result = await calculate_performance_difference("test_tournament", mock_psql_db)
                 
@@ -163,7 +163,7 @@ class TestTournamentBurn:
             TaskScore(hotkey="winner_hotkey", test_loss=0.6, synth_loss=0.5, quality_score=0.7)
         ]
         
-        with pytest.mock.patch('validator.core.weight_setting.get_boss_round_winner_task_pairs', return_value=[task_pair]):
+        with patch('validator.core.weight_setting.get_boss_round_winner_task_pairs', return_value=[task_pair]):
             with pytest.mock.patch('validator.core.weight_setting.get_task_scores_as_models', side_effect=[tournament_scores, synthetic_scores]):
                 result = await calculate_performance_difference("test_tournament", mock_psql_db)
                 
