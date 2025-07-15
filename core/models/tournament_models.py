@@ -229,3 +229,22 @@ class TournamentDetailsResponse(BaseModel):
     final_scores: list[TournamentScore]
     text_tournament_weight: float
     image_tournament_weight: float
+
+
+class BossRoundTaskCompletion(BaseModel):
+    total_synth_tasks: int
+    completed_synth_tasks: int
+
+
+class BossRoundTaskPair(BaseModel):
+    tournament_task_id: str
+    synthetic_task_id: str
+    winner_hotkey: str
+    task_type: str
+
+
+class TaskScore(BaseModel):
+    hotkey: str
+    test_loss: float
+    synth_loss: float
+    quality_score: float
