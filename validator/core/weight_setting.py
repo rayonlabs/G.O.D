@@ -501,7 +501,7 @@ async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]
     for tournament_type, weight in tournament_weights.items():
         performance_diff = None
         
-        latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type.value)
+        latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
         if latest_tournament:
             if await check_boss_round_synthetic_tasks_complete(latest_tournament.tournament_id, psql_db):
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
