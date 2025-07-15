@@ -46,7 +46,7 @@ class TestTournamentBurn:
         assert tournament_weight == cts.BASE_TOURNAMENT_WEIGHT  # 0.5
         assert regular_weight == cts.BASE_REGULAR_WEIGHT  # 0.25
         assert burn_weight == cts.MIN_BURN_WEIGHT  # 0.25
-        assert tournament_weight + regular_weight + burn_weight == 1.0
+        assert abs(tournament_weight + regular_weight + burn_weight - 1.0) < 0.0001
     
     def test_calculate_weight_redistribution_with_burn(self):
         """Test weight redistribution with performance difference causing burn"""
@@ -62,7 +62,7 @@ class TestTournamentBurn:
         assert tournament_weight == 0.25
         assert regular_weight == 0.375
         assert burn_weight == 0.375
-        assert tournament_weight + regular_weight + burn_weight == 1.0
+        assert abs(tournament_weight + regular_weight + burn_weight - 1.0) < 0.0001
     
     def test_calculate_weight_redistribution_max_burn(self):
         """Test weight redistribution with maximum burn scenario"""
@@ -78,7 +78,7 @@ class TestTournamentBurn:
         assert abs(tournament_weight - 0.05) < 0.0001
         assert regular_weight == 0.475
         assert burn_weight == 0.475
-        assert tournament_weight + regular_weight + burn_weight == 1.0
+        assert abs(tournament_weight + regular_weight + burn_weight - 1.0) < 0.0001
     
     @pytest.mark.asyncio
     async def test_check_boss_round_synthetic_tasks_complete_true(self, mock_psql_db):
@@ -208,7 +208,7 @@ class TestTournamentBurn:
         mock_latest_tournament.tournament_id = "latest_tournament"
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_latest_tournament):
-            with pytest.mock.patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', side_effect=[False, True]):
+            with patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', side_effect=[False, True]):
                 with patch('validator.core.weight_setting.get_previous_completed_tournament', return_value="previous_tournament"):
                     with patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.05):
                         tournament_weight, regular_weight, burn_weight = await get_active_tournament_burn_data(mock_psql_db)
