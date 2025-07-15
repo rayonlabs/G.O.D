@@ -87,7 +87,7 @@ class TestTournamentBurn:
         
         mock_completion = BossRoundTaskCompletion(total_synth_tasks=5, completed_synth_tasks=5)
         
-        with pytest.mock.patch('validator.core.weight_setting.get_boss_round_synthetic_task_completion', return_value=mock_completion):
+        with patch('validator.core.weight_setting.get_boss_round_synthetic_task_completion', return_value=mock_completion):
             result = await check_boss_round_synthetic_tasks_complete("test_tournament", mock_psql_db)
             assert result is True
     
@@ -98,7 +98,7 @@ class TestTournamentBurn:
         
         mock_completion = BossRoundTaskCompletion(total_synth_tasks=5, completed_synth_tasks=3)
         
-        with pytest.mock.patch('validator.core.weight_setting.get_boss_round_synthetic_task_completion', return_value=mock_completion):
+        with patch('validator.core.weight_setting.get_boss_round_synthetic_task_completion', return_value=mock_completion):
             result = await check_boss_round_synthetic_tasks_complete("test_tournament", mock_psql_db)
             assert result is False
     
@@ -109,7 +109,7 @@ class TestTournamentBurn:
         
         mock_completion = BossRoundTaskCompletion(total_synth_tasks=0, completed_synth_tasks=0)
         
-        with pytest.mock.patch('validator.core.weight_setting.get_boss_round_synthetic_task_completion', return_value=mock_completion):
+        with patch('validator.core.weight_setting.get_boss_round_synthetic_task_completion', return_value=mock_completion):
             result = await check_boss_round_synthetic_tasks_complete("test_tournament", mock_psql_db)
             assert result is False
     
