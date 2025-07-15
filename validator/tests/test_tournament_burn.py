@@ -138,7 +138,7 @@ class TestTournamentBurn:
         ]
         
         with patch('validator.core.weight_setting.get_boss_round_winner_task_pairs', return_value=[task_pair]):
-            with pytest.mock.patch('validator.core.weight_setting.get_task_scores_as_models', side_effect=[tournament_scores, synthetic_scores]):
+            with patch('validator.core.weight_setting.get_task_scores_as_models', side_effect=[tournament_scores, synthetic_scores]):
                 result = await calculate_performance_difference("test_tournament", mock_psql_db)
                 
                 # For GRPO: tournament_score=0.8, synthetic_score=0.6
@@ -164,7 +164,7 @@ class TestTournamentBurn:
         ]
         
         with patch('validator.core.weight_setting.get_boss_round_winner_task_pairs', return_value=[task_pair]):
-            with pytest.mock.patch('validator.core.weight_setting.get_task_scores_as_models', side_effect=[tournament_scores, synthetic_scores]):
+            with patch('validator.core.weight_setting.get_task_scores_as_models', side_effect=[tournament_scores, synthetic_scores]):
                 result = await calculate_performance_difference("test_tournament", mock_psql_db)
                 
                 # For DPO: tournament_score=0.4, synthetic_score=0.6
@@ -175,7 +175,7 @@ class TestTournamentBurn:
     @pytest.mark.asyncio
     async def test_get_active_tournament_burn_data_no_tournaments(self, mock_psql_db):
         """Test burn data calculation with no tournament data"""
-        with pytest.mock.patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=None):
+        with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=None):
             tournament_weight, regular_weight, burn_weight = await get_active_tournament_burn_data(mock_psql_db)
             
             # Should burn entire tournament allocation
@@ -189,7 +189,7 @@ class TestTournamentBurn:
         mock_tournament = MagicMock()
         mock_tournament.tournament_id = "test_tournament"
         
-        with pytest.mock.patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_tournament):
+        with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_tournament):
             with pytest.mock.patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', return_value=True):
                 with pytest.mock.patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.1):
                     tournament_weight, regular_weight, burn_weight = await get_active_tournament_burn_data(mock_psql_db)
@@ -207,7 +207,7 @@ class TestTournamentBurn:
         mock_latest_tournament = MagicMock()
         mock_latest_tournament.tournament_id = "latest_tournament"
         
-        with pytest.mock.patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_latest_tournament):
+        with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_latest_tournament):
             with pytest.mock.patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', side_effect=[False, True]):
                 with pytest.mock.patch('validator.core.weight_setting.get_previous_completed_tournament', return_value="previous_tournament"):
                     with pytest.mock.patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.05):
