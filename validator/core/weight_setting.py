@@ -15,7 +15,7 @@ from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since, get_aggregate_scores_for_leaderboard_since, get_all_scores_and_losses_for_task
 from validator.evaluation.tournament_scoring import get_tournament_weights
 from validator.db.sql.tournaments import get_latest_completed_tournament, get_tournament_full_results
-from validator.db.sql.boss_round_burn import get_boss_round_synthetic_task_completion, get_boss_round_winner_task_pairs, get_task_scores_as_models, get_previous_completed_tournament
+from validator.db.sql.tournament_performance import get_boss_round_synthetic_task_completion, get_boss_round_winner_task_pairs, get_task_scores_as_models, get_previous_completed_tournament
 
 
 load_dotenv(os.getenv("ENV_FILE", ".vali.env"))

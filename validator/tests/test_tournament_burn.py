@@ -83,7 +83,7 @@ class TestTournamentBurn:
     @pytest.mark.asyncio
     async def test_check_boss_round_synthetic_tasks_complete_true(self, mock_psql_db):
         """Test boss round synthetic tasks completion check - completed"""
-        from validator.db.sql.boss_round_burn import get_boss_round_synthetic_task_completion
+        from validator.db.sql.tournament_performance import get_boss_round_synthetic_task_completion
         
         mock_completion = BossRoundTaskCompletion(total_synth_tasks=5, completed_synth_tasks=5)
         
@@ -94,7 +94,7 @@ class TestTournamentBurn:
     @pytest.mark.asyncio
     async def test_check_boss_round_synthetic_tasks_complete_false(self, mock_psql_db):
         """Test boss round synthetic tasks completion check - incomplete"""
-        from validator.db.sql.boss_round_burn import get_boss_round_synthetic_task_completion
+        from validator.db.sql.tournament_performance import get_boss_round_synthetic_task_completion
         
         mock_completion = BossRoundTaskCompletion(total_synth_tasks=5, completed_synth_tasks=3)
         
@@ -105,7 +105,7 @@ class TestTournamentBurn:
     @pytest.mark.asyncio
     async def test_check_boss_round_synthetic_tasks_complete_none(self, mock_psql_db):
         """Test boss round synthetic tasks completion check - no tasks"""
-        from validator.db.sql.boss_round_burn import get_boss_round_synthetic_task_completion
+        from validator.db.sql.tournament_performance import get_boss_round_synthetic_task_completion
         
         mock_completion = BossRoundTaskCompletion(total_synth_tasks=0, completed_synth_tasks=0)
         
