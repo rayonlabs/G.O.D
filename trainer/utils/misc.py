@@ -11,12 +11,7 @@ from core.models.utility_models import GPUType
 from trainer.tasks import get_running_tasks
 
 
-def clone_repo(
-    repo_url: str,
-    parent_dir: str,
-    branch: str = None,
-    commit_hash: str = None
-) -> str:
+def clone_repo(repo_url: str, parent_dir: str, branch: str = None, commit_hash: str = None) -> str:
     repo_name = os.path.basename(urlparse(repo_url).path)
     if repo_name.endswith(".git"):
         repo_name = repo_name[:-4]
@@ -40,13 +35,15 @@ def clone_repo(
                 print(f"Repository already exists at {repo_dir}. Skipping clone.")
                 return repo_dir
 
-            print(f"Repository exists but is not on correct branch/commit. Deleting and recloning...")
+            print("Repository exists but is not on correct branch/commit. Deleting and recloning...")
             import shutil
+
             shutil.rmtree(repo_dir)
 
         except (InvalidGitRepositoryError, Exception) as e:
             print(f"Directory exists but is not a valid Git repo. Removing: {e}")
             import shutil
+
             shutil.rmtree(repo_dir)
 
     try:
@@ -58,6 +55,7 @@ def clone_repo(
             repo = Repo.clone_from(repo_url, repo_dir)
 
         if commit_hash:
+            repo.git.fetch("--all")
             print(f"Checking out commit {commit_hash}...")
             repo.git.checkout(commit_hash)
 
@@ -97,11 +95,10 @@ async def get_gpu_info() -> list[GPUInfo]:
             for gpu_id in task.gpu_ids:
                 busy_gpu_ids.add(gpu_id)
 
-
     gpu_infos: list[GPUInfo] = []
     for gpu_id in range(device_count):
         if gpu_id not in index_to_type:
-            continue 
+            continue
 
         gpu_info = GPUInfo(
             gpu_id=gpu_id,
