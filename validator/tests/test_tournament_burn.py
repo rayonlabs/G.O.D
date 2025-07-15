@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from core.models.tournament_models import BossRoundTaskCompletion, BossRoundTaskPair, TaskScore, TournamentType
 from core.models.utility_models import TaskType
 from validator.core.weight_setting import (
@@ -75,7 +75,7 @@ class TestTournamentBurn:
         # Regular weight = 0.25 + (0.45 / 2) = 0.475
         # Burn weight = 0.25 + (0.45 / 2) = 0.475
         
-        assert tournament_weight == 0.05
+        assert abs(tournament_weight - 0.05) < 0.0001
         assert regular_weight == 0.475
         assert burn_weight == 0.475
         assert tournament_weight + regular_weight + burn_weight == 1.0

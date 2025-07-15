@@ -61,14 +61,25 @@ async def get_task_scores_as_models(task_id: str, psql_db: PSQLDB) -> list[TaskS
 
 async def get_previous_completed_tournament(psql_db: PSQLDB, tournament_type: str, exclude_tournament_id: str = None) -> str | None:
     async with await psql_db.connection() as connection:
-        query = """
-            SELECT tournament_id
-            FROM tournaments
-            WHERE tournament_type = $1
-            AND status = 'completed'
-            AND ($2 IS NULL OR tournament_id != $2)
-            ORDER BY created_at DESC
-            LIMIT 1
-        """
-        result = await connection.fetchrow(query, tournament_type, exclude_tournament_id)
+        if exclude_tournament_id:
+            query = """
+                SELECT tournament_id
+                FROM tournaments
+                WHERE tournament_type = $1
+                AND status = 'completed'
+                AND tournament_id != $2
+                ORDER BY created_at DESC
+                LIMIT 1
+            """
+            result = await connection.fetchrow(query, tournament_type, exclude_tournament_id)
+        else:
+            query = """
+                SELECT tournament_id
+                FROM tournaments
+                WHERE tournament_type = $1
+                AND status = 'completed'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """
+            result = await connection.fetchrow(query, tournament_type)
         return result['tournament_id'] if result else None
