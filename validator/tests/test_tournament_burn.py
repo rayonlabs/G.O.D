@@ -208,7 +208,7 @@ class TestTournamentBurn:
         mock_latest_tournament.tournament_id = "latest_tournament"
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_latest_tournament):
-            with patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', side_effect=[False, True]):
+            with patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', side_effect=[False, True, False, True]):
                 with patch('validator.core.weight_setting.get_previous_completed_tournament', return_value="previous_tournament"):
                     with patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.05):
                         tournament_weight, regular_weight, burn_weight = await get_active_tournament_burn_data(mock_psql_db)
