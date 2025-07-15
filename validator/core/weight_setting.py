@@ -12,8 +12,10 @@ from dotenv import load_dotenv
 
 from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
-from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since, get_aggregate_scores_for_leaderboard_since
+from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since, get_aggregate_scores_for_leaderboard_since, get_all_scores_and_losses_for_task
 from validator.evaluation.tournament_scoring import get_tournament_weights
+from validator.db.sql.tournaments import get_latest_completed_tournament, get_tournament_full_results
+from validator.db.sql.boss_round_burn import get_boss_round_synthetic_task_completion, get_boss_round_winner_task_pairs, get_task_scores_as_models, get_previous_completed_tournament
 
 
 load_dotenv(os.getenv("ENV_FILE", ".vali.env"))
@@ -418,6 +420,121 @@ def get_miner_performance_breakdown(hotkey: str, task_results: list[TaskResults]
     return breakdown
 
 
+async def check_boss_round_synthetic_tasks_complete(tournament_id: str, psql_db) -> bool:
+    completion_data = await get_boss_round_synthetic_task_completion(tournament_id, psql_db)
+    return completion_data.total_synth_tasks > 0 and completion_data.total_synth_tasks == completion_data.completed_synth_tasks
+
+
+async def calculate_performance_difference(tournament_id: str, psql_db) -> float:
+    task_pairs = await get_boss_round_winner_task_pairs(tournament_id, psql_db)
+    
+    if not task_pairs:
+        return 0.0
+    
+    performance_differences = []
+    
+    for task_pair in task_pairs:
+        tournament_scores = await get_task_scores_as_models(task_pair.tournament_task_id, psql_db)
+        synthetic_scores = await get_task_scores_as_models(task_pair.synthetic_task_id, psql_db)
+        
+        winner_tournament_score = None
+        winner_synthetic_score = None
+        
+        for score in tournament_scores:
+            if score.hotkey == task_pair.winner_hotkey:
+                winner_tournament_score = max(score.test_loss, score.synth_loss)
+                break
+        
+        for score in synthetic_scores:
+            if score.hotkey == task_pair.winner_hotkey:
+                winner_synthetic_score = max(score.test_loss, score.synth_loss)
+                break
+        
+        if winner_tournament_score is not None and winner_synthetic_score is not None:
+            task_type = TaskType(task_pair.task_type)
+            if task_type == TaskType.GRPOTASK:
+                if winner_synthetic_score > 0:
+                    performance_diff = (winner_tournament_score - winner_synthetic_score) / winner_synthetic_score
+                else:
+                    performance_diff = 0.0
+            else:
+                if winner_tournament_score > 0:
+                    performance_diff = (winner_synthetic_score - winner_tournament_score) / winner_tournament_score
+                else:
+                    performance_diff = 0.0
+            
+            performance_differences.append(performance_diff)
+    
+    return sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
+
+
+def calculate_burn_proportion(performance_diff: float) -> float:
+    if performance_diff <= 0:
+        return 0.0
+    
+    burn_reduction = min(cts.MAX_BURN_REDUCTION, performance_diff * cts.BURN_REDUCTION_RATE)
+    return burn_reduction
+
+
+def calculate_weight_redistribution(performance_diff: float) -> tuple[float, float, float]:
+    burn_reduction = calculate_burn_proportion(performance_diff)
+    tournament_burn = cts.BASE_TOURNAMENT_WEIGHT * burn_reduction
+    
+    tournament_weight = cts.BASE_TOURNAMENT_WEIGHT - tournament_burn
+    regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn / 2)
+    burn_weight = cts.MIN_BURN_WEIGHT + (tournament_burn / 2)
+    
+    return tournament_weight, regular_weight, burn_weight
+
+
+async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]:
+    from core.models.tournament_models import TournamentType
+    
+    weighted_performance_diff = 0.0
+    total_weight = 0.0
+    
+    tournament_weights = {
+        TournamentType.TEXT: cts.TOURNAMENT_TEXT_WEIGHT,
+        TournamentType.IMAGE: cts.TOURNAMENT_IMAGE_WEIGHT
+    }
+    
+    for tournament_type, weight in tournament_weights.items():
+        performance_diff = None
+        
+        latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
+        if latest_tournament:
+            if await check_boss_round_synthetic_tasks_complete(latest_tournament.tournament_id, psql_db):
+                performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
+                logger.info(f"Using latest {tournament_type} tournament {latest_tournament.tournament_id} performance: {performance_diff}")
+            else:
+                previous_tournament_id = await get_previous_completed_tournament(psql_db, tournament_type, latest_tournament.tournament_id)
+                if previous_tournament_id:
+                    if await check_boss_round_synthetic_tasks_complete(previous_tournament_id, psql_db):
+                        performance_diff = await calculate_performance_difference(previous_tournament_id, psql_db)
+                        logger.info(f"Using previous {tournament_type} tournament {previous_tournament_id} performance: {performance_diff}")
+                    else:
+                        logger.info(f"Previous {tournament_type} tournament {previous_tournament_id} synthetic tasks not complete")
+                else:
+                    logger.info(f"No previous {tournament_type} tournament found")
+        
+        if performance_diff is not None:
+            weighted_performance_diff += performance_diff * weight
+            total_weight += weight
+        else:
+            logger.info(f"No usable {tournament_type} tournament data, will burn this tournament allocation")
+    
+    if total_weight == 0:
+        logger.info("No tournament data available, burning entire tournament allocation")
+        tournament_burn = cts.BASE_TOURNAMENT_WEIGHT
+        tournament_weight = 0.0
+        regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn / 2)
+        burn_weight = cts.MIN_BURN_WEIGHT + (tournament_burn / 2)
+        return tournament_weight, regular_weight, burn_weight
+    
+    average_performance_diff = weighted_performance_diff / total_weight
+    return calculate_weight_redistribution(average_performance_diff)
+
+
 async def get_node_weights_from_period_scores(
     substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore], psql_db
 ) -> tuple[list[int], list[float]]:
@@ -431,16 +548,21 @@ async def get_node_weights_from_period_scores(
     all_node_ids = [node.node_id for node in all_nodes]
     all_node_weights = [0.0 for _ in all_nodes]
 
+    logger.info("=== BURN CALCULATION ===")
+    tournament_weight_multiplier, regular_weight_multiplier, burn_weight = await get_active_tournament_burn_data(psql_db)
+    logger.info(f"Weight distribution: tournament={tournament_weight_multiplier:.6f}, regular={regular_weight_multiplier:.6f}, burn={burn_weight:.6f}")
+    
     logger.info("=== NODE WEIGHT CALCULATIONS ===")
     for node_result in node_results:
         if node_result.normalised_score is not None:
             node_id = hotkey_to_node_id.get(node_result.hotkey)
             if node_id is not None:
-                contribution = node_result.normalised_score * node_result.weight_multiplier
+                contribution = node_result.normalised_score * node_result.weight_multiplier * regular_weight_multiplier
                 all_node_weights[node_id] = all_node_weights[node_id] + contribution
                 logger.info(f"Node ID {node_id} (hotkey: {node_result.hotkey[:8]}...): "
                            f"normalized_score={node_result.normalised_score:.6f}, "
                            f"weight_multiplier={node_result.weight_multiplier:.6f}, "
+                           f"regular_multiplier={regular_weight_multiplier:.6f}, "
                            f"contribution={contribution:.6f}, "
                            f"total_weight={all_node_weights[node_id]:.6f}")
     
@@ -452,14 +574,24 @@ async def get_node_weights_from_period_scores(
         for hotkey, weight in tournament_weights.items():
             node_id = hotkey_to_node_id.get(hotkey)
             if node_id is not None:
-                tournament_contribution = weight * cts.WEIGHT_FOR_TOURN
+                tournament_contribution = weight * tournament_weight_multiplier
                 all_node_weights[node_id] = all_node_weights[node_id] + tournament_contribution
                 logger.info(f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
                            f"tournament_weight={weight:.6f}, "
+                           f"tournament_multiplier={tournament_weight_multiplier:.6f}, "
                            f"tournament_contribution={tournament_contribution:.6f}, "
                            f"total_weight={all_node_weights[node_id]:.6f}")
     else:
         logger.info("No tournament weights found")
+    
+    logger.info("=== BURN WEIGHT ALLOCATION ===")
+    burn_node_id = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)
+    if burn_node_id is not None:
+        all_node_weights[burn_node_id] = burn_weight
+        logger.info(f"Burn Node ID {burn_node_id} (hotkey: {cts.EMISSION_BURN_HOTKEY[:8]}...): "
+                   f"burn_weight={burn_weight:.6f}")
+    else:
+        logger.warning(f"Burn hotkey {cts.EMISSION_BURN_HOTKEY} not found in network nodes")
     
     logger.info("=== FINAL NODE WEIGHTS ===")
     for node_id, weight in enumerate(all_node_weights):
