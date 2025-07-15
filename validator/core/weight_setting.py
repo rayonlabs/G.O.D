@@ -507,7 +507,7 @@ async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
                 logger.info(f"Using latest {tournament_type} tournament {latest_tournament.tournament_id} performance: {performance_diff}")
             else:
-                previous_tournament_id = await get_previous_completed_tournament(psql_db, tournament_type.value, latest_tournament.tournament_id)
+                previous_tournament_id = await get_previous_completed_tournament(psql_db, tournament_type, latest_tournament.tournament_id)
                 if previous_tournament_id:
                     if await check_boss_round_synthetic_tasks_complete(previous_tournament_id, psql_db):
                         performance_diff = await calculate_performance_difference(previous_tournament_id, psql_db)
