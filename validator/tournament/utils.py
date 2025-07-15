@@ -16,6 +16,7 @@ from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
+from validator.db.sql.auditing import get_task_with_hotkey_details
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.submissions_and_scoring import get_task_winners
@@ -253,7 +254,8 @@ async def get_knockout_winners(
 
             miner_results = await get_task_results_for_ranking(task.task_id, psql_db)
             if not miner_results:
-                logger.warning(f"No valid results for boss round task {task.task_id}")
+                logger.warning(f"No valid results for boss round task {task.task_id}. Winner is base contestant.")
+                task_winners.append(boss_hotkey)
                 continue
 
             ranked_results = calculate_miner_ranking_and_scores(miner_results)
@@ -356,3 +358,12 @@ async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLD
         return await get_knockout_winners(completed_round, round_tasks, psql_db, config)
     else:
         return await get_group_winners(completed_round, round_tasks, psql_db)
+
+
+async def check_if_task_has_zero_scores(task_id: str, psql_db: PSQLDB) -> bool:
+    """Check if a task has all zero quality scores."""
+    task_details = await get_task_with_hotkey_details(task_id, psql_db)
+
+    return all(
+        hotkey_detail.quality_score == 0 or hotkey_detail.quality_score is None for hotkey_detail in task_details.hotkey_details
+    )

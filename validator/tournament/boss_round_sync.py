@@ -10,51 +10,41 @@ from core.models.tournament_models import TournamentRoundData
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.db.database import PSQLDB
-from validator.db.sql.tasks import add_task, get_task
+from validator.db.sql.tasks import add_task
+from validator.db.sql.tasks import get_task
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.utils.logging import get_logger
 
+
 logger = get_logger(__name__)
 
+
 async def sync_boss_round_tasks_to_general(
-    tournament_id: str, 
-    completed_round: TournamentRoundData, 
-    psql_db: PSQLDB, 
-    config: Config
+    tournament_id: str, completed_round: TournamentRoundData, psql_db: PSQLDB, config: Config
 ):
     logger.info(f"Starting boss round task sync for tournament {tournament_id}, round {completed_round.round_id}")
-    
+
     boss_round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
     if not boss_round_tasks:
         logger.warning(f"No tasks found for boss round {completed_round.round_id}")
         return
-    
+
     logger.info(f"Found {len(boss_round_tasks)} boss round tasks to sync")
-    
+
     for tournament_task in boss_round_tasks:
         delay_hours = random.randint(1, 4)
-        asyncio.create_task(_schedule_task_sync(
-            tournament_task.task_id,
-            delay_hours,
-            psql_db,
-            config
-        ))
+        asyncio.create_task(_schedule_task_sync(tournament_task.task_id, delay_hours, psql_db, config))
         logger.info(f"Scheduled task {tournament_task.task_id} to sync in {delay_hours} hours")
 
 
-async def _schedule_task_sync(
-    tournament_task_id: str,
-    delay_hours: int,
-    psql_db: PSQLDB,
-    config: Config
-):
+async def _schedule_task_sync(tournament_task_id: str, delay_hours: int, psql_db: PSQLDB, config: Config):
     delay_seconds = delay_hours * 3600
     logger.info(f"Waiting {delay_hours} hours before syncing task {tournament_task_id}")
-    
+
     await asyncio.sleep(delay_seconds)
-    
+
     try:
-        await _copy_task_to_general(tournament_task_id, psql_db, config)
+        await _copy_task_to_general(tournament_task_id, psql_db)
     except Exception as e:
         logger.error(f"Failed to sync task {tournament_task_id}: {e}")
 
@@ -62,15 +52,14 @@ async def _schedule_task_sync(
 async def _copy_task_to_general(
     tournament_task_id: str,
     psql_db: PSQLDB,
-    config: Config
 ):
     original_task = await get_task(tournament_task_id, psql_db)
     if not original_task:
         logger.error(f"Could not find original task {tournament_task_id}")
         return
-    
+
     logger.info(f"Copying task {tournament_task_id} to general side")
-    
+
     general_task = original_task.model_copy()
     general_task.is_organic = False
     general_task.task_id = uuid4()
@@ -88,10 +77,10 @@ async def _copy_task_to_general(
     general_task.termination_at = None
     general_task.completed_at = None
     general_task.n_eval_attempts = 0
-    
+
     await add_task(general_task, psql_db)
     await _record_task_sync_link(tournament_task_id, general_task.task_id, psql_db)
-    
+
     logger.info(f"Successfully synced task {tournament_task_id} -> {general_task.task_id}")
 
 
@@ -105,3 +94,13 @@ async def _record_task_sync_link(tournament_task_id: str, general_task_id: str, 
         """
         await connection.execute(query, tournament_task_id, general_task_id)
         logger.info(f"Recorded sync link: {tournament_task_id} -> {general_task_id}")
+
+
+async def get_synced_task_id(tournament_task_id: str, psql_db: PSQLDB) -> str | None:
+    # returns the general task id if the task is synced, otherwise None
+    async with await psql_db.connection() as connection:
+        query = """
+            SELECT general_task_id FROM boss_round_synced_tasks WHERE tournament_task_id = $1
+        """
+        general_task_id = await connection.fetchval(query, tournament_task_id)
+        return general_task_id
