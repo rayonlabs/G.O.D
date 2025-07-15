@@ -190,8 +190,8 @@ class TestTournamentBurn:
         mock_tournament.tournament_id = "test_tournament"
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_tournament):
-            with pytest.mock.patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', return_value=True):
-                with pytest.mock.patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.1):
+            with patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', return_value=True):
+                with patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.1):
                     tournament_weight, regular_weight, burn_weight = await get_active_tournament_burn_data(mock_psql_db)
                     
                     # Should use performance difference of 0.1 for both text and image
@@ -210,7 +210,7 @@ class TestTournamentBurn:
         with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_latest_tournament):
             with pytest.mock.patch('validator.core.weight_setting.check_boss_round_synthetic_tasks_complete', side_effect=[False, True]):
                 with pytest.mock.patch('validator.core.weight_setting.get_previous_completed_tournament', return_value="previous_tournament"):
-                    with pytest.mock.patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.05):
+                    with patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.05):
                         tournament_weight, regular_weight, burn_weight = await get_active_tournament_burn_data(mock_psql_db)
                         
                         # Should use previous tournament data with 0.05 performance difference
