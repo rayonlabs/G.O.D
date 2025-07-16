@@ -1,7 +1,6 @@
 import math
 import os
 import re
-import requests
 from datetime import datetime
 
 import numpy as np
@@ -12,17 +11,15 @@ import validator.core.constants as cts
 from core.models.payload_models import DiffusionLosses
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
-from core.models.utility_models import DpoDatasetType
-from core.models.utility_models import TextDatasetType
 from core.models.utility_models import ChatTemplateDatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
-from core.models.utility_models import MinerSubmission
 from core.models.utility_models import InstructTextDatasetType
-from validator.utils.hash_verification import verify_model_hash
+from core.models.utility_models import MinerSubmission
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from core.models.utility_models import TextDatasetType
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.models import AnyTypeRawTask
@@ -44,6 +41,7 @@ from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
+from validator.utils.hash_verification import verify_model_hash
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
@@ -472,7 +470,7 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> Min
     url = f"{cts.SUBMISSION_ENDPOINT}{task_id}"
     try:
         response = await process_non_stream_fiber_get(url, config, miner)
-        
+
         if isinstance(response, dict):
             return MinerSubmission(repo=response["repo"], model_hash=response.get("model_hash"))
         else:
@@ -480,7 +478,7 @@ async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> Min
             if repo == "None":
                 return None
             return MinerSubmission(repo=repo, model_hash=None)
-            
+
     except Exception as e:
         logger.error(f"Failed to get submission for miner {miner.hotkey}: {e}")
         return None
@@ -688,16 +686,15 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
     return loss_groups
 
 
-
 def get_hf_upload_timestamp(repo_url: str) -> datetime | None:
     try:
         repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
         api = HfApi()
-        
+
         model_info = api.model_info(repo_path, timeout=5.0)
         if model_info and model_info.lastModified:
             return model_info.lastModified
-            
+
     except Exception as e:
         logger.error(f"Failed to get upload timestamp for {repo_url}: {e}")
     return None
@@ -710,24 +707,24 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
     for losses, submissions in loss_groups.items():
         if len(submissions) > 1:
             logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
-            
+
             submissions_with_hashes = []
             submissions_without_hashes = []
-            
+
             for hotkey, repo in submissions:
                 result = next(r for r in task_results if r.hotkey == hotkey)
                 if result.submission and result.submission.model_hash:
                     submissions_with_hashes.append((hotkey, repo, result.submission.model_hash))
                 else:
                     submissions_without_hashes.append((hotkey, repo))
-            
+
             # If we have both hashed and non-hashed submissions, prioritize hashed ones
             if submissions_with_hashes and submissions_without_hashes:
-                logger.warning(f"Mixed hash/no-hash submissions with identical losses - prioritizing hashed submissions")
+                logger.warning("Mixed hash/no-hash submissions with identical losses - prioritizing hashed submissions")
                 for hotkey, repo in submissions_without_hashes:
                     keep_submission[hotkey] = False
                     logger.warning(f"Marking duplicate {hotkey} (no hash provided, hashed submission exists)")
-            
+
             # Handle multiple submissions with hashes - group by hash
             if len(submissions_with_hashes) > 1:
                 hash_groups = {}
@@ -735,21 +732,22 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
                     if model_hash not in hash_groups:
                         hash_groups[model_hash] = []
                     hash_groups[model_hash].append((hotkey, repo))
-                
+
                 for model_hash, hash_submissions in hash_groups.items():
                     if len(hash_submissions) > 1:
                         logger.warning(f"Found {len(hash_submissions)} submissions with identical hash {model_hash[:16]}...")
                         for hotkey, repo in hash_submissions[1:]:
                             keep_submission[hotkey] = False
                             logger.warning(f"Marking duplicate {hotkey} (identical model hash)")
-            
+
             # Handle multiple submissions without hashes (only if no hashed submissions exist)
             if len(submissions_without_hashes) > 1 and not submissions_with_hashes:
-                logger.warning(f"Multiple submissions without hashes, using timestamp fallback")
-                submissions_with_timestamps = [(hotkey, repo, get_hf_upload_timestamp(repo)) 
-                                             for hotkey, repo in submissions_without_hashes]
+                logger.warning("Multiple submissions without hashes, using timestamp fallback")
+                submissions_with_timestamps = [
+                    (hotkey, repo, get_hf_upload_timestamp(repo)) for hotkey, repo in submissions_without_hashes
+                ]
                 valid_timestamps = [(h, r, t) for h, r, t in submissions_with_timestamps if t]
-                
+
                 if valid_timestamps:
                     earliest_hotkey = min(valid_timestamps, key=lambda x: x[2])[0]
                     for hotkey, repo in submissions_without_hashes:
@@ -804,7 +802,7 @@ async def process_miners_pool(
     is_tournament_task = await is_task_in_tournament(str(task.task_id), config.psql_db)
     miner_repos: dict[str, str] = {}
     failed_results = []
-    
+
     for miner in miners:
         with LogContext(miner_hotkey=miner.hotkey):
             expected_name = await get_expected_repo_name(task.task_id, miner.hotkey, config.psql_db)
@@ -825,11 +823,11 @@ async def process_miners_pool(
                                 f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
                                 f"but expected {expected_name}. Marking as failed."
                             )
-                            failed_results.append(_create_failed_miner_result(
-                                miner.hotkey, 
-                                score_reason="Repository name mismatch", 
-                                task_type=task.task_type
-                            ))
+                            failed_results.append(
+                                _create_failed_miner_result(
+                                    miner.hotkey, score_reason="Repository name mismatch", task_type=task.task_type
+                                )
+                            )
                             continue
 
                         # Hash verification
@@ -838,18 +836,18 @@ async def process_miners_pool(
                                 logger.info(f"Hash verification passed for miner {miner.hotkey}")
                             else:
                                 logger.warning(f"Hash verification failed for miner {miner.hotkey}. Marking as failed.")
-                                failed_results.append(_create_failed_miner_result(
-                                    miner.hotkey, 
-                                    score_reason="Hash verification failed", 
-                                    task_type=task.task_type
-                                ))
+                                failed_results.append(
+                                    _create_failed_miner_result(
+                                        miner.hotkey, score_reason="Hash verification failed", task_type=task.task_type
+                                    )
+                                )
                                 continue
                         else:
                             logger.info(f"No hash provided by miner {miner.hotkey}, skipping verification")
 
                         miner_repos[miner.hotkey] = submission.repo
-                    
-            logger.info(f"Found repo {submission.repo if submission else None} for miner {miner.hotkey}")
+
+                logger.info(f"Found repo {submission.repo if submission else None} for miner {miner.hotkey}")
 
     results = failed_results + [
         _create_failed_miner_result(miner.hotkey, score_reason="Invalid/No repo submitted", task_type=task.task_type)
