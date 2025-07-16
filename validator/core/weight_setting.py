@@ -481,8 +481,8 @@ def calculate_weight_redistribution(performance_diff: float) -> tuple[float, flo
     tournament_burn = cts.BASE_TOURNAMENT_WEIGHT * burn_reduction
     
     tournament_weight = cts.BASE_TOURNAMENT_WEIGHT - tournament_burn
-    regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn / 2)
-    burn_weight = cts.MIN_BURN_WEIGHT + (tournament_burn / 2)
+    regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT)
+    burn_weight = cts.MIN_BURN_WEIGHT + (tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
     
     return tournament_weight, regular_weight, burn_weight
 

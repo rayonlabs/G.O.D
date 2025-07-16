@@ -266,6 +266,9 @@ MAX_BURN_REDUCTION = 0.9
 BASE_REGULAR_WEIGHT = 0.25
 BASE_TOURNAMENT_WEIGHT = 0.5
 
+# Emission distribution when performance diff occurs
+LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25
+
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
 CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data
