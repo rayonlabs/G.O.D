@@ -620,6 +620,20 @@ async def reset_all_gpu_availability(config: Config):
         logger.error(f"Error resetting GPU availability: {str(e)}")
 
 
+async def update_all_trainers_gpu_availability_cycle(config: Config):
+    """
+    Periodically update GPU availability for all trainers.
+    """
+    while True:
+        try:
+            logger.info("Periodically updating all trainers' GPU availability")
+            await _update_all_trainers_gpu_availability(config)
+        except Exception as e:
+            logger.error(f"Error in periodic GPU availability update: {str(e)}", exc_info=True)
+        finally:
+            await asyncio.sleep(cst.PERIODIC_GPU_AVAILABILITY_UPDATE_INTERVAL)
+
+
 async def run_tournament_orchestrator_cycles():
     config = load_config()
     await try_db_connections(config)
@@ -630,6 +644,7 @@ async def run_tournament_orchestrator_cycles():
         process_pending_tournament_tasks(config),
         monitor_training_tasks(config),
         move_completed_tasks_to_preevaluation(config),
+        update_all_trainers_gpu_availability_cycle(config),
     )
 
 
