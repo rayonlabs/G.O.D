@@ -10,7 +10,7 @@ from validator.utils.logging import get_logger
 from trainer.image_manager import start_training_task
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
-from trainer.tasks import start_task, load_task_history, get_task, log_task, complete_task
+from trainer.tasks import start_task, load_task_history, get_task, log_task, complete_task, monitor_stale_tasks
 from core.models.utility_models import GPUInfo
 
 
@@ -22,6 +22,7 @@ GET_GPU_AVAILABILITY_ENDPOINT = "/v1/trainer/get_gpu_availability"
 TASK_DETAILS_ENDPOINT= "/v1/trainer/{task_id}"
 
 load_task_history()
+asyncio.create_task(monitor_stale_tasks())
 
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:

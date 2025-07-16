@@ -1,4 +1,6 @@
 import json
+import asyncio
+from datetime import timedelta
 from datetime import datetime
 from pathlib import Path
 
@@ -8,6 +10,25 @@ from trainer import constants as cst
 
 task_history: list[TrainerTaskLog] = []
 TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
+
+
+async def monitor_stale_tasks(poll_interval_seconds: int = 10):
+    while True:
+        now = datetime.utcnow()
+        for task in task_history:
+            if task.status != TaskStatus.TRAINING or not task.started_at:
+                continue
+
+            timeout = timedelta(hours=task.training_data.hours_to_complete) + timedelta(minutes=cst.STALE_TASK_GRACE_MINUTES)
+            deadline = task.started_at + timeout
+
+            if now > deadline:
+                task.status = TaskStatus.FAILURE
+                task.finished_at = now
+                task.logs.append(f"[{now.isoformat()}] Task marked as FAILED due to timeout.")
+                save_task_history()
+
+        await asyncio.sleep(poll_interval_seconds)
 
 def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
     log_entry = TrainerTaskLog(

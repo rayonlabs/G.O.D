@@ -363,7 +363,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             message = f"Download container failed with error: {exc}"
             log_task(training_data.task_id, task.hotkey, message)
             complete_task(training_data.task_id, task.hotkey, success=False)
-            raise exc
+            raise RuntimeError(f"Downloader container failed: {exc}")
 
         tag = await asyncio.to_thread(
             build_docker_image,
