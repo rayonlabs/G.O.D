@@ -355,46 +355,52 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
 
 
 async def populate_tournament_participants(tournament_id: str, config: Config, psql_db: PSQLDB) -> int:
-    logger.info(f"Populating participants for tournament {tournament_id}")
+    logger.info(f"Populating participants for tournament {tournament_id} with minimum requirement of {cst.MIN_MINERS_FOR_TOURN} miners")
 
-    # Get tournament to determine its type
     tournament = await get_tournament(tournament_id, psql_db)
     if not tournament:
         logger.error(f"Tournament {tournament_id} not found")
         return 0
 
-    all_nodes = await get_all_nodes(psql_db)
+    while True:
+        all_nodes = await get_all_nodes(psql_db)
 
-    eligible_nodes = [node for node in all_nodes if node.hotkey != config.tournament_base_contestant_hotkey]
+        eligible_nodes = [node for node in all_nodes if node.hotkey != config.tournament_base_contestant_hotkey]
 
-    if not eligible_nodes:
-        logger.warning("No eligible nodes found for tournament")
-        return 0
+        if not eligible_nodes:
+            logger.warning("No eligible nodes found for tournament")
+            return 0
 
-    logger.info(f"Found {len(eligible_nodes)} eligible nodes in database")
+        logger.info(f"Found {len(eligible_nodes)} eligible nodes in database")
 
-    successful_participants = 0
+        miners_that_accept_and_give_repos = 0
 
-    batch_size = t_cst.TOURNAMENT_PARTICIPANT_PING_BATCH_SIZE
-    for i in range(0, len(eligible_nodes), batch_size):
-        batch = eligible_nodes[i : i + batch_size]
-        logger.info(
-            f"Processing batch {i // batch_size + 1}/{(len(eligible_nodes) + batch_size - 1) // batch_size} with {len(batch)} nodes"
-        )
+        batch_size = t_cst.TOURNAMENT_PARTICIPANT_PING_BATCH_SIZE
+        for i in range(0, len(eligible_nodes), batch_size):
+            batch = eligible_nodes[i : i + batch_size]
+            logger.info(
+                f"Processing batch {i // batch_size + 1}/{(len(eligible_nodes) + batch_size - 1) // batch_size} with {len(batch)} nodes"
+            )
 
-        batch_results = await asyncio.gather(
-            *[_process_single_node(node, tournament_id, tournament.tournament_type, config, psql_db) for node in batch],
-            return_exceptions=True,
-        )
+            batch_results = await asyncio.gather(
+                *[_process_single_node(node, tournament_id, tournament.tournament_type, config, psql_db) for node in batch],
+                return_exceptions=True,
+            )
 
-        for result in batch_results:
-            if isinstance(result, Exception):
-                logger.warning(f"Exception in batch processing: {result}")
-            elif result:
-                successful_participants += 1
+            for result in batch_results:
+                if isinstance(result, Exception):
+                    logger.warning(f"Exception in batch processing: {result}")
+                elif result:
+                    miners_that_accept_and_give_repos += 1
 
-    logger.info(f"Successfully populated {successful_participants} participants for tournament {tournament_id}")
-    return successful_participants
+        logger.info(f"Successfully populated {miners_that_accept_and_give_repos} participants for tournament {tournament_id}")
+        
+        if miners_that_accept_and_give_repos >= cst.MIN_MINERS_FOR_TOURN:
+            logger.info(f"Tournament {tournament_id} has sufficient miners ({miners_that_accept_and_give_repos} >= {cst.MIN_MINERS_FOR_TOURN})")
+            return miners_that_accept_and_give_repos
+        
+        logger.warning(f"Tournament {tournament_id} only has {miners_that_accept_and_give_repos} miners that accept and give repos, need at least {cst.MIN_MINERS_FOR_TOURN}. Waiting 30 minutes and retrying...")
+        await asyncio.sleep(30 * 60)
 
 
 async def _process_single_node(
