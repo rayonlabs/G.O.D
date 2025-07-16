@@ -367,11 +367,7 @@ async def get_aggregate_scores_for_leaderboard_since(start_time: datetime, psql_
         return results
 
 
-async def get_organic_proportion_since(
-    start_time: datetime,
-    psql_db: PSQLDB,
-    task_type: str | None = None
-) -> float:
+async def get_organic_proportion_since(start_time: datetime, psql_db: PSQLDB, task_type: str | None = None) -> float:
     """
     Get the proportion of organic tasks since the given start time.
     Optionally filter by task_type.
@@ -677,7 +673,7 @@ async def get_task_winner(task_id: UUID, psql_db: PSQLDB) -> str | None:
             WHERE {cst.TASK_ID} = $1
             AND {cst.NETUID} = $2
             AND {cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL AND {cst.TASK_NODE_QUALITY_SCORE} > 0
-            ORDER BY {cst.TASK_NODE_QUALITY_SCORE} ASC  -- Lower score (loss) is better
+            ORDER BY {cst.TASK_NODE_QUALITY_SCORE} DESC  -- Higher score is better
             LIMIT 1
         """
         return await connection.fetchval(query, task_id, NETUID)
@@ -698,7 +694,7 @@ async def get_task_winners(task_ids: list[UUID], psql_db: PSQLDB) -> dict[str, s
                     {cst.TASK_NODE_QUALITY_SCORE},
                     ROW_NUMBER() OVER (
                         PARTITION BY {cst.TASK_ID} 
-                        ORDER BY {cst.TASK_NODE_QUALITY_SCORE} ASC  -- Lower score (loss) is better
+                        ORDER BY {cst.TASK_NODE_QUALITY_SCORE} DESC  -- Higher score is better
                     ) as rn
                 FROM {cst.TASK_NODES_TABLE}
                 WHERE {cst.TASK_ID} = ANY($1)
