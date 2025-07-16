@@ -18,6 +18,7 @@ from core.models.tournament_models import TournamentType
 from core.models.tournament_models import TournamentResults
 from core.models.tournament_models import TournamentRoundResult
 from core.models.tournament_models import TournamentTaskScore
+from core.models.tournament_models import TournamentSummary
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import TrainerInfo
 from core.models.utility_models import TrainingStatus
@@ -722,6 +723,62 @@ async def get_tournament_training_repo_and_commit(hotkey: str, psql_db: PSQLDB) 
         if result:
             return result[cst.TRAINING_REPO], result[cst.TRAINING_COMMIT_HASH]
         return None, None
+
+
+async def get_all_tournaments_summary(
+    psql_db: PSQLDB, 
+    from_date: datetime | None = None, 
+    to_date: datetime | None = None
+) -> list[TournamentSummary]:
+    """Get summary of all tournaments with optional date filtering by completion date"""
+    async with await psql_db.connection() as connection:
+        base_query = f"""
+            SELECT 
+                t.{cst.TOURNAMENT_ID},
+                t.{cst.TOURNAMENT_TYPE},
+                t.{cst.CREATED_AT} as date_started,
+                t.{cst.UPDATED_AT} as date_completed,
+                t.{cst.WINNER_HOTKEY},
+                tp.{cst.TRAINING_REPO} as winner_repo
+            FROM {cst.TOURNAMENTS_TABLE} t
+            LEFT JOIN {cst.TOURNAMENT_PARTICIPANTS_TABLE} tp 
+                ON t.{cst.TOURNAMENT_ID} = tp.{cst.TOURNAMENT_ID} 
+                AND t.{cst.WINNER_HOTKEY} = tp.{cst.HOTKEY}
+        """
+        
+        conditions = []
+        params = []
+        param_count = 0
+        
+        if from_date:
+            param_count += 1
+            conditions.append(f"t.{cst.CREATED_AT} >= ${param_count}")
+            params.append(from_date)
+            
+        if to_date:
+            param_count += 1
+            conditions.append(f"t.{cst.CREATED_AT} <= ${param_count}")
+            params.append(to_date)
+        
+        if conditions:
+            base_query += " WHERE " + " AND ".join(conditions)
+            
+        base_query += f" ORDER BY t.{cst.CREATED_AT} DESC"
+        
+        results = await connection.fetch(base_query, *params)
+        
+        tournaments = []
+        for row in results:
+            tournaments.append(TournamentSummary(
+                tournament_id=row[cst.TOURNAMENT_ID],
+                tournament_type=TournamentType(row[cst.TOURNAMENT_TYPE]),
+                date_started=row['date_started'],
+                date_completed=row['date_completed'],
+                winner_hotkey=row[cst.WINNER_HOTKEY],
+                winner_repo=row['winner_repo']
+            ))
+        
+        return tournaments
 
 
 async def get_tournament_training_stats(psql_db: PSQLDB) -> dict:

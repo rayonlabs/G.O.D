@@ -248,3 +248,12 @@ class TaskScore(BaseModel):
     test_loss: float
     synth_loss: float
     quality_score: float
+
+
+class TournamentSummary(BaseModel):
+    tournament_id: str
+    tournament_type: TournamentType
+    date_started: datetime
+    date_completed: datetime | None
+    winner_hotkey: str | None
+    winner_repo: str | None

@@ -1,8 +1,10 @@
+from datetime import datetime
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 
-from core.models.tournament_models import TournamentDetailsResponse, DetailedTournamentRoundResult, DetailedTournamentTaskScore, TournamentScore, TournamentType
+from core.models.tournament_models import TournamentDetailsResponse, DetailedTournamentRoundResult, DetailedTournamentTaskScore, TournamentScore, TournamentType, TournamentSummary
 from validator.core.config import Config
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
@@ -16,6 +18,7 @@ logger = get_logger(__name__)
 
 GET_TOURNAMENT_DETAILS_ENDPOINT = "/v1/tournaments/{tournament_id}/details"
 GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT = "/v1/tournaments/latest/details"
+GET_ALL_TOURNAMENTS_ENDPOINT = "/v1/tournaments"
 
 
 async def get_tournament_details(
@@ -128,8 +131,24 @@ async def get_latest_tournaments_details(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+async def get_all_tournaments(
+    config: Config = Depends(get_config),
+    from_date: datetime | None = Query(None, description="Filter tournaments from this date (inclusive)"),
+    to_date: datetime | None = Query(None, description="Filter tournaments to this date (inclusive)")
+) -> list[TournamentSummary]:
+    try:
+        tournaments = await tournament_sql.get_all_tournaments_summary(config.psql_db, from_date, to_date)
+        logger.info(f"Retrieved {len(tournaments)} tournaments")
+        return tournaments
+        
+    except Exception as e:
+        logger.error(f"Error retrieving tournaments: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Tournament Analytics"], dependencies=[Depends(get_api_key)])
+    router.add_api_route(GET_ALL_TOURNAMENTS_ENDPOINT, get_all_tournaments, methods=["GET"])
     router.add_api_route(GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT, get_latest_tournaments_details, methods=["GET"])
     router.add_api_route(GET_TOURNAMENT_DETAILS_ENDPOINT, get_tournament_details, methods=["GET"])
     return router
