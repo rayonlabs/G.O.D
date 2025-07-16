@@ -55,14 +55,24 @@ async def create_image_tournament_round(round_data: Round, config: Config, is_fi
 
         for i, group in enumerate(round_data.groups):
             logger.info(f"  Group {i + 1} ({len(group.member_ids)} members):")
-            task = await create_synthetic_image_task(config, image_models)
+            while True:
+                try:
+                    task = await create_synthetic_image_task(config, image_models)
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to create image task for group {i + 1}: {e}. Retrying...")
             gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
             logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
             tasks.append(task)
     elif is_final_round:
         logger.info("Creating final image tournament (3 image tasks)")
         for i in range(3):
-            task = await create_synthetic_image_task(config, image_models)
+            while True:
+                try:
+                    task = await create_synthetic_image_task(config, image_models)
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to create final image task {i + 1}: {e}. Retrying...")
             gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
             logger.info(f"    Image {i + 1}: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
             tasks.append(task)
@@ -72,7 +82,12 @@ async def create_image_tournament_round(round_data: Round, config: Config, is_fi
 
         for i, pair in enumerate(round_data.pairs):
             logger.info(f"  Pair {i + 1} ({pair[0]} vs {pair[1]}):")
-            task = await create_synthetic_image_task(config, image_models)
+            while True:
+                try:
+                    task = await create_synthetic_image_task(config, image_models)
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to create image task for pair {i + 1}: {e}. Retrying...")
             gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
             logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
             tasks.append(task)
