@@ -332,15 +332,14 @@ def get_task_type(request: TrainerProxyRequest) -> TaskType:
 
 
 async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
-    training_data = task.training_data
-    success = False
-    container = None
-    tag = None
-    timeout_seconds = int(training_data.hours_to_complete * 3600)
-    task_type = get_task_type(task)
-    logger.info(f"Task Type: {task_type}")
-
     try:
+        training_data = task.training_data
+        success = False
+        container = None
+        tag = None
+        timeout_seconds = int(training_data.hours_to_complete * 3600)
+        task_type = get_task_type(task)
+        logger.info(f"Task Type: {task_type}")
         await create_volumes_if_dont_exist()
 
         dockerfile_path = f"{local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}" if task_type == TaskType.IMAGETASK else f"{local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
@@ -424,10 +423,12 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         else:
             log_task(training_data.task_id, task.hotkey, f"Timeout reached ({timeout_seconds}s). Killing container...")
             success = True
+            complete_task(training_data.task_id, task.hotkey, success=success)
 
     except Exception as e:
         log_task(training_data.task_id, task.hotkey, f"Fatal error during training: {e}")
         logger.exception(f"Training job failed: {training_data.task_id}")
+        complete_task(training_data.task_id, task.hotkey, success=success)
 
     finally:
         if container:
