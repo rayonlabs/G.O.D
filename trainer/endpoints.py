@@ -26,7 +26,7 @@ asyncio.create_task(monitor_stale_tasks())
 
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:
-    start_task(req)
+    await start_task(req)
     try:
         local_repo_path = clone_repo(
             repo_url=req.github_repo,
@@ -35,8 +35,8 @@ async def start_training(req: TrainerProxyRequest) -> JSONResponse:
             commit_hash=req.github_commit_hash
         )
     except RuntimeError as e:
-        log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
-        complete_task(req.training_data.task_id, req.hotkey, success=False)
+        await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
+        await complete_task(req.training_data.task_id, req.hotkey, success=False)
         raise HTTPException(status_code=400, detail=str(e))
 
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")

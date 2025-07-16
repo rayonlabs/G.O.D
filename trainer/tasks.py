@@ -26,11 +26,11 @@ async def monitor_stale_tasks(poll_interval_seconds: int = 10):
                 task.status = TaskStatus.FAILURE
                 task.finished_at = now
                 task.logs.append(f"[{now.isoformat()}] Task marked as FAILED due to timeout.")
-                save_task_history()
+                await save_task_history()
 
         await asyncio.sleep(poll_interval_seconds)
 
-def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
+async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
     log_entry = TrainerTaskLog(
         **task.dict(),
         status=TaskStatus.TRAINING,
@@ -38,16 +38,16 @@ def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
         finished_at=None
     )
     task_history.append(log_entry)
-    save_task_history()
+    await save_task_history()
     return log_entry.training_data.task_id, log_entry.hotkey
 
-def complete_task(task_id: str, hotkey: str, success: bool = True):
+async def complete_task(task_id: str, hotkey: str, success: bool = True):
     task = get_task(task_id, hotkey)
     if task is None:
         return
     task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
     task.finished_at = datetime.utcnow()
-    save_task_history()
+    await save_task_history()
 
 def get_task(task_id: str, hotkey: str) -> TrainerTaskLog | None:
     for task in task_history:
@@ -58,17 +58,17 @@ def get_task(task_id: str, hotkey: str) -> TrainerTaskLog | None:
             return task
     return None
 
-def log_task(task_id: str, hotkey: str, message: str):
+async def log_task(task_id: str, hotkey: str, message: str):
     task = get_task(task_id, hotkey)
     if task:
         timestamped_message = f"[{datetime.utcnow().isoformat()}] {message}"
         task.logs.append(timestamped_message)
-        save_task_history()
+        await save_task_history()
 
 def get_running_tasks() -> list[TrainerTaskLog]:
     return [t for t in task_history if t.status == TaskStatus.TRAINING]
 
-def save_task_history():
+async def save_task_history():
     with open(TASK_HISTORY_FILE, "w") as f:
         json.dump([t.model_dump() for t in task_history], f, indent=2, default=str)
 

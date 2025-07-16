@@ -345,7 +345,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         dockerfile_path = f"{local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}" if task_type == TaskType.IMAGETASK else f"{local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
 
         logger.info("Running Cache Download Container")
-        log_task(training_data.task_id, task.hotkey, "Downloading data")
+        await log_task(training_data.task_id, task.hotkey, "Downloading data")
 
         download_status, exc = await asyncio.to_thread(
             run_downloader_container,
@@ -358,11 +358,11 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
 
         if download_status == 0:
             message = "Download container completed successfully"
-            log_task(training_data.task_id, task.hotkey, message)
+            await log_task(training_data.task_id, task.hotkey, message)
         else:
             message = f"Download container failed with error: {exc}"
-            log_task(training_data.task_id, task.hotkey, message)
-            complete_task(training_data.task_id, task.hotkey, success=False)
+            await log_task(training_data.task_id, task.hotkey, message)
+            await complete_task(training_data.task_id, task.hotkey, success=False)
             raise RuntimeError(f"Downloader container failed: {exc}")
 
         tag = await asyncio.to_thread(
@@ -372,7 +372,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             context_path=local_repo_path,
         )
 
-        log_task(training_data.task_id, task.hotkey, f"Docker image built with tag: {tag}")
+        await log_task(training_data.task_id, task.hotkey, f"Docker image built with tag: {tag}")
 
         if task_type == TaskType.IMAGETASK:
             container = await asyncio.wait_for(
@@ -403,12 +403,12 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                 timeout=60
             )
 
-        log_task(training_data.task_id, task.hotkey, f"Container started: {container.name}")
+        await log_task(training_data.task_id, task.hotkey, f"Container started: {container.name}")
 
-        log_task(training_data.task_id, task.hotkey, f"Waiting for container to finish (timeout={timeout_seconds})...")
+        await log_task(training_data.task_id, task.hotkey, f"Waiting for container to finish (timeout={timeout_seconds})...")
         wait_task = asyncio.create_task(asyncio.to_thread(container.wait))
         done, pending = await asyncio.wait({wait_task}, timeout=timeout_seconds)
-        log_task(training_data.task_id, task.hotkey, "Container wait completed or timed out.")
+        await log_task(training_data.task_id, task.hotkey, "Container wait completed or timed out.")
 
         if wait_task in done:
             result = await wait_task
@@ -418,27 +418,27 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                 log_task(training_data.task_id, task.hotkey, "Training completed successfully.")
                 success = True
             else:
-                complete_task(training_data.task_id, task.hotkey, success=success)
-                log_task(training_data.task_id, task.hotkey, f"Training failed with status code {status_code}")
+                await complete_task(training_data.task_id, task.hotkey, success=success)
+                await log_task(training_data.task_id, task.hotkey, f"Training failed with status code {status_code}")
         else:
-            log_task(training_data.task_id, task.hotkey, f"Timeout reached ({timeout_seconds}s). Killing container...")
+            await log_task(training_data.task_id, task.hotkey, f"Timeout reached ({timeout_seconds}s). Killing container...")
             success = True
-            complete_task(training_data.task_id, task.hotkey, success=success)
+            await complete_task(training_data.task_id, task.hotkey, success=success)
 
     except Exception as e:
-        log_task(training_data.task_id, task.hotkey, f"Fatal error during training: {e}")
+        await log_task(training_data.task_id, task.hotkey, f"Fatal error during training: {e}")
         logger.exception(f"Training job failed: {training_data.task_id}")
-        complete_task(training_data.task_id, task.hotkey, success=success)
+        await complete_task(training_data.task_id, task.hotkey, success=success)
 
     finally:
         if container:
             try:
                 container.kill()
                 container.remove(force=True)
-                log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
+                await log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
 
             except Exception as cleanup_err:
-                log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
+                await log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
 
         logger.info("Cleaning up")
         if tag:
@@ -459,9 +459,9 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     wandb_token=os.getenv("WANDB_TOKEN", None),
                     path_in_repo=path_in_repo
                 )
-                log_task(training_data.task_id, task.hotkey, "Repo uploaded successfully.")
+                await log_task(training_data.task_id, task.hotkey, "Repo uploaded successfully.")
             except Exception as upload_err:
-                log_task(training_data.task_id, task.hotkey, f"Upload to HuggingFace failed: {upload_err}")
+                await log_task(training_data.task_id, task.hotkey, f"Upload to HuggingFace failed: {upload_err}")
                 success = False
 
-        complete_task(training_data.task_id, task.hotkey, success=success)
+        await complete_task(training_data.task_id, task.hotkey, success=success)
