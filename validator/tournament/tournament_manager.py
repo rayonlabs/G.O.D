@@ -52,7 +52,6 @@ from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_genera
 from validator.tournament.task_creator import create_image_tournament_round
 from validator.tournament.task_creator import create_new_task_of_same_type
 from validator.tournament.task_creator import create_text_tournament_round
-from validator.tournament.utils import check_if_task_has_zero_scores
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_round_winners
 from validator.utils.call_endpoint import process_non_stream_fiber_get
@@ -355,7 +354,9 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
 
 
 async def populate_tournament_participants(tournament_id: str, config: Config, psql_db: PSQLDB) -> int:
-    logger.info(f"Populating participants for tournament {tournament_id} with minimum requirement of {cst.MIN_MINERS_FOR_TOURN} miners")
+    logger.info(
+        f"Populating participants for tournament {tournament_id} with minimum requirement of {cst.MIN_MINERS_FOR_TOURN} miners"
+    )
 
     tournament = await get_tournament(tournament_id, psql_db)
     if not tournament:
@@ -394,12 +395,16 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                     miners_that_accept_and_give_repos += 1
 
         logger.info(f"Successfully populated {miners_that_accept_and_give_repos} participants for tournament {tournament_id}")
-        
+
         if miners_that_accept_and_give_repos >= cst.MIN_MINERS_FOR_TOURN:
-            logger.info(f"Tournament {tournament_id} has sufficient miners ({miners_that_accept_and_give_repos} >= {cst.MIN_MINERS_FOR_TOURN})")
+            logger.info(
+                f"Tournament {tournament_id} has sufficient miners ({miners_that_accept_and_give_repos} >= {cst.MIN_MINERS_FOR_TOURN})"
+            )
             return miners_that_accept_and_give_repos
-        
-        logger.warning(f"Tournament {tournament_id} only has {miners_that_accept_and_give_repos} miners that accept and give repos, need at least {cst.MIN_MINERS_FOR_TOURN}. Waiting 30 minutes and retrying...")
+
+        logger.warning(
+            f"Tournament {tournament_id} only has {miners_that_accept_and_give_repos} miners that accept and give repos, need at least {cst.MIN_MINERS_FOR_TOURN}. Waiting 30 minutes and retrying..."
+        )
         await asyncio.sleep(30 * 60)
 
 
@@ -625,7 +630,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
     all_tasks_completed = True
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-        if task_obj and task_obj.status != TaskStatus.SUCCESS.value:
+        if task_obj and task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
             break
@@ -641,27 +646,30 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                 synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
                 if synced_task_obj:
                     if synced_task_obj.status == TaskStatus.SUCCESS.value:
-                        if await check_if_task_has_zero_scores(synced_task_id, config.psql_db):
-                            logger.info(f"Synced task {synced_task_id} also had all zero score. Replacing...")
-                            new_task = await create_new_task_of_same_type(task, config)
-                            new_tournament_task = TournamentTask(
-                                tournament_id=round_data.tournament_id,
-                                round_id=round_data.round_id,
-                                task_id=new_task.task_id,
-                                group_id=task.group_id,
-                                pair_id=task.pair_id,
-                            )
-                            await add_tournament_tasks([new_tournament_task], config.psql_db)
-                            logger.info(f"Created replacement task {new_task.task_id} for round {round_data.round_id}")
-                            await task_sql.delete_task(task.task_id, config.psql_db)
-                            logger.info(f"Deleted original task {task.task_id} from db.")
-                            waiting_for_synced_tasks = True
+                        logger.info(f"Synced task {synced_task_id} completed successfully")
+                        continue
+                    elif synced_task_obj.status == TaskStatus.FAILURE.value:
+                        logger.info(f"Synced task {synced_task_id} also failed. Replacing...")
+                        new_task = await create_new_task_of_same_type(task, config)
+                        new_tournament_task = TournamentTask(
+                            tournament_id=round_data.tournament_id,
+                            round_id=round_data.round_id,
+                            task_id=new_task.task_id,
+                            group_id=task.group_id,
+                            pair_id=task.pair_id,
+                        )
+                        await add_tournament_tasks([new_tournament_task], config.psql_db)
+                        logger.info(f"Created replacement task {new_task.task_id} for round {round_data.round_id}")
+                        await task_sql.delete_task(task.task_id, config.psql_db)
+                        logger.info(f"Deleted original task {task.task_id} from db.")
+                        waiting_for_synced_tasks = True
                     else:
                         logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
                         waiting_for_synced_tasks = True
             else:
-                if await check_if_task_has_zero_scores(task.task_id, config.psql_db):
-                    logger.info(f"Task {task.task_id} has all zero scores, copying to main cycle to check.")
+                task_obj = await task_sql.get_task(task.task_id, config.psql_db)
+                if task_obj and task_obj.status == TaskStatus.FAILURE.value:
+                    logger.info(f"Task {task.task_id} failed, copying to main cycle to check.")
                     await _copy_task_to_general(task.task_id, config.psql_db)
                     waiting_for_synced_tasks = True
 
