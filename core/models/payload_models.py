@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 class MinerTaskOffer(BaseModel):
     ds_size: int | None = None
     model: str
-    hours_to_complete: int
+    hours_to_complete: float
     task_id: str
     task_type: TaskType
     model_params_count: int | None = None
@@ -47,7 +47,7 @@ class MinerTaskOffer(BaseModel):
 class TrainRequest(BaseModel):
     model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
     task_id: str
-    hours_to_complete: int
+    hours_to_complete: float
     expected_repo_name: str | None = None
 
 
@@ -166,7 +166,7 @@ class InstructTextDatasetColumnsResponse(BaseModel):
 
 class NewTaskRequest(BaseModel):
     account_id: UUID
-    hours_to_complete: int = Field(..., description="The number of hours to complete the task", examples=[1])
+    hours_to_complete: float = Field(..., description="The number of hours to complete the task", examples=[1])
     result_model_name: str | None = Field(None, description="The name to give to a model that is created by this task")
 
 
@@ -378,7 +378,7 @@ class TaskDetails(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
-    hours_to_complete: int
+    hours_to_complete: float
     trained_model_repository: str | None
     task_type: TaskType
     result_model_name: str | None = None
