@@ -1,4 +1,4 @@
-MAX_TRAINING_ATTEMPTS = 3
+MAX_TRAINING_ATTEMPTS = 1
 
 # Orchestrator cycle intervals (in seconds)
 FETCH_TASKS_CYCLE_INTERVAL = 15  # 20 minutes
