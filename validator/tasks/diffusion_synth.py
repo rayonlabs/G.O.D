@@ -356,14 +356,22 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[Ima
     Path(cst.TEMP_PATH_FOR_IMAGES).mkdir(parents=True, exist_ok=True)
     is_flux_model = model_info.model_type == ImageModelType.FLUX
     if (random.random() < cst.PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE) and not is_flux_model:
-        image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
-    else:
-        for person_synth_try in range(cst.PERSON_GEN_RETRIES):
-            image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
-            if len(image_text_pairs) >= 10:
+        while True:
+            try:
+                image_text_pairs, ds_prefix = await generate_style_synthetic(config, num_prompts)
                 break
-            else:
-                logger.info(f"Person synth generation failed, trying again {person_synth_try + 1}/{cst.PERSON_GEN_RETRIES}")
+            except Exception as e:
+                logger.warning(f"Failed to generate style synthetic: {e}. Retrying...")
+    else:
+        while True:
+            try:
+                image_text_pairs, ds_prefix = await generate_person_synthetic(num_prompts)
+                if len(image_text_pairs) >= 10:
+                    break
+                else:
+                    logger.info(f"Person synth generation failed, trying again...")
+            except Exception as e:
+                logger.warning(f"Failed to generate person synthetic: {e}. Retrying...")
 
 
     if len(image_text_pairs) >= 10:
