@@ -666,7 +666,11 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                         continue
                     elif synced_task_obj.status == TaskStatus.FAILURE.value:
                         logger.info(f"Synced task {synced_task_id} also failed. Replacing...")
-                        new_task = await create_new_task_of_same_type(task, config)
+                        original_task_obj = await task_sql.get_task(task.task_id, config.psql_db)
+                        if not original_task_obj:
+                            logger.error(f"Could not find original task {task.task_id} in database")
+                            continue
+                        new_task = await create_new_task_of_same_type(original_task_obj, config)
                         new_tournament_task = TournamentTask(
                             tournament_id=round_data.tournament_id,
                             round_id=round_data.round_id,
