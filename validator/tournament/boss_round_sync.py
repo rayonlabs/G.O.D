@@ -31,10 +31,15 @@ async def sync_boss_round_tasks_to_general(
 
     logger.info(f"Found {len(boss_round_tasks)} boss round tasks to sync")
 
-    for tournament_task in boss_round_tasks:
-        delay_hours = random.randint(1, 4)
+    for i, tournament_task in enumerate(boss_round_tasks):
+        if i == 0:
+            delay_hours = 0
+        else:
+            delay_hours = random.randint(1, 4)
         asyncio.create_task(_schedule_task_sync(tournament_task.task_id, delay_hours, psql_db, config))
-        logger.info(f"Scheduled task {tournament_task.task_id} to sync in {delay_hours} hours")
+        logger.info(
+            f"Scheduled task {tournament_task.task_id} to sync in {delay_hours} hours (task {i + 1} of {len(boss_round_tasks)})"
+        )
 
 
 async def _schedule_task_sync(tournament_task_id: str, delay_hours: int, psql_db: PSQLDB, config: Config):
@@ -104,3 +109,12 @@ async def get_synced_task_id(tournament_task_id: str, psql_db: PSQLDB) -> str | 
         """
         general_task_id = await connection.fetchval(query, tournament_task_id)
         return general_task_id
+
+
+async def get_synced_task_ids(tournament_task_ids: list[str], psql_db: PSQLDB) -> list[str]:
+    async with await psql_db.connection() as connection:
+        query = """
+            SELECT general_task_id FROM boss_round_synced_tasks WHERE tournament_task_id = ANY($1)
+        """
+        general_task_ids = await connection.fetch(query, tournament_task_ids)
+        return [general_task_id for (general_task_id,) in general_task_ids]
