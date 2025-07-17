@@ -27,14 +27,10 @@ from validator.utils.logging import stream_image_build_logs
 
 logger = get_logger(__name__)
 
-def build_docker_image(
-    dockerfile_path: str,
-    context_path: str = ".",
-    is_image_task: bool = False,
-    tag: str = None,
-    no_cache: bool = True
-) -> str:
 
+def build_docker_image(
+    dockerfile_path: str, context_path: str = ".", is_image_task: bool = False, tag: str = None, no_cache: bool = True
+) -> str:
     client: docker.DockerClient = docker.from_env()
 
     if tag is None:
@@ -78,22 +74,21 @@ def delete_image_and_cleanup(tag: str):
 
 
 async def run_trainer_container_image(
-    task_id: str,
-    tag: str,
-    model: str,
-    dataset_zip: str,
-    model_type: str,
-    expected_repo_name: str,
-    gpu_ids: list[int]=[0]
+    task_id: str, tag: str, model: str, dataset_zip: str, model_type: str, expected_repo_name: str, gpu_ids: list[int] = [0]
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
 
     command: list[str] = [
-        "--task-id", task_id,
-        "--model", model,
-        "--dataset-zip", dataset_zip,
-        "--model-type", model_type,
-        "--expected-repo-name", expected_repo_name
+        "--task-id",
+        task_id,
+        "--model",
+        model,
+        "--dataset-zip",
+        dataset_zip,
+        "--model-type",
+        model_type,
+        "--expected-repo-name",
+        expected_repo_name,
     ]
 
     container_name = f"image-trainer-{uuid.uuid4().hex}"
@@ -104,13 +99,13 @@ async def run_trainer_container_image(
             command=command,
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.IMAGE_CONTAINER_SAVE_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"}
+                cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"},
             },
             remove=False,
             name=container_name,
             mem_limit=cst.DEFAULT_TRAINING_CONTAINER_MEM_LIMIT,
             nano_cpus=cst.DEFAULT_TRAINING_CONTAINER_NANO_CPUS * 1_000_000_000,
-            device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids],  capabilities=[["gpu"]])],
+            device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
             network_mode="none",
@@ -134,23 +129,27 @@ async def run_trainer_container_text(
     task_type: TaskType,
     file_format: FileFormat,
     expected_repo_name: str,
-    gpu_ids: list[int]=[0]
+    gpu_ids: list[int] = [0],
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
 
-    environment = {
-            "WANDB_MODE": "disabled",
-            "WANDB_DISABLED": "true"
-        }
+    environment = {"WANDB_MODE": "disabled", "WANDB_DISABLED": "true"}
 
     command: list[str] = [
-        "--task-id", task_id,
-        "--model", model,
-        "--dataset", dataset,
-        "--dataset-type", json.dumps(dataset_type.model_dump()),
-        "--task-type", task_type,
-        "--file-format", file_format,
-        "--expected-repo-name", expected_repo_name
+        "--task-id",
+        task_id,
+        "--model",
+        model,
+        "--dataset",
+        dataset,
+        "--dataset-type",
+        json.dumps(dataset_type.model_dump()),
+        "--task-type",
+        task_type,
+        "--file-format",
+        file_format,
+        "--expected-repo-name",
+        expected_repo_name,
     ]
 
     container_name = f"text-trainer-{uuid.uuid4().hex}"
@@ -167,12 +166,12 @@ async def run_trainer_container_text(
             name=container_name,
             mem_limit=cst.DEFAULT_TRAINING_CONTAINER_MEM_LIMIT,
             nano_cpus=cst.DEFAULT_TRAINING_CONTAINER_NANO_CPUS * 1_000_000_000,
-            device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids],  capabilities=[["gpu"]])],
+            device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
             detach=True,
             network_mode="none",
-            environment=environment
+            environment=environment,
         )
 
         log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
@@ -203,10 +202,14 @@ def run_downloader_container(
     client = docker.from_env()
 
     command = [
-        "--task-id", task_id,
-        "--model", model,
-        "--task-type", task_type,
-        "--dataset", dataset_url,
+        "--task-id",
+        task_id,
+        "--model",
+        model,
+        "--task-type",
+        task_type,
+        "--dataset",
+        dataset_url,
     ]
     if file_format:
         command += ["--file-format", file_format]
@@ -222,7 +225,7 @@ def run_downloader_container(
             command=command,
             volumes={cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"}},
             remove=False,
-            detach=True
+            detach=True,
         )
 
         stream_container_logs(container, get_all_context_tags())
@@ -260,12 +263,16 @@ async def upload_repo_to_hf(
     huggingface_username: str,
     task_type: TaskType,
     wandb_token: str | None = None,
-    path_in_repo: str | None = None
+    path_in_repo: str | None = None,
 ):
     try:
         client = docker.from_env()
 
-        local_container_folder = f"{cst.IMAGE_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}/" if task_type == TaskType.IMAGETASK else f"{cst.TEXT_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}/"
+        local_container_folder = (
+            f"{cst.IMAGE_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}/"
+            if task_type == TaskType.IMAGETASK
+            else f"{cst.TEXT_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}/"
+        )
 
         environment = {
             "HUGGINGFACE_TOKEN": huggingface_token,
@@ -274,20 +281,14 @@ async def upload_repo_to_hf(
             "LOCAL_FOLDER": local_container_folder,
             "TASK_ID": task_id,
             "EXPECTED_REPO_NAME": expected_repo_name,
-            "HF_REPO_SUBFOLDER": path_in_repo
+            "HF_REPO_SUBFOLDER": path_in_repo,
         }
 
         container_path = cst.IMAGE_CONTAINER_SAVE_PATH if task_type == TaskType.IMAGETASK else cst.TEXT_CONTAINER_SAVE_PATH
 
         volumes = {
-            cst.VOLUME_NAMES[0]: {
-                "bind": container_path,
-                "mode": "rw"
-            },
-            cst.VOLUME_NAMES[1]: {
-                "bind": "/cache",
-                "mode": "rw"
-            }
+            cst.VOLUME_NAMES[0]: {"bind": container_path, "mode": "rw"},
+            cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"},
         }
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
@@ -303,9 +304,7 @@ async def upload_repo_to_hf(
             name=container_name,
         )
 
-        log_task = asyncio.create_task(
-            asyncio.to_thread(stream_container_logs, container, get_all_context_tags())
-        )
+        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
 
     except Exception as e:
         logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}")
@@ -342,7 +341,11 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         logger.info(f"Task Type: {task_type}")
         await create_volumes_if_dont_exist()
 
-        dockerfile_path = f"{local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}" if task_type == TaskType.IMAGETASK else f"{local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
+        dockerfile_path = (
+            f"{local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}"
+            if task_type == TaskType.IMAGETASK
+            else f"{local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
+        )
 
         logger.info("Running Cache Download Container")
         await log_task(training_data.task_id, task.hotkey, "Downloading data")
@@ -385,7 +388,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     expected_repo_name=training_data.expected_repo_name,
                     gpu_ids=task.gpu_ids,
                 ),
-                timeout=60
+                timeout=60,
             )
         else:
             container = await asyncio.wait_for(
@@ -400,7 +403,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     expected_repo_name=training_data.expected_repo_name,
                     gpu_ids=task.gpu_ids,
                 ),
-                timeout=60
+                timeout=60,
             )
 
         await log_task(training_data.task_id, task.hotkey, f"Container started: {container.name}")
@@ -449,7 +452,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
 
         if success:
             try:
-                path_in_repo= cst.IMAGE_TASKS_HF_SUBFOLDER_PATH if task_type == TaskType.IMAGETASK else None
+                path_in_repo = cst.IMAGE_TASKS_HF_SUBFOLDER_PATH if task_type == TaskType.IMAGETASK else None
                 await upload_repo_to_hf(
                     task_id=training_data.task_id,
                     expected_repo_name=training_data.expected_repo_name,
@@ -457,7 +460,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
                     task_type=task_type,
                     wandb_token=os.getenv("WANDB_TOKEN", None),
-                    path_in_repo=path_in_repo
+                    path_in_repo=path_in_repo,
                 )
                 await log_task(training_data.task_id, task.hotkey, "Repo uploaded successfully.")
             except Exception as upload_err:

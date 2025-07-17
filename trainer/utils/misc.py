@@ -46,6 +46,7 @@ def clone_repo(repo_url: str, parent_dir: str, branch: str = None, commit_hash: 
     except Exception as e:
         raise RuntimeError(f"Unexpected error while cloning: {str(e)}")
 
+
 async def get_gpu_info() -> list[GPUInfo]:
     pynvml.nvmlInit()
     device_count = pynvml.nvmlDeviceGetCount()

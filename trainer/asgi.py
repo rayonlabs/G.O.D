@@ -11,6 +11,7 @@ load_dotenv(".trainer.env")
 
 logger = get_logger(__name__)
 
+
 def factory() -> FastAPI:
     logger.debug("Entering factory function")
     app = FastAPI()
@@ -23,6 +24,7 @@ def factory() -> FastAPI:
         allow_headers=["*"],
     )
     return app
+
 
 app = factory()
 

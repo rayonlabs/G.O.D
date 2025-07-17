@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
 GET_GPU_AVAILABILITY_ENDPOINT = "/v1/trainer/get_gpu_availability"
-TASK_DETAILS_ENDPOINT= "/v1/trainer/{task_id}"
+TASK_DETAILS_ENDPOINT = "/v1/trainer/{task_id}"
 
 load_task_history()
 asyncio.create_task(monitor_stale_tasks())
@@ -27,12 +27,14 @@ asyncio.create_task(monitor_stale_tasks())
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:
     await start_task(req)
+
     try:
-        local_repo_path = clone_repo(
+        local_repo_path = await asyncio.to_thread(
+            clone_repo,
             repo_url=req.github_repo,
             parent_dir=cst.TEMP_REPO_PATH,
             branch=req.github_branch,
-            commit_hash=req.github_commit_hash
+            commit_hash=req.github_commit_hash,
         )
     except RuntimeError as e:
         await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
@@ -42,7 +44,7 @@ async def start_training(req: TrainerProxyRequest) -> JSONResponse:
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
 
     asyncio.create_task(start_training_task(req, local_repo_path))
-    
+
     return {"message": "Started Training!", "task_id": req.training_data.task_id}
 
 

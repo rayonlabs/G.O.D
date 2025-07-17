@@ -71,7 +71,7 @@ def main():
         folder_path=local_folder,
         path_in_repo=repo_subfolder if repo_subfolder else None,
         commit_message=f"Upload task output {task_id}",
-        token=hf_token
+        token=hf_token,
     )
 
     print(f"Uploaded successfully to https://huggingface.co/{repo_id}", flush=True)
@@ -83,6 +83,7 @@ def main():
     except Exception as e:
         print(f"Error during cache cleanup: {e}", flush=True)
         pass
+
 
 if __name__ == "__main__":
     main()
