@@ -51,10 +51,10 @@ from validator.tournament.boss_round_sync import get_synced_task_id
 from validator.tournament.boss_round_sync import get_synced_task_ids
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
 from validator.tournament.task_creator import create_image_tournament_round
-from validator.tournament.task_creator import create_new_task_of_same_type
 from validator.tournament.task_creator import create_text_tournament_round
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_round_winners
+from validator.tournament.utils import replace_tournament_task
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import LogContext
 from validator.utils.logging import get_logger
@@ -672,18 +672,15 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                         else:
                             logger.info(f"Synced task {synced_task_id} failed. Original task  also failed. Replacing...")
 
-                        new_task = await create_new_task_of_same_type(original_task_obj, config)
-                        new_tournament_task = TournamentTask(
+                        new_task_id = await replace_tournament_task(
+                            original_task_id=task.task_id,
                             tournament_id=round_data.tournament_id,
                             round_id=round_data.round_id,
-                            task_id=new_task.task_id,
                             group_id=task.group_id,
                             pair_id=task.pair_id,
+                            config=config,
                         )
-                        await add_tournament_tasks([new_tournament_task], config.psql_db)
-                        logger.info(f"Created replacement task {new_task.task_id} for round {round_data.round_id}")
-                        await task_sql.delete_task(task.task_id, config.psql_db)
-                        logger.info(f"Deleted original task {task.task_id} from db.")
+                        logger.info(f"Successfully replaced task {task.task_id} with {new_task_id}")
                         waiting_for_synced_tasks = True
                     else:
                         logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
