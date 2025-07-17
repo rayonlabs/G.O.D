@@ -55,7 +55,7 @@ your-training-repo/
 
 ## CLI Arguments
 
-Your training scripts accept these standardized CLI arguments:
+Your training scripts accept these standardised CLI arguments:
 
 ### Text Training Arguments
 ```bash
@@ -90,7 +90,7 @@ Your training scripts accept these standardized CLI arguments:
 
 ## Output Structure Requirements
 
-**Critical:** The output paths are standardized and MUST NOT be changed. The uploader expects models at these exact locations.
+**Critical:** The output paths are standardised and MUST NOT be changed. The uploader expects models at these exact locations.
 
 ### Text Model Output Path
 ```python
