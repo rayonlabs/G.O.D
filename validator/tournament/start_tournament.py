@@ -2,7 +2,6 @@ import asyncio
 
 from core.models.tournament_models import TournamentType
 from validator.core.config import load_config
-from validator.db.sql.tournaments import cancel_all_active_tournaments
 from validator.tournament.tournament_manager import create_basic_tournament
 from validator.utils.logging import get_logger
 
@@ -22,13 +21,7 @@ async def main():
     logger.info("Connected to database")
 
     try:
-        # Step 0: Cancel all active or pending tournaments
-        logger.info("Step 0: Cancelling all active or pending tournaments...")
-        cancelled_count = await cancel_all_active_tournaments(config.psql_db)
-        logger.info(f"Cancelled {cancelled_count} tournaments")
-
-        # Step 1: Create basic tournament in DB
-        logger.info("Step 1: Creating basic tournament...")
+        logger.info("Creating basic tournament...")
         tournament_id = await create_basic_tournament(TournamentType.IMAGE, config.psql_db, config)
         logger.info(f"Created basic tournament: {tournament_id}")
 
