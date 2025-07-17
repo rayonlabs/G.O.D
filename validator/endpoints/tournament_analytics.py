@@ -1,21 +1,32 @@
+from collections import defaultdict
+from typing import Dict
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 
-from core.models.tournament_models import TournamentDetailsResponse, DetailedTournamentRoundResult, DetailedTournamentTaskScore, TournamentScore, TournamentType
+import validator.core.constants as cts
+from core.models.payload_models import GpuRequirementSummary
+from core.models.payload_models import TournamentGpuRequirementsResponse
+from core.models.tournament_models import DetailedTournamentRoundResult
+from core.models.tournament_models import DetailedTournamentTaskScore
+from core.models.tournament_models import TournamentDetailsResponse
+from core.models.tournament_models import TournamentType
+from core.models.tournament_models import get_tournament_gpu_requirement
+from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
-from validator.db.sql import tournaments as tournament_sql
 from validator.db.sql import tasks as task_sql
+from validator.db.sql import tournaments as tournament_sql
 from validator.utils.logging import get_logger
-import validator.core.constants as cts
 
 
 logger = get_logger(__name__)
 
 GET_TOURNAMENT_DETAILS_ENDPOINT = "/v1/tournaments/{tournament_id}/details"
 GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT = "/v1/tournaments/latest/details"
+GET_TOURNAMENT_GPU_REQUIREMENTS_ENDPOINT = "/v1/tournaments/gpu-requirements"
 
 
 async def get_tournament_details(
@@ -26,14 +37,14 @@ async def get_tournament_details(
         tournament = await tournament_sql.get_tournament(tournament_id, config.psql_db)
         if not tournament:
             raise HTTPException(status_code=404, detail="Tournament not found")
-        
+
         participants = await tournament_sql.get_tournament_participants(tournament_id, config.psql_db)
         rounds = await tournament_sql.get_tournament_rounds(tournament_id, config.psql_db)
-        
+
         detailed_rounds = []
         for round_data in rounds:
             tasks = await tournament_sql.get_tournament_tasks(round_data.round_id, config.psql_db)
-            
+
             round_participants = []
             if round_data.round_type == "group":
                 groups = await tournament_sql.get_tournament_groups(round_data.round_id, config.psql_db)
@@ -44,24 +55,24 @@ async def get_tournament_details(
                 pairs = await tournament_sql.get_tournament_pairs(round_data.round_id, config.psql_db)
                 for pair in pairs:
                     round_participants.extend([pair.hotkey1, pair.hotkey2])
-            
+
             detailed_tasks = []
             for task in tasks:
                 task_details = await task_sql.get_task(task.task_id, config.psql_db)
                 participant_scores = await tournament_sql.get_all_scores_and_losses_for_task(task.task_id, config.psql_db)
                 task_winners = await tournament_sql.get_task_winners([task.task_id], config.psql_db)
                 winner = task_winners.get(str(task.task_id))
-                
+
                 detailed_task = DetailedTournamentTaskScore(
                     task_id=str(task.task_id),
                     group_id=task.group_id,
                     pair_id=task.pair_id,
                     winner=winner,
                     participant_scores=participant_scores,
-                    task_type=task_details.task_type if task_details else None
+                    task_type=task_details.task_type if task_details else None,
                 )
                 detailed_tasks.append(detailed_task)
-            
+
             detailed_round = DetailedTournamentRoundResult(
                 round_id=round_data.round_id,
                 round_number=round_data.round_number,
@@ -69,17 +80,16 @@ async def get_tournament_details(
                 is_final_round=round_data.is_final_round,
                 status=round_data.status,
                 participants=list(set(round_participants)),
-                tasks=detailed_tasks
+                tasks=detailed_tasks,
             )
             detailed_rounds.append(detailed_round)
-        
+
         from validator.evaluation.tournament_scoring import calculate_tournament_type_scores
-        
+
         tournament_type_result = await calculate_tournament_type_scores(
-            TournamentType(tournament.tournament_type), 
-            config.psql_db
+            TournamentType(tournament.tournament_type), config.psql_db
         )
-        
+
         response = TournamentDetailsResponse(
             tournament_id=tournament.tournament_id,
             tournament_type=tournament.tournament_type,
@@ -90,12 +100,12 @@ async def get_tournament_details(
             rounds=detailed_rounds,
             final_scores=tournament_type_result.scores,
             text_tournament_weight=cts.TOURNAMENT_TEXT_WEIGHT,
-            image_tournament_weight=cts.TOURNAMENT_IMAGE_WEIGHT
+            image_tournament_weight=cts.TOURNAMENT_IMAGE_WEIGHT,
         )
-        
+
         logger.info(f"Retrieved tournament details for {tournament_id}")
         return response
-        
+
     except Exception as e:
         logger.error(f"Error retrieving tournament details for {tournament_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
@@ -107,24 +117,85 @@ async def get_latest_tournaments_details(
     try:
         latest_text = await tournament_sql.get_latest_completed_tournament(config.psql_db, TournamentType.TEXT)
         latest_image = await tournament_sql.get_latest_completed_tournament(config.psql_db, TournamentType.IMAGE)
-        
+
         result = {}
-        
+
         if latest_text:
-            result['text'] = await get_tournament_details(latest_text.tournament_id, config)
+            result["text"] = await get_tournament_details(latest_text.tournament_id, config)
         else:
-            result['text'] = None
-            
+            result["text"] = None
+
         if latest_image:
-            result['image'] = await get_tournament_details(latest_image.tournament_id, config)
+            result["image"] = await get_tournament_details(latest_image.tournament_id, config)
         else:
-            result['image'] = None
-        
-        logger.info(f"Retrieved latest tournament details: text={latest_text.tournament_id if latest_text else None}, image={latest_image.tournament_id if latest_image else None}")
+            result["image"] = None
+
+        logger.info(
+            f"Retrieved latest tournament details: text={latest_text.tournament_id if latest_text else None}, image={latest_image.tournament_id if latest_image else None}"
+        )
         return result
-        
+
     except Exception as e:
         logger.error(f"Error retrieving latest tournament details: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+async def get_tournament_gpu_requirements(
+    config: Config = Depends(get_config),
+) -> TournamentGpuRequirementsResponse:
+    try:
+        unfinished_statuses = [
+            TaskStatus.PENDING,
+            TaskStatus.PREPARING_DATA,
+            TaskStatus.LOOKING_FOR_NODES,
+            TaskStatus.READY,
+            TaskStatus.TRAINING,
+        ]
+
+        unfinished_tasks = []
+        for status in unfinished_statuses:
+            tasks = await task_sql.get_tasks_with_status(status=status, psql_db=config.psql_db, tournament_filter="only")
+            unfinished_tasks.extend(tasks)
+
+        logger.info(f"Found {len(unfinished_tasks)} unfinished tournament tasks")
+
+        gpu_requirements: Dict[str, Dict[str, float]] = defaultdict(lambda: {"count": 0, "total_hours": 0.0})
+
+        for task in unfinished_tasks:
+            gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+            gpu_type = gpu_req.value
+
+            hours = float(task.hours_to_complete) if task.hours_to_complete else 1.0
+
+            gpu_requirements[gpu_type]["count"] += 1
+            gpu_requirements[gpu_type]["total_hours"] += hours
+
+        gpu_summaries = []
+        total_tasks = 0
+        total_hours = 0.0
+
+        for gpu_type, data in gpu_requirements.items():
+            count = data["count"]
+            hours = data["total_hours"]
+
+            gpu_summaries.append(GpuRequirementSummary(gpu_type=gpu_type, count=count, total_hours=hours))
+
+            total_tasks += count
+            total_hours += hours
+
+        gpu_summaries.sort(key=lambda x: x.gpu_type)
+
+        response = TournamentGpuRequirementsResponse(
+            gpu_requirements=gpu_summaries, total_tasks=total_tasks, total_hours=total_hours
+        )
+
+        logger.info(
+            f"Retrieved GPU requirements: {len(gpu_summaries)} GPU types, {total_tasks} total tasks, {total_hours:.0f} total hours"
+        )
+        return response
+
+    except Exception as e:
+        logger.error(f"Error retrieving tournament GPU requirements: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
@@ -132,4 +203,5 @@ def factory_router() -> APIRouter:
     router = APIRouter(tags=["Tournament Analytics"], dependencies=[Depends(get_api_key)])
     router.add_api_route(GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT, get_latest_tournaments_details, methods=["GET"])
     router.add_api_route(GET_TOURNAMENT_DETAILS_ENDPOINT, get_tournament_details, methods=["GET"])
+    router.add_api_route(GET_TOURNAMENT_GPU_REQUIREMENTS_ENDPOINT, get_tournament_gpu_requirements, methods=["GET"])
     return router

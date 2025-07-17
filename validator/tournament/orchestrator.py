@@ -17,11 +17,11 @@ from core.models.utility_models import GPUType
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
-from trainer.endpoints import GET_GPU_AVAILABILITY_ENDPOINT
-from trainer.endpoints import PROXY_TRAINING_IMAGE_ENDPOINT
-from trainer.endpoints import TASK_DETAILS_ENDPOINT
 from validator.core.config import Config
 from validator.core.config import load_config
+from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
+from validator.core.constants import PROXY_TRAINING_IMAGE_ENDPOINT
+from validator.core.constants import TASK_DETAILS_ENDPOINT
 from validator.core.models import AnyTypeRawTask
 from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql

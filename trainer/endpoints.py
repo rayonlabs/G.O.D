@@ -1,25 +1,30 @@
-from fastapi.responses import JSONResponse
-from fastapi import APIRouter
 import asyncio
+
+from fastapi import APIRouter
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 
 from core.models.payload_models import TrainerProxyRequest
 from core.models.payload_models import TrainerTaskLog
+from core.models.utility_models import GPUInfo
 from trainer import constants as cst
-from validator.utils.logging import get_logger
 from trainer.image_manager import start_training_task
+from trainer.tasks import complete_task
+from trainer.tasks import get_task
+from trainer.tasks import load_task_history
+from trainer.tasks import log_task
+from trainer.tasks import monitor_stale_tasks
+from trainer.tasks import start_task
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
-from trainer.tasks import start_task, load_task_history, get_task, log_task, complete_task, monitor_stale_tasks
-from core.models.utility_models import GPUInfo
+from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
+from validator.core.constants import PROXY_TRAINING_IMAGE_ENDPOINT
+from validator.core.constants import TASK_DETAILS_ENDPOINT
+from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
 
-
-PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
-GET_GPU_AVAILABILITY_ENDPOINT = "/v1/trainer/get_gpu_availability"
-TASK_DETAILS_ENDPOINT = "/v1/trainer/{task_id}"
 
 load_task_history()
 asyncio.create_task(monitor_stale_tasks())
