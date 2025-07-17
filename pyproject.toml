@@ -47,7 +47,8 @@ dependencies = [
     "langcheck==0.9.0",
     "detoxify",
     "gitpython",
-    "nvidia-ml-py3"
+    "nvidia-ml-py3",
+    "aiofiles"
 ]
 
 [project.optional-dependencies]
