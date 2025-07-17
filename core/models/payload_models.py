@@ -11,21 +11,17 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
-from core.models.utility_models import DpoDatasetType
-from core.models.utility_models import TextDatasetType
 from core.models.utility_models import FileFormat
-from core.models.utility_models import GPUType
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
-from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import RewardFunction
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from core.models.utility_models import TextDatasetType
 from validator.core.models import AllNodeStats
 
 
@@ -41,7 +37,6 @@ class MinerTaskOffer(BaseModel):
     model_params_count: int | None = None
 
     model_config = ConfigDict(protected_namespaces=())
-
 
 
 class TrainRequest(BaseModel):
@@ -215,7 +210,13 @@ class NewTaskRequestChat(NewTaskRequest):
 
     @model_validator(mode="before")
     def convert_empty_strings(cls, values):
-        string_fields = ["chat_column", "chat_role_field", "chat_content_field", "chat_user_reference", "chat_assistant_reference"]
+        string_fields = [
+            "chat_column",
+            "chat_role_field",
+            "chat_content_field",
+            "chat_user_reference",
+            "chat_assistant_reference",
+        ]
         for field in string_fields:
             if field in values and isinstance(values[field], str):
                 values[field] = values[field].strip() or None
@@ -468,6 +469,18 @@ class ImageModelInfo(BaseModel):
 
 class ImageModelsResponse(BaseModel):
     models: list[ImageModelInfo]
+
+
+class GpuRequirementSummary(BaseModel):
+    gpu_type: str
+    count: int
+    total_hours: float
+
+
+class TournamentGpuRequirementsResponse(BaseModel):
+    gpu_requirements: list[GpuRequirementSummary]
+    total_tasks: int
+    total_hours: float
 
 
 # Type alias for task details types
