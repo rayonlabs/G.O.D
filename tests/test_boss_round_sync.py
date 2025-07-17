@@ -104,7 +104,7 @@ async def test_copy_task_to_general_creates_correct_copy(mock_config, mock_psql_
     with patch("validator.tournament.boss_round_sync.get_task", return_value=sample_instruct_task) as mock_get_task:
         with patch("validator.tournament.boss_round_sync.add_task") as mock_add_task:
             with patch("validator.tournament.boss_round_sync._record_task_sync_link") as mock_record_link:
-                await _copy_task_to_general(str(original_task_id), mock_psql_db, mock_config)
+                await _copy_task_to_general(str(original_task_id), mock_psql_db)
 
                 # Should get the original task
                 mock_get_task.assert_called_once_with(str(original_task_id), mock_psql_db)
