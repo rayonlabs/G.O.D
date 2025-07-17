@@ -3,8 +3,8 @@ from urllib.parse import urlparse
 
 import pynvml
 from git import GitCommandError
-from git import InvalidGitRepositoryError
 from git import Repo
+import shutil
 
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
@@ -23,49 +23,28 @@ def clone_repo(repo_url: str, parent_dir: str, branch: str = None, commit_hash: 
             repo = Repo(repo_dir)
             current_commit = repo.head.commit.hexsha
 
-            if commit_hash:
-                if current_commit.startswith(commit_hash):
-                    print(f"Repository already exists at {repo_dir} and is on commit {commit_hash}. Skipping clone.")
-                    return repo_dir
-            elif branch:
-                if repo.active_branch.name == branch:
-                    print(f"Repository already exists at {repo_dir} and is on branch '{branch}'. Skipping clone.")
-                    return repo_dir
-            else:
-                print(f"Repository already exists at {repo_dir}. Skipping clone.")
+            if commit_hash and current_commit.startswith(commit_hash):
                 return repo_dir
-
-            print("Repository exists but is not on correct branch/commit. Deleting and recloning...")
-            import shutil
-
+            elif branch and repo.active_branch.name == branch:
+                return repo_dir
             shutil.rmtree(repo_dir)
-
-        except (InvalidGitRepositoryError, Exception) as e:
-            print(f"Directory exists but is not a valid Git repo. Removing: {e}")
-            import shutil
-
+        except:
             shutil.rmtree(repo_dir)
 
     try:
-        if branch:
-            print(f"Cloning {repo_url} at branch '{branch}'...")
-            repo = Repo.clone_from(repo_url, repo_dir, branch=branch)
-        else:
-            print(f"Cloning {repo_url} at default branch...")
-            repo = Repo.clone_from(repo_url, repo_dir)
+        repo = Repo.clone_from(repo_url, repo_dir, branch=branch) if branch else Repo.clone_from(repo_url, repo_dir)
 
         if commit_hash:
             repo.git.fetch("--all")
-            print(f"Checking out commit {commit_hash}...")
             repo.git.checkout(commit_hash)
 
-        print(f"Repository cloned to {repo_dir}")
         return repo_dir
 
-    except GitCommandError as git_err:
-        raise RuntimeError(f"Git error: {git_err}")
+    except GitCommandError as e:
+        raise RuntimeError(f"Error in cloning: {str(e)}")
+
     except Exception as e:
-        raise RuntimeError(f"Failed to clone repository: {e}")
+        raise RuntimeError(f"Unexpected error while cloning: {str(e)}")
 
 
 async def get_gpu_info() -> list[GPUInfo]:

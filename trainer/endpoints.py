@@ -1,6 +1,7 @@
-from fastapi import Response
+from fastapi.responses import JSONResponse
 from fastapi import APIRouter
 import asyncio
+from fastapi import HTTPException
 
 from core.models.payload_models import TrainerProxyRequest
 from core.models.payload_models import TrainerTaskLog
@@ -9,7 +10,7 @@ from validator.utils.logging import get_logger
 from trainer.image_manager import start_training_task
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
-from trainer.tasks import start_task, load_task_history, get_task
+from trainer.tasks import start_task, load_task_history, get_task, log_task, complete_task, monitor_stale_tasks
 from core.models.utility_models import GPUInfo
 
 
@@ -18,23 +19,32 @@ logger = get_logger(__name__)
 
 PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
 GET_GPU_AVAILABILITY_ENDPOINT = "/v1/trainer/get_gpu_availability"
-TASK_DETAILS_ENDPOINT= "/v1/trainer/{task_id}"
+TASK_DETAILS_ENDPOINT = "/v1/trainer/{task_id}"
 
 load_task_history()
+asyncio.create_task(monitor_stale_tasks())
 
 
-async def start_training(req: TrainerProxyRequest) -> Response:
-    local_repo_path = clone_repo(
-        repo_url=req.github_repo,
-        parent_dir=cst.TEMP_REPO_PATH,
-        branch=req.github_branch,
-        commit_hash=req.github_commit_hash
-    )
+async def start_training(req: TrainerProxyRequest) -> JSONResponse:
+    await start_task(req)
+
+    try:
+        local_repo_path = await asyncio.to_thread(
+            clone_repo,
+            repo_url=req.github_repo,
+            parent_dir=cst.TEMP_REPO_PATH,
+            branch=req.github_branch,
+            commit_hash=req.github_commit_hash,
+        )
+    except RuntimeError as e:
+        await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
+        await complete_task(req.training_data.task_id, req.hotkey, success=False)
+        raise HTTPException(status_code=400, detail=str(e))
+
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
 
     asyncio.create_task(start_training_task(req, local_repo_path))
-    start_task(req)
-    
+
     return {"message": "Started Training!", "task_id": req.training_data.task_id}
 
 
@@ -44,7 +54,10 @@ async def get_available_gpus() -> list[GPUInfo]:
 
 
 async def get_task_details(task_id: str, hotkey: str) -> TrainerTaskLog:
-    return get_task(task_id, hotkey)
+    task = get_task(task_id, hotkey)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task with ID '{task_id}' and hotkey '{hotkey}' not found.")
+    return task
 
 
 def factory_router() -> APIRouter:

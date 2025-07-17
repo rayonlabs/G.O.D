@@ -17,6 +17,7 @@ from trainer import constants as cst
 
 hf_api = HfApi()
 
+
 async def download_text_dataset(task_id, dataset_url, file_format):
     dataset_task_dir = f"{cst.CACHE_PATH}/{task_id}/datasets"
     os.makedirs(dataset_task_dir, exist_ok=True)
@@ -34,12 +35,7 @@ async def download_text_dataset(task_id, dataset_url, file_format):
         input_data_path = os.path.join(dataset_task_dir, repo_name)
 
         if not os.path.exists(input_data_path):
-            snapshot_download(
-                repo_id=dataset_url,
-                repo_type="dataset",
-                local_dir=input_data_path,
-                local_dir_use_symlinks=False
-            )
+            snapshot_download(repo_id=dataset_url, repo_type="dataset", local_dir=input_data_path, local_dir_use_symlinks=False)
 
     return input_data_path, file_format
 
@@ -52,6 +48,7 @@ async def download_image_dataset(dataset_zip_url, task_id):
     local_path = await download_s3_file(dataset_zip_url, local_zip_path)
     print(f"Downloaded dataset to: {local_path}")
     return local_path
+
 
 def is_safetensors_available(repo_id: str) -> tuple[bool, str | None]:
     files_metadata = hf_api.list_repo_tree(repo_id=repo_id, repo_type="model")
@@ -68,6 +65,7 @@ def is_safetensors_available(repo_id: str) -> tuple[bool, str | None]:
     if largest_file:
         return True, largest_file.path
     return False, None
+
 
 def download_from_huggingface(repo_id: str, filename: str, local_dir: str) -> str:
     try:
@@ -86,6 +84,7 @@ def download_from_huggingface(repo_id: str, filename: str, local_dir: str) -> st
     except Exception as e:
         raise e
 
+
 def download_flux_unet(repo_id: str, output_dir: str) -> str:
     files_metadata = hf_api.list_repo_tree(repo_id=repo_id, repo_type="model")
     file_path = None
@@ -99,6 +98,7 @@ def download_flux_unet(repo_id: str, output_dir: str) -> str:
 
     return local_path
 
+
 async def download_base_model(repo_id: str, save_root: str) -> str:
     has_safetensors, safetensors_path = is_safetensors_available(repo_id)
     if has_safetensors and safetensors_path:
@@ -109,14 +109,10 @@ async def download_base_model(repo_id: str, save_root: str) -> str:
         snapshot_download(repo_id=repo_id, repo_type="model", local_dir=save_path, local_dir_use_symlinks=False)
         return save_path
 
+
 async def download_axolotl_base_model(repo_id: str, save_dir: str) -> str:
     model_dir = os.path.join(save_dir, repo_id.replace("/", "--"))
-    snapshot_download(
-        repo_id=repo_id,
-        repo_type="model",
-        local_dir=model_dir,
-        local_dir_use_symlinks=False
-    )
+    snapshot_download(repo_id=repo_id, repo_type="model", local_dir=model_dir, local_dir_use_symlinks=False)
     return model_dir
 
 
@@ -127,12 +123,7 @@ async def main():
     parser.add_argument(
         "--task-type",
         required=True,
-        choices=[
-            TaskType.IMAGETASK.value,
-            TaskType.INSTRUCTTEXTTASK.value,
-            TaskType.DPOTASK.value,
-            TaskType.GRPOTASK.value
-        ]
+        choices=[TaskType.IMAGETASK.value, TaskType.INSTRUCTTEXTTASK.value, TaskType.DPOTASK.value, TaskType.GRPOTASK.value],
     )
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--file-format")
@@ -159,24 +150,16 @@ async def main():
             repo_type="model",
             local_dir="/cache/hf_cache/google--t5-v1_1-xxl",
             local_dir_use_symlinks=False,
-            allow_patterns=[
-                "tokenizer_config.json",
-                "spiece.model",
-                "special_tokens_map.json",
-                "tokenizer.json"
-            ]
+            allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "tokenizer.json"],
         )
     else:
-        dataset_path, _ = await download_text_dataset(
-            args.task_id,
-            args.dataset,
-            args.file_format
-        )
+        dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format)
         model_path = await download_axolotl_base_model(args.model, model_dir)
 
     print(f"All files saved in: {base_dir}", flush=True)
     print(f"Model path: {model_path}", flush=True)
     print(f"Dataset path: {dataset_dir}", flush=True)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
