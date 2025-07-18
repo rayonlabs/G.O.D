@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import ConfigDict
 
 from core.models.payload_models import TrainingRepoResponse
 from core.models.utility_models import TaskType
@@ -254,7 +255,7 @@ class TaskScore(BaseModel):
 
 
 class RespondingNode(BaseModel):
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
     node: Node
     training_repo_response: TrainingRepoResponse
