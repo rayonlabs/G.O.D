@@ -19,7 +19,7 @@ class TestCountCompletedTournamentEntries:
         mock_db = AsyncMock()
         mock_connection = AsyncMock()
         mock_db.connection.return_value.__aenter__.return_value = mock_connection
-        mock_connection.fetchrow.return_value = [0]
+        mock_connection.fetchrow.return_value = {"count": 0}
         
         result = await count_completed_tournament_entries("test_hotkey", mock_db)
         assert result == 0
@@ -29,7 +29,7 @@ class TestCountCompletedTournamentEntries:
         mock_db = AsyncMock()
         mock_connection = AsyncMock()
         mock_db.connection.return_value.__aenter__.return_value = mock_connection
-        mock_connection.fetchrow.return_value = [3]
+        mock_connection.fetchrow.return_value = {"count": 3}
         
         result = await count_completed_tournament_entries("test_hotkey", mock_db)
         assert result == 3
