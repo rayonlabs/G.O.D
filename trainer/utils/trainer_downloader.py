@@ -134,11 +134,8 @@ async def main():
     parser.add_argument("--file-format")
     args = parser.parse_args()
 
-    base_dir = f"/cache/"
-    os.makedirs(base_dir, exist_ok=True)
-
-    dataset_dir = os.path.join(base_dir, "datasets")
-    model_dir = os.path.join(base_dir, "models")
+    dataset_dir = cst.CACHE_DATASETS_DIR
+    model_dir = cst.CACHE_MODELS_DIR
     os.makedirs(dataset_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
 
@@ -162,7 +159,6 @@ async def main():
         dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format, dataset_dir)
         model_path = await download_axolotl_base_model(args.model, model_dir)
 
-    print(f"All files saved in: {base_dir}", flush=True)
     print(f"Model path: {model_path}", flush=True)
     print(f"Dataset path: {dataset_dir}", flush=True)
 
