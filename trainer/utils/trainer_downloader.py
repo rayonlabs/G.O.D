@@ -18,13 +18,12 @@ from trainer import constants as cst
 hf_api = HfApi()
 
 
-async def download_text_dataset(task_id, dataset_url, file_format):
-    dataset_task_dir = f"{cst.CACHE_PATH}/{task_id}/datasets"
-    os.makedirs(dataset_task_dir, exist_ok=True)
+async def download_text_dataset(task_id, dataset_url, file_format, dataset_dir):
+    os.makedirs(dataset_dir, exist_ok=True)
 
     if file_format == FileFormat.S3.value:
         dataset_filename = f"{task_id}_train_data.json"
-        input_data_path = os.path.join(dataset_task_dir, dataset_filename)
+        input_data_path = os.path.join(dataset_dir, dataset_filename)
 
         if not os.path.exists(input_data_path):
             local_path = await download_s3_file(dataset_url)
@@ -32,7 +31,7 @@ async def download_text_dataset(task_id, dataset_url, file_format):
 
     elif file_format == FileFormat.HF.value:
         repo_name = dataset_url.replace("/", "--")
-        input_data_path = os.path.join(dataset_task_dir, repo_name)
+        input_data_path = os.path.join(dataset_dir, repo_name)
 
         if not os.path.exists(input_data_path):
             snapshot_download(repo_id=dataset_url, repo_type="dataset", local_dir=input_data_path, local_dir_use_symlinks=False)
@@ -40,8 +39,7 @@ async def download_text_dataset(task_id, dataset_url, file_format):
     return input_data_path, file_format
 
 
-async def download_image_dataset(dataset_zip_url, task_id):
-    dataset_dir = f"{cst.CACHE_PATH}/{task_id}/datasets"
+async def download_image_dataset(dataset_zip_url, task_id, dataset_dir):
     os.makedirs(dataset_dir, exist_ok=True)
     local_zip_path = f"{dataset_dir}/{task_id}.zip"
     print(f"Downloading dataset from: {dataset_zip_url}")
@@ -100,18 +98,25 @@ def download_flux_unet(repo_id: str, output_dir: str) -> str:
 
 
 async def download_base_model(repo_id: str, save_root: str) -> str:
-    has_safetensors, safetensors_path = is_safetensors_available(repo_id)
-    if has_safetensors and safetensors_path:
-        return download_from_huggingface(repo_id, safetensors_path, save_root)
-    else:
-        model_name = repo_id.replace("/", "--")
-        save_path = os.path.join(save_root, model_name)
-        snapshot_download(repo_id=repo_id, repo_type="model", local_dir=save_path, local_dir_use_symlinks=False)
+    model_name = repo_id.replace("/", "--")
+    save_path = os.path.join(save_root, model_name)
+    if os.path.exists(save_path):
+        print(f"Model {repo_id} already exists at {save_path}. Skipping download.")
         return save_path
+    else:
+        has_safetensors, safetensors_path = is_safetensors_available(repo_id)
+        if has_safetensors and safetensors_path:
+            return download_from_huggingface(repo_id, safetensors_path, save_path)
+        else:
+            snapshot_download(repo_id=repo_id, repo_type="model", local_dir=save_path, local_dir_use_symlinks=False)
+            return save_path
 
 
 async def download_axolotl_base_model(repo_id: str, save_dir: str) -> str:
     model_dir = os.path.join(save_dir, repo_id.replace("/", "--"))
+    if os.path.exists(model_dir):
+        print(f"Model {repo_id} already exists at {model_dir}. Skipping download.")
+        return model_dir
     snapshot_download(repo_id=repo_id, repo_type="model", local_dir=model_dir, local_dir_use_symlinks=False)
     return model_dir
 
@@ -129,7 +134,7 @@ async def main():
     parser.add_argument("--file-format")
     args = parser.parse_args()
 
-    base_dir = f"/cache/{args.task_id}"
+    base_dir = f"/cache/"
     os.makedirs(base_dir, exist_ok=True)
 
     dataset_dir = os.path.join(base_dir, "datasets")
@@ -137,10 +142,11 @@ async def main():
     os.makedirs(dataset_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
 
-    print(f"Downloading files to: {base_dir}", flush=True)
+    print(f"Downloading datasets to: {dataset_dir}", flush=True)
+    print(f"Downloading models to: {model_dir}", flush=True)
 
     if args.task_type == TaskType.IMAGETASK.value:
-        dataset_zip_path = await download_image_dataset(args.dataset, args.task_id)
+        dataset_zip_path = await download_image_dataset(args.dataset, args.task_id, dataset_dir)
         model_path = await download_base_model(args.model, model_dir)
         print("Downloading clip models", flush=True)
         CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir="/cache/hf_cache")
@@ -153,7 +159,7 @@ async def main():
             allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "tokenizer.json"],
         )
     else:
-        dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format)
+        dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format, dataset_dir)
         model_path = await download_axolotl_base_model(args.model, model_dir)
 
     print(f"All files saved in: {base_dir}", flush=True)

@@ -7,7 +7,7 @@ from huggingface_hub import HfApi
 from huggingface_hub import login
 
 
-def clear_old_cache(directory: str, max_age_hours: int = 24):
+def clear_old_cache(directory: str, max_age_hours: int = 12):
     now = time.time()
     cutoff_time = now - (max_age_hours * 3600)
 
