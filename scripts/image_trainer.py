@@ -118,6 +118,7 @@ async def main():
     parser.add_argument("--model", required=True, help="Model name or path")
     parser.add_argument("--dataset-zip", required=True, help="Link to dataset zip file")
     parser.add_argument("--model-type", required=True, choices=["sdxl", "flux"], help="Model type")
+    parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
     args = parser.parse_args()
 

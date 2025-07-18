@@ -211,6 +211,7 @@ async def main():
     parser.add_argument("--dataset-type", required=True, help="JSON string of dataset type config")
     parser.add_argument("--task-type", required=True, choices=["InstructTextTask", "DpoTask", "GrpoTask"], help="Type of task")
     parser.add_argument("--file-format", required=True, choices=["csv", "json", "hf", "s3"], help="File format")
+    parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
     args = parser.parse_args()
 
