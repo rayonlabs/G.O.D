@@ -137,16 +137,16 @@ class TestPopulateTournamentParticipantsTop32Selection:
         for i in range(40):  # Create 40 nodes to test top-32 selection
             node = Node(
                 hotkey=f"hotkey{i}",
-                alpha_stake=1000 + i * 100,  # Increasing stakes
+                alpha_stake=float(1000 + i * 100),  # Increasing stakes
                 coldkey=f"cold{i}",
                 node_id=i,
                 incentive=0.1,
                 netuid=1,
-                tao_stake=0,
-                stake=0,
+                tao_stake=0.0,
+                stake=0.0,
                 trust=0.5,
                 vtrust=0.5,
-                last_updated=1234567890,
+                last_updated=1234567890.0,
                 ip=f"1.1.1.{i}",
                 ip_type=4,
                 port=8080,
@@ -155,7 +155,7 @@ class TestPopulateTournamentParticipantsTop32Selection:
             nodes.append(node)
         
         # Add base node (excluded)
-        base_node = Node(hotkey="base_hotkey", alpha_stake=10000, coldkey="cold_base", node_id=100, incentive=0.1, netuid=1, tao_stake=0, stake=0, trust=0.5, vtrust=0.5, last_updated=1234567890, ip="0.0.0.0", ip_type=4, port=8080, protocol=4)
+        base_node = Node(hotkey="base_hotkey", alpha_stake=10000.0, coldkey="cold_base", node_id=100, incentive=0.1, netuid=1, tao_stake=0.0, stake=0.0, trust=0.5, vtrust=0.5, last_updated=1234567890.0, ip="0.0.0.0", ip_type=4, port=8080, protocol=4)
         nodes.append(base_node)
         
         mock_get_nodes.return_value = nodes
