@@ -28,6 +28,9 @@ from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_node_by_hotkey
 from validator.db.sql.tournaments import add_tournament_participants
 from validator.db.sql.tournaments import add_tournament_tasks
+from validator.db.sql.tournaments import count_completed_tournament_entries
+from validator.db.sql.tournaments import eliminate_tournament_participants
+from validator.db.sql.tournaments import get_participants_with_insufficient_stake
 from validator.db.sql.tournaments import create_tournament
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
@@ -291,6 +294,27 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
 
         winners = await get_round_winners(completed_round, psql_db, config)
         logger.info(f"Round winners: {winners}")
+        
+        # Get all active participants and handle eliminations
+        all_participants = await get_tournament_participants(tournament.tournament_id, psql_db)
+        active_participants = [p.hotkey for p in all_participants if p.eliminated_in_round_id is None]
+        
+        # Eliminate losers (those who didn't win)
+        losers = [p for p in active_participants if p not in winners]
+        
+        # Check stake requirements for winners
+        insufficient_stake_hotkeys = await get_participants_with_insufficient_stake(tournament.tournament_id, psql_db)
+        winners_with_insufficient_stake = [w for w in winners if w in insufficient_stake_hotkeys]
+        
+        # Combine all eliminations
+        all_eliminated = losers + winners_with_insufficient_stake
+        if all_eliminated:
+            await eliminate_tournament_participants(tournament.tournament_id, completed_round.round_id, all_eliminated, psql_db)
+            if winners_with_insufficient_stake:
+                logger.info(f"Eliminated {len(winners_with_insufficient_stake)} winners for insufficient stake: {winners_with_insufficient_stake}")
+        
+        # Update winners list to remove those with insufficient stake
+        winners = [w for w in winners if w not in winners_with_insufficient_stake]
 
         if len(winners) == 0:
             logger.warning(
@@ -361,6 +385,7 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
             hotkey=config.tournament_base_contestant_hotkey,
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
+            stake_required=0
         )
         await add_tournament_participants([base_participant], psql_db)
 
@@ -382,7 +407,20 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
     while True:
         all_nodes = await get_all_nodes(psql_db)
 
-        eligible_nodes = [node for node in all_nodes if node.hotkey != config.tournament_base_contestant_hotkey]
+        eligible_nodes = []
+        for node in all_nodes:
+            if node.hotkey == config.tournament_base_contestant_hotkey:
+                continue
+            
+            completed_entries = await count_completed_tournament_entries(node.hotkey, psql_db)
+            required_stake = cst.TOURNAMENT_BASE_STAKE_REQUIREMENT * completed_entries
+            
+            if node.alpha_stake >= required_stake:
+                eligible_nodes.append((node, required_stake))
+            else:
+                logger.info(
+                    f"Node {node.hotkey} has insufficient stake: {node.alpha_stake:.2f} < {required_stake:.2f} required"
+                )
 
         if not eligible_nodes:
             logger.warning("No eligible nodes found for tournament")
@@ -400,7 +438,8 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
             )
 
             batch_results = await asyncio.gather(
-                *[_process_single_node(node, tournament_id, tournament.tournament_type, config, psql_db) for node in batch],
+                *[_process_single_node(node, tournament_id, tournament.tournament_type, config, psql_db, required_stake) 
+                  for node, required_stake in batch],
                 return_exceptions=True,
             )
 
@@ -425,7 +464,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
 
 async def _process_single_node(
-    node: Node, tournament_id: str, tournament_type: TournamentType, config: Config, psql_db: PSQLDB
+    node: Node, tournament_id: str, tournament_type: TournamentType, config: Config, psql_db: PSQLDB, required_stake: float
 ) -> bool:
     """Process a single node to add it as a tournament participant if it responds with a training repo."""
     with LogContext(node_hotkey=node.hotkey):
@@ -433,7 +472,11 @@ async def _process_single_node(
             training_repo_response = await _get_miner_training_repo(node, config, tournament_type)
 
             if training_repo_response:
-                participant = TournamentParticipant(tournament_id=tournament_id, hotkey=node.hotkey)
+                participant = TournamentParticipant(
+                    tournament_id=tournament_id, 
+                    hotkey=node.hotkey,
+                    stake_required=required_stake
+                )
                 await add_tournament_participants([participant], psql_db)
 
                 await update_tournament_participant_training_repo(

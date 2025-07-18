@@ -136,6 +136,7 @@ MINIMUM_MINER_POOL = 1
 
 # Tournament Start Requirements
 MIN_MINERS_FOR_TOURN = 4
+TOURNAMENT_BASE_STAKE_REQUIREMENT = 250
 
 # General miner pool sizes
 MIN_IDEAL_NUM_MINERS_IN_POOL = 8
