@@ -254,6 +254,8 @@ class TaskScore(BaseModel):
 
 
 class RespondingNode(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+    
     node: Node
     training_repo_response: TrainingRepoResponse
     boosted_stake: float
