@@ -14,7 +14,7 @@ from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since, get_aggregate_scores_for_leaderboard_since, get_all_scores_and_losses_for_task
 from validator.evaluation.tournament_scoring import get_tournament_weights
-from validator.db.sql.tournaments import get_latest_completed_tournament, get_tournament_full_results
+from validator.db.sql.tournaments import get_latest_completed_tournament, get_tournament_full_results, get_active_tournament_participants
 from validator.db.sql.tournament_performance import get_boss_round_synthetic_task_completion, get_boss_round_winner_task_pairs, get_task_scores_as_models, get_previous_completed_tournament
 
 
@@ -554,7 +554,19 @@ async def get_node_weights_from_period_scores(
 
     logger.info("=== BURN CALCULATION ===")
     tournament_weight_multiplier, regular_weight_multiplier, burn_weight = await get_active_tournament_burn_data(psql_db)
-    logger.info(f"Weight distribution: tournament={tournament_weight_multiplier:.6f}, regular={regular_weight_multiplier:.6f}, burn={burn_weight:.6f}")
+    
+    # Calculate participation weights total and scale existing weights
+    participation_participants = await get_active_tournament_participants(psql_db)
+    participation_total = len(participation_participants) * cts.TOURNAMENT_PARTICIPATION_WEIGHT
+    
+    if participation_total > 0:
+        scale_factor = 1.0 - participation_total
+        tournament_weight_multiplier *= scale_factor
+        regular_weight_multiplier *= scale_factor
+        burn_weight *= scale_factor
+        logger.info(f"Scaled weights for {len(participation_participants)} participants (total participation: {participation_total:.6f})")
+    
+    logger.info(f"Weight distribution: tournament={tournament_weight_multiplier:.6f}, regular={regular_weight_multiplier:.6f}, burn={burn_weight:.6f}, participation={participation_total:.6f}")
     
     logger.info("=== NODE WEIGHT CALCULATIONS ===")
     for node_result in node_results:
@@ -587,6 +599,19 @@ async def get_node_weights_from_period_scores(
                            f"total_weight={all_node_weights[node_id]:.6f}")
     else:
         logger.info("No tournament weights found")
+    
+    logger.info("=== PARTICIPATION WEIGHT ALLOCATION ===")
+    if participation_participants:
+        for hotkey in participation_participants:
+            node_id = hotkey_to_node_id.get(hotkey)
+            if node_id is not None:
+                participation_contribution = cts.TOURNAMENT_PARTICIPATION_WEIGHT
+                all_node_weights[node_id] = all_node_weights[node_id] + participation_contribution
+                logger.info(f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
+                           f"participation_weight={participation_contribution:.6f}, "
+                           f"total_weight={all_node_weights[node_id]:.6f}")
+    else:
+        logger.info("No tournament participants found")
     
     logger.info("=== BURN WEIGHT ALLOCATION ===")
     burn_node_id = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)

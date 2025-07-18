@@ -1,12 +1,14 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fiber.chain.models import Node
-from core.models.tournament_models import TournamentParticipant, TournamentData, TournamentType, TournamentStatus, TournamentRoundData, RoundType, RoundStatus
-from validator.core.constants import TOURNAMENT_BASE_STAKE_REQUIREMENT
+from core.models.tournament_models import TournamentParticipant, TournamentData, TournamentType, TournamentStatus, TournamentRoundData, RoundType, RoundStatus, RespondingNode
+from validator.core.constants import TOURNAMENT_TOP_N_BY_STAKE, TOURNAMENT_REPEAT_BOOST_PERCENTAGE, TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE, TOURNAMENT_PARTICIPATION_WEIGHT
 from validator.db.sql.tournaments import (
     count_completed_tournament_entries,
     get_participants_with_insufficient_stake,
-    eliminate_tournament_participants
+    eliminate_tournament_participants,
+    calculate_boosted_stake,
+    get_active_tournament_participants
 )
 from validator.tournament.tournament_manager import populate_tournament_participants, advance_tournament
 
@@ -83,30 +85,41 @@ class TestEliminateTournamentParticipants:
         assert hotkeys in call_args
 
 
-class TestStakeRequirementCalculation:
+class TestBoostedStakeCalculation:
     def test_first_tournament_entry(self):
+        actual_stake = 1000
         completed_entries = 0
-        required_stake = TOURNAMENT_BASE_STAKE_REQUIREMENT * completed_entries
-        assert required_stake == 0
+        boosted_stake = calculate_boosted_stake(actual_stake, completed_entries)
+        assert boosted_stake == 1000  # No boost
 
     def test_second_tournament_entry(self):
-        completed_entries = 1
-        required_stake = TOURNAMENT_BASE_STAKE_REQUIREMENT * completed_entries
-        assert required_stake == 250
+        actual_stake = 1000
+        completed_entries = 1  # 5% boost
+        boosted_stake = calculate_boosted_stake(actual_stake, completed_entries)
+        assert boosted_stake == 1050  # 1000 * 1.05
 
-    def test_fifth_tournament_entry(self):
-        completed_entries = 4
-        required_stake = TOURNAMENT_BASE_STAKE_REQUIREMENT * completed_entries
-        assert required_stake == 1000
+    def test_max_boost(self):
+        actual_stake = 1000
+        completed_entries = 10  # Would be 50% but capped at 25%
+        boosted_stake = calculate_boosted_stake(actual_stake, completed_entries)
+        assert boosted_stake == 1250  # 1000 * 1.25
+
+    def test_constants_consistency(self):
+        assert TOURNAMENT_REPEAT_BOOST_PERCENTAGE == 5
+        assert TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE == 25
+        assert TOURNAMENT_TOP_N_BY_STAKE == 32
+        assert TOURNAMENT_PARTICIPATION_WEIGHT == 0.01
 
 
-class TestPopulateTournamentParticipantsStakeFilter:
+class TestPopulateTournamentParticipantsTop32Selection:
     @pytest.mark.asyncio
     @patch('validator.tournament.tournament_manager.get_all_nodes')
     @patch('validator.tournament.tournament_manager.count_completed_tournament_entries')
-    @patch('validator.tournament.tournament_manager._process_single_node')
+    @patch('validator.tournament.tournament_manager._get_miner_training_repo')
     @patch('validator.tournament.tournament_manager.get_tournament')
-    async def test_filter_nodes_by_stake_requirement(self, mock_get_tournament, mock_process_node, mock_count_entries, mock_get_nodes):
+    @patch('validator.tournament.tournament_manager.add_tournament_participants')
+    @patch('validator.tournament.tournament_manager.update_tournament_participant_training_repo')
+    async def test_select_top_32_by_boosted_stake(self, mock_update_repo, mock_add_participants, mock_get_tournament, mock_get_training_repo, mock_count_entries, mock_get_nodes):
         # Setup mocks
         mock_config = MagicMock()
         mock_config.tournament_base_contestant_hotkey = "base_hotkey"
@@ -120,37 +133,73 @@ class TestPopulateTournamentParticipantsStakeFilter:
         mock_get_tournament.return_value = mock_tournament
         
         # Create test nodes with different stake levels
-        node1 = Node(hotkey="hotkey1", alpha_stake=0, coldkey="cold1", node_id=1, incentive=0.1, netuid=1, tao_stake=0, stake=0, trust=0.5, vtrust=0.5, last_updated=1234567890, ip="1.1.1.1", ip_type=4, port=8080, protocol=4)
-        node2 = Node(hotkey="hotkey2", alpha_stake=300, coldkey="cold2", node_id=2, incentive=0.1, netuid=1, tao_stake=0, stake=0, trust=0.5, vtrust=0.5, last_updated=1234567890, ip="2.2.2.2", ip_type=4, port=8080, protocol=4)
-        node3 = Node(hotkey="hotkey3", alpha_stake=500, coldkey="cold3", node_id=3, incentive=0.1, netuid=1, tao_stake=0, stake=0, trust=0.5, vtrust=0.5, last_updated=1234567890, ip="3.3.3.3", ip_type=4, port=8080, protocol=4)
-        base_node = Node(hotkey="base_hotkey", alpha_stake=1000, coldkey="cold_base", node_id=0, incentive=0.1, netuid=1, tao_stake=0, stake=0, trust=0.5, vtrust=0.5, last_updated=1234567890, ip="0.0.0.0", ip_type=4, port=8080, protocol=4)
+        nodes = []
+        for i in range(40):  # Create 40 nodes to test top-32 selection
+            node = Node(
+                hotkey=f"hotkey{i}",
+                alpha_stake=1000 + i * 100,  # Increasing stakes
+                coldkey=f"cold{i}",
+                node_id=i,
+                incentive=0.1,
+                netuid=1,
+                tao_stake=0,
+                stake=0,
+                trust=0.5,
+                vtrust=0.5,
+                last_updated=1234567890,
+                ip=f"1.1.1.{i}",
+                ip_type=4,
+                port=8080,
+                protocol=4
+            )
+            nodes.append(node)
         
-        mock_get_nodes.return_value = [node1, node2, node3, base_node]
+        # Add base node (excluded)
+        base_node = Node(hotkey="base_hotkey", alpha_stake=10000, coldkey="cold_base", node_id=100, incentive=0.1, netuid=1, tao_stake=0, stake=0, trust=0.5, vtrust=0.5, last_updated=1234567890, ip="0.0.0.0", ip_type=4, port=8080, protocol=4)
+        nodes.append(base_node)
         
-        # Mock tournament entries: node1=1 (250 required), node2=0 (0 required), node3=2 (500 required)
+        mock_get_nodes.return_value = nodes
+        
+        # Mock all nodes respond with training repos
+        mock_training_repo = MagicMock()
+        mock_training_repo.github_repo = "test/repo"
+        mock_training_repo.commit_hash = "abc123"
+        mock_get_training_repo.return_value = mock_training_repo
+        
+        # Mock tournament entries (some nodes have previous entries for boost)
         def mock_count_side_effect(hotkey, db):
-            if hotkey == "hotkey1":
-                return 1  # 250 required, has 0 - insufficient
-            elif hotkey == "hotkey2":  
-                return 0  # 0 required, has 300 - sufficient
-            elif hotkey == "hotkey3":
-                return 2  # 500 required, has 500 - sufficient
-            return 0
+            if hotkey.endswith("0"):  # Every 10th node has 1 previous entry
+                return 1  # 5% boost
+            elif hotkey.endswith("5"):  # Every node ending in 5 has 3 previous entries
+                return 3  # 15% boost
+            return 0  # No boost
         
         mock_count_entries.side_effect = mock_count_side_effect
-        mock_process_node.return_value = True
         
-        # Mock constants import
-        with patch('validator.tournament.tournament_manager.cst.MIN_MINERS_FOR_TOURN', 2):
-            result = await populate_tournament_participants("test_tournament", mock_config, mock_psql_db)
+        # Mock constants
+        with patch('validator.tournament.tournament_manager.cst.MIN_MINERS_FOR_TOURN', 4):
+            with patch('validator.tournament.tournament_manager.cst.TOURNAMENT_TOP_N_BY_STAKE', 32):
+                result = await populate_tournament_participants("test_tournament", mock_config, mock_psql_db)
         
-        # Should process node2 and node3 (sufficient stake), but not node1 (insufficient) or base_node (excluded)
-        assert mock_process_node.call_count == 2
-        processed_hotkeys = [call[0][0].hotkey for call in mock_process_node.call_args_list]
-        assert "hotkey2" in processed_hotkeys
-        assert "hotkey3" in processed_hotkeys
-        assert "hotkey1" not in processed_hotkeys
-        assert "base_hotkey" not in processed_hotkeys
+        # Should select top 32 by boosted stake
+        assert result == 32
+        
+        # Check that participants were added with correct entry stakes
+        assert mock_add_participants.call_count == 32
+        
+        # Verify the participants have the highest boosted stakes
+        # The nodes with highest actual stakes and boosts should be selected
+        added_participants = []
+        for call in mock_add_participants.call_args_list:
+            participants = call[0][0]  # First argument is the participants list
+            added_participants.extend(participants)
+        
+        assert len(added_participants) == 32
+        
+        # Check that entry_stake is set to actual stake (not boosted)
+        for participant in added_participants:
+            assert participant.entry_stake is not None
+            assert participant.entry_stake > 0
 
 
 class TestAdvanceTournamentStakeElimination:

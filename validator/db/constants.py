@@ -166,7 +166,7 @@ TRAINING_STATUS = "training_status"
 N_TRAINING_ATTEMPTS = "n_training_attempts"
 TRAINING_REPO = "training_repo"
 TRAINING_COMMIT_HASH = "training_commit_hash"
-STAKE_REQUIRED = "stake_required"
+ENTRY_STAKE = "entry_stake"
 
 # Trainer GPUs Table
 TRAINERS_GPUS_TABLE = "trainers_gpus"
