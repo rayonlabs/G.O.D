@@ -161,9 +161,11 @@ class TestPopulateTournamentParticipantsTop32Selection:
         mock_get_nodes.return_value = nodes
         
         # Mock all nodes respond with training repos
-        mock_training_repo = MagicMock()
-        mock_training_repo.github_repo = "test/repo"
-        mock_training_repo.commit_hash = "abc123"
+        from core.models.payload_models import TrainingRepoResponse
+        mock_training_repo = TrainingRepoResponse(
+            github_repo="test/repo",
+            commit_hash="abc123"
+        )
         mock_get_training_repo.return_value = mock_training_repo
         
         # Mock tournament entries (some nodes have previous entries for boost)

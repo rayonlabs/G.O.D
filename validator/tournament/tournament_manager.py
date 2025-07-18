@@ -441,23 +441,12 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                         completed_entries = await count_completed_tournament_entries(node.hotkey, psql_db)
                         boosted_stake = calculate_boosted_stake(node.alpha_stake, completed_entries)
                         
-                        try:
-                            responding_node = RespondingNode(
-                                node=node,
-                                training_repo_response=result,
-                                boosted_stake=boosted_stake,
-                                actual_stake=node.alpha_stake
-                            )
-                        except Exception as e:
-                            print(f"DEBUG: RespondingNode validation failed for {node.hotkey}")
-                            print(f"DEBUG: Node type: {type(node)}")
-                            print(f"DEBUG: Node data: {node}")
-                            print(f"DEBUG: Training repo response type: {type(result)}")
-                            print(f"DEBUG: Training repo response data: {result}")
-                            print(f"DEBUG: Boosted stake: {boosted_stake} (type: {type(boosted_stake)})")
-                            print(f"DEBUG: Actual stake: {node.alpha_stake} (type: {type(node.alpha_stake)})")
-                            print(f"DEBUG: Validation error: {e}")
-                            raise
+                        responding_node = RespondingNode(
+                            node=node,
+                            training_repo_response=result,
+                            boosted_stake=boosted_stake,
+                            actual_stake=node.alpha_stake
+                        )
                         responding_nodes.append(responding_node)
                         logger.info(
                             f"Node responded with training repo {result.github_repo}@{result.commit_hash}, "
