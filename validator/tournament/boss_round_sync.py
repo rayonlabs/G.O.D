@@ -68,7 +68,7 @@ async def _copy_task_to_general(
     general_task = original_task.model_copy()
     general_task.is_organic = False
     general_task.task_id = uuid4()
-    general_task.status = TaskStatus.PENDING
+    general_task.status = TaskStatus.LOOKING_FOR_NODES
     general_task.account_id = cst.NULL_ACCOUNT_ID
     general_task.times_delayed = 0
     general_task.assigned_miners = None
