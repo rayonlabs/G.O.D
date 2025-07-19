@@ -45,7 +45,7 @@ docker run --rm --gpus all \
   --cap-drop=ALL \
   --memory=32g \
   --cpus=8 \
-  --volume "$CHECKPOINTS_DIR:/app/diffusion/models:rw" \
+  --volume "$CHECKPOINTS_DIR:/cache:rw" \
   --name image-trainer-example \
   standalone-image-trainer \
   --task-id "$TASK_ID" \

@@ -54,7 +54,7 @@ docker run --rm --gpus all \
   --cap-drop=ALL \
   --memory=64g \
   --cpus=8 \
-  --volume "$DATA_DIR:/workspace/input_data:rw" \
+  --volume "$DATA_DIR:/cache:rw" \
   --name dpo-trainer-example \
   standalone-text-trainer \
   --task-id "$TASK_ID" \
