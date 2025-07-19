@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import aiofiles
 import docker
+import threading
 
 from core.models.utility_models import TaskStatus
 from core.models.payload_models import TrainerProxyRequest, TrainerTaskLog
@@ -18,6 +19,13 @@ logger = get_logger(__name__)
 task_history: list[TrainerTaskLog] = []
 TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
 
+
+def start_cleanup_loop_in_thread():
+    def run():
+        asyncio.run(periodically_cleanup_tasks_and_cache())
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    
 
 async def periodically_cleanup_tasks_and_cache(poll_interval_seconds: int = 600):
     while True:
