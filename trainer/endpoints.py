@@ -13,7 +13,6 @@ from trainer.tasks import complete_task
 from trainer.tasks import get_task
 from trainer.tasks import load_task_history
 from trainer.tasks import log_task
-from trainer.tasks import monitor_stale_tasks
 from trainer.tasks import start_task
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
@@ -27,8 +26,6 @@ logger = get_logger(__name__)
 
 
 load_task_history()
-asyncio.create_task(monitor_stale_tasks())
-
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:
     await start_task(req)
