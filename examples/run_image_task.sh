@@ -1,21 +1,45 @@
 #!/bin/bash
 
-TASK_ID="9a877904-5fe9-402a-8c75-be5eb1b51f7e"
-MODEL="zenless-lab/sdxl-anima-pencil-xl-v5"
-DATASET_ZIP="https://gradients.s3.eu-north-1.amazonaws.com/18c12259dda47eac_train_data.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVVZOOA7SA4UOFLPI%2F20250504%2Feu-north-1%2Fs3%2Faws4_request&X-Amz-Date=20250504T233035Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=c4f230d56569c5ccc3e02a723368b262f76b30cb2e953dd3f95b97840dc735bb"
-MODEL_TYPE="sdxl"
-HOURS_TO_COMPLETE=2
+# Example configuration for Image Model Training
 
-HUGGINGFACE_TOKEN="disabled"
-WANDB_TOKEN="your_wandb_token_here"
-HUGGINGFACE_USERNAME="your_hf_username_here"
+# Unique task identifier
+TASK_ID="9a877904-5fe9-402a-8c75-be5eb1b51f7e"
+
+# Base model to fine-tune (from HuggingFace)
+MODEL="zenless-lab/sdxl-anima-pencil-xl-v5"
+
+# Dataset ZIP file location (must be a ZIP file with images)
+DATASET_ZIP="s3://your-bucket/path/to/image_dataset.zip"
+
+# Model type: "sdxl" or "flux"
+MODEL_TYPE="sdxl"
+
+# Optional: Repository name for the trained model
+EXPECTED_REPO_NAME="my-sdxl-finetuned"
 
 CHECKPOINTS_DIR="$(pwd)/secure_checkpoints"
 mkdir -p "$CHECKPOINTS_DIR"
 chmod 700 "$CHECKPOINTS_DIR"
 
+# Build the downloader image
+docker build --no-cache -t trainer-downloader -f dockerfiles/trainer-downloader.dockerfile .
+
+# Build the trainer image
 docker build --no-cache -t standalone-image-trainer -f dockerfiles/standalone-image-trainer.dockerfile .
 
+# Download model and dataset
+echo "Downloading model and dataset..."
+docker run --rm \
+  --volume "$CHECKPOINTS_DIR:/cache:rw" \
+  --name downloader-image \
+  trainer-downloader \
+  --task-id "$TASK_ID" \
+  --model "$MODEL" \
+  --dataset "$DATASET_ZIP" \
+  --task-type "ImageTask"
+
+# Run the training
+echo "Starting image training..."
 docker run --rm --gpus all \
   --security-opt=no-new-privileges \
   --cap-drop=ALL \
@@ -28,7 +52,4 @@ docker run --rm --gpus all \
   --model "$MODEL" \
   --dataset-zip "$DATASET_ZIP" \
   --model-type "$MODEL_TYPE" \
-  --hours-to-complete "$HOURS_TO_COMPLETE" \
-  --huggingface-token "$HUGGINGFACE_TOKEN" \
-  --wandb-token "$WANDB_TOKEN" \
-  --huggingface-username "$HUGGINGFACE_USERNAME"
+  --expected-repo-name "$EXPECTED_REPO_NAME"

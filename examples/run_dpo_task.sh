@@ -1,8 +1,24 @@
 #!/bin/bash
 
+# Example configuration for DPO (Direct Preference Optimization) Task
+
+# Unique task identifier
 TASK_ID="7719761b-73c5-4100-98fb-cbe5a6847737"
+
+# Model to fine-tune (from HuggingFace)
 MODEL="Qwen/Qwen1.5-7B-Chat"
-DATASET="https://gradients.s3.eu-north-1.amazonaws.com/755b05591666e560_synth_data.json?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVVZOOA7SA4UOFLPI%2F20250502%2Feu-north-1%2Fs3%2Faws4_request&X-Amz-Date=20250502T001419Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=8eb5998d93e0434e2d7a516981dbd1f9eeff829901aa79b83a77d19adc9f1402"
+
+# Dataset location - can be:
+# - S3 URL: "s3://bucket/path/to/dataset.json"
+# - Local file: "/path/to/dataset.json"
+# - HuggingFace dataset: "username/dataset-name"
+DATASET="s3://your-bucket/path/to/dpo_dataset.json"
+
+# Dataset type mapping for DPO:
+# - field_prompt: column containing the prompt
+# - field_chosen: column containing the preferred response
+# - field_rejected: column containing the rejected response
+# - Optional format templates (use {prompt}, {chosen}, {rejected} as placeholders)
 DATASET_TYPE='{
   "field_prompt":"prompt",
   "field_chosen":"chosen",
@@ -12,19 +28,37 @@ DATASET_TYPE='{
   "rejected_format":"{rejected}"
 }'
 
-
+# File format: "csv", "json", "hf" (HuggingFace), or "s3"
 FILE_FORMAT="s3"
-HOURS_TO_COMPLETE=8
-HUGGINGFACE_TOKEN="your_huggingface_token_here"
-WANDB_TOKEN="your_wandb_token_here"
-HUGGINGFACE_USERNAME="your_hf_username_here"
 
+# Optional: Repository name for the trained model (just the model name, not username/model-name)
+EXPECTED_REPO_NAME="my-dpo-finetuned-model"
+
+# Create secure data directory
 DATA_DIR="$(pwd)/secure_data"
 mkdir -p "$DATA_DIR"
 chmod 700 "$DATA_DIR"
 
+# Build the downloader image
+docker build --no-cache -t trainer-downloader -f dockerfiles/trainer-downloader.dockerfile .
+
+# Build the trainer image
 docker build --no-cache -t standalone-text-trainer -f dockerfiles/standalone-text-trainer.dockerfile .
 
+# Download model and dataset
+echo "Downloading model and dataset..."
+docker run --rm \
+  --volume "$DATA_DIR:/cache:rw" \
+  --name downloader-dpo \
+  trainer-downloader \
+  --task-id "$TASK_ID" \
+  --model "$MODEL" \
+  --dataset "$DATASET" \
+  --task-type "DpoTask" \
+  --file-format "$FILE_FORMAT"
+
+# Run the training
+echo "Starting DPO training..."
 docker run --rm --gpus all \
   --security-opt=no-new-privileges \
   --cap-drop=ALL \
@@ -39,7 +73,4 @@ docker run --rm --gpus all \
   --dataset-type "$DATASET_TYPE" \
   --task-type "DpoTask" \
   --file-format "$FILE_FORMAT" \
-  --hours-to-complete "$HOURS_TO_COMPLETE" \
-  --huggingface-token "$HUGGINGFACE_TOKEN" \
-  --wandb-token "$WANDB_TOKEN" \
-  --huggingface-username "$HUGGINGFACE_USERNAME"
+  --expected-repo-name "$EXPECTED_REPO_NAME"
