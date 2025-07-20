@@ -105,7 +105,7 @@ output_dir = f"/app/checkpoints/{task_id}/{expected_repo_name}"
 ### Input Model Cache Path
 ```python
 # Models are pre-downloaded to this location by the downloader container
-model_path = f"/workspace/cache/{task_id}/models/{model.replace('/', '--')}"
+model_path = f"/cache/models/{model.replace('/', '--')}"
 ```
 
 ## Environment Variables
@@ -116,7 +116,7 @@ The following environment variables are available in your container:
 CONFIG_DIR="/workspace/configs"      # Configuration files
 OUTPUT_DIR="/workspace/outputs"      # General output directory
 DATASET_DIR="/workspace/data"        # For image tasks
-CACHE_PATH="/workspace/cache"        # Model cache directory
+CACHE_PATH="/cache"                  # Model cache directory
 ```
 
 ## Example Entrypoint Script
