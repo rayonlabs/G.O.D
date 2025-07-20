@@ -41,15 +41,9 @@ async def _get_7_day_task_results_for_rayon_validator(config: Config) -> tuple[l
     with open(result_filepath, "r") as f:
         upload_data = json.load(f)
 
-    # Handle both old format (just task_results) and new format (with tournament_audit_data)
-    # TODO: Remove once tournament release is stable
     if isinstance(upload_data, list):
-        # Old format - just task results
-        logger.info("Old format - just task results")
-        task_results_dicts = upload_data
-        tournament_audit_data = None
+        logger.error("Old format - just task results. This should not happen.")
     else:
-        # New format - with tournament data
         logger.info("New format - with tournament data")
         task_results_dicts = upload_data.get("task_results", [])
         tournament_audit_data = upload_data.get("tournament_audit_data")
