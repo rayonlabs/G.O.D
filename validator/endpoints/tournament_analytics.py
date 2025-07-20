@@ -1,4 +1,7 @@
 from collections import defaultdict
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from typing import Dict
 
 from fastapi import APIRouter
@@ -8,8 +11,13 @@ from fastapi import HTTPException
 import validator.core.constants as cts
 from core.models.payload_models import GpuRequirementSummary
 from core.models.payload_models import TournamentGpuRequirementsResponse
+from core.models.tournament_models import ActiveTournamentInfo
+from core.models.tournament_models import ActiveTournamentParticipant
+from core.models.tournament_models import ActiveTournamentsResponse
 from core.models.tournament_models import DetailedTournamentRoundResult
 from core.models.tournament_models import DetailedTournamentTaskScore
+from core.models.tournament_models import NextTournamentDates
+from core.models.tournament_models import NextTournamentInfo
 from core.models.tournament_models import TournamentDetailsResponse
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import get_tournament_gpu_requirement
@@ -27,6 +35,8 @@ logger = get_logger(__name__)
 GET_TOURNAMENT_DETAILS_ENDPOINT = "/v1/tournaments/{tournament_id}/details"
 GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT = "/v1/tournaments/latest/details"
 GET_TOURNAMENT_GPU_REQUIREMENTS_ENDPOINT = "/v1/tournaments/gpu-requirements"
+GET_NEXT_TOURNAMENT_DATES_ENDPOINT = "/v1/tournaments/next-dates"
+GET_ACTIVE_TOURNAMENTS_ENDPOINT = "/v1/tournaments/active"
 
 
 async def get_tournament_details(
@@ -199,9 +209,103 @@ async def get_tournament_gpu_requirements(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+async def get_next_tournament_dates(
+    config: Config = Depends(get_config),
+) -> NextTournamentDates:
+    """Get the next tournament start and end dates for both text and image tournaments."""
+    try:
+        async def get_next_dates_for_type(tournament_type: TournamentType) -> NextTournamentInfo:
+            tournament, created_at = await tournament_sql.get_latest_tournament_with_created_at(
+                config.psql_db, tournament_type
+            )
+            
+            if created_at is None:
+                # No previous tournament, start from now
+                next_start = datetime.now(timezone.utc)
+            else:
+                # Next tournament starts TOURNAMENT_INTERVAL_DAYS after the last one started
+                next_start = created_at + timedelta(days=cts.TOURNAMENT_INTERVAL_DAYS)
+                
+                # If the calculated start date is in the past, use current time
+                current_time = datetime.now(timezone.utc)
+                if next_start < current_time:
+                    next_start = current_time
+            
+            # Tournament ends TOURNAMENT_INTERVAL_DAYS after it starts
+            next_end = next_start + timedelta(days=cts.TOURNAMENT_INTERVAL_DAYS)
+            
+            return NextTournamentInfo(
+                tournament_type=tournament_type,
+                next_start_date=next_start,
+                next_end_date=next_end,
+                interval_days=cts.TOURNAMENT_INTERVAL_DAYS,
+            )
+
+        response = NextTournamentDates(
+            text=await get_next_dates_for_type(TournamentType.TEXT),
+            image=await get_next_dates_for_type(TournamentType.IMAGE),
+        )
+
+        logger.info("Retrieved next tournament dates")
+        return response
+
+    except Exception as e:
+        logger.error(f"Error retrieving next tournament dates: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+async def get_active_tournaments(
+    config: Config = Depends(get_config),
+) -> ActiveTournamentsResponse:
+    """Get currently active tournaments with participants and their stake requirements."""
+    try:
+        async def get_active_tournament_info(tournament_type: TournamentType) -> ActiveTournamentInfo | None:
+            tournament = await tournament_sql.get_active_tournament(config.psql_db, tournament_type)
+            if not tournament:
+                return None
+            
+            _, created_at = await tournament_sql.get_tournament_with_created_at(
+                tournament.tournament_id, config.psql_db
+            )
+            participants = await tournament_sql.get_tournament_participants(tournament.tournament_id, config.psql_db)
+            
+            active_participants = [
+                ActiveTournamentParticipant(
+                    hotkey=p.hotkey,
+                    stake_requirement=p.stake_required,
+                )
+                for p in participants
+                if p.stake_required is not None
+            ]
+            
+            return ActiveTournamentInfo(
+                tournament_id=tournament.tournament_id,
+                tournament_type=tournament_type,
+                status=tournament.status,
+                participants=active_participants,
+                created_at=created_at,
+            )
+
+        text_info = await get_active_tournament_info(TournamentType.TEXT)
+        image_info = await get_active_tournament_info(TournamentType.IMAGE)
+
+        logger.info(
+            f"Retrieved active tournaments: text={text_info.tournament_id if text_info else None}, "
+            f"image={image_info.tournament_id if image_info else None}"
+        )
+        
+        return ActiveTournamentsResponse(text=text_info, image=image_info)
+
+    except Exception as e:
+        logger.error(f"Error retrieving active tournaments: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Tournament Analytics"], dependencies=[Depends(get_api_key)])
     router.add_api_route(GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT, get_latest_tournaments_details, methods=["GET"])
     router.add_api_route(GET_TOURNAMENT_DETAILS_ENDPOINT, get_tournament_details, methods=["GET"])
     router.add_api_route(GET_TOURNAMENT_GPU_REQUIREMENTS_ENDPOINT, get_tournament_gpu_requirements, methods=["GET"])
+    router.add_api_route(GET_NEXT_TOURNAMENT_DATES_ENDPOINT, get_next_tournament_dates, methods=["GET"])
+    router.add_api_route(GET_ACTIVE_TOURNAMENTS_ENDPOINT, get_active_tournaments, methods=["GET"])
     return router

@@ -1,7 +1,7 @@
 -- migrate:up
 ALTER TABLE tournament_participants
-ADD COLUMN entry_stake DECIMAL DEFAULT 0;
+ADD COLUMN stake_required DECIMAL DEFAULT 0;
 
 -- migrate:down
 ALTER TABLE tournament_participants
-DROP COLUMN entry_stake;
+DROP COLUMN stake_required;

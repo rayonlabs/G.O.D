@@ -198,10 +198,10 @@ class TestPopulateTournamentParticipantsTop32Selection:
         
         assert len(added_participants) == 32
         
-        # Check that entry_stake is set to actual stake (not boosted)
+        # Check that stake_required is set to actual stake (not boosted)
         for participant in added_participants:
-            assert participant.entry_stake is not None
-            assert participant.entry_stake > 0
+            assert participant.stake_required is not None
+            assert participant.stake_required > 0
 
 
 class TestAdvanceTournamentStakeElimination:

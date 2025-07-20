@@ -126,7 +126,7 @@ async def add_tournament_participants(participants: list[TournamentParticipant],
         async with connection.transaction():
             query = f"""
                 INSERT INTO {cst.TOURNAMENT_PARTICIPANTS_TABLE} 
-                ({cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.ENTRY_STAKE}, {cst.CREATED_AT})
+                ({cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.STAKE_REQUIRED}, {cst.CREATED_AT})
                 VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
                 ON CONFLICT ({cst.TOURNAMENT_ID}, {cst.HOTKEY}) DO NOTHING
             """
@@ -137,7 +137,7 @@ async def add_tournament_participants(participants: list[TournamentParticipant],
                     participant.hotkey,
                     participant.training_repo,
                     participant.training_commit_hash,
-                    participant.entry_stake,
+                    participant.stake_required,
                 )
             logger.info(f"Added {len(participants)} participants to tournament")
 
@@ -483,7 +483,7 @@ async def get_tournament_participant(tournament_id: str, hotkey: str, psql_db: P
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.ELIMINATED_IN_ROUND_ID}, 
-                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.ENTRY_STAKE}
+                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.STAKE_REQUIRED}
             FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1 AND {cst.HOTKEY} = $2
         """
@@ -496,7 +496,7 @@ async def get_tournament_participant(tournament_id: str, hotkey: str, psql_db: P
                 final_position=result[cst.FINAL_POSITION],
                 training_repo=result[cst.TRAINING_REPO],
                 training_commit_hash=result[cst.TRAINING_COMMIT_HASH],
-                entry_stake=result[cst.ENTRY_STAKE],
+                stake_required=result[cst.STAKE_REQUIRED],
             )
         return None
 
@@ -506,7 +506,7 @@ async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> li
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.ELIMINATED_IN_ROUND_ID}, 
-                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.ENTRY_STAKE}
+                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.STAKE_REQUIRED}
             FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1
         """
@@ -519,7 +519,7 @@ async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> li
                 final_position=row[cst.FINAL_POSITION],
                 training_repo=row[cst.TRAINING_REPO],
                 training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
-                entry_stake=row[cst.ENTRY_STAKE],
+                stake_required=row[cst.STAKE_REQUIRED],
             )
             for row in results
         ]
@@ -827,7 +827,7 @@ async def get_participants_with_insufficient_stake(tournament_id: str, psql_db: 
             JOIN {cst.NODES_TABLE} n ON tp.{cst.HOTKEY} = n.{cst.HOTKEY}
             WHERE tp.{cst.TOURNAMENT_ID} = $1 
             AND tp.{cst.ELIMINATED_IN_ROUND_ID} IS NULL
-            AND (n.alpha_stake < COALESCE(tp.{cst.ENTRY_STAKE}, 0))
+            AND (n.alpha_stake < COALESCE(tp.{cst.STAKE_REQUIRED}, 0))
         """
         results = await connection.fetch(query, tournament_id)
         return [row[cst.HOTKEY] for row in results]
@@ -907,3 +907,74 @@ async def get_tournament_full_results(tournament_id: str, psql_db: PSQLDB) -> To
         tournament_id=tournament_id,
         rounds=round_results
     )
+
+
+async def get_tournament_with_created_at(tournament_id: str, psql_db: PSQLDB) -> tuple[TournamentData | None, datetime | None]:
+    """Get a tournament with its created_at timestamp."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, 
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.CREATED_AT}
+            FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_ID} = $1
+        """
+        result = await connection.fetchrow(query, tournament_id)
+        if result:
+            tournament = TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
+                winner_hotkey=result[cst.WINNER_HOTKEY],
+            )
+            created_at = result[cst.CREATED_AT]
+            return tournament, created_at
+        return None, None
+
+
+async def get_active_tournament(psql_db: PSQLDB, tournament_type: TournamentType) -> TournamentData | None:
+    """Get the active tournament for a given type (if any)."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, 
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
+            FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'active'
+            ORDER BY {cst.CREATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, tournament_type.value)
+        if result:
+            return TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
+                winner_hotkey=result[cst.WINNER_HOTKEY],
+            )
+        return None
+
+
+async def get_latest_tournament_with_created_at(psql_db: PSQLDB, tournament_type: TournamentType) -> tuple[TournamentData | None, datetime | None]:
+    """Get the latest tournament (active or completed) with its created_at timestamp."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, 
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.CREATED_AT}
+            FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_TYPE} = $1
+            ORDER BY {cst.CREATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, tournament_type.value)
+        if result:
+            tournament = TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
+                winner_hotkey=result[cst.WINNER_HOTKEY],
+            )
+            created_at = result[cst.CREATED_AT]
+            return tournament, created_at
+        return None, None
