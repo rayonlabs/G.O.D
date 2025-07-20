@@ -270,10 +270,10 @@ async def get_active_tournaments(
             active_participants = [
                 ActiveTournamentParticipant(
                     hotkey=p.hotkey,
-                    stake_requirement=p.entry_stake,
+                    stake_requirement=p.stake_required,
                 )
                 for p in participants
-                if p.entry_stake is not None
+                if p.stake_required is not None
             ]
             
             return ActiveTournamentInfo(

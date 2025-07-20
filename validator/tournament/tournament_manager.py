@@ -387,7 +387,7 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
             hotkey=config.tournament_base_contestant_hotkey,
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
-            entry_stake=0
+            stake_required=0
         )
         await add_tournament_participants([base_participant], psql_db)
 
@@ -467,7 +467,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
             participant = TournamentParticipant(
                 tournament_id=tournament_id,
                 hotkey=responding_node.node.hotkey,
-                entry_stake=responding_node.actual_stake
+                stake_required=responding_node.actual_stake
             )
             await add_tournament_participants([participant], psql_db)
             
