@@ -261,3 +261,33 @@ class RespondingNode(BaseModel):
     training_repo_response: TrainingRepoResponse
     boosted_stake: float
     actual_stake: float
+
+
+class NextTournamentInfo(BaseModel):
+    tournament_type: TournamentType
+    next_start_date: datetime
+    next_end_date: datetime
+    interval_days: int
+
+
+class NextTournamentDates(BaseModel):
+    text: NextTournamentInfo
+    image: NextTournamentInfo
+
+
+class ActiveTournamentParticipant(BaseModel):
+    hotkey: str
+    stake_requirement: float
+
+
+class ActiveTournamentInfo(BaseModel):
+    tournament_id: str
+    tournament_type: TournamentType
+    status: TournamentStatus
+    participants: list[ActiveTournamentParticipant]
+    created_at: datetime
+
+
+class ActiveTournamentsResponse(BaseModel):
+    text: ActiveTournamentInfo | None
+    image: ActiveTournamentInfo | None

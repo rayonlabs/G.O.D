@@ -907,3 +907,74 @@ async def get_tournament_full_results(tournament_id: str, psql_db: PSQLDB) -> To
         tournament_id=tournament_id,
         rounds=round_results
     )
+
+
+async def get_tournament_with_created_at(tournament_id: str, psql_db: PSQLDB) -> tuple[TournamentData | None, datetime | None]:
+    """Get a tournament with its created_at timestamp."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, 
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.CREATED_AT}
+            FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_ID} = $1
+        """
+        result = await connection.fetchrow(query, tournament_id)
+        if result:
+            tournament = TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
+                winner_hotkey=result[cst.WINNER_HOTKEY],
+            )
+            created_at = result[cst.CREATED_AT]
+            return tournament, created_at
+        return None, None
+
+
+async def get_active_tournament(psql_db: PSQLDB, tournament_type: TournamentType) -> TournamentData | None:
+    """Get the active tournament for a given type (if any)."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, 
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
+            FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'active'
+            ORDER BY {cst.CREATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, tournament_type.value)
+        if result:
+            return TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
+                winner_hotkey=result[cst.WINNER_HOTKEY],
+            )
+        return None
+
+
+async def get_latest_tournament_with_created_at(psql_db: PSQLDB, tournament_type: TournamentType) -> tuple[TournamentData | None, datetime | None]:
+    """Get the latest tournament (active or completed) with its created_at timestamp."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, 
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.CREATED_AT}
+            FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_TYPE} = $1
+            ORDER BY {cst.CREATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, tournament_type.value)
+        if result:
+            tournament = TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
+                winner_hotkey=result[cst.WINNER_HOTKEY],
+            )
+            created_at = result[cst.CREATED_AT]
+            return tournament, created_at
+        return None, None
