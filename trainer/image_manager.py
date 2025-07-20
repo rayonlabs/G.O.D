@@ -19,6 +19,7 @@ from core.models.utility_models import TaskType
 from trainer import constants as cst
 from trainer.tasks import complete_task
 from trainer.tasks import log_task
+import trainer.utils.training_paths as train_paths
 from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
 from validator.utils.logging import stream_container_logs
@@ -268,11 +269,7 @@ async def upload_repo_to_hf(
     try:
         client = docker.from_env()
 
-        local_container_folder = (
-            f"{cst.IMAGE_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}/"
-            if task_type == TaskType.IMAGETASK
-            else f"{cst.TEXT_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}/"
-        )
+        local_container_folder = train_paths.get_checkpoints_output_path(task_id, expected_repo_name)
 
         environment = {
             "HUGGINGFACE_TOKEN": huggingface_token,
@@ -284,11 +281,8 @@ async def upload_repo_to_hf(
             "HF_REPO_SUBFOLDER": path_in_repo,
         }
 
-        container_path = cst.IMAGE_CONTAINER_SAVE_PATH if task_type == TaskType.IMAGETASK else cst.TEXT_CONTAINER_SAVE_PATH
-
         volumes = {
-            cst.VOLUME_NAMES[0]: {"bind": container_path, "mode": "rw"},
-            cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"},
+            cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"}
         }
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"

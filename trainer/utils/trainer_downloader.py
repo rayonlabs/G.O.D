@@ -13,6 +13,7 @@ from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from trainer import constants as cst
+import trainer.utils.training_paths as train_paths
 
 
 hf_api = HfApi()
@@ -22,8 +23,7 @@ async def download_text_dataset(task_id, dataset_url, file_format, dataset_dir):
     os.makedirs(dataset_dir, exist_ok=True)
 
     if file_format == FileFormat.S3.value:
-        dataset_filename = f"{task_id}_train_data.json"
-        input_data_path = os.path.join(dataset_dir, dataset_filename)
+        input_data_path = train_paths.get_text_dataset_path(task_id)
 
         if not os.path.exists(input_data_path):
             local_path = await download_s3_file(dataset_url)
@@ -41,7 +41,7 @@ async def download_text_dataset(task_id, dataset_url, file_format, dataset_dir):
 
 async def download_image_dataset(dataset_zip_url, task_id, dataset_dir):
     os.makedirs(dataset_dir, exist_ok=True)
-    local_zip_path = f"{dataset_dir}/{task_id}.zip"
+    local_zip_path = train_paths.get_image_training_zip_save_path(task_id)
     print(f"Downloading dataset from: {dataset_zip_url}")
     local_path = await download_s3_file(dataset_zip_url, local_zip_path)
     print(f"Downloaded dataset to: {local_path}")
