@@ -124,7 +124,7 @@ async def main():
     # Prepare dataset
     print("Preparing dataset...", flush=True)
 
-    prepare_dataset(
+     prepare_dataset(
         training_images_zip_path=train_paths.get_image_training_zip_save_path(args.task_id),
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
         instance_prompt=cst.DIFFUSION_DEFAULT_INSTANCE_PROMPT,

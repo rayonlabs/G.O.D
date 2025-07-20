@@ -6,9 +6,12 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import ConfigDict
 
+from core.models.payload_models import TrainingRepoResponse
 from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
+from fiber.chain.models import Node
 from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
 from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100
 from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100
@@ -125,6 +128,7 @@ class TournamentParticipant(BaseModel):
     final_position: int | None = None
     training_repo: str | None = None
     training_commit_hash: str | None = None
+    stake_required: float | None = None
 
 
 class TournamentTask(BaseModel):
@@ -248,3 +252,42 @@ class TaskScore(BaseModel):
     test_loss: float
     synth_loss: float
     quality_score: float
+
+
+class RespondingNode(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    node: Node
+    training_repo_response: TrainingRepoResponse
+    boosted_stake: float
+    actual_stake: float
+
+
+class NextTournamentInfo(BaseModel):
+    tournament_type: TournamentType
+    next_start_date: datetime
+    next_end_date: datetime
+    interval_days: int
+
+
+class NextTournamentDates(BaseModel):
+    text: NextTournamentInfo
+    image: NextTournamentInfo
+
+
+class ActiveTournamentParticipant(BaseModel):
+    hotkey: str
+    stake_requirement: float
+
+
+class ActiveTournamentInfo(BaseModel):
+    tournament_id: str
+    tournament_type: TournamentType
+    status: TournamentStatus
+    participants: list[ActiveTournamentParticipant]
+    created_at: datetime
+
+
+class ActiveTournamentsResponse(BaseModel):
+    text: ActiveTournamentInfo | None
+    image: ActiveTournamentInfo | None
