@@ -6,7 +6,7 @@ from trainer import constants as cst
 
 
 TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
-CHECKPOINTS_DIR = Path(cst.CHECKPOINTS_DIR)
+CHECKPOINTS_DIR = Path(cst.OUTPUT_CHECKPOINTS_PATH)
 CACHE_MODELS_DIR = Path(cst.CACHE_MODELS_DIR)
 CACHE_DATASETS_DIR = Path(cst.CACHE_DATASETS_DIR)
 CUTOFF_HOURS = cst.CACHE_CLEANUP_CUTOFF_HOURS
@@ -86,12 +86,13 @@ def clean_models(task_history: list[dict]):
         ):
             recent_models.add(model_folder)
 
-    for model_dir in CACHE_MODELS_DIR.iterdir():
-        if not model_dir.is_dir():
-            continue
-        if model_dir.name not in recent_models and model_dir.name in all_models:
-            print(f"Deleting model folder: {model_dir}")
-            shutil.rmtree(model_dir, ignore_errors=True)
+    if CACHE_MODELS_DIR.exists():
+        for model_dir in CACHE_MODELS_DIR.iterdir():
+            if not model_dir.is_dir():
+                continue
+            if model_dir.name not in recent_models and model_dir.name in all_models:
+                print(f"Deleting model folder: {model_dir}")
+                shutil.rmtree(model_dir, ignore_errors=True)
 
 
 def main():
