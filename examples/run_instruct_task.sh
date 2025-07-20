@@ -13,6 +13,7 @@ DATASET_TYPE='{
 
 # File format: "csv", "json", "hf" (HuggingFace), or "s3"
 FILE_FORMAT="s3"
+HOURS_TO_COMPLETE=8
 
 
 # For uploading the outputs
