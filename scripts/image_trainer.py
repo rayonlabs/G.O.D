@@ -24,14 +24,12 @@ from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.models.utility_models import ImageModelType
 
 
-def get_model_path(base_dir: str) -> str:
-    for item in os.listdir(base_dir):
-        full_path = os.path.join(base_dir, item)
-        if item.endswith(".safetensors") and os.path.isfile(full_path):
-            return full_path
-        if os.path.isdir(full_path):
-            return full_path
-    raise FileNotFoundError("No model folder or .safetensors file found in the provided directory.")
+def get_model_path(path: str) -> str:
+    if os.path.isdir(path):
+        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+        if len(files) == 1 and files[0].endswith(".safetensors"):
+            return os.path.join(path, files[0])
+    return path
 
 def create_config(task_id, model, model_type, expected_repo_name):
     """Create the diffusion config file"""
@@ -127,8 +125,8 @@ async def main():
     os.makedirs("/dataset/outputs", exist_ok=True)
     os.makedirs("/dataset/images", exist_ok=True)
 
-
-    model_path = get_model_path(f"{train_cst.CACHE_PATH}/{args.task_id}/models/")
+    model_folder = args.model.replace("/", "--")
+    model_path = get_model_path(f"{train_cst.CACHE_PATH}/models/{model_folder}")
 
     # Create config file
     config_path = create_config(
@@ -147,7 +145,7 @@ async def main():
         cst.DIFFUSION_DATASET_DIR = os.environ.get("DATASET_DIR")
 
     prepare_dataset(
-        training_images_zip_path=f"{train_cst.CACHE_PATH}/{args.task_id}/datasets/{args.task_id}.zip",
+        training_images_zip_path=f"{train_cst.CACHE_PATH}/datasets/{args.task_id}.zip",
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
         instance_prompt=cst.DIFFUSION_DEFAULT_INSTANCE_PROMPT,
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,

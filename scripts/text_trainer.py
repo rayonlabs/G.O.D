@@ -108,7 +108,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         config = yaml.safe_load(file)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
-    model_path = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
+    model_path = f"{train_cst.CACHE_PATH}/models/{model.replace('/', '--')}"
     config["base_model"] = model_path
     config["mlflow_experiment_name"] = dataset
     os.makedirs(output_dir, exist_ok=True)
@@ -238,7 +238,7 @@ async def main():
     except Exception as e:
         sys.exit(f"Error creating dataset type object: {e}")
 
-    base_dataset_path = f"{train_cst.CACHE_PATH}/{args.task_id}/datasets"
+    base_dataset_path = f"{train_cst.CACHE_PATH}/datasets"
     dataset_path = f"{base_dataset_path}/{args.task_id}_train_data.json" if args.file_format == FileFormat.S3.value else f"{base_dataset_path}/{args.dataset.replace('/', '--')}"
 
     if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
