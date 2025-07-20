@@ -24,9 +24,9 @@ def get_image_training_images_dir(task_id: str) -> str:
 def get_image_training_config_template_path(model_type: str) -> str:
     model_type = model_type.lower()
     if model_type == ImageModelType.SDXL.value:
-        return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH / "base_diffusion_sdxl.toml"))
+        return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH) / "base_diffusion_sdxl.toml")
     elif model_type == ImageModelType.FLUX.value:
-        return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH / "base_diffusion_flux.toml"))
+        return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH) / "base_diffusion_flux.toml")
 
 def get_image_training_zip_save_path(task_id: str) -> str:
     return str(Path(train_cst.CACHE_DATASETS_DIR) / f"{task_id}.zip")
