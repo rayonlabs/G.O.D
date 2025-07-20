@@ -123,19 +123,14 @@ async def main():
     # Prepare dataset
     print("Preparing dataset...", flush=True)
 
-    # Set DIFFUSION_DATASET_DIR to environment variable if available
-    original_dataset_dir = cst.DIFFUSION_DATASET_DIR
- 
     prepare_dataset(
         training_images_zip_path=train_paths.get_image_training_zip_save_path(args.task_id),
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
         instance_prompt=cst.DIFFUSION_DEFAULT_INSTANCE_PROMPT,
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,
         job_id=args.task_id,
+        output_dir=train_cst.IMAGE_CONTAINER_IMAGES_PATH
     )
-
-    # Restore original value
-    cst.DIFFUSION_DATASET_DIR = original_dataset_dir
 
     # Run training
     run_training(args.model_type, config_path)
