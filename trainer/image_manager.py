@@ -119,7 +119,7 @@ async def run_trainer_container_image(
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
             network_mode="none",
-            environment={"TRANSFORMERS_CACHE": "/cache/hf_cache"},
+            environment={"TRANSFORMERS_CACHE": cst.HUGGINGFACE_CACHE_PATH},
             detach=True,
         )
 

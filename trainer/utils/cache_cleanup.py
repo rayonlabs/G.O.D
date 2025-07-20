@@ -41,14 +41,23 @@ def load_task_history() -> list[dict]:
 
 
 def clean_checkpoints(task_history: list[dict]):
+    task_id_to_times: dict[str, list[str | None]] = {}
+
     for task in task_history:
         task_id = task.get("training_data", {}).get("task_id")
+        if not task_id:
+            continue
         finished_at = task.get("finished_at")
-        if task_id and is_older_than(finished_at, CUTOFF_HOURS):
-            target = CHECKPOINTS_DIR / task_id
-            if target.exists():
-                print(f"Deleting checkpoint: {target}")
-                shutil.rmtree(target, ignore_errors=True)
+        task_id_to_times.setdefault(task_id, []).append(finished_at)
+
+    print(task_id_to_times.items())
+
+    for task_id, finished_list in task_id_to_times.items():
+
+        if all(is_older_than(finished_at, CUTOFF_HOURS) for finished_at in finished_list):
+            target = Path(CHECKPOINTS_DIR, task_id)
+            print(f"Deleting checkpoints for task {task_id} at {target}")
+            shutil.rmtree(target, ignore_errors=True)
 
 
 def clean_datasets(task_history: list[dict]):

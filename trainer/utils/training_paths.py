@@ -35,8 +35,8 @@ def get_text_dataset_path(task_id: str) -> str:
     return str(Path(train_cst.CACHE_DATASETS_DIR) / f"{task_id}_train_data.json")
 
 def get_axolotl_dataset_paths(dataset_filename: str) -> tuple[str, str]:
-    data_path = Path(train_cst.AXOLOTL_DIRECTORIES["data"]) / dataset_filename
-    root_path = Path(train_cst.AXOLOTL_DIRECTORIES["root"]) / dataset_filename
+    data_path = str(Path(train_cst.AXOLOTL_DIRECTORIES["data"]) / dataset_filename)
+    root_path = str(Path(train_cst.AXOLOTL_DIRECTORIES["root"]) / dataset_filename)
     return data_path, root_path
 
 def get_axolotl_base_config_path(dataset_type) -> str:

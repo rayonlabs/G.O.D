@@ -15,6 +15,7 @@ CACHE_CLEANUP_CUTOFF_HOURS = 12
 
 #TRAINING PATHS 
 CACHE_ROOT_PATH = "/cache"
+HUGGINGFACE_CACHE_PATH = "/cache/hf_cache"
 OUTPUT_CHECKPOINTS_PATH = "/app/checkpoints/"
 CACHE_MODELS_DIR = "/cache/models"
 CACHE_DATASETS_DIR = "/cache/datasets"

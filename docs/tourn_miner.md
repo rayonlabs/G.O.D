@@ -189,6 +189,7 @@ Tournaments are held every two weeks starting July 21st. There are separate tour
 2. **Don't hardcode paths** - Use provided constants
 3. **Don't ignore time limits** - Respect the hours-to-complete parameter
 4. **Don't skip validation** - Test with various model sizes and datasets
+5. **Don't upload/download in the training script** - Training container is run with no access to internet or host machine
 
 ## Reference Implementation
 
