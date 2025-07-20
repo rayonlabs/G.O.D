@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from typing import Dict
 
 from fastapi import APIRouter
@@ -220,14 +221,15 @@ async def get_next_tournament_dates(
             
             if created_at is None:
                 # No previous tournament, start from now
-                next_start = datetime.utcnow()
+                next_start = datetime.now(timezone.utc)
             else:
                 # Next tournament starts TOURNAMENT_INTERVAL_DAYS after the last one started
                 next_start = created_at + timedelta(days=cts.TOURNAMENT_INTERVAL_DAYS)
                 
                 # If the calculated start date is in the past, use current time
-                if next_start < datetime.utcnow():
-                    next_start = datetime.utcnow()
+                current_time = datetime.now(timezone.utc)
+                if next_start < current_time:
+                    next_start = current_time
             
             # Tournament ends TOURNAMENT_INTERVAL_DAYS after it starts
             next_end = next_start + timedelta(days=cts.TOURNAMENT_INTERVAL_DAYS)
