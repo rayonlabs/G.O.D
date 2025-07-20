@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from trainer.endpoints import factory_router
+from trainer.tasks import start_cleanup_loop_in_thread
 from validator.utils.logging import get_logger
 
 
@@ -23,6 +24,12 @@ def factory() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.on_event("startup")
+    async def startup():
+        logger.info("Starting async cleanup loop in a background thread")
+        start_cleanup_loop_in_thread()
+
     return app
 
 

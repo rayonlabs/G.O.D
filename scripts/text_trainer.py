@@ -21,6 +21,7 @@ project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
 import trainer.constants as train_cst
+import trainer.utils.training_paths as train_paths
 from core.config.config_handler import create_dataset_entry
 from core.config.config_handler import save_config
 from core.config.config_handler import update_flash_attention
@@ -76,43 +77,29 @@ def patch_model_metadata(output_dir: str, base_model_id: str):
         pass
 
 
-def copy_dataset_if_needed(dataset_path, file_format):
-    """Copy dataset to Axolotl directories for non-HF datasets."""
-    if file_format != FileFormat.HF.value:
-        dataset_filename = os.path.basename(dataset_path)
+def copy_dataset_to_axolotl_directories(dataset_path):
+    dataset_filename = os.path.basename(dataset_path)
+    data_path, root_path = train_paths.get_axolotl_dataset_paths(dataset_filename)
+    shutil.copy(dataset_path, data_path)
+    shutil.copy(dataset_path, root_path)
 
-        os.makedirs("/workspace/axolotl/data", exist_ok=True)
-        os.makedirs("/workspace/axolotl", exist_ok=True)
-
-        data_path = f"/workspace/axolotl/data/{dataset_filename}"
-        root_path = f"/workspace/axolotl/{dataset_filename}"
-
-        shutil.copy(dataset_path, data_path)
-        shutil.copy(dataset_path, root_path)
-
-        return data_path
-    return dataset_path
+    return data_path
 
 
 def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None,
                 huggingface_username=None, huggingface_token=None, disable_upload=True):
     """Create the axolotl config file with appropriate settings."""
-    if isinstance(dataset_type, InstructTextDatasetType | DpoDatasetType):
-        config_path = "/workspace/axolotl/base.yml"
-    elif isinstance(dataset_type, GrpoDatasetType):
-        config_path = "/workspace/axolotl/base_grpo.yml"
-    else:
-        raise ValueError(f"Unsupported dataset type: {type(dataset_type)}")
+    config_path = train_paths.get_axolotl_base_config_path(dataset_type)
 
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
-    model_path = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
+    model_path = str(train_paths.get_text_base_model_path(model))
     config["base_model"] = model_path
     config["mlflow_experiment_name"] = dataset
     os.makedirs(output_dir, exist_ok=True)
-    config["output_dir"] = output_dir
+    config["output_dir"] = str(output_dir)
 
     config = update_flash_attention(config, model)
 
@@ -122,7 +109,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         filename, reward_funcs_names = create_reward_funcs_file(
             [reward_function.reward_func for reward_function in dataset_type.reward_functions],
             task_id,
-            destination_dir="/workspace/axolotl/src/",
+            destination_dir=train_cst.AXOLOTL_DIRECTORIES["src"],
         )
         config["trl"]["reward_funcs"] = [f"{filename}.{func_name}" for func_name in reward_funcs_names]
         config["trl"]["reward_weights"] = [reward_function.reward_weight for reward_function in dataset_type.reward_functions]
@@ -146,7 +133,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
             ds["ds_type"] = "json"
 
             if "path" in ds:
-                ds["path"] = "/workspace/axolotl/data"
+                ds["path"] = train_cst.AXOLOTL_DIRECTORIES["data"]
 
             ds["data_files"] = [os.path.basename(dataset)]
 
@@ -154,7 +141,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         config["special_tokens"] = {"pad_token": tokenizer.eos_token}
 
-    config_path = os.path.join("/workspace/axolotl/configs", f"{task_id}.yml")
+    config_path = os.path.join(train_cst.AXOLOTL_DIRECTORIES["configs"], f"{task_id}.yml")
     save_config(config, config_path)
     return config_path
 
@@ -213,16 +200,10 @@ async def main():
     parser.add_argument("--file-format", required=True, choices=["csv", "json", "hf", "s3"], help="File format")
     parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
+    parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
     args = parser.parse_args()
 
-    for directory in [
-        "/workspace/axolotl/data",
-        "/workspace/axolotl/data_prepared",
-        "/workspace/axolotl/configs",
-        "/workspace/axolotl/outputs",
-        "/workspace/input_data",
-        "/workspace/axolotl"
-    ]:
+    for directory in train_cst.AXOLOTL_DIRECTORIES.values():
         os.makedirs(directory, exist_ok=True)
     try:
         dataset_type_dict = json.loads(args.dataset_type)
@@ -238,17 +219,17 @@ async def main():
     except Exception as e:
         sys.exit(f"Error creating dataset type object: {e}")
 
-    base_dataset_path = f"{train_cst.CACHE_PATH}/{args.task_id}/datasets"
-    dataset_path = f"{base_dataset_path}/{args.task_id}_train_data.json" if args.file_format == FileFormat.S3.value else f"{base_dataset_path}/{args.dataset.replace('/', '--')}"
-
-    if args.file_format == FileFormat.S3.value and args.task_type == TaskType.DPOTASK.value:
+    dataset_path = train_paths.get_text_dataset_path(args.task_id)
+    if args.task_type == TaskType.DPOTASK.value:
         adapt_columns_for_dpo_dataset(dataset_path, dataset_type, apply_formatting=True)
-    elif args.file_format == FileFormat.S3.value and args.task_type == TaskType.GRPOTASK.value:
+    elif args.task_type == TaskType.GRPOTASK.value:
         adapt_columns_for_grpo_dataset(dataset_path, dataset_type)
 
-    dataset_path = copy_dataset_if_needed(dataset_path, args.file_format)
+    dataset_path = copy_dataset_to_axolotl_directories(dataset_path)
 
-    output_dir = f"/workspace/axolotl/outputs/{args.task_id}/{args.expected_repo_name}"
+    output_dir = train_paths.get_checkpoints_output_path(args.task_id, args.expected_repo_name)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
 
     config_path = create_config(
         args.task_id,
