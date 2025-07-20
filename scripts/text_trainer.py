@@ -199,6 +199,7 @@ async def main():
     parser.add_argument("--task-type", required=True, choices=["InstructTextTask", "DpoTask", "GrpoTask"], help="Type of task")
     parser.add_argument("--file-format", required=True, choices=["csv", "json", "hf", "s3"], help="File format")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
+    parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
     args = parser.parse_args()
 
     for directory in train_cst.AXOLOTL_DIRECTORIES.values():

@@ -104,6 +104,7 @@ async def main():
     parser.add_argument("--dataset-zip", required=True, help="Link to dataset zip file")
     parser.add_argument("--model-type", required=True, choices=["sdxl", "flux"], help="Model type")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
+    parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
     args = parser.parse_args()
 
     os.makedirs(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, exist_ok=True)
@@ -124,9 +125,7 @@ async def main():
 
     # Set DIFFUSION_DATASET_DIR to environment variable if available
     original_dataset_dir = cst.DIFFUSION_DATASET_DIR
-    if os.environ.get("DATASET_DIR"):
-        cst.DIFFUSION_DATASET_DIR = os.environ.get("DATASET_DIR")
-
+ 
     prepare_dataset(
         training_images_zip_path=train_paths.get_image_training_zip_save_path(args.task_id),
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
