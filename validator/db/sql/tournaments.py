@@ -4,6 +4,7 @@ from datetime import timezone
 
 from fiber.chain.models import Node
 
+import validator.core.constants
 import validator.db.constants as cst
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import TournamentData
@@ -125,8 +126,8 @@ async def add_tournament_participants(participants: list[TournamentParticipant],
         async with connection.transaction():
             query = f"""
                 INSERT INTO {cst.TOURNAMENT_PARTICIPANTS_TABLE} 
-                ({cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.CREATED_AT})
-                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                ({cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.ENTRY_STAKE}, {cst.CREATED_AT})
+                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
                 ON CONFLICT ({cst.TOURNAMENT_ID}, {cst.HOTKEY}) DO NOTHING
             """
             for participant in participants:
@@ -136,6 +137,7 @@ async def add_tournament_participants(participants: list[TournamentParticipant],
                     participant.hotkey,
                     participant.training_repo,
                     participant.training_commit_hash,
+                    participant.entry_stake,
                 )
             logger.info(f"Added {len(participants)} participants to tournament")
 
@@ -481,7 +483,7 @@ async def get_tournament_participant(tournament_id: str, hotkey: str, psql_db: P
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.ELIMINATED_IN_ROUND_ID}, 
-                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
+                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.ENTRY_STAKE}
             FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1 AND {cst.HOTKEY} = $2
         """
@@ -494,6 +496,7 @@ async def get_tournament_participant(tournament_id: str, hotkey: str, psql_db: P
                 final_position=result[cst.FINAL_POSITION],
                 training_repo=result[cst.TRAINING_REPO],
                 training_commit_hash=result[cst.TRAINING_COMMIT_HASH],
+                entry_stake=result[cst.ENTRY_STAKE],
             )
         return None
 
@@ -503,7 +506,7 @@ async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> li
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.ELIMINATED_IN_ROUND_ID}, 
-                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
+                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.ENTRY_STAKE}
             FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1
         """
@@ -516,6 +519,7 @@ async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> li
                 final_position=row[cst.FINAL_POSITION],
                 training_repo=row[cst.TRAINING_REPO],
                 training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
+                entry_stake=row[cst.ENTRY_STAKE],
             )
             for row in results
         ]
@@ -796,6 +800,74 @@ async def get_tasks_with_all_training_completed(psql_db: PSQLDB) -> list[str]:
         """
         results = await connection.fetch(query)
         return [row[cst.TASK_ID] for row in results]
+
+
+async def eliminate_tournament_participants(tournament_id: str, round_id: str, hotkeys: list[str], psql_db: PSQLDB):
+    """Mark tournament participants as eliminated in the specified round."""
+    if not hotkeys:
+        return
+    
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+            SET {cst.ELIMINATED_IN_ROUND_ID} = $2
+            WHERE {cst.TOURNAMENT_ID} = $1 AND {cst.HOTKEY} = ANY($3)
+            AND {cst.ELIMINATED_IN_ROUND_ID} IS NULL
+        """
+        await connection.execute(query, tournament_id, round_id, hotkeys)
+        logger.info(f"Eliminated {len(hotkeys)} participants from tournament {tournament_id} in round {round_id}")
+
+
+async def get_participants_with_insufficient_stake(tournament_id: str, psql_db: PSQLDB) -> list[str]:
+    """Get list of participant hotkeys who no longer meet their stake requirement."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT tp.{cst.HOTKEY}
+            FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE} tp
+            JOIN {cst.NODES_TABLE} n ON tp.{cst.HOTKEY} = n.{cst.HOTKEY}
+            WHERE tp.{cst.TOURNAMENT_ID} = $1 
+            AND tp.{cst.ELIMINATED_IN_ROUND_ID} IS NULL
+            AND (n.alpha_stake < COALESCE(tp.{cst.ENTRY_STAKE}, 0))
+        """
+        results = await connection.fetch(query, tournament_id)
+        return [row[cst.HOTKEY] for row in results]
+
+
+def calculate_boosted_stake(actual_stake: float, completed_entries: int) -> float:
+    """Calculate stake with repeat participant bonus."""
+    boost_percentage = min(completed_entries * validator.core.constants.TOURNAMENT_REPEAT_BOOST_PERCENTAGE, 
+                          validator.core.constants.TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE)
+    return actual_stake * (1 + boost_percentage / 100)
+
+
+async def count_completed_tournament_entries(hotkey: str, psql_db: PSQLDB) -> int:
+    """Count how many completed tournaments a hotkey has participated in."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT COUNT(DISTINCT tp.{cst.TOURNAMENT_ID}) 
+            FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE} tp
+            JOIN {cst.TOURNAMENTS_TABLE} t ON tp.{cst.TOURNAMENT_ID} = t.{cst.TOURNAMENT_ID}
+            WHERE tp.{cst.HOTKEY} = $1 
+            AND t.{cst.TOURNAMENT_STATUS} = 'completed'
+        """
+        result = await connection.fetchrow(query, hotkey)
+        return result[0] if result else 0
+
+
+async def get_active_tournament_participants(psql_db: PSQLDB) -> list[str]:
+    """Get hotkeys of all active tournament participants for participation weights."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT DISTINCT tp.{cst.HOTKEY}
+            FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE} tp
+            JOIN {cst.TOURNAMENTS_TABLE} t ON tp.{cst.TOURNAMENT_ID} = t.{cst.TOURNAMENT_ID}
+            WHERE t.{cst.TOURNAMENT_STATUS} = 'active'
+            AND tp.{cst.ELIMINATED_IN_ROUND_ID} IS NULL
+        """
+        results = await connection.fetch(query)
+        hotkeys = [row[cst.HOTKEY] for row in results]
+        logger.info(f"Found {len(hotkeys)} active tournament participants for participation weights")
+        return hotkeys
 
 
 async def get_tournament_full_results(tournament_id: str, psql_db: PSQLDB) -> TournamentResults:
