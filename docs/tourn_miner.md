@@ -23,7 +23,9 @@ Where `task_type` can be:
 
 ## Docker-Based Architecture
 
-### Supported Base Images
+### Recommended Starting Images
+
+You can use any Docker base image that suits your needs. We provide these as recommended starting points:
 
 **For Text Tasks (Instruct, DPO, GRPO, Chat):**
 ```dockerfile
@@ -34,6 +36,8 @@ FROM axolotlai/axolotl:main-py3.11-cu124-2.5.1
 ```dockerfile
 FROM diagonalge/kohya_latest:latest
 ```
+
+Feel free to use alternative base images or build your own custom environment as long as it can handle the required training tasks.
 
 ### Required Repository Structure
 
