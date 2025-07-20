@@ -11,7 +11,7 @@ def get_checkpoints_output_path(task_id: str, repo_name: str) -> str:
 
 def get_image_base_model_path(model_id: str) -> str:
     model_folder = model_id.replace("/", "--")
-    base_path = Path(train_cst.CACHE_MODELS_DIR) / model_folder
+    base_path = str(Path(train_cst.CACHE_MODELS_DIR) / model_folder)
     if os.path.isdir(base_path):
         files = [f for f in os.listdir(base_path) if os.path.isfile(os.path.join(base_path, f))]
         if len(files) == 1 and files[0].endswith(".safetensors"):
@@ -24,9 +24,9 @@ def get_image_training_images_dir(task_id: str) -> str:
 def get_image_training_config_template_path(model_type: str) -> str:
     model_type = model_type.lower()
     if model_type == ImageModelType.SDXL.value:
-        return str(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH / "base_diffusion_sdxl.toml")
+        return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH / "base_diffusion_sdxl.toml"))
     elif model_type == ImageModelType.FLUX.value:
-        return str(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH / "base_diffusion_flux.toml")
+        return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH / "base_diffusion_flux.toml"))
 
 def get_image_training_zip_save_path(task_id: str) -> str:
     return str(Path(train_cst.CACHE_DATASETS_DIR) / f"{task_id}.zip")

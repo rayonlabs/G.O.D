@@ -99,8 +99,8 @@ async def run_trainer_container_image(
             image=tag,
             command=command,
             volumes={
-                cst.VOLUME_NAMES[0]: {"bind": cst.IMAGE_CONTAINER_SAVE_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"},
+                cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
+                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
             },
             remove=False,
             name=container_name,
@@ -160,8 +160,8 @@ async def run_trainer_container_text(
             image=tag,
             command=command,
             volumes={
-                cst.VOLUME_NAMES[0]: {"bind": cst.TEXT_CONTAINER_SAVE_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"},
+                cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
+                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
             },
             remove=False,
             name=container_name,
