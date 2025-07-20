@@ -260,6 +260,9 @@ async def main():
         args.expected_repo_name,
     )
 
+    import time
+    print("Waiting 10 minutes before training...")
+    time.sleep(10*60)
     run_training(config_path)
 
     patch_model_metadata(output_dir, args.model)

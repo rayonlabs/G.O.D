@@ -1,3 +1,4 @@
+import time
 
 
 def reward_specific_char_count(completions, **kwargs):
@@ -479,6 +480,13 @@ def test_download_all_rewards():
     except Exception as e:
         print(f"❌ Error in reward_low_identity_attack_score: {e}")
 
+    # # wait 10 minutes while showing remaining time in a clean loop
+    # for i in range(4):
+    #     print(f"Waiting {10 - i} minutes...")
+    #     time.sleep(60)
+
 
 if __name__ == "__main__":
-    test_download_all_rewards()
+    # test_download_all_rewards()
+    from detoxify import Detoxify
+    model = Detoxify('original')
