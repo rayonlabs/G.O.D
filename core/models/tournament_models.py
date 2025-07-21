@@ -70,7 +70,6 @@ def generate_pair_id(round_id: str, pair_number: int) -> str:
 
 
 def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int) -> GpuRequirement:
-    return GpuRequirement.A100
     if task_type == TaskType.IMAGETASK:
         return GpuRequirement.A100
 
