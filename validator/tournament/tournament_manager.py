@@ -9,11 +9,11 @@ from core.models.payload_models import TrainingRepoResponse
 from core.models.tournament_models import Group
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import KnockoutRound
+from core.models.tournament_models import RespondingNode
 from core.models.tournament_models import Round
 from core.models.tournament_models import RoundStatus
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentData
-from core.models.tournament_models import RespondingNode
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentStatus
@@ -31,9 +31,9 @@ from validator.db.sql.tournaments import add_tournament_participants
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import calculate_boosted_stake
 from validator.db.sql.tournaments import count_completed_tournament_entries
+from validator.db.sql.tournaments import create_tournament
 from validator.db.sql.tournaments import eliminate_tournament_participants
 from validator.db.sql.tournaments import get_participants_with_insufficient_stake
-from validator.db.sql.tournaments import create_tournament
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
@@ -76,10 +76,10 @@ def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
         hotkeys = [node.hotkey for node in nodes_copy]
 
         if len(hotkeys) % 2 == 1:
-            if config.tournament_base_contestant_hotkey not in hotkeys:
-                hotkeys.append(config.tournament_base_contestant_hotkey)
+            if cst.EMISSION_BURN_HOTKEY not in hotkeys:
+                hotkeys.append(cst.EMISSION_BURN_HOTKEY)
             else:
-                hotkeys.remove(config.tournament_base_contestant_hotkey)
+                hotkeys.remove(cst.EMISSION_BURN_HOTKEY)
 
         random.shuffle(hotkeys)
         pairs = []
@@ -246,16 +246,16 @@ async def create_next_round(
         next_round_is_final = len(winners) == 1
 
         if len(winners) == 2:
-            if config.tournament_base_contestant_hotkey in winners:
+            if cst.EMISSION_BURN_HOTKEY in winners:
                 next_round_is_final = True
         elif len(winners) % 2 == 1:
-            if config.tournament_base_contestant_hotkey not in winners:
-                winners.append(config.tournament_base_contestant_hotkey)
+            if cst.EMISSION_BURN_HOTKEY not in winners:
+                winners.append(cst.EMISSION_BURN_HOTKEY)
             else:
                 if len(winners) == 1:
                     next_round_is_final = True
                 else:
-                    winners = [w for w in winners if w != config.tournament_base_contestant_hotkey]
+                    winners = [w for w in winners if w != cst.EMISSION_BURN_HOTKEY]
 
         winner_nodes = []
         for hotkey in winners:
@@ -296,25 +296,27 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
 
         winners = await get_round_winners(completed_round, psql_db, config)
         logger.info(f"Round winners: {winners}")
-        
+
         # Get all active participants and handle eliminations
         all_participants = await get_tournament_participants(tournament.tournament_id, psql_db)
         active_participants = [p.hotkey for p in all_participants if p.eliminated_in_round_id is None]
-        
+
         # Eliminate losers (those who didn't win)
         losers = [p for p in active_participants if p not in winners]
-        
+
         # Check stake requirements for winners
         insufficient_stake_hotkeys = await get_participants_with_insufficient_stake(tournament.tournament_id, psql_db)
         winners_with_insufficient_stake = [w for w in winners if w in insufficient_stake_hotkeys]
-        
+
         # Combine all eliminations
         all_eliminated = losers + winners_with_insufficient_stake
         if all_eliminated:
             await eliminate_tournament_participants(tournament.tournament_id, completed_round.round_id, all_eliminated, psql_db)
             if winners_with_insufficient_stake:
-                logger.info(f"Eliminated {len(winners_with_insufficient_stake)} winners for insufficient stake: {winners_with_insufficient_stake}")
-        
+                logger.info(
+                    f"Eliminated {len(winners_with_insufficient_stake)} winners for insufficient stake: {winners_with_insufficient_stake}"
+                )
+
         # Update winners list to remove those with insufficient stake
         winners = [w for w in winners if w not in winners_with_insufficient_stake]
 
@@ -322,7 +324,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             logger.warning(
                 f"No winners found for round {completed_round.round_id}. Setting base contestant as winner of the tournament."
             )
-            winner = config.tournament_base_contestant_hotkey
+            winner = cst.EMISSION_BURN_HOTKEY
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
@@ -384,10 +386,10 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
     if base_winner_hotkey:
         base_participant = TournamentParticipant(
             tournament_id=tournament_id,
-            hotkey=config.tournament_base_contestant_hotkey,
+            hotkey=cst.EMISSION_BURN_HOTKEY,
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
-            stake_required=0
+            stake_required=0,
         )
         await add_tournament_participants([base_participant], psql_db)
 
@@ -410,7 +412,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         all_nodes = await get_all_nodes(psql_db)
 
         # Get all nodes except base contestant
-        eligible_nodes = [node for node in all_nodes if node.hotkey != config.tournament_base_contestant_hotkey]
+        eligible_nodes = [node for node in all_nodes if node.hotkey != cst.EMISSION_BURN_HOTKEY]
 
         if not eligible_nodes:
             logger.warning("No eligible nodes found for tournament")
@@ -421,7 +423,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         # Ping all nodes to get responders
         responding_nodes = []
         batch_size = t_cst.TOURNAMENT_PARTICIPANT_PING_BATCH_SIZE
-        
+
         for i in range(0, len(eligible_nodes), batch_size):
             batch = eligible_nodes[i : i + batch_size]
             logger.info(
@@ -440,12 +442,9 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                     elif result:
                         completed_entries = await count_completed_tournament_entries(node.hotkey, psql_db)
                         boosted_stake = calculate_boosted_stake(node.alpha_stake, completed_entries)
-                        
+
                         responding_node = RespondingNode(
-                            node=node,
-                            training_repo_response=result,
-                            boosted_stake=boosted_stake,
-                            actual_stake=node.alpha_stake
+                            node=node, training_repo_response=result, boosted_stake=boosted_stake, actual_stake=node.alpha_stake
                         )
                         responding_nodes.append(responding_node)
                         logger.info(
@@ -457,7 +456,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
         # Sort by boosted stake (descending) and take top N
         responding_nodes.sort(key=lambda x: x.boosted_stake, reverse=True)
-        selected_nodes = responding_nodes[:cst.TOURNAMENT_TOP_N_BY_STAKE]
+        selected_nodes = responding_nodes[: cst.TOURNAMENT_TOP_N_BY_STAKE]
 
         logger.info(f"Selected top {len(selected_nodes)} responders by boosted stake")
 
@@ -465,20 +464,18 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         miners_that_accept_and_give_repos = 0
         for responding_node in selected_nodes:
             participant = TournamentParticipant(
-                tournament_id=tournament_id,
-                hotkey=responding_node.node.hotkey,
-                stake_required=responding_node.actual_stake
+                tournament_id=tournament_id, hotkey=responding_node.node.hotkey, stake_required=responding_node.actual_stake
             )
             await add_tournament_participants([participant], psql_db)
-            
+
             await update_tournament_participant_training_repo(
-                tournament_id, 
-                responding_node.node.hotkey, 
-                responding_node.training_repo_response.github_repo, 
-                responding_node.training_repo_response.commit_hash, 
-                psql_db
+                tournament_id,
+                responding_node.node.hotkey,
+                responding_node.training_repo_response.github_repo,
+                responding_node.training_repo_response.commit_hash,
+                psql_db,
             )
-            
+
             miners_that_accept_and_give_repos += 1
 
         logger.info(f"Successfully populated {miners_that_accept_and_give_repos} participants for tournament {tournament_id}")
@@ -493,8 +490,6 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
             f"Tournament {tournament_id} only has {miners_that_accept_and_give_repos} miners that accept and give repos, need at least {cst.MIN_MINERS_FOR_TOURN}. Waiting 30 minutes and retrying..."
         )
         await asyncio.sleep(30 * 60)
-
-
 
 
 async def _get_miner_training_repo(node: Node, config: Config, tournament_type: TournamentType) -> TrainingRepoResponse | None:
@@ -534,7 +529,7 @@ async def create_first_round_for_active_tournament(tournament_id: str, config: C
 
     participant_nodes = []
     for participant in participants:
-        if participant.hotkey == config.tournament_base_contestant_hotkey:
+        if participant.hotkey == cst.EMISSION_BURN_HOTKEY:
             continue
 
         node = await get_node_by_hotkey(participant.hotkey, psql_db)
