@@ -141,7 +141,7 @@ MIN_MINERS_FOR_TOURN = 8
 TOURNAMENT_TOP_N_BY_STAKE = 32
 TOURNAMENT_REPEAT_BOOST_PERCENTAGE = 5  # 5% boost per previous entry
 TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE = 25  # Maximum 25% boost
-TOURNAMENT_PARTICIPATION_WEIGHT = 0.005  # Weight given to active participants
+TOURNAMENT_PARTICIPATION_WEIGHT = 0.0001  # Weight given to active participants
 
 # General miner pool sizes
 MIN_IDEAL_NUM_MINERS_IN_POOL = 8
