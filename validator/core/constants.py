@@ -300,6 +300,7 @@ CHAIN_WEIGHT_DIVISOR = 65535
 # GRPO evaluation
 TRL_GRPO_FIELD_PROMPT = GRPO_DEFAULT_FIELD_PROMPT
 
+
 MIN_SYNTH_JOBS_REQUIRED_PER_DAY = 3
 
 # Default, fixed Hyperparameters
@@ -326,6 +327,7 @@ STANDARD_CHAT_ROLE_FIELD = "from"
 STANDARD_CHAT_CONTENT_FIELD = "value"
 
 
+
 # Trainer endpoints
 
 PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
@@ -335,3 +337,4 @@ TASK_DETAILS_ENDPOINT = "/v1/trainer/{task_id}"
 # Tournament constants
 DEFAULT_PARTICIPANT_REPO = "https://github.com/rayonlabs/G.O.D"
 DEFAULT_PARTICIPANT_COMMIT = "0bc824a3f21b76ad59ff6810e921c1efdb80e6fe"
+

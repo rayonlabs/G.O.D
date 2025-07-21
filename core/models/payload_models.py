@@ -11,8 +11,12 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
+
+from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import TextDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import JobStatus
@@ -217,6 +221,7 @@ class NewTaskRequestChat(NewTaskRequest):
             "chat_user_reference",
             "chat_assistant_reference",
         ]
+
         for field in string_fields:
             if field in values and isinstance(values[field], str):
                 values[field] = values[field].strip() or None

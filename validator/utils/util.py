@@ -3,7 +3,9 @@ import os
 import tempfile
 
 import httpx
+from requests.exceptions import HTTPError
 from tenacity import retry
+from tenacity import retry_if_exception
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
@@ -22,6 +24,10 @@ from validator.core.models import TaskType
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
 
+
+
+from validator.utils.retry_utils import retry_on_5xx
+from validator.utils.retry_utils import should_retry_model_loading_on_exception
 
 logger = get_logger(__name__)
 

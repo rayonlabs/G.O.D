@@ -928,7 +928,6 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
         elif task_type == TaskType.CHATTASK.value:
             return ChatTask(**full_task_data)
 
-
 async def get_tasks_by_ids(task_ids: list[UUID], psql_db: PSQLDB, connection: Connection | None = None) -> list[AnyTypeTask]:
     """Get multiple tasks by their IDs efficiently in batch.
 
@@ -1019,6 +1018,7 @@ async def _load_tasks_by_type(
                 tasks.append(task)
         else:
             logger.warning(f"Specific data not found for task {task_id} of type {task_type}")
+
 
     return tasks
 
