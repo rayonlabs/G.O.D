@@ -459,6 +459,10 @@ async def _monitor_training_tasks(config: Config):
                 trainer_ip = None
                 task_log = None
 
+                logger.info(
+                    f"Checking task {training_task.task.task_id} with hotkey {training_task.hotkey} "
+                    f"on trainers {[trainer.trainer_ip for trainer in trainers]}"
+                )
                 for trainer in trainers:
                     try:
                         task_log = await get_training_task_details(
@@ -466,7 +470,16 @@ async def _monitor_training_tasks(config: Config):
                         )
                         if task_log:
                             trainer_ip = trainer.trainer_ip
+                            logger.info(
+                                f"Found task {training_task.task.task_id} with hotkey {training_task.hotkey} "
+                                f"on trainer {trainer_ip}"
+                                )
                             break
+                    except httpx.HTTPStatusError as e:
+                        status_code = e.response.status_code
+                        if 500 <= status_code < 600:
+                            logger.error(f"Server error ({status_code}) from trainer {trainer.trainer_ip}: {str(e)}")
+                        continue
                     except Exception as e:
                         logger.info(f"Could not get task details from trainer {trainer.trainer_ip}: {str(e)}")
                         continue
