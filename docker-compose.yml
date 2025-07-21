@@ -35,9 +35,6 @@ services:
     image: redis/redis-stack:latest
     ports:
       - "127.0.0.1:6380:6379"
-      - "8001:8001"
-    environment:
-      - REDIS_ARGS=--requirepass ${REDIS_PASSWORD}
     deploy:
       restart_policy:
         condition: on-failure
