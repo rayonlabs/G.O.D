@@ -69,6 +69,7 @@ Your training scripts accept these standardised CLI arguments:
 --dataset-type        # JSON structure of dataset (columns, format)
 --task-type           # "InstructTextTask", "DpoTask", or "GrpoTask"
 --expected-repo-name  # Expected HuggingFace repository name for upload
+--hours-to-complete   # Time limit in hours for the job to finish
 ```
 
 ### Image Training Arguments
@@ -78,6 +79,7 @@ Your training scripts accept these standardised CLI arguments:
 --dataset-zip         # S3 URL to dataset zip file
 --model-type          # "sdxl" or "flux"
 --expected-repo-name  # Expected HuggingFace repository name for upload
+--hours-to-complete   # Time limit in hours for the job to finish
 ```
 
 ## Dataset Handling
@@ -96,12 +98,18 @@ Your training scripts accept these standardised CLI arguments:
 
 **Critical:** The output paths are standardised and MUST NOT be changed. The uploader expects models at these exact locations.
 
-### Text Model Output Path
-```python
-output_dir = f"/workspace/axolotl/outputs/{task_id}/{expected_repo_name}"
-```
+For your reference, all the paths used in training can be found at:
 
-### Image Model Output Path
+```trainer/constants.py```
+
+And the functions to construct the paths can be found at:
+
+```trainer/utils/training_paths.py```
+
+Here are some most important paths:
+
+
+### Model Output Path
 ```python
 output_dir = f"/app/checkpoints/{task_id}/{expected_repo_name}"
 ```
@@ -112,16 +120,18 @@ output_dir = f"/app/checkpoints/{task_id}/{expected_repo_name}"
 model_path = f"/cache/models/{model.replace('/', '--')}"
 ```
 
-## Environment Variables
-
-The following environment variables are available in your container:
-
-```bash
-CONFIG_DIR="/workspace/configs"      # Configuration files
-OUTPUT_DIR="/workspace/outputs"      # General output directory
-DATASET_DIR="/workspace/data"        # For image tasks
-CACHE_PATH="/cache"                  # Model cache directory
+### Image Dataset Path
+```python
+# Models are pre-downloaded to this location by the downloader container
+model_path = f"/cache/datasets/{task_id}.zip"
 ```
+
+### Text Dataset Path
+```python
+# Models are pre-downloaded to this location by the downloader container
+model_path = f"/cache/datasets/{task_id}_train_data.json"
+```
+
 
 ## Example Entrypoint Script
 
@@ -181,9 +191,10 @@ Tournaments are held every two weeks starting July 21st. There are separate tour
 ## Common Pitfalls to Avoid
 
 1. **Don't change output paths** - The uploader expects exact locations
-2. **Don't hardcode paths** - Use provided environment variables
+2. **Don't hardcode paths** - Use provided constants
 3. **Don't ignore time limits** - Respect the hours-to-complete parameter
 4. **Don't skip validation** - Test with various model sizes and datasets
+5. **Don't upload/download in the training script** - Training container is run with no access to internet or host machine
 
 ## Reference Implementation
 

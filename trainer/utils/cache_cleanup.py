@@ -1,107 +1,120 @@
 import json
-import shutil
+import asyncio
+from datetime import timedelta
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timedelta
+import aiofiles
+import docker
+import threading
+
+from core.models.utility_models import TaskStatus
+from core.models.payload_models import TrainerProxyRequest, TrainerTaskLog
+from validator.utils.logging import get_all_context_tags
+from validator.utils.logging import get_logger
+from validator.utils.logging import stream_container_logs
 from trainer import constants as cst
 
+logger = get_logger(__name__)
 
+task_history: list[TrainerTaskLog] = []
 TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
-CHECKPOINTS_DIR = Path(cst.CHECKPOINTS_DIR)
-CACHE_MODELS_DIR = Path(cst.CACHE_MODELS_DIR)
-CACHE_DATASETS_DIR = Path(cst.CACHE_DATASETS_DIR)
-CUTOFF_HOURS = cst.CACHE_CLEANUP_CUTOFF_HOURS
 
 
-def parse_time(dt_str: str | None) -> datetime | None:
-    if not dt_str:
-        return None
-    try:
-        return datetime.fromisoformat(dt_str)
-    except Exception:
-        return None
+def start_cleanup_loop_in_thread():
+    def run():
+        asyncio.run(periodically_cleanup_tasks_and_cache())
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    
+
+async def periodically_cleanup_tasks_and_cache(poll_interval_seconds: int = 600):
+    while True:
+        if len(task_history) > 0:
+            now = datetime.utcnow()
+            for task in task_history:
+                if task.status != TaskStatus.TRAINING or not task.started_at:
+                    continue
+
+                timeout = timedelta(hours=task.training_data.hours_to_complete) + timedelta(minutes=cst.STALE_TASK_GRACE_MINUTES)
+                deadline = task.started_at + timeout
+
+                if now > deadline:
+                    task.status = TaskStatus.FAILURE
+                    task.finished_at = now
+                    task.logs.append(f"[{now.isoformat()}] Task marked as FAILED due to timeout.")
+                    await save_task_history()
+
+            client = docker.from_env()
+            abs_task_path = Path(cst.TASKS_FILE_PATH).resolve()
+
+            if abs_task_path.exists():
+
+                logger.info("Starting cleanup container...")
+
+                container = client.containers.run(
+                    image=cst.CACHE_CLEANER_DOCKER_IMAGE,
+                    volumes={
+                        cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
+                        cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
+                        str(abs_task_path): {"bind": "/app/trainer/task_history.json", "mode": "ro"},
+                    },
+                    remove=True,
+                    detach=True
+                )
+
+                log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+
+                logger.info("Cleanup container finished.")
 
 
-def is_older_than(dt_str: str | None, hours: int) -> bool:
-    dt = parse_time(dt_str)
-    if not dt:
-        return False
-    return datetime.utcnow() - dt > timedelta(hours=hours)
+            await asyncio.sleep(poll_interval_seconds)
 
 
-def get_model_folder(model_name: str) -> str:
-    return model_name.replace("/", "--")
+async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
+    log_entry = TrainerTaskLog(**task.dict(), status=TaskStatus.TRAINING, started_at=datetime.utcnow(), finished_at=None)
+    task_history.append(log_entry)
+    await save_task_history()
+    return log_entry.training_data.task_id, log_entry.hotkey
 
 
-def load_task_history() -> list[dict]:
-    if not TASK_HISTORY_FILE.exists():
-        print(f"Task history file not found at {TASK_HISTORY_FILE}")
-        return []
-    with TASK_HISTORY_FILE.open("r") as f:
-        return json.load(f)
+async def complete_task(task_id: str, hotkey: str, success: bool = True):
+    task = get_task(task_id, hotkey)
+    if task is None:
+        return
+    task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
+    task.finished_at = datetime.utcnow()
+    await save_task_history()
 
 
-def clean_checkpoints(task_history: list[dict]):
+def get_task(task_id: str, hotkey: str) -> TrainerTaskLog | None:
     for task in task_history:
-        task_id = task.get("training_data", {}).get("task_id")
-        finished_at = task.get("finished_at")
-        if task_id and is_older_than(finished_at, CUTOFF_HOURS):
-            target = CHECKPOINTS_DIR / task_id
-            if target.exists():
-                print(f"Deleting checkpoint: {target}")
-                shutil.rmtree(target, ignore_errors=True)
+        if task.training_data.task_id == task_id and task.hotkey == hotkey:
+            return task
+    return None
 
 
-def clean_datasets(task_history: list[dict]):
-    for task in task_history:
-        task_id = task.get("training_data", {}).get("task_id")
-        finished_at = task.get("finished_at")
-        if task_id and is_older_than(finished_at, CUTOFF_HOURS):
-            for ext in [".zip", ".json"]:
-                dataset_file = CACHE_DATASETS_DIR / f"{task_id}{ext}"
-                if dataset_file.exists():
-                    print(f"Deleting dataset file: {dataset_file}")
-                    dataset_file.unlink()
+async def log_task(task_id: str, hotkey: str, message: str):
+    task = get_task(task_id, hotkey)
+    if task:
+        timestamped_message = f"[{datetime.utcnow().isoformat()}] {message}"
+        task.logs.append(timestamped_message)
+        await save_task_history()
 
 
-def clean_models(task_history: list[dict]):
-    recent_models = set()
-    all_models = set()
-
-    for task in task_history:
-        model = task.get("training_data", {}).get("model")
-        if not model:
-            continue
-
-        model_folder = get_model_folder(model)
-        all_models.add(model_folder)
-
-        status = task.get("status")
-        started_at = task.get("started_at")
-        finished_at = task.get("finished_at")
-
-        if (
-            status == "training"
-            or not is_older_than(started_at, CUTOFF_HOURS)
-            or not is_older_than(finished_at, CUTOFF_HOURS)
-        ):
-            recent_models.add(model_folder)
-
-    for model_dir in CACHE_MODELS_DIR.iterdir():
-        if not model_dir.is_dir():
-            continue
-        if model_dir.name not in recent_models and model_dir.name in all_models:
-            print(f"Deleting model folder: {model_dir}")
-            shutil.rmtree(model_dir, ignore_errors=True)
+def get_running_tasks() -> list[TrainerTaskLog]:
+    return [t for t in task_history if t.status == TaskStatus.TRAINING]
 
 
-def main():
-    print(f"[{datetime.utcnow()}] Starting cleanup...")
-    task_history = load_task_history()
-    clean_checkpoints(task_history)
-    clean_datasets(task_history)
-    clean_models(task_history)
-    print(f"[{datetime.utcnow()}] Cleanup complete.")
+async def save_task_history():
+    async with aiofiles.open(TASK_HISTORY_FILE, "w") as f:
+        data = json.dumps([t.model_dump() for t in task_history], indent=2, default=str)
+        await f.write(data)
 
 
-if __name__ == "__main__":
-    main()
+def load_task_history():
+    global task_history
+    if TASK_HISTORY_FILE.exists():
+        with open(TASK_HISTORY_FILE, "r") as f:
+            data = json.load(f)
+            task_history.clear()
+            task_history.extend(TrainerTaskLog(**item) for item in data)
