@@ -3,15 +3,15 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
+from fiber.chain.models import Node
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
-from pydantic import ConfigDict
 
 from core.models.payload_models import TrainingRepoResponse
 from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
-from fiber.chain.models import Node
 from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
 from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100
 from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100
@@ -211,6 +211,13 @@ class TournamentResults(BaseModel):
     rounds: list[TournamentRoundResult]
 
 
+class TournamentResultsWithWinners(BaseModel):
+    tournament_id: str
+    rounds: list[TournamentRoundResult]
+    base_winner_hotkey: str | None = None
+    winner_hotkey: str | None = None
+
+
 class TournamentScore(BaseModel):
     hotkey: str
     score: float
@@ -235,6 +242,15 @@ class TournamentDetailsResponse(BaseModel):
     image_tournament_weight: float
 
 
+class TournamentAuditData(BaseModel):
+    text_tournament_data: TournamentResultsWithWinners | None = None
+    image_tournament_data: TournamentResultsWithWinners | None = None
+    participants: list[str] = []
+    tournament_weight_multiplier: float = 0.0
+    regular_weight_multiplier: float = 0.0
+    burn_weight: float = 0.0
+
+
 class BossRoundTaskCompletion(BaseModel):
     total_synth_tasks: int
     completed_synth_tasks: int
@@ -256,7 +272,7 @@ class TaskScore(BaseModel):
 
 class RespondingNode(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    
+
     node: Node
     training_repo_response: TrainingRepoResponse
     boosted_stake: float
