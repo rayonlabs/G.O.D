@@ -351,6 +351,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         timeout_seconds = int(training_data.hours_to_complete * 3600)
         task_type = get_task_type(task)
         logger.info(f"Task Type: {task_type}")
+        training_data.hours_to_complete = int(training_data.hours_to_complete)
         await create_volumes_if_dont_exist()
 
         dockerfile_path = (
