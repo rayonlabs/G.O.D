@@ -17,6 +17,10 @@ RUN mkdir -p /dataset/configs \
     /workspace/scripts \
     /workspace/core
 
+ENV CONFIG_DIR="/dataset/configs"
+ENV OUTPUT_DIR="/dataset/outputs"
+ENV DATASET_DIR="/dataset/images"
+
 COPY core /workspace/core
 COPY miner /workspace/miner
 COPY trainer /workspace/trainer

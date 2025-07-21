@@ -7,13 +7,12 @@ import tempfile
 from huggingface_hub import HfApi
 from huggingface_hub import hf_hub_download
 from huggingface_hub import snapshot_download
-from transformers import CLIPTokenizer, T5TokenizerFast
+from transformers import CLIPTokenizer
 
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from trainer import constants as cst
-import trainer.utils.training_paths as train_paths
 
 
 hf_api = HfApi()
@@ -23,7 +22,8 @@ async def download_text_dataset(task_id, dataset_url, file_format, dataset_dir):
     os.makedirs(dataset_dir, exist_ok=True)
 
     if file_format == FileFormat.S3.value:
-        input_data_path = train_paths.get_text_dataset_path(task_id)
+        dataset_filename = f"{task_id}_train_data.json"
+        input_data_path = os.path.join(dataset_dir, dataset_filename)
 
         if not os.path.exists(input_data_path):
             local_path = await download_s3_file(dataset_url)
@@ -41,7 +41,7 @@ async def download_text_dataset(task_id, dataset_url, file_format, dataset_dir):
 
 async def download_image_dataset(dataset_zip_url, task_id, dataset_dir):
     os.makedirs(dataset_dir, exist_ok=True)
-    local_zip_path = train_paths.get_image_training_zip_save_path(task_id)
+    local_zip_path = f"{dataset_dir}/{task_id}.zip"
     print(f"Downloading dataset from: {dataset_zip_url}")
     local_path = await download_s3_file(dataset_zip_url, local_zip_path)
     print(f"Downloaded dataset to: {local_path}")
@@ -146,14 +146,14 @@ async def main():
         dataset_zip_path = await download_image_dataset(args.dataset, args.task_id, dataset_dir)
         model_path = await download_base_model(args.model, model_dir)
         print("Downloading clip models", flush=True)
-        CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH)
-        CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH)
+        CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir="/cache/hf_cache")
+        CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir="/cache/hf_cache")
         snapshot_download(
             repo_id="google/t5-v1_1-xxl",
             repo_type="model",
-            cache_dir="/cache/hf_cache/",
+            local_dir="/cache/hf_cache/google--t5-v1_1-xxl",
             local_dir_use_symlinks=False,
-            allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "config.json"],
+            allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "tokenizer.json"],
         )
     else:
         dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format, dataset_dir)
