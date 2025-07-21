@@ -494,7 +494,7 @@ def calculate_weight_redistribution(performance_diff: float) -> tuple[float, flo
 
     tournament_weight = cts.BASE_TOURNAMENT_WEIGHT - tournament_burn
     regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT)
-    burn_weight = cts.MIN_BURN_WEIGHT + (tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
+    burn_weight = (1 - cts.BASE_REGULAR_WEIGHT - cts.BASE_TOURNAMENT_WEIGHT) + (tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
 
     return tournament_weight, regular_weight, burn_weight
 
@@ -550,8 +550,8 @@ async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]
         logger.info("No tournament data available, burning entire tournament allocation")
         tournament_burn = cts.BASE_TOURNAMENT_WEIGHT
         tournament_weight = 0.0
-        regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn / 2)
-        burn_weight = cts.MIN_BURN_WEIGHT + (tournament_burn / 2)
+        regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT)
+        burn_weight = (1 - cts.BASE_REGULAR_WEIGHT - cts.BASE_TOURNAMENT_WEIGHT) + (tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
         return tournament_weight, regular_weight, burn_weight
 
     average_performance_diff = weighted_performance_diff / total_weight
