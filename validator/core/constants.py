@@ -333,3 +333,7 @@ STANDARD_CHAT_CONTENT_FIELD = "value"
 PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
 GET_GPU_AVAILABILITY_ENDPOINT = "/v1/trainer/get_gpu_availability"
 TASK_DETAILS_ENDPOINT = "/v1/trainer/{task_id}"
+
+# Tournament constants
+DEFAULT_PARTICIPANT_REPO = "https://github.com/rayonlabs/G.O.D"
+DEFAULT_PARTICIPANT_COMMIT = "0bc824a3f21b76ad59ff6810e921c1efdb80e6fe"

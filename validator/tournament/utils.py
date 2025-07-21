@@ -12,6 +12,9 @@ from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskType
 from validator.core.config import Config
+from validator.core.constants import DEFAULT_PARTICIPANT_COMMIT
+from validator.core.constants import DEFAULT_PARTICIPANT_REPO
+from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
 from validator.db import constants as db_cst
@@ -132,8 +135,19 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
         logger.info(f"Using latest tournament winner as BASE: {latest_winner.hotkey}")
         return latest_winner
 
-    logger.warning(f"No previous tournament winner found for type {tournament_type.value}, no BASE contestant available")
-    return None
+    logger.info(
+        f"No previous tournament winner found for type {tournament_type.value}, using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
+    )
+
+    hardcoded_participant = TournamentParticipant(
+        tournament_id="",
+        hotkey=EMISSION_BURN_HOTKEY,
+        training_repo=DEFAULT_PARTICIPANT_REPO,
+        training_commit_hash=DEFAULT_PARTICIPANT_COMMIT,
+        stake_required=0,
+    )
+
+    return hardcoded_participant
 
 
 async def get_latest_tournament_winner_participant(
@@ -152,7 +166,7 @@ async def get_latest_tournament_winner_participant(
 
     logger.info(f"Found latest tournament winner: {winner_hotkey}")
     winner_participant = await get_tournament_participant(latest_tournament.tournament_id, winner_hotkey, psql_db)
-    if winner_participant.hotkey == config.tournament_base_contestant_hotkey:
+    if winner_participant.hotkey == EMISSION_BURN_HOTKEY:
         winner_participant.hotkey = latest_tournament.base_winner_hotkey
 
     return winner_participant
@@ -284,7 +298,7 @@ async def get_knockout_winners(
     else:
         # Boss round. You need to beat the boss by 5% to win the task.
         # Best of 3 wins the round.
-        boss_hotkey = config.tournament_base_contestant_hotkey
+        boss_hotkey = EMISSION_BURN_HOTKEY
         opponent_hotkey = None
         task_winners = []
 
