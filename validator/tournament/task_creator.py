@@ -175,13 +175,13 @@ async def _create_probability_based_text_tasks(round_data: KnockoutRound, config
         rand_val = random.random()
         if rand_val < instruct_prob:
             task = await create_synthetic_instruct_text_task(config, models, instruct_datasets)
-            task_type = "Instruct"
+            task_type = TaskType.INSTRUCTTEXTTASK
         elif rand_val < (instruct_prob + dpo_prob):
             task = await create_synthetic_dpo_task(config, models, dpo_datasets)
-            task_type = "DPO"
+            task_type = TaskType.DPOTASK
         else:
             task = await create_synthetic_grpo_task(config, models, instruct_datasets)
-            task_type = "GRPO"
+            task_type = TaskType.GRPOTASK
 
         gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
         logger.info(f"    {task_type}: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}")
