@@ -327,7 +327,6 @@ STANDARD_CHAT_ROLE_FIELD = "from"
 STANDARD_CHAT_CONTENT_FIELD = "value"
 
 
-
 # Trainer endpoints
 
 PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
@@ -336,5 +335,4 @@ TASK_DETAILS_ENDPOINT = "/v1/trainer/{task_id}"
 
 # Tournament constants
 DEFAULT_PARTICIPANT_REPO = "https://github.com/rayonlabs/G.O.D"
-DEFAULT_PARTICIPANT_COMMIT = "0bc824a3f21b76ad59ff6810e921c1efdb80e6fe"
-
+DEFAULT_PARTICIPANT_COMMIT = "8631451156e2915070f77e5547ca0d5ed3d0eb8a"
