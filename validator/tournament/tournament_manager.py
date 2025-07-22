@@ -17,7 +17,6 @@ from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentStatus
-from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
@@ -28,7 +27,6 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_node_by_hotkey
 from validator.db.sql.tournaments import add_tournament_participants
-from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import calculate_boosted_stake
 from validator.db.sql.tournaments import count_completed_tournament_entries
 from validator.db.sql.tournaments import create_tournament
@@ -55,8 +53,8 @@ from validator.tournament.boss_round_sync import _copy_task_to_general
 from validator.tournament.boss_round_sync import get_synced_task_id
 from validator.tournament.boss_round_sync import get_synced_task_ids
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
-from validator.tournament.task_creator import create_image_tournament_round
-from validator.tournament.task_creator import create_text_tournament_round
+from validator.tournament.task_creator import create_image_tournament_tasks
+from validator.tournament.task_creator import create_text_tournament_tasks
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import replace_tournament_task
@@ -139,54 +137,11 @@ async def _create_first_round(
 
 async def _create_tournament_tasks(
     tournament_id: str, round_id: str, round_structure: Round, tournament_type: TournamentType, is_final: bool, config: Config
-) -> list[TournamentTask]:
+) -> list[str]:
     if tournament_type == TournamentType.TEXT:
-        tournament_round = await create_text_tournament_round(round_structure, config, is_final)
+        tasks = await create_text_tournament_tasks(round_structure, tournament_id, round_id, config, is_final)
     else:
-        tournament_round = await create_image_tournament_round(round_structure, config, is_final)
-
-    tasks = []
-    if isinstance(round_structure, GroupRound):
-        group_task_count = t_cst.TEXT_TASKS_PER_GROUP if tournament_type == TournamentType.TEXT else t_cst.IMAGE_TASKS_PER_GROUP
-
-        for i, group in enumerate(round_structure.groups):
-            group_id = f"{round_id}_group_{i + 1:03d}"
-
-            for j in range(group_task_count):
-                task_index = i * group_task_count + j
-                if task_index < len(tournament_round.tasks):
-                    task = TournamentTask(
-                        tournament_id=tournament_id,
-                        round_id=round_id,
-                        task_id=tournament_round.tasks[task_index],
-                        group_id=group_id,
-                        pair_id=None,
-                    )
-                    tasks.append(task)
-    else:
-        if is_final:
-            for i in range(len(tournament_round.tasks)):
-                pair_id = f"{round_id}_pair_{1:03d}"
-                task = TournamentTask(
-                    tournament_id=tournament_id,
-                    round_id=round_id,
-                    task_id=tournament_round.tasks[i],
-                    group_id=None,
-                    pair_id=pair_id,
-                )
-                tasks.append(task)
-        else:
-            for i in range(len(round_structure.pairs)):
-                pair_id = f"{round_id}_pair_{i + 1:03d}"
-                if i < len(tournament_round.tasks):
-                    task = TournamentTask(
-                        tournament_id=tournament_id,
-                        round_id=round_id,
-                        task_id=tournament_round.tasks[i],
-                        group_id=None,
-                        pair_id=pair_id,
-                    )
-                    tasks.append(task)
+        tasks = await create_image_tournament_tasks(round_structure, tournament_id, round_id, config, is_final)
 
     return tasks
 
@@ -621,7 +576,6 @@ async def process_pending_rounds(config: Config):
                             round_data.is_final_round,
                             config,
                         )
-                        await add_tournament_tasks(tasks, config.psql_db)
 
                         await assign_nodes_to_tournament_tasks(
                             round_data.tournament_id, round_data.round_id, round_structure, config.psql_db
