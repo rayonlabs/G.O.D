@@ -738,8 +738,8 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                         waiting_for_synced_tasks = True
             else:
                 task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-                if task_obj and task_obj.status == TaskStatus.FAILURE.value:
-                    logger.info(f"Task {task.task_id} failed, copying to main cycle to check.")
+                if task_obj and task_obj.status in [TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value]:
+                    logger.info(f"Task {task.task_id} failed (status: {task_obj.status}), copying to main cycle to check.")
                     await _copy_task_to_general(task.task_id, config.psql_db)
                     waiting_for_synced_tasks = True
 
