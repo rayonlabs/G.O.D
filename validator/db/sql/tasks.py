@@ -45,42 +45,82 @@ async def add_task(task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
 
 async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dict:
     """Insert the base task record and return it"""
-    query_tasks = f"""
-        INSERT INTO {cst.TASKS_TABLE}
-        ({cst.ACCOUNT_ID},
-        {cst.MODEL_ID},
-        {cst.DS},
-        {cst.STATUS},
-        {cst.IS_ORGANIC},
-        {cst.HOURS_TO_COMPLETE},
-        {cst.TEST_DATA},
-        {cst.TRAINING_DATA},
-        {cst.CREATED_AT},
-        {cst.TASK_TYPE},
-        {cst.RESULT_MODEL_NAME},
-        {cst.TRAINING_REPO_BACKUP},
-        {cst.STARTED_AT},
-        {cst.TERMINATION_AT})
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-        RETURNING *
-    """
-    return await connection.fetchrow(
-        query_tasks,
-        task.account_id,
-        task.model_id,
-        task.ds,
-        task.status,
-        task.is_organic,
-        task.hours_to_complete,
-        task.test_data,
-        task.training_data,
-        task.created_at,
-        task.task_type.value,
-        task.result_model_name,
-        task.training_repo_backup,
-        task.started_at,
-        task.termination_at,
-    )
+    if task.task_id is not None:
+        query_tasks = f"""
+            INSERT INTO {cst.TASKS_TABLE}
+            ({cst.TASK_ID},
+            {cst.ACCOUNT_ID},
+            {cst.MODEL_ID},
+            {cst.DS},
+            {cst.STATUS},
+            {cst.IS_ORGANIC},
+            {cst.HOURS_TO_COMPLETE},
+            {cst.TEST_DATA},
+            {cst.TRAINING_DATA},
+            {cst.CREATED_AT},
+            {cst.TASK_TYPE},
+            {cst.RESULT_MODEL_NAME},
+            {cst.TRAINING_REPO_BACKUP},
+            {cst.STARTED_AT},
+            {cst.TERMINATION_AT})
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            RETURNING *
+        """
+        return await connection.fetchrow(
+            query_tasks,
+            task.task_id,
+            task.account_id,
+            task.model_id,
+            task.ds,
+            task.status,
+            task.is_organic,
+            task.hours_to_complete,
+            task.test_data,
+            task.training_data,
+            task.created_at,
+            task.task_type.value,
+            task.result_model_name,
+            task.training_repo_backup,
+            task.started_at,
+            task.termination_at,
+        )
+    else:
+        query_tasks = f"""
+            INSERT INTO {cst.TASKS_TABLE}
+            ({cst.ACCOUNT_ID},
+            {cst.MODEL_ID},
+            {cst.DS},
+            {cst.STATUS},
+            {cst.IS_ORGANIC},
+            {cst.HOURS_TO_COMPLETE},
+            {cst.TEST_DATA},
+            {cst.TRAINING_DATA},
+            {cst.CREATED_AT},
+            {cst.TASK_TYPE},
+            {cst.RESULT_MODEL_NAME},
+            {cst.TRAINING_REPO_BACKUP},
+            {cst.STARTED_AT},
+            {cst.TERMINATION_AT})
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            RETURNING *
+        """
+        return await connection.fetchrow(
+            query_tasks,
+            task.account_id,
+            task.model_id,
+            task.ds,
+            task.status,
+            task.is_organic,
+            task.hours_to_complete,
+            task.test_data,
+            task.training_data,
+            task.created_at,
+            task.task_type.value,
+            task.result_model_name,
+            task.training_repo_backup,
+            task.started_at,
+            task.termination_at,
+        )
 
 
 async def _insert_task_specific_data(connection: Connection, task: AnyTypeRawTask, task_record: dict) -> None:
