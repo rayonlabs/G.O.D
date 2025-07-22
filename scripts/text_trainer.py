@@ -107,7 +107,7 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         config = yaml.safe_load(file)
 
     config["datasets"] = [create_dataset_entry(dataset, dataset_type, FileFormat(file_format))]
-    model_path = f"{train_cst.CACHE_PATH}/models/{model.replace('/', '--')}"
+    model_path = f"{train_cst.CACHE_PATH}/{task_id}/models/{model.replace('/', '--')}"
     config["base_model"] = model_path
     config["mlflow_experiment_name"] = dataset
     os.makedirs(output_dir, exist_ok=True)
