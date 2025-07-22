@@ -23,12 +23,14 @@ from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
+from validator.core.models import RawTask
 from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_node_by_hotkey
 from validator.db.sql.tournaments import add_tournament_participants
 from validator.db.sql.tournaments import add_tournament_tasks
+from validator.db.sql.tournaments import add_tasks_and_tournament_metadata_atomically
 from validator.db.sql.tournaments import calculate_boosted_stake
 from validator.db.sql.tournaments import count_completed_tournament_entries
 from validator.db.sql.tournaments import create_tournament
@@ -140,12 +142,14 @@ async def _create_first_round(
 async def _create_tournament_tasks(
     tournament_id: str, round_id: str, round_structure: Round, tournament_type: TournamentType, is_final: bool, config: Config
 ) -> list[TournamentTask]:
+    # Create tasks without saving to DB
     if tournament_type == TournamentType.TEXT:
-        tournament_round = await create_text_tournament_round(round_structure, config, is_final)
+        tournament_round, raw_tasks = await create_text_tournament_round(round_structure, config, is_final, save_to_db=False)
     else:
-        tournament_round = await create_image_tournament_round(round_structure, config, is_final)
+        tournament_round, raw_tasks = await create_image_tournament_round(round_structure, config, is_final, save_to_db=False)
 
     tasks = []
+    
     if isinstance(round_structure, GroupRound):
         group_task_count = t_cst.TEXT_TASKS_PER_GROUP if tournament_type == TournamentType.TEXT else t_cst.IMAGE_TASKS_PER_GROUP
 
@@ -188,6 +192,9 @@ async def _create_tournament_tasks(
                     )
                     tasks.append(task)
 
+    # Save both tasks and tournament metadata together
+    await add_tasks_and_tournament_metadata_atomically(raw_tasks, tasks, config.psql_db)
+    
     return tasks
 
 
@@ -621,7 +628,6 @@ async def process_pending_rounds(config: Config):
                             round_data.is_final_round,
                             config,
                         )
-                        await add_tournament_tasks(tasks, config.psql_db)
 
                         await assign_nodes_to_tournament_tasks(
                             round_data.tournament_id, round_data.round_id, round_structure, config.psql_db

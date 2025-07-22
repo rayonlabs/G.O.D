@@ -24,6 +24,8 @@ from core.models.utility_models import TrainerInfo
 from core.models.utility_models import TrainingStatus
 from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
+from validator.db.sql.tasks import _insert_base_task
+from validator.db.sql.tasks import _insert_task_specific_data
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task, get_task_winners
 from validator.utils.logging import get_logger
 
@@ -153,6 +155,28 @@ async def add_tournament_tasks(tasks: list[TournamentTask], psql_db: PSQLDB):
             for task in tasks:
                 await connection.execute(query, task.tournament_id, task.round_id, task.task_id, task.group_id, task.pair_id)
             logger.info(f"Added {len(tasks)} tasks to tournament")
+
+
+async def add_tasks_and_tournament_metadata_atomically(raw_tasks: list, tournament_tasks: list[TournamentTask], psql_db: PSQLDB):
+    """Add multiple tasks to both the main tasks table and tournament_tasks table atomically."""
+    
+    async with await psql_db.connection() as connection:
+        async with connection.transaction():
+            # First insert all tasks into main tasks table
+            for raw_task in raw_tasks:
+                task_record = await _insert_base_task(connection, raw_task)
+                await _insert_task_specific_data(connection, raw_task, task_record)
+            
+            # Then insert all tournament metadata
+            query = f"""
+                INSERT INTO {cst.TOURNAMENT_TASKS_TABLE}
+                ({cst.TOURNAMENT_ID}, {cst.ROUND_ID}, {cst.TASK_ID}, {cst.GROUP_ID}, {cst.PAIR_ID}, {cst.CREATED_AT})
+                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+            """
+            for task in tournament_tasks:
+                await connection.execute(query, task.tournament_id, task.round_id, task.task_id, task.group_id, task.pair_id)
+            
+            logger.info(f"Atomically added {len(raw_tasks)} tasks and {len(tournament_tasks)} tournament metadata entries")
 
 
 async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData | None:
