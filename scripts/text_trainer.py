@@ -94,8 +94,7 @@ def copy_dataset_if_needed(dataset_path, file_format):
     return dataset_path
 
 
-def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None,
-                huggingface_username=None, huggingface_token=None, disable_upload=True):
+def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None, log_wandb=True):
     """Create the axolotl config file with appropriate settings."""
     if isinstance(dataset_type, InstructTextDatasetType | DpoDatasetType):
         config_path = "/workspace/axolotl/base.yml"
@@ -114,6 +113,16 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
     os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir
 
+    if log_wandb:
+        config["wandb_runid"] = f"{task_id}_{expected_repo_name}"
+        config["wandb_name"] = f"{task_id}_{expected_repo_name}"
+        config["wandb_mode"] = "offline"
+        os.makedirs(train_cst.WANDB_LOGS_DIR, exist_ok=True)
+    else:
+        for key in list(config.keys()):
+            if key.startswith("wandb"):
+                config.pop(key)
+
     config = update_flash_attention(config, model)
 
     if isinstance(dataset_type, DpoDatasetType):
@@ -126,20 +135,6 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         )
         config["trl"]["reward_funcs"] = [f"{filename}.{func_name}" for func_name in reward_funcs_names]
         config["trl"]["reward_weights"] = [reward_function.reward_weight for reward_function in dataset_type.reward_functions]
-
-    if not disable_upload:
-        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", "rayonlabs")
-        os.environ["HUGGINGFACE_USERNAME"] = hf_username
-
-        repo_name = expected_repo_name or str(uuid.uuid4())
-        config["hub_model_id"] = f"{hf_username}/{repo_name}"
-
-        if huggingface_token:
-            os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
-    else:
-        for key in list(config.keys()):
-            if key.startswith("wandb") or key.startswith("hub"):
-                config.pop(key)
 
     if file_format != FileFormat.HF.value:
         for ds in config["datasets"]:
@@ -258,6 +253,7 @@ async def main():
         args.file_format,
         output_dir,
         args.expected_repo_name,
+        log_wandb=True
     )
 
     run_training(config_path)

@@ -143,7 +143,7 @@ async def run_trainer_container_text(
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
 
-    environment = {"WANDB_MODE": "disabled", "WANDB_DISABLED": "true"}
+    environment = {"WANDB_MODE": "offline", "WANDB_DIR": cst.WANDB_LOGS_DIR}
 
     command: list[str] = [
         "--task-id",
@@ -289,7 +289,7 @@ async def upload_repo_to_hf(
         environment = {
             "HUGGINGFACE_TOKEN": huggingface_token,
             "HUGGINGFACE_USERNAME": huggingface_username,
-            "WANDB_TOKEN": wandb_token or "",
+            "WANDB_TOKEN": wandb_token or None,
             "LOCAL_FOLDER": local_container_folder,
             "TASK_ID": task_id,
             "EXPECTED_REPO_NAME": expected_repo_name,

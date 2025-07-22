@@ -19,4 +19,5 @@ STALE_TASK_GRACE_MINUTES = 30
 CHECKPOINTS_DIR = "/checkpoints"
 CACHE_MODELS_DIR = "/cache/models"
 CACHE_DATASETS_DIR = "/cache/datasets"
+WANDB_LOGS_DIR = "/cache/wandb_logs"
 CACHE_CLEANUP_CUTOFF_HOURS = 12
