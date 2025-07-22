@@ -707,11 +707,6 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
         logger.info(f"Round {round_data.round_id} not ready for completion yet")
         return False
     else:
-        # Only check synced tasks for final rounds
-        if not round_data.is_final_round:
-            logger.info(f"All tasks in round {round_data.round_id} are completed, marking round as completed")
-            return True
-            
         for task in round_tasks:
             synced_task_id = await get_synced_task_id(task.task_id, config.psql_db)
             if synced_task_id:
