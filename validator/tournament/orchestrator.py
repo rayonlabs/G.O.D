@@ -455,26 +455,19 @@ async def _monitor_training_tasks(config: Config):
     for training_task in training_tasks:
         with LogContext(task_id=training_task.task.task_id, hotkey=training_task.hotkey):
             try:
-                # Try to find which trainer has this task running
-                trainer_ip = None
-                task_log = None
-
+                # Query all trainers for this task
                 logger.info(
                     f"Checking task {training_task.task.task_id} with hotkey {training_task.hotkey} "
                     f"on trainers {[trainer.trainer_ip for trainer in trainers]}"
                 )
+                responses = []
                 for trainer in trainers:
                     try:
                         task_log = await get_training_task_details(
                             trainer.trainer_ip, str(training_task.task.task_id), training_task.hotkey
                         )
                         if task_log:
-                            trainer_ip = trainer.trainer_ip
-                            logger.info(
-                                f"Found task {training_task.task.task_id} with hotkey {training_task.hotkey} "
-                                f"on trainer {trainer_ip}"
-                                )
-                            break
+                            responses.append((trainer.trainer_ip, task_log))
                     except httpx.HTTPStatusError as e:
                         status_code = e.response.status_code
                         if 500 <= status_code < 600:
@@ -484,7 +477,7 @@ async def _monitor_training_tasks(config: Config):
                         logger.info(f"Could not get task details from trainer {trainer.trainer_ip}: {str(e)}")
                         continue
 
-                if not trainer_ip or not task_log:
+                if not responses:
                     logger.warning(
                         f"Could not find trainer for task {training_task.task.task_id} with hotkey {training_task.hotkey}"
                     )
@@ -497,23 +490,31 @@ async def _monitor_training_tasks(config: Config):
                     )
                     continue
 
-                # Check if task completed (success or failure)
-                if task_log.status in [TaskStatus.SUCCESS, TaskStatus.FAILURE]:
+                # Gather all statuses
+                statuses = [task_log.status for _, task_log in responses]
+                # Priority: SUCCESS > TRAINING > FAILURE
+                if TaskStatus.SUCCESS in statuses:
                     any_completed = True
-
                     logger.info(
-                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} completed with status {task_log.status}"
+                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} completed with status SUCCESS "
+                        f"(at least one trainer)"
                     )
-
-                    # Update task status in database
-                    if task_log.status == TaskStatus.SUCCESS:
-                        await tournament_sql.update_tournament_task_training_status(
-                            training_task.task.task_id, training_task.hotkey, TrainingStatus.SUCCESS, config.psql_db
-                        )
-                    else:  # FAILURE
-                        await tournament_sql.update_tournament_task_training_status(
-                            training_task.task.task_id, training_task.hotkey, TrainingStatus.PENDING, config.psql_db
-                        )
+                    await tournament_sql.update_tournament_task_training_status(
+                        training_task.task.task_id, training_task.hotkey, TrainingStatus.SUCCESS, config.psql_db
+                    )
+                elif all(s == TaskStatus.FAILURE for s in statuses):
+                    any_completed = True
+                    logger.info(
+                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed on all trainers"
+                    )
+                    await tournament_sql.update_tournament_task_training_status(
+                        training_task.task.task_id, training_task.hotkey, TrainingStatus.PENDING, config.psql_db
+                    )
+                else:
+                    logger.info(
+                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} is still training on at least "
+                        f"one trainer"
+                    )
 
             except Exception as e:
                 logger.error(f"Error checking task {training_task.task.task_id} with hotkey {training_task.hotkey}: {str(e)}")
