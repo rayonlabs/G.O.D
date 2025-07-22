@@ -37,7 +37,7 @@ async def create_text_tournament_round(
         tasks = await _create_group_text_tasks(round_data, config, is_final_round, save_to_db)
     elif is_final_round:
         logger.info("Creating final text tournament (1 instruct + 1 DPO + 1 GRPO with 1 big model)")
-        tasks = await _create_one_of_each_text_task(config, use_big_model=True, save_to_db=save_to_db)
+        tasks = await _create_one_of_each_text_task(config, save_to_db=save_to_db, use_big_model=True)
     else:
         num_pairs = len(round_data.pairs)
         logger.info(f"Creating text tournament for {num_pairs} knockout pairs (probability-based)")
