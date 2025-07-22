@@ -292,6 +292,7 @@ async def create_synthetic_dpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[Dataset, None],
+    save_to_db: bool = True,
 ) -> RawTask:
     logger.info("DPO task")
     model_id = await anext(models)
@@ -331,7 +332,8 @@ async def create_synthetic_dpo_task(
     )
     logger.info(f"New DPO task created with {len(selected_datasets)} datasets")
 
-    task = await add_task(task, config.psql_db)
+    if save_to_db:
+        task = await add_task(task, config.psql_db)
 
     return task
 
@@ -425,6 +427,7 @@ async def create_synthetic_grpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[Dataset, None],
+    save_to_db: bool = True,
 ) -> RawTask:
     model_id = await anext(models)
 
@@ -455,7 +458,8 @@ async def create_synthetic_grpo_task(
     )
     logger.info(f"New GRPO task created with {len(selected_datasets)} datasets")
 
-    task = await add_task(task, config.psql_db)
+    if save_to_db:
+        task = await add_task(task, config.psql_db)
 
     return task
 
@@ -465,6 +469,7 @@ async def create_synthetic_instruct_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[Dataset, None],
+    save_to_db: bool = True,
 ) -> RawTask:
     model_id = await anext(models)
 
@@ -497,8 +502,9 @@ async def create_synthetic_instruct_text_task(
     )
     logger.info(f"INSTRUCT_TASK: Successfully created task with {len(selected_datasets)} datasets")
 
-    task = await add_task(task, config.psql_db)
-    logger.info(f"INSTRUCT_TASK: Task saved to database with ID: {task.task_id}")
+    if save_to_db:
+        task = await add_task(task, config.psql_db)
+        logger.info(f"INSTRUCT_TASK: Task saved to database with ID: {task.task_id}")
 
     return task
 

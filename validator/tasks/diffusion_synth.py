@@ -347,7 +347,7 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
     return image_text_pairs, cst.PERSON_SYNTH_DS_PREFIX
 
 
-async def create_synthetic_image_task(config: Config, models: AsyncGenerator[ImageModelInfo, None]) -> RawTask:
+async def create_synthetic_image_task(config: Config, models: AsyncGenerator[ImageModelInfo, None], save_to_db: bool = True) -> RawTask:
     """Create a synthetic image task with random model and style."""
     logger.info("Creating synthetic image task")
     number_of_hours = random.randint(cst.MIN_IMAGE_COMPETITION_HOURS, cst.MAX_IMAGE_COMPETITION_HOURS)
@@ -383,8 +383,10 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[Ima
             model_type=model_info.model_type,
         )
 
-        logger.info(f"New task created and added to the queue {task}")
-        task = await add_task(task, config.psql_db)
+        logger.info(f"New task created {task}")
+        if save_to_db:
+            task = await add_task(task, config.psql_db)
+            logger.info(f"Task saved to database with ID {task.task_id}")
         return task
     else:
         logger.error("Failed to generate enough image-text pairs for the task.")
