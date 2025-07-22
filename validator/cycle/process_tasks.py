@@ -285,7 +285,7 @@ async def _prep_task(task: AnyTypeRawTask, config: Config):
 async def _processing_pending_tasks(config: Config):
     logger.debug("Processing pending tasks")
 
-    pending_tasks = await tasks_sql.get_tasks_with_status(status=TaskStatus.PENDING, psql_db=config.psql_db, tournament_filter="exclude")
+    pending_tasks = await tasks_sql.get_tasks_with_status(status=TaskStatus.PENDING, psql_db=config.psql_db)
     logger.info(f"Found {len(pending_tasks)} pending tasks! Will prep them all now...")
     await asyncio.gather(*[_prep_task(task, config) for task in pending_tasks[: cst.MAX_CONCURRENT_TASK_PREPS]])
     clean_all_hf_datasets_cache()
