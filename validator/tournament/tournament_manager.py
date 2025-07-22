@@ -151,6 +151,8 @@ async def _create_tournament_tasks(
     for task in raw_tasks:
         if task.task_id is None:
             task.task_id = uuid.uuid4()
+    
+    tournament_round.tasks = [str(task.task_id) for task in raw_tasks]
 
     tasks = []
     
