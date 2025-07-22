@@ -498,7 +498,7 @@ async def _monitor_training_tasks(config: Config):
                     continue
 
                 # Check if task completed (success or failure)
-                if task_log.status in [TaskStatus.SUCCESS, TaskStatus.FAILURE]:
+                if task_log.status in [TaskStatus.SUCCESS, TaskStatus.FAILURE, TaskStatus.PREP_TASK_FAILURE]:
                     any_completed = True
 
                     logger.info(

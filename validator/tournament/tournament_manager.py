@@ -697,7 +697,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
     all_tasks_completed = True
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-        if task_obj and task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
+        if task_obj and task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value]:
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
             break
@@ -715,13 +715,13 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                     if synced_task_obj.status == TaskStatus.SUCCESS.value:
                         logger.info(f"Synced task {synced_task_id} completed successfully")
                         continue
-                    elif synced_task_obj.status == TaskStatus.FAILURE.value:
+                    elif synced_task_obj.status in [TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value]:
                         original_task_obj = await task_sql.get_task(task.task_id, config.psql_db)
                         if original_task_obj.status == TaskStatus.SUCCESS.value:
-                            logger.info(f"Synced task {synced_task_id} failed. Original task was successful. Ignoring...")
+                            logger.info(f"Synced task {synced_task_id} failed (status: {synced_task_obj.status}). Original task was successful. Ignoring...")
                             continue
                         else:
-                            logger.info(f"Synced task {synced_task_id} failed. Original task  also failed. Replacing...")
+                            logger.info(f"Synced task {synced_task_id} failed (status: {synced_task_obj.status}). Original task also failed. Replacing...")
 
                         new_task_id = await replace_tournament_task(
                             original_task_id=task.task_id,
