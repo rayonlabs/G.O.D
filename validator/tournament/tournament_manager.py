@@ -1,6 +1,7 @@
 import asyncio
 import math
 import random
+import uuid
 
 from fiber.chain.models import Node
 
@@ -142,11 +143,14 @@ async def _create_first_round(
 async def _create_tournament_tasks(
     tournament_id: str, round_id: str, round_structure: Round, tournament_type: TournamentType, is_final: bool, config: Config
 ) -> list[TournamentTask]:
-    # Create tasks without saving to DB
     if tournament_type == TournamentType.TEXT:
         tournament_round, raw_tasks = await create_text_tournament_round(round_structure, config, is_final, save_to_db=False)
     else:
         tournament_round, raw_tasks = await create_image_tournament_round(round_structure, config, is_final, save_to_db=False)
+    
+    for task in raw_tasks:
+        if task.task_id is None:
+            task.task_id = uuid.uuid4()
 
     tasks = []
     
