@@ -8,6 +8,7 @@ from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
+from validator.tournament.constants import IMAGE_TASKS_PER_GROUP
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
 from validator.core.models import RawTask
@@ -56,29 +57,31 @@ async def create_image_tournament_tasks(
 
     if isinstance(round_data, GroupRound):
         num_groups = len(round_data.groups)
-        logger.info(f"Creating image tournament for {num_groups} groups (1 per group)")
+        logger.info(f"Creating image tournament for {num_groups} groups ({IMAGE_TASKS_PER_GROUP} per group)")
 
         for i, group in enumerate(round_data.groups):
             group_id = f"{round_id}_group_{i + 1:03d}"
             logger.info(f"  Group {i + 1} ({len(group.member_ids)} members):")
-            while True:
-                try:
-                    task = await create_synthetic_image_task(config, image_models)
-                    tournament_task = TournamentTask(
-                        tournament_id=tournament_id,
-                        round_id=round_id,
-                        task_id=task.task_id,
-                        group_id=group_id,
-                        pair_id=None,
-                        gpu_requirement=get_tournament_gpu_requirement(task.task_type, task.model_params_count),
-                    )
-                    await add_tournament_tasks([tournament_task], config.psql_db)
-                    break
-                except Exception as e:
-                    logger.warning(f"Failed to create image task for group {i + 1}: {e}. Retrying...")
-            gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
-            logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
-            tasks.append(task)
+            
+            for task_num in range(IMAGE_TASKS_PER_GROUP):
+                while True:
+                    try:
+                        task = await create_synthetic_image_task(config, image_models)
+                        tournament_task = TournamentTask(
+                            tournament_id=tournament_id,
+                            round_id=round_id,
+                            task_id=task.task_id,
+                            group_id=group_id,
+                            pair_id=None,
+                            gpu_requirement=get_tournament_gpu_requirement(task.task_type, task.model_params_count),
+                        )
+                        await add_tournament_tasks([tournament_task], config.psql_db)
+                        break
+                    except Exception as e:
+                        logger.warning(f"Failed to create image task {task_num + 1} for group {i + 1}: {e}. Retrying...")
+                gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+                logger.info(f"    Image {task_num + 1}: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
+                tasks.append(task)
     elif is_final_round:
         logger.info("Creating final image tournament (3 image tasks)")
         for i in range(3):
