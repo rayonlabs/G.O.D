@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 from core.models.tournament_models import TournamentAuditData
 from core.models.tournament_models import TournamentResultsWithWinners
+from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
