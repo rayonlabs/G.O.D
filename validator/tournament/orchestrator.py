@@ -227,7 +227,9 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
     while pending_training_tasks:
         oldest_task_training = pending_training_tasks[-1]
         tournament_id = await get_tournament_id_by_task_id(oldest_task_training.task.task_id, config.psql_db)
-        with LogContext(task_id=oldest_task_training.task.task_id, hotkey=oldest_task_training.hotkey, tournament_id=tournament_id):
+        with LogContext(
+            task_id=oldest_task_training.task.task_id, hotkey=oldest_task_training.hotkey, tournament_id=tournament_id
+        ):
             task = oldest_task_training.task
             task_key = f"{task.task_id}_{oldest_task_training.hotkey}"
 
@@ -258,7 +260,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
         try:
             training_task = pending_training_tasks[-1]
             tournament_id = await get_tournament_id_by_task_id(training_task.task.task_id, config.psql_db)
-            with LogContext(task_id=training_task.task.task_id, hotkey=training_task.hotkey, tournament_id=tournament_id):
+            with LogContext(task_id=str(training_task.task.task_id), hotkey=training_task.hotkey, tournament_id=tournament_id):
                 training_request = await _create_training_request(training_task.task, training_task.hotkey, gpu_ids, config)
                 training_success = await start_training_task(trainer_ip, training_request)
 
@@ -470,7 +472,9 @@ async def _monitor_training_tasks(config: Config):
     # Check each training task
     for training_task in training_tasks:
         tournament_id = await get_tournament_id_by_task_id(training_task.task.task_id, config.psql_db)
-        with LogContext(task_id=training_task.task.task_id, hotkey=training_task.hotkey, tournament_id=tournament_id):
+        if tournament_id is None:
+            logger.warning(f"Task {training_task.task.task_id} not found in tournament_tasks table - no tournament_id available")
+        with LogContext(task_id=str(training_task.task.task_id), hotkey=training_task.hotkey, tournament_id=tournament_id):
             try:
                 # Query all trainers for this task
                 logger.info(
@@ -521,9 +525,7 @@ async def _monitor_training_tasks(config: Config):
                     )
                 elif all(s == TaskStatus.FAILURE for s in statuses):
                     any_completed = True
-                    logger.info(
-                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed on all trainers"
-                    )
+                    logger.info(f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed on all trainers")
                     await tournament_sql.update_tournament_task_training_status(
                         training_task.task.task_id, training_task.hotkey, TrainingStatus.PENDING, config.psql_db
                     )
@@ -621,7 +623,7 @@ async def _move_completed_tasks_to_preevaluation(config: Config):
     # Move tasks to preevaluation
     for task in tasks_to_move:
         tournament_id = await get_tournament_id_by_task_id(task.task_id, config.psql_db)
-        with LogContext(task_id=task.task_id, tournament_id=tournament_id):
+        with LogContext(task_id=str(task.task_id), tournament_id=tournament_id):
             try:
                 task.status = TaskStatus.PREEVALUATION
                 await task_sql.update_task(task, config.psql_db)
