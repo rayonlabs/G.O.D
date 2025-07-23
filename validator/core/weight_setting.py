@@ -850,7 +850,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
     tournament_audit_data = TournamentAuditData()
 
     text_tournament = await get_latest_completed_tournament(config.psql_db, TournamentType.TEXT)
-    if text_tournament:
+    if text_tournament and text_tournament.status != TournamentStatus.CANCELLED:
         tournament_results = await get_tournament_full_results(text_tournament.tournament_id, config.psql_db)
         tournament_audit_data.text_tournament_data = TournamentResultsWithWinners(
             tournament_id=tournament_results.tournament_id,
@@ -860,7 +860,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
         )
 
     image_tournament = await get_latest_completed_tournament(config.psql_db, TournamentType.IMAGE)
-    if image_tournament:
+    if image_tournament and image_tournament.status != TournamentStatus.CANCELLED:
         tournament_results = await get_tournament_full_results(image_tournament.tournament_id, config.psql_db)
         tournament_audit_data.image_tournament_data = TournamentResultsWithWinners(
             tournament_id=tournament_results.tournament_id,
