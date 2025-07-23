@@ -71,7 +71,24 @@ async def periodically_cleanup_tasks_and_cache(poll_interval_seconds: int = 600)
 
 
 async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
-    log_entry = TrainerTaskLog(**task.dict(), status=TaskStatus.TRAINING, started_at=datetime.utcnow(), finished_at=None)
+    task_id = task.training_data.task_id
+    hotkey = task.hotkey
+
+    existing_task = get_task(task_id, hotkey)
+    if existing_task:
+        existing_task.logs.clear()
+        existing_task.status = TaskStatus.TRAINING
+        existing_task.started_at = datetime.utcnow()
+        existing_task.finished_at = None
+        await save_task_history()
+        return task_id, hotkey
+
+    log_entry = TrainerTaskLog(
+        **task.dict(),
+        status=TaskStatus.TRAINING,
+        started_at=datetime.utcnow(),
+        finished_at=None,
+    )
     task_history.append(log_entry)
     await save_task_history()
     return log_entry.training_data.task_id, log_entry.hotkey
