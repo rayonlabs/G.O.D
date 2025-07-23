@@ -287,9 +287,9 @@ async def create_new_task_of_same_type(task: RawTask, config: Config) -> RawTask
     if task.task_type == TaskType.IMAGETASK:
         return await create_synthetic_image_task(config, _get_image_models(config.keypair))
 
-    models = _get_text_models(
-        config.keypair, smallest_size_b=task.model_params_count * 0.8, largest_size_b=task.model_params_count * 1.2
-    )
+    model_params_b = int(task.model_params_count / 1e9)
+
+    models = _get_text_models(config.keypair, smallest_size_b=model_params_b * 0.8, largest_size_b=model_params_b * 1.2)
     instruct_datasets = _get_instruct_text_datasets(config.keypair)
     dpo_datasets = _get_dpo_datasets(config.keypair)
 
