@@ -105,6 +105,26 @@ def get_running_tasks() -> list[TrainerTaskLog]:
     return [t for t in task_history if t.status == TaskStatus.TRAINING]
 
 
+def get_recent_tasks(hours: float = 1.0) -> list[TrainerTaskLog]:
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+
+    recent_tasks = [
+        task for task in task_history
+        if (task.started_at and task.started_at >= cutoff) or
+           (task.finished_at and task.finished_at >= cutoff)
+    ]
+
+    recent_tasks.sort(
+        key=lambda t: max(
+            t.finished_at or datetime.min,
+            t.started_at or datetime.min
+        ),
+        reverse=True
+    )
+
+    return recent_tasks
+
+
 async def save_task_history():
     async with aiofiles.open(TASK_HISTORY_FILE, "w") as f:
         data = json.dumps([t.model_dump() for t in task_history], indent=2, default=str)
