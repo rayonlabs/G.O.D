@@ -2,6 +2,9 @@ import asyncio
 
 import httpx
 from dotenv import load_dotenv
+from tenacity import retry
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
 
 import validator.tournament.constants as cst
 from core.models.payload_models import TrainerProxyRequest
@@ -34,6 +37,14 @@ from validator.utils.util import try_db_connections
 logger = get_logger(__name__)
 
 
+simple_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=4, max=10),
+    reraise=True,
+)
+
+
+@simple_retry
 async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
     """
     Fetch GPU availability information from a trainer.
@@ -64,6 +75,7 @@ async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
         return gpu_infos
 
 
+@simple_retry
 async def start_training_task(trainer_ip: str, training_request: TrainerProxyRequest) -> bool:
     """
     Ask trainer to start training.
@@ -102,6 +114,7 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
         return response.json()["message"] == cst.EXPECTED_TRAINING_START_MESSAGE
 
 
+@simple_retry
 async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str) -> TrainerTaskLog:
     """
     Get the details of a training task from a trainer.
