@@ -385,7 +385,8 @@ async def get_group_winners(
         hotkey_win_counts = Counter(task_winners.values())
 
         if len(hotkey_win_counts) == 0:
-            raise ValueError(f"Group {group_id} has {len(hotkey_win_counts)} winners")
+            logger.warning(f"Group {group_id} has {len(hotkey_win_counts)} winners - proceeding with no winners")
+            continue
 
         sorted_participants = sorted(hotkey_win_counts.items(), key=lambda x: x[1], reverse=True)
 
