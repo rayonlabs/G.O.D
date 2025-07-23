@@ -17,6 +17,7 @@ from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentStatus
+from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
