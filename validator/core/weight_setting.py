@@ -733,7 +733,7 @@ async def get_node_weights_from_period_scores(
 
     text_tournament = await get_latest_completed_tournament(psql_db, TournamentType.TEXT)
     text_tournament_data = None
-    if text_tournament:
+    if text_tournament and text_tournament.status != TournamentStatus.CANCELLED:
         tournament_results = await get_tournament_full_results(text_tournament.tournament_id, psql_db)
         text_tournament_data = TournamentResultsWithWinners(
             tournament_id=tournament_results.tournament_id,
@@ -744,7 +744,7 @@ async def get_node_weights_from_period_scores(
 
     image_tournament = await get_latest_completed_tournament(psql_db, TournamentType.IMAGE)
     image_tournament_data = None
-    if image_tournament:
+    if image_tournament and image_tournament.status != TournamentStatus.CANCELLED:
         tournament_results = await get_tournament_full_results(image_tournament.tournament_id, psql_db)
         image_tournament_data = TournamentResultsWithWinners(
             tournament_id=tournament_results.tournament_id,
