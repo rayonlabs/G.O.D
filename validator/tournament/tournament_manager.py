@@ -627,7 +627,6 @@ async def process_active_tournaments(config: Config):
 
 
 async def _handle_prep_failure(task: TournamentTask, round_data: TournamentRoundData, config: Config) -> str:
-    """Handle a task that failed during preparation by immediately replacing it."""
     new_task_id = await replace_tournament_task(
         original_task_id=task.task_id,
         tournament_id=round_data.tournament_id,
@@ -691,14 +690,12 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
         logger.info(f"No tasks found for round {round_data.round_id}")
         return False
 
-    # First check if all tasks have reached a terminal state
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
         if task_obj and task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value]:
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
             return False
 
-    # All tasks are in terminal state, now handle post-processing
     waiting_for_synced_tasks = False
     
     for task in round_tasks:
@@ -710,7 +707,6 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                 waiting = await _handle_synced_task_status(task, synced_task_obj, round_data, config)
                 waiting_for_synced_tasks = waiting_for_synced_tasks or waiting
         else:
-            # No synced task yet, check if we need to create one or replace
             task_obj = await task_sql.get_task(task.task_id, config.psql_db)
             if task_obj:
                 waiting = await _handle_original_task_failure(task, task_obj, round_data, config)
