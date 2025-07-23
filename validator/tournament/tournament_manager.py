@@ -659,22 +659,22 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                         continue
                     elif synced_task_obj.status == TaskStatus.FAILURE.value:
                         original_task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-                        if original_task_obj.status == TaskStatus.SUCCESS.value:
+                        if original_task_obj.status == TaskStatus.FAILURE.value:
+                            logger.info(f"Synced task {synced_task_id} failed. Original task also failed. Replacing...")
+                            
+                            new_task_id = await replace_tournament_task(
+                                original_task_id=task.task_id,
+                                tournament_id=round_data.tournament_id,
+                                round_id=round_data.round_id,
+                                group_id=task.group_id,
+                                pair_id=task.pair_id,
+                                config=config,
+                            )
+                            logger.info(f"Successfully replaced task {task.task_id} with {new_task_id}")
+                            waiting_for_synced_tasks = True
+                        else:
                             logger.info(f"Synced task {synced_task_id} failed. Original task was successful. Ignoring...")
                             continue
-                        else:
-                            logger.info(f"Synced task {synced_task_id} failed. Original task  also failed. Replacing...")
-
-                        new_task_id = await replace_tournament_task(
-                            original_task_id=task.task_id,
-                            tournament_id=round_data.tournament_id,
-                            round_id=round_data.round_id,
-                            group_id=task.group_id,
-                            pair_id=task.pair_id,
-                            config=config,
-                        )
-                        logger.info(f"Successfully replaced task {task.task_id} with {new_task_id}")
-                        waiting_for_synced_tasks = True
                     else:
                         logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
                         waiting_for_synced_tasks = True
