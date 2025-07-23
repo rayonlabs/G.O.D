@@ -626,89 +626,95 @@ async def process_active_tournaments(config: Config):
             await asyncio.sleep(t_cst.TOURNAMENT_ACTIVE_CYCLE_INTERVAL)
 
 
+async def _handle_prep_failure(task: TournamentTask, round_data: TournamentRoundData, config: Config) -> str:
+    """Handle a task that failed during preparation by immediately replacing it."""
+    new_task_id = await replace_tournament_task(
+        original_task_id=task.task_id,
+        tournament_id=round_data.tournament_id,
+        round_id=round_data.round_id,
+        group_id=task.group_id,
+        pair_id=task.pair_id,
+        config=config,
+    )
+    return new_task_id
+
+
+async def _handle_synced_task_status(task: TournamentTask, synced_task_obj, round_data: TournamentRoundData, config: Config) -> bool:
+    """Handle the status of a synced task. Returns True if waiting for more processing."""
+    synced_task_id = synced_task_obj.task_id
+    
+    if synced_task_obj.status == TaskStatus.SUCCESS.value:
+        logger.info(f"Synced task {synced_task_id} completed successfully")
+        return False
+        
+    elif synced_task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
+        logger.info(f"Synced task {synced_task_id} had prep failure, replacing with new task immediately.")
+        new_task_id = await _handle_prep_failure(task, round_data, config)
+        logger.info(f"Successfully replaced prep-failed task {task.task_id} with {new_task_id}")
+        return True
+        
+    elif synced_task_obj.status == TaskStatus.FAILURE.value:
+        original_task_obj = await task_sql.get_task(task.task_id, config.psql_db)
+        if original_task_obj.status == TaskStatus.FAILURE.value:
+            logger.info(f"Synced task {synced_task_id} failed. Original task also failed. Replacing...")
+            new_task_id = await _handle_prep_failure(task, round_data, config)
+            logger.info(f"Successfully replaced task {task.task_id} with {new_task_id}")
+            return True
+        else:
+            logger.info(f"Synced task {synced_task_id} failed. Original task was successful. Ignoring...")
+            return False
+    else:
+        logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
+        return True
+
+
+async def _handle_original_task_failure(task: TournamentTask, task_obj, round_data: TournamentRoundData, config: Config) -> bool:
+    """Handle an original task that has failed. Returns True if waiting for more processing."""
+    if task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
+        logger.info(f"Task {task.task_id} had prep failure, replacing with new task immediately.")
+        new_task_id = await _handle_prep_failure(task, round_data, config)
+        logger.info(f"Successfully replaced prep-failed task {task.task_id} with {new_task_id}")
+        return True
+    elif task_obj.status == TaskStatus.FAILURE.value:
+        logger.info(f"Task {task.task_id} failed, copying to main cycle to check.")
+        await _copy_task_to_general(task.task_id, config.psql_db)
+        return True
+    return False
+
+
 async def check_if_round_is_completed(round_data: TournamentRoundData, config: Config) -> bool:
     """Check if a round should be marked as completed based on task completion."""
     logger.info(f"Checking if round {round_data.round_id} should be completed...")
 
     round_tasks = await get_tournament_tasks(round_data.round_id, config.psql_db)
-
     if not round_tasks:
         logger.info(f"No tasks found for round {round_data.round_id}")
         return False
 
-    all_tasks_completed = True
+    # First check if all tasks have reached a terminal state
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
         if task_obj and task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value]:
-            all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
-            break
+            return False
 
+    # All tasks are in terminal state, now handle post-processing
     waiting_for_synced_tasks = False
-    if not all_tasks_completed:
-        logger.info(f"Round {round_data.round_id} not ready for completion yet")
-        return False
-    else:
-        for task in round_tasks:
-            synced_task_id = await get_synced_task_id(task.task_id, config.psql_db)
-            if synced_task_id:
-                synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
-                if synced_task_obj:
-                    if synced_task_obj.status == TaskStatus.SUCCESS.value:
-                        logger.info(f"Synced task {synced_task_id} completed successfully")
-                        continue
-                    elif synced_task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
-                        logger.info(f"Synced task {synced_task_id} had prep failure, replacing with new task immediately.")
-                        new_task_id = await replace_tournament_task(
-                            original_task_id=task.task_id,
-                            tournament_id=round_data.tournament_id,
-                            round_id=round_data.round_id,
-                            group_id=task.group_id,
-                            pair_id=task.pair_id,
-                            config=config,
-                        )
-                        logger.info(f"Successfully replaced prep-failed task {task.task_id} with {new_task_id}")
-                        waiting_for_synced_tasks = True
-                    elif synced_task_obj.status == TaskStatus.FAILURE.value:
-                        original_task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-                        if original_task_obj.status == TaskStatus.FAILURE.value:
-                            logger.info(f"Synced task {synced_task_id} failed. Original task also failed. Replacing...")
-                            
-                            new_task_id = await replace_tournament_task(
-                                original_task_id=task.task_id,
-                                tournament_id=round_data.tournament_id,
-                                round_id=round_data.round_id,
-                                group_id=task.group_id,
-                                pair_id=task.pair_id,
-                                config=config,
-                            )
-                            logger.info(f"Successfully replaced task {task.task_id} with {new_task_id}")
-                            waiting_for_synced_tasks = True
-                        else:
-                            logger.info(f"Synced task {synced_task_id} failed. Original task was successful. Ignoring...")
-                            continue
-                    else:
-                        logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
-                        waiting_for_synced_tasks = True
-            else:
-                task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-                if task_obj:
-                    if task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
-                        logger.info(f"Task {task.task_id} had prep failure, replacing with new task immediately.")
-                        new_task_id = await replace_tournament_task(
-                            original_task_id=task.task_id,
-                            tournament_id=round_data.tournament_id,
-                            round_id=round_data.round_id,
-                            group_id=task.group_id,
-                            pair_id=task.pair_id,
-                            config=config,
-                        )
-                        logger.info(f"Successfully replaced prep-failed task {task.task_id} with {new_task_id}")
-                        waiting_for_synced_tasks = True
-                    elif task_obj.status == TaskStatus.FAILURE.value:
-                        logger.info(f"Task {task.task_id} failed, copying to main cycle to check.")
-                        await _copy_task_to_general(task.task_id, config.psql_db)
-                        waiting_for_synced_tasks = True
+    
+    for task in round_tasks:
+        synced_task_id = await get_synced_task_id(task.task_id, config.psql_db)
+        
+        if synced_task_id:
+            synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
+            if synced_task_obj:
+                waiting = await _handle_synced_task_status(task, synced_task_obj, round_data, config)
+                waiting_for_synced_tasks = waiting_for_synced_tasks or waiting
+        else:
+            # No synced task yet, check if we need to create one or replace
+            task_obj = await task_sql.get_task(task.task_id, config.psql_db)
+            if task_obj:
+                waiting = await _handle_original_task_failure(task, task_obj, round_data, config)
+                waiting_for_synced_tasks = waiting_for_synced_tasks or waiting
 
     if waiting_for_synced_tasks:
         logger.info(f"Waiting for synced tasks to complete in round {round_data.round_id}")
