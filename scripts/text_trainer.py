@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+import pathlib
 
 import yaml
 from transformers import AutoTokenizer
@@ -32,6 +33,24 @@ from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskType
 from miner.logic.job_handler import create_reward_funcs_file
+
+
+def patch_wandb_symlinks(base_dir:str):
+    for root, _, files in os.walk(base_dir):
+        for name in files:
+            full_path = os.path.join(root, name)
+            if os.path.islink(full_path):
+                target = os.readlink(full_path)
+                if not os.path.exists(full_path):
+                    print(f"Broken symlink: {full_path} → {target}")
+                    if os.path.exists(target):
+                        print("Replacing symlink with real file")
+                        os.unlink(full_path)
+                        shutil.copy(target, full_path)
+                    else:
+                        print("Target file missing, replacing with dummy")
+                        os.unlink(full_path)
+                        pathlib.Path(full_path).touch()
 
 
 def patch_model_metadata(output_dir: str, base_model_id: str):
@@ -259,6 +278,8 @@ async def main():
     run_training(config_path)
 
     patch_model_metadata(output_dir, args.model)
+
+    patch_wandb_symlinks(train_cst.WANDB_LOGS_DIR)
 
 
 if __name__ == "__main__":

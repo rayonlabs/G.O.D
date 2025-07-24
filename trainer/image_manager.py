@@ -173,6 +173,7 @@ async def run_trainer_container_text(
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.TEXT_CONTAINER_SAVE_PATH, "mode": "rw"},
                 cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"},
+                "/root/wandb_test": {"bind": cst.WANDB_LOGS_DIR, "mode": "rw"},
             },
             remove=False,
             name=container_name,
