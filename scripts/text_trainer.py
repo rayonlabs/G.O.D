@@ -39,22 +39,26 @@ def patch_wandb_symlinks(base_dir:str):
     for root, _, files in os.walk(base_dir):
         for name in files:
             full_path = os.path.join(root, name)
+
             if os.path.islink(full_path):
                 target_path = os.readlink(full_path)
-                if not os.path.exists(target_path):
-                    print(f"⚠️ Broken or inaccessible symlink: {full_path} → {target_path}")
+
+                print(f"Symlink: {full_path} → {target_path}")
+                try:
+                    os.unlink(full_path)
+                except Exception as e:
+                    print(f"Failed to unlink {full_path}: {e}")
+                    continue
+
+                if os.path.exists(target_path):
+                    print("Copying real file")
                     try:
-                        # Replace symlink with real file if it exists somewhere
-                        if os.path.exists(target_path):
-                            print("✅ Replacing symlink with real file")
-                            os.unlink(full_path)
-                            shutil.copy(target_path, full_path)
-                        else:
-                            print("❌ Target missing, replacing with empty file")
-                            os.unlink(full_path)
-                            pathlib.Path(full_path).touch()
+                        shutil.copy(target_path, full_path)
                     except Exception as e:
-                        print(f"🚨 Failed to patch: {full_path} — {e}")
+                        print(f"Failed to copy: {e}")
+                else:
+                    print("Target not found, creating dummy")
+                    pathlib.Path(full_path).touch()
 
 
 def patch_model_metadata(output_dir: str, base_model_id: str):
