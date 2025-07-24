@@ -94,23 +94,12 @@ def calculate_tournament_type_scores_from_data(
 
 
 def exponential_decline_mapping(total_participants: int, rank: float) -> float:
-    """
-    Maps rank to weight using exponential decay with winner getting minimum guaranteed weight.
-    """
+    """Exponential weight decay based on rank."""
     if total_participants <= 1:
         return 1.0
     
-    # Winner gets at least the minimum guaranteed weight
-    if rank == 1:
-        return cts.TOURNAMENT_WINNER_MIN_WEIGHT
-    
-    # Exponential decay for remaining weight distributed among other participants
-    remaining_weight = 1.0 - cts.TOURNAMENT_WINNER_MIN_WEIGHT
-    
-    # Calculate weight for this rank using exponential decay
-    weight = remaining_weight * (1.0 / (cts.TOURNAMENT_WEIGHT_DECAY_RATE ** ((rank - 2) / (total_participants - 1))))
-    
-    return weight
+    decay_factor = (rank - 1) / (total_participants - 1)
+    return 1.0 / (cts.TOURNAMENT_WEIGHT_DECAY_RATE ** decay_factor)
 
 
 def tournament_scores_to_weights(
