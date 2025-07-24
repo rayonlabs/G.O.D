@@ -1019,7 +1019,6 @@ async def _load_tasks_by_type(
         else:
             logger.warning(f"Specific data not found for task {task_id} of type {task_type}")
 
-
     return tasks
 
 

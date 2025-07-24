@@ -1,38 +1,30 @@
 #!/bin/bash
 
-# Example configuration for InstructTextTask training
-
-# Unique task identifier
 TASK_ID="0ace46bc-8f88-4e70-95b9-9502b5a4d1dc"
-
-# Model to fine-tune (from HuggingFace)
-MODEL="TinyLlama/TinyLlama_v1.1"
-
-# Dataset location - can be:
-# - S3 URL: "s3://bucket/path/to/dataset.json"
-# - Local file: "/path/to/dataset.json"
-# - HuggingFace dataset: "username/dataset-name"
-DATASET="s3://your-bucket/path/to/instruct_dataset.json"
-
-# Dataset type mapping - maps your dataset columns to expected format
-# For InstructTextTask:
-# - field_instruction: column containing the instruction/question
-# - field_output: column containing the expected output/answer
+MODEL="Qwen/Qwen3-0.6B"
+DATASET="https://gradients.s3.eu-north-1.amazonaws.com/68742916c5fba7e2_test_data.json?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVVZOOA7SA4UOFLPI%2F20250718%2Feu-north-1%2Fs3%2Faws4_request&X-Amz-Date=20250718T123411Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=7cf19bb88267a6922afae0c845964412c45b63abe6b79983dd1ed10494453190"
 DATASET_TYPE='{
   "field_instruction":"instruct",
   "field_output":"output"
 }'
-
-# File format: "csv", "json", "hf" (HuggingFace), or "s3"
 FILE_FORMAT="s3"
+HOURS_TO_COMPLETE=6
 
-# Optional: Repository name for the trained model (just the model name, not username/model-name)
-EXPECTED_REPO_NAME="my-finetuned-model"
 
-# Create secure data directory
-DATA_DIR="$(pwd)/secure_data"
-mkdir -p "$DATA_DIR"
-chmod 700 "$DATA_DIR"
+# For uploading the outputs
+HUGGINGFACE_TOKEN="Your Huggingface Token"
+WANDB_TOKEN="Your WandB Token"
+HUGGINGFACE_USERNAME="Your Huggingface Username"
+EXPECTED_REPO_NAME="instructtest"
+LOCAL_FOLDER="/app/checkpoints/$TASK_ID/$EXPECTED_REPO_NAME"
+
+
+CHECKPOINTS_DIR="$(pwd)/secure_checkpoints"
+OUTPUTS_DIR="$(pwd)/outputs"
+mkdir -p "$CHECKPOINTS_DIR"
+chmod 700 "$CHECKPOINTS_DIR"
+mkdir -p "$OUTPUTS_DIR"
+chmod 700 "$OUTPUTS_DIR"
 
 # Build the downloader image
 docker build --no-cache -t trainer-downloader -f dockerfiles/trainer-downloader.dockerfile .
@@ -40,26 +32,30 @@ docker build --no-cache -t trainer-downloader -f dockerfiles/trainer-downloader.
 # Build the trainer image
 docker build --no-cache -t standalone-text-trainer -f dockerfiles/standalone-text-trainer.dockerfile .
 
+# Build the hf uploader image
+docker build --no-cache -t hf-uploader -f dockerfiles/hf-uploader.dockerfile .
+
 # Download model and dataset
 echo "Downloading model and dataset..."
 docker run --rm \
-  --volume "$DATA_DIR:/cache:rw" \
-  --name downloader-example \
+  --volume "$CHECKPOINTS_DIR:/cache:rw" \
+  --name downloader-image \
   trainer-downloader \
   --task-id "$TASK_ID" \
   --model "$MODEL" \
   --dataset "$DATASET" \
-  --task-type "InstructTextTask" \
-  --file-format "$FILE_FORMAT"
+  --file-format "$FILE_FORMAT" \
+  --task-type "InstructTextTask"
 
-# Run the training
-echo "Starting training..."
+
 docker run --rm --gpus all \
   --security-opt=no-new-privileges \
   --cap-drop=ALL \
   --memory=64g \
   --cpus=8 \
-  --volume "$DATA_DIR:/cache:rw" \
+  --network none \
+  --volume "$CHECKPOINTS_DIR:/cache:rw" \
+  --volume "$OUTPUTS_DIR:/app/checkpoints/:rw" \
   --name instruct-text-trainer-example \
   standalone-text-trainer \
   --task-id "$TASK_ID" \
@@ -68,4 +64,20 @@ docker run --rm --gpus all \
   --dataset-type "$DATASET_TYPE" \
   --task-type "InstructTextTask" \
   --file-format "$FILE_FORMAT" \
-  --expected-repo-name "$EXPECTED_REPO_NAME"
+  --hours-to-complete "$HOURS_TO_COMPLETE" \
+  --expected-repo-name "$EXPECTED_REPO_NAME" \
+
+
+  # Upload the trained model to HuggingFace
+echo "Uploading model to HuggingFace..."
+docker run --rm --gpus all \
+  --volume "$OUTPUTS_DIR:/app/checkpoints/:rw" \
+  --env HUGGINGFACE_TOKEN="$HUGGINGFACE_TOKEN" \
+  --env HUGGINGFACE_USERNAME="$HUGGINGFACE_USERNAME" \
+  --env WANDB_TOKEN="$WANDB_TOKEN" \
+  --env TASK_ID="$TASK_ID" \
+  --env EXPECTED_REPO_NAME="$EXPECTED_REPO_NAME" \
+  --env LOCAL_FOLDER="$LOCAL_FOLDER" \
+  --name hf-uploader \
+  hf-uploader
+

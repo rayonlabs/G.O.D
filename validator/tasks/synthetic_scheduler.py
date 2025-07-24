@@ -44,7 +44,6 @@ from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
 from validator.utils.reward_functions import validate_reward_function
 from validator.utils.util import retry_with_backoff
-
 from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import upload_file_to_minio
 
@@ -284,7 +283,6 @@ async def merge_and_upload_chat_datasets(dataset_ids: list[str], input_field: st
     if os.path.exists(dataset_json):
         os.remove(dataset_json)
     return uploaded_url
-
 
 
 @retry_with_backoff
