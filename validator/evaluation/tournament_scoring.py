@@ -93,10 +93,24 @@ def calculate_tournament_type_scores_from_data(
     )
 
 
-def linear_decline_mapping(total_participants: int, rank: float) -> float:
+def exponential_decline_mapping(total_participants: int, rank: float) -> float:
+    """
+    Maps rank to weight using exponential decay with winner getting minimum guaranteed weight.
+    """
     if total_participants <= 1:
         return 1.0
-    return 1.0 - (rank - 1) / (total_participants - 1)
+    
+    # Winner gets at least the minimum guaranteed weight
+    if rank == 1:
+        return cts.TOURNAMENT_WINNER_MIN_WEIGHT
+    
+    # Exponential decay for remaining weight distributed among other participants
+    remaining_weight = 1.0 - cts.TOURNAMENT_WINNER_MIN_WEIGHT
+    
+    # Calculate weight for this rank using exponential decay
+    weight = remaining_weight * (1.0 / (cts.TOURNAMENT_WEIGHT_DECAY_RATE ** ((rank - 2) / (total_participants - 1))))
+    
+    return weight
 
 
 def tournament_scores_to_weights(
@@ -154,7 +168,7 @@ def tournament_scores_to_weights(
         else:
             avg_rank = current_rank + (len(hotkeys_with_score) - 1) / 2
 
-        weight = linear_decline_mapping(total_participants, avg_rank)
+        weight = exponential_decline_mapping(total_participants, avg_rank)
 
         # Assign same weight to all tied participants
         for hotkey in hotkeys_with_score:

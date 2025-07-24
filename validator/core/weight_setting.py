@@ -551,10 +551,17 @@ async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]
             weighted_performance_diff += performance_diff * weight
             total_weight += weight
         elif latest_tournament:
-            logger.info(
-                f"No synthetic task data available for {tournament_type} tournaments, assuming perfect performance (0% difference)"
-            )
-            weighted_performance_diff += 0.0 * weight
+            # Check if burn account won this tournament
+            if latest_tournament.winner_hotkey == cts.EMISSION_BURN_HOTKEY:
+                logger.info(
+                    f"No synthetic task data available for {tournament_type} tournaments, burn account won - assuming worst performance (100% difference)"
+                )
+                weighted_performance_diff += 1.0 * weight  # Maximum performance difference
+            else:
+                logger.info(
+                    f"No synthetic task data available for {tournament_type} tournaments, assuming perfect performance (0% difference)"
+                )
+                weighted_performance_diff += 0.0 * weight
             total_weight += weight
         else:
             logger.info(f"No {tournament_type} tournament data available, will burn this tournament allocation")
