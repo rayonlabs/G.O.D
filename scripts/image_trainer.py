@@ -19,6 +19,7 @@ sys.path.append(project_root)
 
 import core.constants as cst
 import trainer.constants as train_cst
+import trainer.utils.training_paths as train_paths
 from core.config.config_handler import save_config_toml
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.models.utility_models import ImageModelType
@@ -33,35 +34,21 @@ def get_model_path(path: str) -> str:
 
 def create_config(task_id, model, model_type, expected_repo_name):
     """Create the diffusion config file"""
-    # In Docker environment, adjust paths
-    if os.path.exists("/workspace/core/config"):
-        config_path = "/workspace/core/config"
-        sdxl_path = f"{config_path}/base_diffusion_sdxl.toml"
-        flux_path = f"{config_path}/base_diffusion_flux.toml"
-    else:
-        sdxl_path = cst.CONFIG_TEMPLATE_PATH_DIFFUSION_SDXL
-        flux_path = cst.CONFIG_TEMPLATE_PATH_DIFFUSION_FLUX
+    config_template_path = train_paths.get_image_training_config_template_path(model_type)
 
-    # Load appropriate config template
-    if model_type == ImageModelType.SDXL.value:
-        with open(sdxl_path, "r") as file:
-            config = toml.load(file)
-    elif model_type == ImageModelType.FLUX.value:
-        with open(flux_path, "r") as file:
-            config = toml.load(file)
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
+    with open(config_template_path, "r") as file:
+        config = toml.load(file)
 
     # Update config
     config["pretrained_model_name_or_path"] = model
-    config["train_data_dir"] = f"/dataset/images/{task_id}/img/"
-    output_dir = f"{train_cst.IMAGE_CONTAINER_SAVE_PATH}{task_id}/{expected_repo_name}"
+    config["train_data_dir"] = train_paths.get_image_training_images_dir(task_id)
+    output_dir = train_paths.get_checkpoints_output_path(task_id, expected_repo_name)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = output_dir
 
     # Save config to file
-    config_path = os.path.join("/dataset/configs", f"{task_id}.toml")
+    config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
     save_config_toml(config, config_path)
     print(f"Created config at {config_path}", flush=True)
     return config_path
@@ -116,17 +103,14 @@ async def main():
     parser.add_argument("--model", required=True, help="Model name or path")
     parser.add_argument("--dataset-zip", required=True, help="Link to dataset zip file")
     parser.add_argument("--model-type", required=True, choices=["sdxl", "flux"], help="Model type")
-    parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
+    parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
     args = parser.parse_args()
 
-    # Create required directories
-    os.makedirs("/dataset/configs", exist_ok=True)
-    os.makedirs("/dataset/outputs", exist_ok=True)
-    os.makedirs("/dataset/images", exist_ok=True)
+    os.makedirs(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, exist_ok=True)
+    os.makedirs(train_cst.IMAGE_CONTAINER_IMAGES_PATH, exist_ok=True)
 
-    model_folder = args.model.replace("/", "--")
-    model_path = get_model_path(f"{train_cst.CACHE_PATH}/models/{model_folder}")
+    model_path = train_paths.get_image_base_model_path(args.model)
 
     # Create config file
     config_path = create_config(
@@ -139,21 +123,14 @@ async def main():
     # Prepare dataset
     print("Preparing dataset...", flush=True)
 
-    # Set DIFFUSION_DATASET_DIR to environment variable if available
-    original_dataset_dir = cst.DIFFUSION_DATASET_DIR
-    if os.environ.get("DATASET_DIR"):
-        cst.DIFFUSION_DATASET_DIR = os.environ.get("DATASET_DIR")
-
     prepare_dataset(
-        training_images_zip_path=f"{train_cst.CACHE_PATH}/datasets/{args.task_id}.zip",
+        training_images_zip_path=train_paths.get_image_training_zip_save_path(args.task_id),
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
         instance_prompt=cst.DIFFUSION_DEFAULT_INSTANCE_PROMPT,
         class_prompt=cst.DIFFUSION_DEFAULT_CLASS_PROMPT,
         job_id=args.task_id,
+        output_dir=train_cst.IMAGE_CONTAINER_IMAGES_PATH
     )
-
-    # Restore original value
-    cst.DIFFUSION_DATASET_DIR = original_dataset_dir
 
     # Run training
     run_training(args.model_type, config_path)
