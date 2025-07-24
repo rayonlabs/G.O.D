@@ -551,10 +551,17 @@ async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]
             weighted_performance_diff += performance_diff * weight
             total_weight += weight
         elif latest_tournament:
-            logger.info(
-                f"No synthetic task data available for {tournament_type} tournaments, assuming perfect performance (0% difference)"
-            )
-            weighted_performance_diff += 0.0 * weight
+            # Check if burn account won this tournament
+            if latest_tournament.winner_hotkey == cts.EMISSION_BURN_HOTKEY:
+                logger.info(
+                    f"No synthetic task data available for {tournament_type} tournaments, burn account won - assuming worst performance (100% difference)"
+                )
+                weighted_performance_diff += 1.0 * weight  # Maximum performance difference
+            else:
+                logger.info(
+                    f"No synthetic task data available for {tournament_type} tournaments, assuming perfect performance (0% difference)"
+                )
+                weighted_performance_diff += 0.0 * weight
             total_weight += weight
         else:
             logger.info(f"No {tournament_type} tournament data available, will burn this tournament allocation")
@@ -754,6 +761,16 @@ async def get_node_weights_from_period_scores(
         )
 
     tournament_weights = get_tournament_weights_from_data(text_tournament_data, image_tournament_data)
+    
+    # Apply tournament type weights if only one tournament type completed
+    if text_tournament_data and not image_tournament_data:
+        # Only text tournament - scale weights by text proportion
+        tournament_weights = {hotkey: weight * cts.TOURNAMENT_TEXT_WEIGHT for hotkey, weight in tournament_weights.items()}
+        logger.info(f"Only text tournament completed - scaled weights by {cts.TOURNAMENT_TEXT_WEIGHT}")
+    elif image_tournament_data and not text_tournament_data:
+        # Only image tournament - scale weights by image proportion  
+        tournament_weights = {hotkey: weight * cts.TOURNAMENT_IMAGE_WEIGHT for hotkey, weight in tournament_weights.items()}
+        logger.info(f"Only image tournament completed - scaled weights by {cts.TOURNAMENT_IMAGE_WEIGHT}")
 
     logger.info(f"Tournament weights returned: {tournament_weights}")
     logger.info(f"Tournament weights length: {len(tournament_weights)}")

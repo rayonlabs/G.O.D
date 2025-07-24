@@ -101,3 +101,14 @@ def build_wandb_env(task_id: str, hotkey: str) -> dict:
     }
 
     return env
+
+def extract_container_error(logs: str) -> str | None:
+    lines = logs.strip().splitlines()
+
+    for line in reversed(lines):
+        line = line.strip()
+        if line and ":" in line and any(word in line for word in ["Error", "Exception"]):
+            return line
+
+    return None
+

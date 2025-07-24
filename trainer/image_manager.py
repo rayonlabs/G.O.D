@@ -22,6 +22,7 @@ from trainer.tasks import complete_task
 from trainer.tasks import log_task
 from trainer.tasks import update_wandb_url
 from trainer.utils.misc import build_wandb_env
+from trainer.utils.misc import extract_container_error
 from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
 from validator.utils.logging import stream_container_logs
@@ -33,7 +34,7 @@ logger = get_logger(__name__)
 
 def build_docker_image(
     dockerfile_path: str, context_path: str = ".", is_image_task: bool = False, tag: str = None, no_cache: bool = True
-) -> str:
+) -> tuple[str, str | None]:
     client: docker.DockerClient = docker.from_env()
 
     if tag is None:
@@ -52,10 +53,10 @@ def build_docker_image(
         stream_image_build_logs(build_output, get_all_context_tags())
 
         logger.info("Docker image built successfully.")
-        return tag
+        return tag, None
     except (BuildError, APIError) as e:
         logger.error(f"Docker build failed: {str(e)}")
-        raise
+        return None, str(e)
 
 
 def delete_image_and_cleanup(tag: str):
@@ -252,7 +253,9 @@ def run_downloader_container(
         if exit_code == 0:
             logger.info(f"Download completed successfully for task {task_id}")
         else:
-            logger.error(f"Download container exited with code {exit_code} for task {task_id}")
+            logs = container.logs().decode("utf-8", errors="ignore")
+            error_message = extract_container_error(logs)
+            return exit_code, error_message
 
         return exit_code, None
 
@@ -324,12 +327,21 @@ async def upload_repo_to_hf(
 
         log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
         result = container.wait()
-        if wandb_token:
-            logs = container.logs().decode("utf-8")
-            match = re.search(r"https://wandb\.ai/\S+", logs)
-            wandb_url = match.group(0) if match else None
-            if wandb_url:
-                await update_wandb_url(task_id, hotkey, wandb_url)
+        logs = container.logs().decode("utf-8", errors="ignore")
+        exit_code = result.get("StatusCode", -1)
+        if exit_code == 0:
+          logger.info(f"Download completed successfully for task {task_id}")
+          if wandb_token:
+              match = re.search(r"https://wandb\.ai/\S+", logs)
+              wandb_url = match.group(0) if match else None
+              if wandb_url:
+                  await update_wandb_url(task_id, hotkey, wandb_url)
+        else:
+            error_message = extract_container_error(logs)
+            if error_message:
+                await log_task(task_id, hotkey, f"[ERROR] Upload container failed | ExitCode: {exit_code} | LastError: {error_message}")
+                logger.error(f"Upload container failed: {error_message}")
+
     except Exception as e:
         logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}")
         raise
@@ -388,17 +400,23 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             message = "Download container completed successfully"
             await log_task(training_data.task_id, task.hotkey, message)
         else:
-            message = f"Download container failed with error: {exc}"
+            message = f"[ERROR] Download container failed | ExitCode: {download_status} | LastError: {exc}"
             await log_task(training_data.task_id, task.hotkey, message)
             await complete_task(training_data.task_id, task.hotkey, success=False)
             raise RuntimeError(f"Downloader container failed: {exc}")
 
-        tag = await asyncio.to_thread(
+        tag, exc = await asyncio.to_thread(
             build_docker_image,
             dockerfile_path=dockerfile_path,
             is_image_task=(task_type == TaskType.IMAGETASK),
             context_path=local_repo_path,
         )
+
+        if not tag:
+            message = f"[ERROR] Image Build failed | ExitCode: Unknown | LastError: {exc}"
+            await log_task(training_data.task_id, task.hotkey, message)
+            await complete_task(training_data.task_id, task.hotkey, success=False)
+            raise RuntimeError(f"Image build failed: {exc}")
 
         await log_task(training_data.task_id, task.hotkey, f"Docker image built with tag: {tag}")
 
@@ -435,7 +453,6 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             )
 
         await log_task(training_data.task_id, task.hotkey, f"Container started: {container.name}")
-
         await log_task(training_data.task_id, task.hotkey, f"Waiting for container to finish (timeout={timeout_seconds})...")
         wait_task = asyncio.create_task(asyncio.to_thread(container.wait))
         done, pending = await asyncio.wait({wait_task}, timeout=timeout_seconds)
@@ -446,9 +463,15 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             logger.info(f"Container.wait() returned: {result}")
             status_code = result.get("StatusCode", -1)
             if status_code == 0:
-                log_task(training_data.task_id, task.hotkey, "Training completed successfully.")
+                await log_task(training_data.task_id, task.hotkey, "Training completed successfully.")
                 success = True
             else:
+                logs = container.logs().decode("utf-8", errors="ignore")
+                error_message = extract_container_error(logs)
+                if error_message:
+                    log_message = f"[ERROR] Training container failed | ExitCode: {status_code} | LastError: {error_message}"
+                    await log_task(training_data.task_id, task.hotkey, log_message)
+                    logger.error(f"Training container failed: {error_message}")
                 await complete_task(training_data.task_id, task.hotkey, success=success)
                 await log_task(training_data.task_id, task.hotkey, f"Training failed with status code {status_code}")
         else:
@@ -457,14 +480,17 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             await complete_task(training_data.task_id, task.hotkey, success=success)
 
     except Exception as e:
-        await log_task(training_data.task_id, task.hotkey, f"Fatal error during training: {e}")
+        log_message = f"[ERROR] Job failed: {e}"
+        await log_task(training_data.task_id, task.hotkey, log_message)
         logger.exception(f"Training job failed: {training_data.task_id}")
         await complete_task(training_data.task_id, task.hotkey, success=success)
 
     finally:
         if container:
             try:
-                container.kill()
+                container.reload()
+                if container.status == "running":
+                    container.kill()
                 container.remove(force=True)
                 await log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
 
@@ -495,7 +521,8 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
 
                 await log_task(training_data.task_id, task.hotkey, "Repo uploaded successfully.")
             except Exception as upload_err:
-                await log_task(training_data.task_id, task.hotkey, f"Upload to HuggingFace failed: {upload_err}")
+                log_message = f"[ERROR] Upload container failed | ExitCode: Unknown | LastError: {upload_err}"
+                await log_task(training_data.task_id, task.hotkey, log_message)
                 success = False
 
         await complete_task(training_data.task_id, task.hotkey, success=success)

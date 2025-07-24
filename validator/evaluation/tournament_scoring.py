@@ -93,10 +93,14 @@ def calculate_tournament_type_scores_from_data(
     )
 
 
-def linear_decline_mapping(total_participants: int, rank: float) -> float:
+def exponential_decline_mapping(total_participants: int, rank: float) -> float:
+    """Exponential weight decay based on rank."""
     if total_participants <= 1:
         return 1.0
-    return 1.0 - (rank - 1) / (total_participants - 1)
+    
+    decay_factor = (rank - 1) / (total_participants - 1)
+    return 1.0 / (cts.TOURNAMENT_WEIGHT_DECAY_RATE ** decay_factor)
+
 
 
 def tournament_scores_to_weights(
@@ -108,23 +112,27 @@ def tournament_scores_to_weights(
     # Filter out zero scores
     non_zero_scores = [score for score in tournament_scores if score.score > 0]
 
-    # If we have a previous winner, insert them at 1st or 2nd position
+    # If we have a previous winner, place them appropriately
     if prev_winner_hotkey:
         if prev_winner_won_final:
             # Previous winner won final round, place them 1st
             prev_winner_score = TournamentScore(hotkey=prev_winner_hotkey, score=float("inf"))
             non_zero_scores.insert(0, prev_winner_score)
         else:
-            # Previous winner lost final round, place them 2nd
-            if len(non_zero_scores) > 0:
-                # Find the highest score to place prev winner just below it
-                max_score = max(score.score for score in non_zero_scores)
-                prev_winner_score = TournamentScore(hotkey=prev_winner_hotkey, score=max_score - 0.1)
-                non_zero_scores.append(prev_winner_score)
+            # Check if prev_winner is in the scores (meaning they participated and lost)
+            # vs won by default (not in scores, won because others failed)
+            prev_winner_in_scores = any(score.hotkey == prev_winner_hotkey for score in non_zero_scores)
+            
+            if prev_winner_in_scores:
+                # Previous winner participated but lost final round, place them 2nd
+                if len(non_zero_scores) > 0:
+                    max_score = max(score.score for score in non_zero_scores)
+                    prev_winner_score = TournamentScore(hotkey=prev_winner_hotkey, score=max_score - 0.1)
+                    non_zero_scores.append(prev_winner_score)
             else:
-                # No other scores, prev winner gets 1st by default
-                prev_winner_score = TournamentScore(hotkey=prev_winner_hotkey, score=1.0)
-                non_zero_scores.append(prev_winner_score)
+                # Previous winner won by default (not in scores), place them 1st
+                prev_winner_score = TournamentScore(hotkey=prev_winner_hotkey, score=float("inf"))
+                non_zero_scores.insert(0, prev_winner_score)
 
     if not non_zero_scores:
         return {}
@@ -154,7 +162,7 @@ def tournament_scores_to_weights(
         else:
             avg_rank = current_rank + (len(hotkeys_with_score) - 1) / 2
 
-        weight = linear_decline_mapping(total_participants, avg_rank)
+        weight = exponential_decline_mapping(total_participants, avg_rank)
 
         # Assign same weight to all tied participants
         for hotkey in hotkeys_with_score:
