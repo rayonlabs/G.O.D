@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from pydantic import BaseModel
 
 
 @dataclass
@@ -46,14 +45,6 @@ class ValidatorConfig(BaseConfig):
     refresh_nodes: bool = True
     database_url: str | None = None
     postgres_profile: str = "default"
-    redis_password: str | None = None
-
-
-@dataclass
-class TrainerConfig:
-    wandb_token: str
-    huggingface_username: str
-    huggingface_token: str
 
 
 @dataclass
