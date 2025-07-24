@@ -19,6 +19,7 @@ from core.models.tournament_models import DetailedTournamentTaskScore
 from core.models.tournament_models import NextTournamentDates
 from core.models.tournament_models import NextTournamentInfo
 from core.models.tournament_models import TournamentDetailsResponse
+from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskStatus
@@ -27,6 +28,7 @@ from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql
+from validator.evaluation.tournament_scoring import calculate_tournament_type_scores_from_data
 from validator.utils.logging import get_logger
 
 
@@ -94,10 +96,14 @@ async def get_tournament_details(
             )
             detailed_rounds.append(detailed_round)
 
-        from validator.evaluation.tournament_scoring import calculate_tournament_type_scores
-
-        tournament_type_result = await calculate_tournament_type_scores(
-            TournamentType(tournament.tournament_type), config.psql_db
+        tournament_results_with_winners = TournamentResultsWithWinners(
+            tournament_id=tournament.tournament_id,
+            rounds=detailed_rounds,
+            base_winner_hotkey=tournament.base_winner_hotkey,
+            winner_hotkey=tournament.winner_hotkey,
+        )
+        tournament_type_result = calculate_tournament_type_scores_from_data(
+            TournamentType(tournament.tournament_type), tournament_results_with_winners
         )
 
         response = TournamentDetailsResponse(
@@ -218,22 +224,22 @@ async def get_next_tournament_dates(
             tournament, created_at = await tournament_sql.get_latest_tournament_with_created_at(
                 config.psql_db, tournament_type
             )
-            
+
             if created_at is None:
                 # No previous tournament, start from now
                 next_start = datetime.now(timezone.utc)
             else:
                 # Next tournament starts TOURNAMENT_INTERVAL_DAYS after the last one started
                 next_start = created_at + timedelta(days=cts.TOURNAMENT_INTERVAL_DAYS)
-                
+
                 # If the calculated start date is in the past, use current time
                 current_time = datetime.now(timezone.utc)
                 if next_start < current_time:
                     next_start = current_time
-            
+
             # Tournament ends TOURNAMENT_INTERVAL_DAYS after it starts
             next_end = next_start + timedelta(days=cts.TOURNAMENT_INTERVAL_DAYS)
-            
+
             return NextTournamentInfo(
                 tournament_type=tournament_type,
                 next_start_date=next_start,
@@ -263,12 +269,12 @@ async def get_active_tournaments(
             tournament = await tournament_sql.get_active_tournament(config.psql_db, tournament_type)
             if not tournament:
                 return None
-            
+
             _, created_at = await tournament_sql.get_tournament_with_created_at(
                 tournament.tournament_id, config.psql_db
             )
             participants = await tournament_sql.get_tournament_participants(tournament.tournament_id, config.psql_db)
-            
+
             active_participants = [
                 ActiveTournamentParticipant(
                     hotkey=p.hotkey,
@@ -277,7 +283,7 @@ async def get_active_tournaments(
                 for p in participants
                 if p.stake_required is not None
             ]
-            
+
             return ActiveTournamentInfo(
                 tournament_id=tournament.tournament_id,
                 tournament_type=tournament_type,
@@ -293,7 +299,7 @@ async def get_active_tournaments(
             f"Retrieved active tournaments: text={text_info.tournament_id if text_info else None}, "
             f"image={image_info.tournament_id if image_info else None}"
         )
-        
+
         return ActiveTournamentsResponse(text=text_info, image=image_info)
 
     except Exception as e:

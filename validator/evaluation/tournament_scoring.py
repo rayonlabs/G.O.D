@@ -102,6 +102,7 @@ def exponential_decline_mapping(total_participants: int, rank: float) -> float:
     return 1.0 / (cts.TOURNAMENT_WEIGHT_DECAY_RATE ** decay_factor)
 
 
+
 def tournament_scores_to_weights(
     tournament_scores: list[TournamentScore], prev_winner_hotkey: str | None, prev_winner_won_final: bool
 ) -> dict[str, float]:

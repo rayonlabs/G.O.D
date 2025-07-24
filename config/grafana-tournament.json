@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 2,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -48,7 +48,7 @@
         "sortOrder": "Descending",
         "wrapLogMessage": false
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -56,8 +56,8 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "direction": "backward",
-          "editorMode": "code",
-          "expr": "{service_name=~\"$service_to_show\"} | ctx_tournament_id =~ `.*$tournament_id.*` | label_format level=detected_level | line_format `{{.service_name }} - {{__line__}}`",
+          "editorMode": "builder",
+          "expr": "{service_name=~\"$service_to_show\"} |~ `(?i)$search_text` | ctx_tournament_id =~ `.*$tournament_id.*` | label_format level=detected_level | line_format `{{.service_name }} - {{__line__}}`",
           "queryType": "range",
           "refId": "A"
         }
@@ -74,19 +74,36 @@
     "list": [
       {
         "current": {
-          "text": "tourn_83a8598db3278fe7_20250710",
-          "value": "tourn_83a8598db3278fe7_20250710"
+          "text": "",
+          "value": ""
+        },
+        "label": "Search",
+        "name": "search_text",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
         },
         "label": "Tournament ID",
         "name": "tournament_id",
         "options": [
           {
             "selected": true,
-            "text": "tourn_83a8598db3278fe7_20250710",
-            "value": "tourn_83a8598db3278fe7_20250710"
+            "text": "",
+            "value": ""
           }
         ],
-        "query": "tourn_83a8598db3278fe7_20250710",
+        "query": "",
         "type": "textbox"
       },
       {
@@ -128,5 +145,5 @@
   "timezone": "browser",
   "title": "Tournament",
   "uid": "b6dfaebc-2c4f-4621-9e6c-800ab36e7ac2",
-  "version": 4
+  "version": 2
 }
