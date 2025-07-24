@@ -330,12 +330,12 @@ async def upload_repo_to_hf(
         logs = container.logs().decode("utf-8", errors="ignore")
         exit_code = result.get("StatusCode", -1)
         if exit_code == 0:
-          logger.info(f"Download completed successfully for task {task_id}")
-          if wandb_token:
-              match = re.search(r"https://wandb\.ai/\S+", logs)
-              wandb_url = match.group(0) if match else None
-              if wandb_url:
-                  await update_wandb_url(task_id, hotkey, wandb_url)
+            logger.info(f"Download completed successfully for task {task_id}")
+            if wandb_token:
+                match = re.search(r"https://wandb\.ai/\S+", logs)
+                wandb_url = match.group(0) if match else None
+                if wandb_url:
+                    await update_wandb_url(task_id, hotkey, wandb_url)
         else:
             error_message = extract_container_error(logs)
             if error_message:
