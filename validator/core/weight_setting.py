@@ -761,6 +761,16 @@ async def get_node_weights_from_period_scores(
         )
 
     tournament_weights = get_tournament_weights_from_data(text_tournament_data, image_tournament_data)
+    
+    # Apply tournament type weights if only one tournament type completed
+    if text_tournament_data and not image_tournament_data:
+        # Only text tournament - scale weights by text proportion
+        tournament_weights = {hotkey: weight * cts.TOURNAMENT_TEXT_WEIGHT for hotkey, weight in tournament_weights.items()}
+        logger.info(f"Only text tournament completed - scaled weights by {cts.TOURNAMENT_TEXT_WEIGHT}")
+    elif image_tournament_data and not text_tournament_data:
+        # Only image tournament - scale weights by image proportion  
+        tournament_weights = {hotkey: weight * cts.TOURNAMENT_IMAGE_WEIGHT for hotkey, weight in tournament_weights.items()}
+        logger.info(f"Only image tournament completed - scaled weights by {cts.TOURNAMENT_IMAGE_WEIGHT}")
 
     logger.info(f"Tournament weights returned: {tournament_weights}")
     logger.info(f"Tournament weights length: {len(tournament_weights)}")
