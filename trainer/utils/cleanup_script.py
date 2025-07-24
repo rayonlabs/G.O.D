@@ -6,7 +6,7 @@ from trainer import constants as cst
 
 
 TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
-CHECKPOINTS_DIR = Path(cst.CHECKPOINTS_DIR)
+CHECKPOINTS_DIR = Path(cst.OUTPUT_CHECKPOINTS_PATH)
 CACHE_MODELS_DIR = Path(cst.CACHE_MODELS_DIR)
 CACHE_DATASETS_DIR = Path(cst.CACHE_DATASETS_DIR)
 CUTOFF_HOURS = cst.CACHE_CLEANUP_CUTOFF_HOURS
@@ -41,14 +41,23 @@ def load_task_history() -> list[dict]:
 
 
 def clean_checkpoints(task_history: list[dict]):
+    task_id_to_times: dict[str, list[str | None]] = {}
+
     for task in task_history:
         task_id = task.get("training_data", {}).get("task_id")
+        if not task_id:
+            continue
         finished_at = task.get("finished_at")
-        if task_id and is_older_than(finished_at, CUTOFF_HOURS):
-            target = CHECKPOINTS_DIR / task_id
-            if target.exists():
-                print(f"Deleting checkpoint: {target}")
-                shutil.rmtree(target, ignore_errors=True)
+        task_id_to_times.setdefault(task_id, []).append(finished_at)
+
+    print(task_id_to_times.items())
+
+    for task_id, finished_list in task_id_to_times.items():
+
+        if all(is_older_than(finished_at, CUTOFF_HOURS) for finished_at in finished_list):
+            target = Path(CHECKPOINTS_DIR, task_id)
+            print(f"Deleting checkpoints for task {task_id} at {target}")
+            shutil.rmtree(target, ignore_errors=True)
 
 
 def clean_datasets(task_history: list[dict]):
@@ -86,12 +95,13 @@ def clean_models(task_history: list[dict]):
         ):
             recent_models.add(model_folder)
 
-    for model_dir in CACHE_MODELS_DIR.iterdir():
-        if not model_dir.is_dir():
-            continue
-        if model_dir.name not in recent_models and model_dir.name in all_models:
-            print(f"Deleting model folder: {model_dir}")
-            shutil.rmtree(model_dir, ignore_errors=True)
+    if CACHE_MODELS_DIR.exists():
+        for model_dir in CACHE_MODELS_DIR.iterdir():
+            if not model_dir.is_dir():
+                continue
+            if model_dir.name not in recent_models and model_dir.name in all_models:
+                print(f"Deleting model folder: {model_dir}")
+                shutil.rmtree(model_dir, ignore_errors=True)
 
 
 def main():

@@ -222,7 +222,6 @@ class NewTaskRequestChat(NewTaskRequest):
             "chat_user_reference",
             "chat_assistant_reference",
         ]
-
         for field in string_fields:
             if field in values and isinstance(values[field], str):
                 values[field] = values[field].strip() or None
