@@ -515,7 +515,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
                     huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
                     task_type=task_type,
-                    wandb_token=os.getenv("WANDB_TOKEN", None),
+                    wandb_token=wandb_token,
                     path_in_repo=path_in_repo,
                 )
 
