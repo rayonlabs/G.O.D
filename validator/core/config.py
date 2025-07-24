@@ -34,7 +34,6 @@ class Config:
     refresh_nodes: bool
     httpx_client: httpx.AsyncClient
     set_metagraph_weights_with_high_updated_to_not_dereg: bool
-    tournament_base_contestant_hotkey: str
     testnet: bool = os.getenv("SUBTENSOR_NETWORK", "").lower() == "test"
     debug: bool = os.getenv("ENV", "prod").lower() != "prod"
 
@@ -57,8 +56,7 @@ def load_config() -> Config:
         else:
             netuid = int(netuid)
 
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        redis_host = "localhost"
 
         refresh_nodes: bool = os.getenv("REFRESH_NODES", "true").lower() == "true"
         if refresh_nodes:
@@ -92,13 +90,11 @@ def load_config() -> Config:
             os.getenv("SET_METAGRAPH_WEIGHTS_WITH_HIGH_UPDATED_TO_NOT_DEREG", "false").lower() == "true"
         )
 
-        tournament_base_contestant_hotkey = os.getenv("TOURNAMENT_BASE_CONTESTANT_HOTKEY")
-
         _config = Config(
             substrate=substrate,
             keypair=keypair,
             psql_db=PSQLDB(),
-            redis_db=Redis(host=redis_host, port=redis_port),
+            redis_db=Redis(host=redis_host),
             subtensor_network=subtensor_network,
             subtensor_address=subtensor_address,
             netuid=netuid,
@@ -106,6 +102,5 @@ def load_config() -> Config:
             httpx_client=httpx_client,
             debug=dev_env,
             set_metagraph_weights_with_high_updated_to_not_dereg=set_metagraph_weights_with_high_updated_to_not_dereg,
-            tournament_base_contestant_hotkey=tournament_base_contestant_hotkey,
         )
     return _config

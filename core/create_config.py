@@ -170,11 +170,7 @@ def generate_validator_config(dev: bool = False) -> dict[str, Any]:
     return vars(config)
 
 
-<<<<<<< HEAD
-def generate_config(dev: bool = False, miner: bool = False, trainer: bool=False) -> dict[str, Any]:
-=======
 def generate_config(dev: bool = False, miner: bool = False, trainer: bool = False) -> dict[str, Any]:
->>>>>>> 5.0.1
     if miner:
         return generate_miner_config(dev)
     elif trainer:

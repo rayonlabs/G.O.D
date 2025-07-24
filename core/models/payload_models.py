@@ -11,12 +11,9 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
-<<<<<<< HEAD
-=======
 
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import TextDatasetType
->>>>>>> 5.0.1
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ChatTemplateDatasetType
