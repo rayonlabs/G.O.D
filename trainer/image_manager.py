@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import uuid
+import re
 
 import docker
 from docker.errors import APIError
@@ -19,6 +20,8 @@ from core.models.utility_models import TaskType
 from trainer import constants as cst
 from trainer.tasks import complete_task
 from trainer.tasks import log_task
+from trainer.tasks import update_wandb_url
+from trainer.utils.misc import build_wandb_env
 from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
 from validator.utils.logging import stream_container_logs
@@ -131,6 +134,7 @@ async def run_trainer_container_image(
 
 async def run_trainer_container_text(
     task_id: str,
+    hotkey: str,
     tag: str,
     model: str,
     dataset: str,
@@ -143,7 +147,7 @@ async def run_trainer_container_text(
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
 
-    environment = {"WANDB_MODE": "offline", "WANDB_DIR": cst.WANDB_LOGS_DIR, "WANDB_CACHE_DIR": cst.WANDB_LOGS_DIR, "WANDB_ARTIFACT_DIR": cst.WANDB_LOGS_DIR, "WANDB_DATA_DIR": cst.WANDB_LOGS_DIR, "WANDB_CONFIG_DIR": cst.WANDB_LOGS_DIR}
+    environment = build_wandb_env(task_id, hotkey)
 
     command: list[str] = [
         "--task-id",
@@ -173,7 +177,6 @@ async def run_trainer_container_text(
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.TEXT_CONTAINER_SAVE_PATH, "mode": "rw"},
                 cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"},
-                "/root/wandb_test": {"bind": cst.WANDB_LOGS_DIR, "mode": "rw"},
             },
             remove=False,
             name=container_name,
@@ -271,6 +274,7 @@ def run_downloader_container(
 
 async def upload_repo_to_hf(
     task_id: str,
+    hotkey: str,
     expected_repo_name: str,
     huggingface_token: str,
     huggingface_username: str,
@@ -291,11 +295,7 @@ async def upload_repo_to_hf(
             "HUGGINGFACE_TOKEN": huggingface_token,
             "HUGGINGFACE_USERNAME": huggingface_username,
             "WANDB_TOKEN": wandb_token or None,
-            "WANDB_LOGS_PATH": cst.WANDB_LOGS_DIR,
-            "WANDB_CACHE_DIR": cst.WANDB_LOGS_DIR,
-            "WANDB_ARTIFACT_DIR": cst.WANDB_LOGS_DIR,
-            "WANDB_CONFIG_DIR": cst.WANDB_LOGS_DIR,
-            "WANDB_DATA_DIR": cst.WANDB_LOGS_DIR,
+            "WANDB_LOGS_PATH": f"{cst.WANDB_LOGS_DIR}/{task_id}_{hotkey}",
             "LOCAL_FOLDER": local_container_folder,
             "TASK_ID": task_id,
             "EXPECTED_REPO_NAME": expected_repo_name,
@@ -318,12 +318,18 @@ async def upload_repo_to_hf(
             environment=environment,
             volumes=volumes,
             detach=True,
-            remove=True,
+            remove=False,
             name=container_name,
         )
 
         log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
-
+        result = container.wait()
+        if wandb_token:
+            logs = container.logs().decode("utf-8")
+            match = re.search(r"https://wandb\.ai/\S+", logs)
+            wandb_url = match.group(0) if match else None
+            if wandb_url:
+                await update_wandb_url(task_id, hotkey, wandb_url)
     except Exception as e:
         logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}")
         raise
@@ -414,6 +420,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             container = await asyncio.wait_for(
                 run_trainer_container_text(
                     task_id=training_data.task_id,
+                    hotkey=task.hotkey,
                     tag=tag,
                     model=training_data.model,
                     dataset=training_data.dataset,
@@ -474,8 +481,10 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         if success:
             try:
                 path_in_repo = cst.IMAGE_TASKS_HF_SUBFOLDER_PATH if task_type == TaskType.IMAGETASK else None
+                wandb_token = os.getenv("WANDB_TOKEN") if task_type != TaskType.IMAGETASK else None
                 await upload_repo_to_hf(
                     task_id=training_data.task_id,
+                    hotkey=task.hotkey,
                     expected_repo_name=training_data.expected_repo_name,
                     huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
                     huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
@@ -483,6 +492,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     wandb_token=os.getenv("WANDB_TOKEN", None),
                     path_in_repo=path_in_repo,
                 )
+
                 await log_task(training_data.task_id, task.hotkey, "Repo uploaded successfully.")
             except Exception as upload_err:
                 await log_task(training_data.task_id, task.hotkey, f"Upload to HuggingFace failed: {upload_err}")

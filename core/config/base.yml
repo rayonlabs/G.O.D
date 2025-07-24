@@ -53,27 +53,14 @@ wandb_mode: offline
 wandb_run: your_name
 wandb_runid: default
 
-
-saves_per_epoch: 1
-warmup_steps: 1
-evals_per_epoch: 1
+saves_per_epoch: 4
+warmup_steps: 10
+evals_per_epoch: 4
 eval_table_size:
 eval_max_new_tokens: 128
-max_steps: 1
+max_steps: 10
 debug:
 deepspeed:
 weight_decay: 0.0
 fsdp:
 fsdp_config:
-
-# saves_per_epoch: 4
-# warmup_steps: 10
-# evals_per_epoch: 4
-# eval_table_size:
-# eval_max_new_tokens: 128
-# max_steps: 10
-# debug:
-# deepspeed:
-# weight_decay: 0.0
-# fsdp:
-# fsdp_config:
