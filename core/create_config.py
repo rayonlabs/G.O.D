@@ -9,7 +9,6 @@ from core.models.config_models import AuditorConfig
 from core.models.config_models import MinerConfig
 from core.models.config_models import TrainerConfig
 from core.models.config_models import ValidatorConfig
-from core.models.config_models import TrainerConfig
 from core.validators import InputValidators
 from core.validators import validate_input
 
@@ -93,7 +92,6 @@ def generate_validator_config(dev: bool = False) -> dict[str, Any]:
     # Check if POSTGRES_PASSWORD already exists in the environment
     postgres_password = os.getenv("POSTGRES_PASSWORD")
     frontend_api_key = os.getenv("FRONTEND_API_KEY")
-    redis_password = os.getenv("REDIS_PASSWORD")
 
     subtensor_network = input("🌐 Enter subtensor network (default: finney): ") or "finney"
     subtensor_address = (
@@ -134,7 +132,6 @@ def generate_validator_config(dev: bool = False) -> dict[str, Any]:
     s3_region = input("🎯 Enter s3 region (default: us-east-1): ") or "us-east-1"
 
     frontend_api_key = generate_secure_password() if not frontend_api_key else frontend_api_key
-    redis_password = generate_secure_password() if not redis_password else redis_password
 
     config = ValidatorConfig(
         wallet_name=wallet_name,
@@ -165,7 +162,6 @@ def generate_validator_config(dev: bool = False) -> dict[str, Any]:
         localhost=parse_bool_input("Use localhost?", default=True) if dev else False,
         database_url=database_url,
         postgres_profile=postgres_profile,
-        redis_password=redis_password,
     )
     return vars(config)
 
