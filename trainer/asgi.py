@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from trainer.endpoints import factory_router
-from trainer.tasks import start_cleanup_loop_in_thread
+from trainer.utils.cleanup_loop import start_cleanup_loop_in_thread
 from validator.utils.logging import get_logger
 
 

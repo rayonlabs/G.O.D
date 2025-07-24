@@ -6,4 +6,4 @@ COPY trainer/ trainer/
 
 ENV PYTHONPATH=/app
 
-CMD ["python", "trainer/utils/cache_cleanup.py"]
+CMD ["python", "trainer/utils/cleanup_script.py"]

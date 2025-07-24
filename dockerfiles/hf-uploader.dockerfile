@@ -7,8 +7,13 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir huggingface_hub
+RUN pip install --no-cache-dir \
+    huggingface_hub \
+    wandb 
 
-COPY trainer/utils/hf_upload.py /app/hf_upload.py
+COPY trainer/ trainer/
+COPY core/ core/
 
-ENTRYPOINT ["python", "/app/hf_upload.py"]
+ENV PYTHONPATH=/app
+
+ENTRYPOINT ["python", "trainer/utils/hf_upload.py"]

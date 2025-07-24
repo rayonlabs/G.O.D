@@ -9,6 +9,7 @@ import shutil
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
 from trainer.tasks import get_running_tasks
+import trainer.constants as cst
 
 
 def clone_repo(repo_url: str, parent_dir: str, branch: str = None, commit_hash: str = None) -> str:
@@ -90,6 +91,16 @@ async def get_gpu_info() -> list[GPUInfo]:
     pynvml.nvmlShutdown()
     return gpu_infos
 
+
+def build_wandb_env(task_id: str, hotkey: str) -> dict:
+    wandb_path = f"{cst.WANDB_LOGS_DIR}/{task_id}_{hotkey}"
+
+    env = {
+        "WANDB_MODE": "offline",
+        **{key: wandb_path for key in cst.WANDB_DIRECTORIES}
+    }
+
+    return env
 
 def extract_container_error(logs: str) -> str | None:
     lines = logs.strip().splitlines()
