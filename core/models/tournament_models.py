@@ -3,10 +3,20 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
+<<<<<<< HEAD
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
+=======
+from fiber.chain.models import Node
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import field_validator
+
+from core.models.payload_models import TrainingRepoResponse
+>>>>>>> 5.0.1
 from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
 from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
@@ -67,7 +77,10 @@ def generate_pair_id(round_id: str, pair_number: int) -> str:
 
 
 def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int) -> GpuRequirement:
+<<<<<<< HEAD
     return GpuRequirement.A100
+=======
+>>>>>>> 5.0.1
     if task_type == TaskType.IMAGETASK:
         return GpuRequirement.A100
 
@@ -125,6 +138,10 @@ class TournamentParticipant(BaseModel):
     final_position: int | None = None
     training_repo: str | None = None
     training_commit_hash: str | None = None
+<<<<<<< HEAD
+=======
+    stake_required: float | None = None
+>>>>>>> 5.0.1
 
 
 class TournamentTask(BaseModel):
@@ -207,6 +224,16 @@ class TournamentResults(BaseModel):
     rounds: list[TournamentRoundResult]
 
 
+<<<<<<< HEAD
+=======
+class TournamentResultsWithWinners(BaseModel):
+    tournament_id: str
+    rounds: list[TournamentRoundResult]
+    base_winner_hotkey: str | None = None
+    winner_hotkey: str | None = None
+
+
+>>>>>>> 5.0.1
 class TournamentScore(BaseModel):
     hotkey: str
     score: float
@@ -231,6 +258,18 @@ class TournamentDetailsResponse(BaseModel):
     image_tournament_weight: float
 
 
+<<<<<<< HEAD
+=======
+class TournamentAuditData(BaseModel):
+    text_tournament_data: TournamentResultsWithWinners | None = None
+    image_tournament_data: TournamentResultsWithWinners | None = None
+    participants: list[str] = []
+    tournament_weight_multiplier: float = 0.0
+    regular_weight_multiplier: float = 0.0
+    burn_weight: float = 0.0
+
+
+>>>>>>> 5.0.1
 class BossRoundTaskCompletion(BaseModel):
     total_synth_tasks: int
     completed_synth_tasks: int
@@ -248,3 +287,45 @@ class TaskScore(BaseModel):
     test_loss: float
     synth_loss: float
     quality_score: float
+<<<<<<< HEAD
+=======
+
+
+class RespondingNode(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    node: Node
+    training_repo_response: TrainingRepoResponse
+    boosted_stake: float
+    actual_stake: float
+
+
+class NextTournamentInfo(BaseModel):
+    tournament_type: TournamentType
+    next_start_date: datetime
+    next_end_date: datetime
+    interval_days: int
+
+
+class NextTournamentDates(BaseModel):
+    text: NextTournamentInfo
+    image: NextTournamentInfo
+
+
+class ActiveTournamentParticipant(BaseModel):
+    hotkey: str
+    stake_requirement: float
+
+
+class ActiveTournamentInfo(BaseModel):
+    tournament_id: str
+    tournament_type: TournamentType
+    status: TournamentStatus
+    participants: list[ActiveTournamentParticipant]
+    created_at: datetime
+
+
+class ActiveTournamentsResponse(BaseModel):
+    text: ActiveTournamentInfo | None
+    image: ActiveTournamentInfo | None
+>>>>>>> 5.0.1

@@ -14,9 +14,6 @@ logger = get_logger(__name__)
 async def cycle():
     config = load_config()
 
-    if config.netuid == 56:
-        raise Exception("This is not meant to be run on mainnet yet. It may affect real miner weights.")
-
     await try_db_connections(config)
 
     await asyncio.gather(

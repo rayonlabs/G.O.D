@@ -367,7 +367,9 @@ async def get_aggregate_scores_for_leaderboard_since(start_time: datetime, psql_
         return results
 
 
+
 async def get_organic_proportion_since(start_time: datetime, psql_db: PSQLDB, task_type: str | None = None) -> float:
+
     """
     Get the proportion of organic tasks since the given start time.
     Optionally filter by task_type.

@@ -23,7 +23,13 @@ Where `task_type` can be:
 
 ## Docker-Based Architecture
 
+<<<<<<< HEAD
 ### Supported Base Images
+=======
+### Recommended Starting Images
+
+You can use any Docker base image that suits your needs. We provide these as recommended starting points:
+>>>>>>> 5.0.1
 
 **For Text Tasks (Instruct, DPO, GRPO, Chat):**
 ```dockerfile
@@ -35,6 +41,11 @@ FROM axolotlai/axolotl:main-py3.11-cu124-2.5.1
 FROM diagonalge/kohya_latest:latest
 ```
 
+<<<<<<< HEAD
+=======
+Feel free to use alternative base images or build your own custom environment as long as it can handle the required training tasks.
+
+>>>>>>> 5.0.1
 ### Required Repository Structure
 
 ```
@@ -65,7 +76,10 @@ Your training scripts accept these standardised CLI arguments:
 --dataset-type        # JSON structure of dataset (columns, format)
 --task-type           # "InstructTextTask", "DpoTask", or "GrpoTask"
 --expected-repo-name  # Expected HuggingFace repository name for upload
+<<<<<<< HEAD
 --hours-to-complete   # Time limit in hours for the job to finish
+=======
+>>>>>>> 5.0.1
 ```
 
 ### Image Training Arguments
@@ -75,7 +89,10 @@ Your training scripts accept these standardised CLI arguments:
 --dataset-zip         # S3 URL to dataset zip file
 --model-type          # "sdxl" or "flux"
 --expected-repo-name  # Expected HuggingFace repository name for upload
+<<<<<<< HEAD
 --hours-to-complete   # Time limit in hours for the job to finish
+=======
+>>>>>>> 5.0.1
 ```
 
 ## Dataset Handling

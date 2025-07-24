@@ -7,7 +7,7 @@ import tempfile
 from huggingface_hub import HfApi
 from huggingface_hub import hf_hub_download
 from huggingface_hub import snapshot_download
-from transformers import CLIPTokenizer, T5TokenizerFast
+from transformers import CLIPTokenizer
 
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskType

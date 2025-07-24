@@ -7,6 +7,7 @@ from typing import Any
 
 from core.models.config_models import AuditorConfig
 from core.models.config_models import MinerConfig
+from core.models.config_models import TrainerConfig
 from core.models.config_models import ValidatorConfig
 from core.models.config_models import TrainerConfig
 from core.validators import InputValidators
@@ -80,7 +81,7 @@ def generate_trainer_config() -> dict[str, Any]:
     config = TrainerConfig(
         wandb_token=input("📊 Enter wandb token (default: default): ") or "default",
         huggingface_token=input("🤗 Enter huggingface token (default: default): ") or "default",
-        huggingface_username=input("🏗️ Enter your huggingface username where you would like to save the models: ")
+        huggingface_username=input("🏗️ Enter your huggingface username where you would like to save the models: "),
     )
 
     return vars(config)
@@ -169,7 +170,11 @@ def generate_validator_config(dev: bool = False) -> dict[str, Any]:
     return vars(config)
 
 
+<<<<<<< HEAD
 def generate_config(dev: bool = False, miner: bool = False, trainer: bool=False) -> dict[str, Any]:
+=======
+def generate_config(dev: bool = False, miner: bool = False, trainer: bool = False) -> dict[str, Any]:
+>>>>>>> 5.0.1
     if miner:
         return generate_miner_config(dev)
     elif trainer:

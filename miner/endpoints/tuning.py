@@ -20,7 +20,9 @@ from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import MinerSubmission
 from validator.utils.hash_verification import calculate_model_hash
+
 from core.models.payload_models import TrainingRepoResponse
+
 from core.models.payload_models import TrainRequestGrpo
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText

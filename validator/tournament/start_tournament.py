@@ -14,9 +14,6 @@ async def main():
 
     config = load_config()
 
-    if config.netuid == 56:
-        raise Exception("This is not meant to be run on mainnet yet. It may affect real miner weights.")
-
     await config.psql_db.connect()
     logger.info("Connected to database")
 

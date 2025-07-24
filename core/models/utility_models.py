@@ -211,3 +211,7 @@ class GPUInfo(BaseModel):
 class TrainerInfo(BaseModel):
     trainer_ip: str = Field(..., description="Trainer IP address")
     gpus: list[GPUInfo] = Field(..., description="List of GPUs available on this trainer")
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5.0.1

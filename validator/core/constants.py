@@ -135,7 +135,21 @@ EMISSION_BURN_HOTKEY = "5GU4Xkd3dCGTU3s8VLcHGc5wsD5M8XyxDca5yDQhYm1mVXFu"
 MINIMUM_MINER_POOL = 1
 
 # Tournament Start Requirements
+<<<<<<< HEAD
 MIN_MINERS_FOR_TOURN = 4
+=======
+MIN_MINERS_FOR_TOURN = 8
+
+# Tournament Selection by Stake
+TOURNAMENT_TOP_N_BY_STAKE = 32
+TOURNAMENT_REPEAT_BOOST_PERCENTAGE = 5  # 5% boost per previous entry
+TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE = 25  # Maximum 25% boost
+TOURNAMENT_PARTICIPATION_WEIGHT = 0.0001  # Weight given to active participants
+
+# Tournament weight distribution
+TOURNAMENT_WINNER_MIN_WEIGHT = 0.5  # Minimum weight proportion for tournament winner
+TOURNAMENT_WEIGHT_DECAY_RATE = 2.0  # Controls exponential decay for non-winners
+>>>>>>> 5.0.1
 
 # General miner pool sizes
 MIN_IDEAL_NUM_MINERS_IN_POOL = 8
@@ -262,12 +276,20 @@ ONE_DAY_SCORE_WEIGHT = 0.3
 
 TOURNAMENT_TEXT_WEIGHT = 0.6
 TOURNAMENT_IMAGE_WEIGHT = 0.4
+<<<<<<< HEAD
 WEIGHT_FOR_TOURN = 0.5
 MIN_BURN_WEIGHT = 0.25
 BURN_REDUCTION_RATE = 5.0
 MAX_BURN_REDUCTION = 0.9
 BASE_REGULAR_WEIGHT = 0.25
 BASE_TOURNAMENT_WEIGHT = 0.5
+=======
+TOURNAMENT_INTERVAL_DAYS = 14
+BURN_REDUCTION_RATE = 5.0
+MAX_BURN_REDUCTION = 0.9
+BASE_REGULAR_WEIGHT = 0.35
+BASE_TOURNAMENT_WEIGHT = 0.4
+>>>>>>> 5.0.1
 
 # Emission distribution when performance diff occurs
 LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25
@@ -295,6 +317,10 @@ CHAIN_WEIGHT_DIVISOR = 65535
 # GRPO evaluation
 TRL_GRPO_FIELD_PROMPT = GRPO_DEFAULT_FIELD_PROMPT
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5.0.1
 MIN_SYNTH_JOBS_REQUIRED_PER_DAY = 3
 
 # Default, fixed Hyperparameters
@@ -326,3 +352,11 @@ STANDARD_CHAT_CONTENT_FIELD = "value"
 PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
 GET_GPU_AVAILABILITY_ENDPOINT = "/v1/trainer/get_gpu_availability"
 TASK_DETAILS_ENDPOINT = "/v1/trainer/{task_id}"
+<<<<<<< HEAD
+=======
+GET_RECENT_TASKS_ENDPOINT = "/v1/trainer/get_recent_tasks"
+
+# Tournament constants
+DEFAULT_PARTICIPANT_REPO = "https://github.com/rayonlabs/G.O.D"
+DEFAULT_PARTICIPANT_COMMIT = "8631451156e2915070f77e5547ca0d5ed3d0eb8a"
+>>>>>>> 5.0.1

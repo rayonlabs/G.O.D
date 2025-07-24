@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import requests
 from datetime import datetime
 
 import numpy as np
@@ -13,10 +14,17 @@ from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import TextDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
+from core.models.utility_models import MinerSubmission
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import MinerSubmission
+
+from validator.utils.hash_verification import verify_model_hash
+
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.models.utility_models import TextDatasetType
@@ -700,6 +708,20 @@ def get_hf_upload_timestamp(repo_url: str) -> datetime | None:
     return None
 
 
+def get_hf_upload_timestamp(repo_url: str) -> datetime | None:
+    try:
+        repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
+        api = HfApi()
+        
+        model_info = api.model_info(repo_path, timeout=5.0)
+        if model_info and model_info.lastModified:
+            return model_info.lastModified
+            
+    except Exception as e:
+        logger.error(f"Failed to get upload timestamp for {repo_url}: {e}")
+    return None
+
+
 async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
@@ -708,8 +730,10 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
         if len(submissions) > 1:
             logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
 
+
             submissions_with_hashes = []
             submissions_without_hashes = []
+
 
             for hotkey, repo in submissions:
                 result = next(r for r in task_results if r.hotkey == hotkey)

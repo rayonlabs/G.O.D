@@ -57,4 +57,11 @@ class TrainerConfig:
 
 
 @dataclass
+class TrainerConfig:
+    wandb_token: str
+    huggingface_username: str
+    huggingface_token: str
+
+
+@dataclass
 class AuditorConfig(BaseConfig): ...

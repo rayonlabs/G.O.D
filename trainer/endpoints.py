@@ -14,11 +14,13 @@ from trainer.tasks import get_task
 from trainer.tasks import load_task_history
 from trainer.tasks import log_task
 from trainer.tasks import start_task
+from trainer.tasks import get_recent_tasks
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
 from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
 from validator.core.constants import PROXY_TRAINING_IMAGE_ENDPOINT
 from validator.core.constants import TASK_DETAILS_ENDPOINT
+from validator.core.constants import GET_RECENT_TASKS_ENDPOINT
 from validator.utils.logging import get_logger
 
 
@@ -62,9 +64,17 @@ async def get_task_details(task_id: str, hotkey: str) -> TrainerTaskLog:
     return task
 
 
+async def get_recent_tasks_list(hours:int) -> list[TrainerTaskLog]:
+    tasks = get_recent_tasks(hours)
+    if not tasks:
+        raise HTTPException(status_code=404, detail=f"Tasks not found in the last {hours} hours.")
+    return tasks
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Proxy Trainer"])
     router.add_api_route(PROXY_TRAINING_IMAGE_ENDPOINT, start_training, methods=["POST"])
     router.add_api_route(GET_GPU_AVAILABILITY_ENDPOINT, get_available_gpus, methods=["GET"])
+    router.add_api_route(GET_RECENT_TASKS_ENDPOINT, get_recent_tasks_list, methods=["GET"])
     router.add_api_route(TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])
     return router

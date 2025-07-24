@@ -9,6 +9,7 @@ from core.models.payload_models import TrainingRepoResponse
 from core.models.tournament_models import Group
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import KnockoutRound
+from core.models.tournament_models import RespondingNode
 from core.models.tournament_models import Round
 from core.models.tournament_models import RoundStatus
 from core.models.tournament_models import RoundType
@@ -16,7 +17,6 @@ from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentStatus
-from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
@@ -27,8 +27,11 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_node_by_hotkey
 from validator.db.sql.tournaments import add_tournament_participants
-from validator.db.sql.tournaments import add_tournament_tasks
+from validator.db.sql.tournaments import calculate_boosted_stake
+from validator.db.sql.tournaments import count_completed_tournament_entries
 from validator.db.sql.tournaments import create_tournament
+from validator.db.sql.tournaments import eliminate_tournament_participants
+from validator.db.sql.tournaments import get_participants_with_insufficient_stake
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
@@ -50,8 +53,8 @@ from validator.tournament.boss_round_sync import _copy_task_to_general
 from validator.tournament.boss_round_sync import get_synced_task_id
 from validator.tournament.boss_round_sync import get_synced_task_ids
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
-from validator.tournament.task_creator import create_image_tournament_round
-from validator.tournament.task_creator import create_text_tournament_round
+from validator.tournament.task_creator import create_image_tournament_tasks
+from validator.tournament.task_creator import create_text_tournament_tasks
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import replace_tournament_task
@@ -71,10 +74,10 @@ def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
         hotkeys = [node.hotkey for node in nodes_copy]
 
         if len(hotkeys) % 2 == 1:
-            if config.tournament_base_contestant_hotkey not in hotkeys:
-                hotkeys.append(config.tournament_base_contestant_hotkey)
+            if cst.EMISSION_BURN_HOTKEY not in hotkeys:
+                hotkeys.append(cst.EMISSION_BURN_HOTKEY)
             else:
-                hotkeys.remove(config.tournament_base_contestant_hotkey)
+                hotkeys.remove(cst.EMISSION_BURN_HOTKEY)
 
         random.shuffle(hotkeys)
         pairs = []
@@ -134,54 +137,11 @@ async def _create_first_round(
 
 async def _create_tournament_tasks(
     tournament_id: str, round_id: str, round_structure: Round, tournament_type: TournamentType, is_final: bool, config: Config
-) -> list[TournamentTask]:
+) -> list[str]:
     if tournament_type == TournamentType.TEXT:
-        tournament_round = await create_text_tournament_round(round_structure, config, is_final)
+        tasks = await create_text_tournament_tasks(round_structure, tournament_id, round_id, config, is_final)
     else:
-        tournament_round = await create_image_tournament_round(round_structure, config, is_final)
-
-    tasks = []
-    if isinstance(round_structure, GroupRound):
-        group_task_count = t_cst.TEXT_TASKS_PER_GROUP if tournament_type == TournamentType.TEXT else t_cst.IMAGE_TASKS_PER_GROUP
-
-        for i, group in enumerate(round_structure.groups):
-            group_id = f"{round_id}_group_{i + 1:03d}"
-
-            for j in range(group_task_count):
-                task_index = i * group_task_count + j
-                if task_index < len(tournament_round.tasks):
-                    task = TournamentTask(
-                        tournament_id=tournament_id,
-                        round_id=round_id,
-                        task_id=tournament_round.tasks[task_index],
-                        group_id=group_id,
-                        pair_id=None,
-                    )
-                    tasks.append(task)
-    else:
-        if is_final:
-            for i in range(len(tournament_round.tasks)):
-                pair_id = f"{round_id}_pair_{1:03d}"
-                task = TournamentTask(
-                    tournament_id=tournament_id,
-                    round_id=round_id,
-                    task_id=tournament_round.tasks[i],
-                    group_id=None,
-                    pair_id=pair_id,
-                )
-                tasks.append(task)
-        else:
-            for i in range(len(round_structure.pairs)):
-                pair_id = f"{round_id}_pair_{i + 1:03d}"
-                if i < len(tournament_round.tasks):
-                    task = TournamentTask(
-                        tournament_id=tournament_id,
-                        round_id=round_id,
-                        task_id=tournament_round.tasks[i],
-                        group_id=None,
-                        pair_id=pair_id,
-                    )
-                    tasks.append(task)
+        tasks = await create_image_tournament_tasks(round_structure, tournament_id, round_id, config, is_final)
 
     return tasks
 
@@ -241,16 +201,16 @@ async def create_next_round(
         next_round_is_final = len(winners) == 1
 
         if len(winners) == 2:
-            if config.tournament_base_contestant_hotkey in winners:
+            if cst.EMISSION_BURN_HOTKEY in winners:
                 next_round_is_final = True
         elif len(winners) % 2 == 1:
-            if config.tournament_base_contestant_hotkey not in winners:
-                winners.append(config.tournament_base_contestant_hotkey)
+            if cst.EMISSION_BURN_HOTKEY not in winners:
+                winners.append(cst.EMISSION_BURN_HOTKEY)
             else:
                 if len(winners) == 1:
                     next_round_is_final = True
                 else:
-                    winners = [w for w in winners if w != config.tournament_base_contestant_hotkey]
+                    winners = [w for w in winners if w != cst.EMISSION_BURN_HOTKEY]
 
         winner_nodes = []
         for hotkey in winners:
@@ -292,11 +252,34 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
         winners = await get_round_winners(completed_round, psql_db, config)
         logger.info(f"Round winners: {winners}")
 
+        # Get all active participants and handle eliminations
+        all_participants = await get_tournament_participants(tournament.tournament_id, psql_db)
+        active_participants = [p.hotkey for p in all_participants if p.eliminated_in_round_id is None]
+
+        # Eliminate losers (those who didn't win)
+        losers = [p for p in active_participants if p not in winners]
+
+        # Check stake requirements for winners
+        insufficient_stake_hotkeys = await get_participants_with_insufficient_stake(tournament.tournament_id, psql_db)
+        winners_with_insufficient_stake = [w for w in winners if w in insufficient_stake_hotkeys]
+
+        # Combine all eliminations
+        all_eliminated = losers + winners_with_insufficient_stake
+        if all_eliminated:
+            await eliminate_tournament_participants(tournament.tournament_id, completed_round.round_id, all_eliminated, psql_db)
+            if winners_with_insufficient_stake:
+                logger.info(
+                    f"Eliminated {len(winners_with_insufficient_stake)} winners for insufficient stake: {winners_with_insufficient_stake}"
+                )
+
+        # Update winners list to remove those with insufficient stake
+        winners = [w for w in winners if w not in winners_with_insufficient_stake]
+
         if len(winners) == 0:
             logger.warning(
                 f"No winners found for round {completed_round.round_id}. Setting base contestant as winner of the tournament."
             )
-            winner = config.tournament_base_contestant_hotkey
+            winner = cst.EMISSION_BURN_HOTKEY
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
@@ -358,9 +341,10 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
     if base_winner_hotkey:
         base_participant = TournamentParticipant(
             tournament_id=tournament_id,
-            hotkey=config.tournament_base_contestant_hotkey,
+            hotkey=cst.EMISSION_BURN_HOTKEY,
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
+            stake_required=0,
         )
         await add_tournament_participants([base_participant], psql_db)
 
@@ -382,7 +366,8 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
     while True:
         all_nodes = await get_all_nodes(psql_db)
 
-        eligible_nodes = [node for node in all_nodes if node.hotkey != config.tournament_base_contestant_hotkey]
+        # Get all nodes except base contestant
+        eligible_nodes = [node for node in all_nodes if node.hotkey != cst.EMISSION_BURN_HOTKEY]
 
         if not eligible_nodes:
             logger.warning("No eligible nodes found for tournament")
@@ -390,9 +375,10 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
         logger.info(f"Found {len(eligible_nodes)} eligible nodes in database")
 
-        miners_that_accept_and_give_repos = 0
-
+        # Ping all nodes to get responders
+        responding_nodes = []
         batch_size = t_cst.TOURNAMENT_PARTICIPANT_PING_BATCH_SIZE
+
         for i in range(0, len(eligible_nodes), batch_size):
             batch = eligible_nodes[i : i + batch_size]
             logger.info(
@@ -400,15 +386,52 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
             )
 
             batch_results = await asyncio.gather(
-                *[_process_single_node(node, tournament_id, tournament.tournament_type, config, psql_db) for node in batch],
+                *[_get_miner_training_repo(node, config, tournament.tournament_type) for node in batch],
                 return_exceptions=True,
             )
 
-            for result in batch_results:
-                if isinstance(result, Exception):
-                    logger.warning(f"Exception in batch processing: {result}")
-                elif result:
-                    miners_that_accept_and_give_repos += 1
+            for node, result in zip(batch, batch_results):
+                with LogContext(node_hotkey=node.hotkey):
+                    if isinstance(result, Exception):
+                        logger.warning(f"Exception pinging {node.hotkey}: {result}")
+                    elif result:
+                        completed_entries = await count_completed_tournament_entries(node.hotkey, psql_db)
+                        boosted_stake = calculate_boosted_stake(node.alpha_stake, completed_entries)
+
+                        responding_node = RespondingNode(
+                            node=node, training_repo_response=result, boosted_stake=boosted_stake, actual_stake=node.alpha_stake
+                        )
+                        responding_nodes.append(responding_node)
+                        logger.info(
+                            f"Node responded with training repo {result.github_repo}@{result.commit_hash}, "
+                            f"stake: {node.alpha_stake:.2f}, boosted: {boosted_stake:.2f}"
+                        )
+
+        logger.info(f"Got {len(responding_nodes)} responding nodes")
+
+        # Sort by boosted stake (descending) and take top N
+        responding_nodes.sort(key=lambda x: x.boosted_stake, reverse=True)
+        selected_nodes = responding_nodes[: cst.TOURNAMENT_TOP_N_BY_STAKE]
+
+        logger.info(f"Selected top {len(selected_nodes)} responders by boosted stake")
+
+        # Add selected participants to tournament
+        miners_that_accept_and_give_repos = 0
+        for responding_node in selected_nodes:
+            participant = TournamentParticipant(
+                tournament_id=tournament_id, hotkey=responding_node.node.hotkey, stake_required=responding_node.actual_stake
+            )
+            await add_tournament_participants([participant], psql_db)
+
+            await update_tournament_participant_training_repo(
+                tournament_id,
+                responding_node.node.hotkey,
+                responding_node.training_repo_response.github_repo,
+                responding_node.training_repo_response.commit_hash,
+                psql_db,
+            )
+
+            miners_that_accept_and_give_repos += 1
 
         logger.info(f"Successfully populated {miners_that_accept_and_give_repos} participants for tournament {tournament_id}")
 
@@ -422,35 +445,6 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
             f"Tournament {tournament_id} only has {miners_that_accept_and_give_repos} miners that accept and give repos, need at least {cst.MIN_MINERS_FOR_TOURN}. Waiting 30 minutes and retrying..."
         )
         await asyncio.sleep(30 * 60)
-
-
-async def _process_single_node(
-    node: Node, tournament_id: str, tournament_type: TournamentType, config: Config, psql_db: PSQLDB
-) -> bool:
-    """Process a single node to add it as a tournament participant if it responds with a training repo."""
-    with LogContext(node_hotkey=node.hotkey):
-        try:
-            training_repo_response = await _get_miner_training_repo(node, config, tournament_type)
-
-            if training_repo_response:
-                participant = TournamentParticipant(tournament_id=tournament_id, hotkey=node.hotkey)
-                await add_tournament_participants([participant], psql_db)
-
-                await update_tournament_participant_training_repo(
-                    tournament_id, node.hotkey, training_repo_response.github_repo, training_repo_response.commit_hash, psql_db
-                )
-
-                logger.info(
-                    f"Added participant {node.hotkey} with training repo {training_repo_response.github_repo}@{training_repo_response.commit_hash}"
-                )
-                return True
-            else:
-                logger.info(f"Skipping {node.hotkey} - no training repo response received")
-                return False
-
-        except Exception as e:
-            logger.warning(f"Failed to get training repo from {node.hotkey}: {str(e)}")
-            return False
 
 
 async def _get_miner_training_repo(node: Node, config: Config, tournament_type: TournamentType) -> TrainingRepoResponse | None:
@@ -490,7 +484,7 @@ async def create_first_round_for_active_tournament(tournament_id: str, config: C
 
     participant_nodes = []
     for participant in participants:
-        if participant.hotkey == config.tournament_base_contestant_hotkey:
+        if participant.hotkey == cst.EMISSION_BURN_HOTKEY:
             continue
 
         node = await get_node_by_hotkey(participant.hotkey, psql_db)
@@ -582,7 +576,6 @@ async def process_pending_rounds(config: Config):
                             round_data.is_final_round,
                             config,
                         )
-                        await add_tournament_tasks(tasks, config.psql_db)
 
                         await assign_nodes_to_tournament_tasks(
                             round_data.tournament_id, round_data.round_id, round_structure, config.psql_db
