@@ -277,6 +277,10 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                         f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} for training "
                         f"on trainer {trainer_ip} with GPUs {gpu_ids} for {training_task.task.hours_to_complete} hours"
                     )
+                    
+                    # Add delay between successful job submissions to avoid overwhelming trainers
+                    logger.info(f"Waiting {cst.SUCCESSFUL_TRAINING_DELAY} seconds before next job submission")
+                    await asyncio.sleep(cst.SUCCESSFUL_TRAINING_DELAY)
 
                 else:
                     logger.error(f"Failed to start training for task {training_task.task.task_id} on trainer {trainer_ip}")

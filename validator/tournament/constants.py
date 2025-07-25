@@ -16,6 +16,7 @@ TOURNAMENT_PENDING_ROUND_CYCLE_INTERVAL = 15 * 60
 # Retry intervals (in seconds)
 GPU_AVAILABILITY_CHECK_RETRY_INTERVAL = 15 * 60  # 15 minutes
 TRAINING_START_RETRY_INTERVAL = 1 * 60  # 15 minutes
+SUCCESSFUL_TRAINING_DELAY = 5 * 60  # 5 minutes delay between successful job submissions
 
 # Trainer requests
 TRAINER_HTTP_TIMEOUT = 30.0  # seconds

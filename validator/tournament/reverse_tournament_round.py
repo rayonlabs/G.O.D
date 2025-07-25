@@ -169,6 +169,9 @@ async def reverse_tournament_round(tournament_id: str, round_id_to_delete: str, 
                 if previous_round:
                     await update_round_status(previous_round.round_id, RoundStatus.ACTIVE, psql_db)
                     logger.info(f"Set previous round {previous_round.round_id} to active status")
+                else:
+                    # If deleting the first round, tournament will need to create a new first round
+                    logger.info("Deleted the first round - tournament will need to create a new first round")
 
                 # 7. Set tournament back to active if it was completed
                 if tournament.status == TournamentStatus.COMPLETED:
