@@ -142,15 +142,6 @@ def get_recent_tasks(hours: float = 1.0) -> list[TrainerTaskLog]:
     return recent_tasks
 
 
-def is_taskid_training(task_id: str) -> bool:
-    matching_tasks = [task for task in task_history if task.training_data.task_id == task_id]
-
-    for task in matching_tasks:
-        if task.status == TaskStatus.TRAINING:
-            return True
-    return False
-
-
 async def save_task_history():
     async with aiofiles.open(TASK_HISTORY_FILE, "w") as f:
         data = json.dumps([t.model_dump() for t in task_history], indent=2, default=str)

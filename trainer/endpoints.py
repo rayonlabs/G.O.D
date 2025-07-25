@@ -14,7 +14,6 @@ from trainer.tasks import get_task
 from trainer.tasks import load_task_history
 from trainer.tasks import log_task
 from trainer.tasks import start_task
-from trainer.tasks import is_taskid_training
 from trainer.tasks import get_recent_tasks
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
@@ -31,30 +30,26 @@ logger = get_logger(__name__)
 load_task_history()
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:
-    if not is_taskid_training(req.training_data.task_id):
-        await start_task(req)
+    await start_task(req)
 
-        try:
-            local_repo_path = await asyncio.to_thread(
-                clone_repo,
-                repo_url=req.github_repo,
-                parent_dir=cst.TEMP_REPO_PATH,
-                branch=req.github_branch,
-                commit_hash=req.github_commit_hash,
-            )
-        except RuntimeError as e:
-            await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
-            await complete_task(req.training_data.task_id, req.hotkey, success=False)
-            raise HTTPException(status_code=400, detail=str(e))
+    try:
+        local_repo_path = await asyncio.to_thread(
+            clone_repo,
+            repo_url=req.github_repo,
+            parent_dir=cst.TEMP_REPO_PATH,
+            branch=req.github_branch,
+            commit_hash=req.github_commit_hash,
+        )
+    except RuntimeError as e:
+        await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
+        await complete_task(req.training_data.task_id, req.hotkey, success=False)
+        raise HTTPException(status_code=400, detail=str(e))
 
-        logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
+    logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
 
-        asyncio.create_task(start_training_task(req, local_repo_path))
+    asyncio.create_task(start_training_task(req, local_repo_path))
 
-        return {"message": "Started Training!", "task_id": req.training_data.task_id}
-    
-    else:
-        raise HTTPException(status_code=400, detail="TaskID is already in training state, please wait for it to complete.")
+    return {"message": "Started Training!", "task_id": req.training_data.task_id}
 
 
 async def get_available_gpus() -> list[GPUInfo]:
