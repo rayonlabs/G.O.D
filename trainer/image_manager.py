@@ -123,7 +123,7 @@ async def run_trainer_container_image(
             detach=True,
         )
 
-        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+        log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
         return container
     except Exception as e:
         logger.error(e)
@@ -187,7 +187,7 @@ async def run_trainer_container_text(
             environment=environment,
         )
 
-        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+        log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
         return container
     except Exception as e:
         logger.error(e)
@@ -320,7 +320,7 @@ async def upload_repo_to_hf(
             name=container_name,
         )
 
-        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+        log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
 
         result = container.wait()
         exit_code = result.get("StatusCode", -1)
