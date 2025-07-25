@@ -29,6 +29,7 @@ from validator.db.sql.tasks import update_task_status
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_rounds
 from validator.db.sql.tournaments import get_tournament_tasks
+from validator.db.sql.tournaments import is_synced_task
 from validator.db.sql.tournaments import update_round_status
 from validator.db.sql.tournaments import update_tournament_status
 from validator.utils.logging import get_logger
@@ -119,9 +120,13 @@ async def reverse_tournament_round(tournament_id: str, round_id_to_delete: str, 
                 """
                 await connection.execute(query, round_id_to_delete)
 
-                # Set task statuses to FAILURE for the deleted round's tasks
+                # Set task statuses to FAILURE for the deleted round's tasks (but not synced tasks)
                 for task in round_tasks:
-                    await update_task_status(task.task_id, TaskStatus.FAILURE, psql_db)
+                    if not await is_synced_task(task.task_id, psql_db):
+                        await update_task_status(task.task_id, TaskStatus.FAILURE, psql_db)
+                        logger.info(f"Set task {task.task_id} to FAILURE status")
+                    else:
+                        logger.info(f"Skipped setting synced task {task.task_id} to FAILURE")
 
                 # 2. Delete pairs if it's a knockout round
                 query = """
