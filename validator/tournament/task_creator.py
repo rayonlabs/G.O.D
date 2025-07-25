@@ -108,7 +108,7 @@ async def create_image_tournament_tasks(
         logger.info(f"Creating image tournament for {num_pairs} knockout pairs (1 per pair)")
 
         for i, pair in enumerate(round_data.pairs):
-            pair_id = f"{round_id}_pair_{1:03d}"
+            pair_id = f"{round_id}_pair_{i + 1:03d}"
             logger.info(f"  Pair {i + 1} ({pair[0]} vs {pair[1]}):")
             while True:
                 try:
