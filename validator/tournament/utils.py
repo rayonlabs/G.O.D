@@ -372,17 +372,21 @@ async def get_group_winners(
                 group_tasks[task.group_id] = []
             group_tasks[task.group_id].append(task.task_id)
 
+    logger.info(f"Processing {len(group_tasks)} groups in round {completed_round.round_id}")
     all_winners = []
     for group_id, task_ids in group_tasks.items():
         participants = await get_tournament_group_members(group_id, psql_db)
         participant_hotkeys = [p.hotkey for p in participants]
+        logger.info(f"Group {group_id}: {len(participant_hotkeys)} participants, {len(task_ids)} tasks")
 
         if not participant_hotkeys or not task_ids:
             continue
 
         task_winners = await get_task_winners(task_ids, psql_db)
+        logger.info(f"Group {group_id} task winners: {task_winners}")
 
         hotkey_win_counts = Counter(task_winners.values())
+        logger.info(f"Group {group_id} win counts: {dict(hotkey_win_counts)}")
 
         if len(hotkey_win_counts) == 0:
             logger.warning(f"Group {group_id} has {len(hotkey_win_counts)} winners - proceeding with no winners")
@@ -392,17 +396,21 @@ async def get_group_winners(
 
         if len(sorted_participants) == 1:
             all_winners.append(sorted_participants[0][0])
+            logger.info(f"Group {group_id}: Single winner {sorted_participants[0][0]} with {sorted_participants[0][1]} wins")
         else:
             max_wins = sorted_participants[0][1]
             tied_for_first = [hotkey for hotkey, wins in sorted_participants if wins == max_wins]
 
             if len(tied_for_first) == 1:
                 group_winners = [hotkey for hotkey, _ in sorted_participants[:NUM_WINNERS_TO_ADVANCE]]
+                logger.info(f"Group {group_id}: Advancing top {NUM_WINNERS_TO_ADVANCE}: {group_winners}")
             else:
                 group_winners = tied_for_first
+                logger.info(f"Group {group_id}: {len(tied_for_first)} tied for first with {max_wins} wins each: {group_winners}")
 
             all_winners.extend(group_winners)
 
+    logger.info(f"Total group stage winners: {len(all_winners)} - {all_winners}")
     return all_winners
 
 

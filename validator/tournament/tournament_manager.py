@@ -198,6 +198,7 @@ async def create_next_round(
     next_round_id = generate_round_id(tournament.tournament_id, next_round_number)
 
     with LogContext(tournament_id=tournament.tournament_id, round_id=next_round_id):
+        logger.info(f"Creating next round with {len(winners)} winners: {winners}")
         next_round_is_final = len(winners) == 1
 
         if len(winners) == 2:
@@ -206,21 +207,28 @@ async def create_next_round(
         elif len(winners) % 2 == 1:
             if cst.EMISSION_BURN_HOTKEY not in winners:
                 winners.append(cst.EMISSION_BURN_HOTKEY)
+                logger.info(f"Added burn hotkey to make even number of participants")
             else:
                 if len(winners) == 1:
                     next_round_is_final = True
                 else:
                     winners = [w for w in winners if w != cst.EMISSION_BURN_HOTKEY]
+                    logger.info(f"Removed burn hotkey to make even number of participants")
 
         winner_nodes = []
         for hotkey in winners:
             node = await get_node_by_hotkey(hotkey, psql_db)
             if node:
                 winner_nodes.append(node)
+                logger.info(f"Found node for winner {hotkey}")
+            else:
+                logger.warning(f"CRITICAL: Could not find node for winner {hotkey} - this winner will be excluded from next round!")
 
         if not winner_nodes:
             logger.error("No winner nodes found, cannot create next round")
             return
+        
+        logger.info(f"Successfully found {len(winner_nodes)} nodes out of {len(winners)} winners")
 
         round_structure = organise_tournament_round(winner_nodes, config)
 
@@ -255,12 +263,15 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
         # Get all active participants and handle eliminations
         all_participants = await get_tournament_participants(tournament.tournament_id, psql_db)
         active_participants = [p.hotkey for p in all_participants if p.eliminated_in_round_id is None]
+        logger.info(f"Active participants before elimination: {len(active_participants)} - {active_participants}")
 
         # Eliminate losers (those who didn't win)
         losers = [p for p in active_participants if p not in winners]
+        logger.info(f"Losers to be eliminated: {len(losers)} - {losers}")
 
         # Check stake requirements for winners
         insufficient_stake_hotkeys = await get_participants_with_insufficient_stake(tournament.tournament_id, psql_db)
+        logger.info(f"Participants with insufficient stake: {len(insufficient_stake_hotkeys)} - {insufficient_stake_hotkeys}")
         winners_with_insufficient_stake = [w for w in winners if w in insufficient_stake_hotkeys]
 
         # Combine all eliminations
@@ -274,6 +285,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
 
         # Update winners list to remove those with insufficient stake
         winners = [w for w in winners if w not in winners_with_insufficient_stake]
+        logger.info(f"Final winners after stake check: {len(winners)} - {winners}")
 
         if len(winners) == 0:
             logger.warning(
