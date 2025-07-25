@@ -169,14 +169,19 @@ async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, ro
                             f"Assigned {hotkey} to group task {task.task_id} with expected_repo_name: {expected_repo_name}"
                         )
     else:
+        logger.info(f"Processing KNOCKOUT round assignment")
         round_tasks = await get_tournament_tasks(round_id, psql_db)
+        logger.info(f"Found {len(round_tasks)} tasks for round {round_id}")
 
         for i, pair in enumerate(round_structure.pairs):
             pair_id = f"{round_id}_pair_{i + 1:03d}"
+            logger.info(f"Processing pair {i+1}/{len(round_structure.pairs)}: {pair} -> {pair_id}")
 
             pair_tasks = [task for task in round_tasks if task.pair_id == pair_id]
+            logger.info(f"Found {len(pair_tasks)} tasks for pair {pair_id}")
 
             for pair_task in pair_tasks:
+                logger.info(f"Assigning nodes to task {pair_task.task_id}")
                 for hotkey in pair:
                     node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
@@ -188,6 +193,8 @@ async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, ro
                         logger.info(
                             f"Assigned {hotkey} to pair task {pair_task.task_id} with expected_repo_name: {expected_repo_name}"
                         )
+                    else:
+                        logger.warning(f"Could not find node for hotkey {hotkey} during task assignment")
 
 
 async def create_next_round(
@@ -563,23 +570,30 @@ async def process_pending_rounds(config: Config):
 
             for round_data in pending_rounds:
                 with LogContext(tournament_id=round_data.tournament_id, round_id=round_data.round_id):
-                    logger.info(f"Processing pending round {round_data.round_id}")
+                    logger.info(f"Processing pending round {round_data.round_id} (type: {round_data.round_type})")
 
                     try:
                         tournament = await get_tournament(round_data.tournament_id, config.psql_db)
+                        logger.info(f"Found tournament {tournament.tournament_id} with status {tournament.status}")
 
                         if round_data.round_type == RoundType.GROUP:
+                            logger.info(f"Processing GROUP round")
                             groups_data = await get_tournament_groups(round_data.round_id, config.psql_db)
+                            logger.info(f"Found {len(groups_data)} groups")
                             groups = []
                             for group_data in groups_data:
                                 members = await get_tournament_group_members(group_data.group_id, config.psql_db)
                                 member_ids = [member.hotkey for member in members]
                                 groups.append(Group(member_ids=member_ids))
+                                logger.info(f"Group {group_data.group_id}: {len(member_ids)} members")
                             round_structure = GroupRound(groups=groups)
                         else:
+                            logger.info(f"Processing KNOCKOUT round")
                             pairs = await get_tournament_pairs(round_data.round_id, config.psql_db)
+                            logger.info(f"Found {len(pairs)} pairs: {[(p.hotkey1, p.hotkey2) for p in pairs]}")
                             round_structure = KnockoutRound(pairs=[(pair.hotkey1, pair.hotkey2) for pair in pairs])
 
+                        logger.info(f"About to create tournament tasks for round {round_data.round_id}")
                         tasks = await _create_tournament_tasks(
                             round_data.tournament_id,
                             round_data.round_id,
@@ -588,11 +602,15 @@ async def process_pending_rounds(config: Config):
                             round_data.is_final_round,
                             config,
                         )
+                        logger.info(f"Created {len(tasks)} tasks for round {round_data.round_id}")
 
+                        logger.info(f"About to assign nodes to tournament tasks")
                         await assign_nodes_to_tournament_tasks(
                             round_data.tournament_id, round_data.round_id, round_structure, config.psql_db
                         )
+                        logger.info(f"Finished assigning nodes to tournament tasks")
 
+                        logger.info(f"Setting round {round_data.round_id} to ACTIVE status")
                         await update_round_status(round_data.round_id, RoundStatus.ACTIVE, config.psql_db)
 
                         logger.info(f"Successfully processed pending round {round_data.round_id} with {len(tasks)} tasks")
