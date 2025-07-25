@@ -134,30 +134,32 @@ async def main():
     parser.add_argument("--file-format")
     args = parser.parse_args()
 
-    dataset_dir = f"/cache/{args.task_id}/datasets"
-    model_dir = f"/cache/{args.task_id}/models"
-    os.makedirs(dataset_dir, exist_ok=True)
-    os.makedirs(model_dir, exist_ok=True)
+    dataset_dir = cst.CACHE_DATASETS_DIR
+    model_dir = cst.CACHE_MODELS_DIR
+    for ddir in dataset_dir:
+        os.makedirs(ddir, exist_ok=True)
+    for mdir in model_dir:
+        os.makedirs(mdir, exist_ok=True)
 
     print(f"Downloading datasets to: {dataset_dir}", flush=True)
     print(f"Downloading models to: {model_dir}", flush=True)
 
     if args.task_type == TaskType.IMAGETASK.value:
-        dataset_zip_path = await download_image_dataset(args.dataset, args.task_id, dataset_dir)
-        model_path = await download_base_model(args.model, model_dir)
+        dataset_zip_path = await download_image_dataset(args.dataset, args.task_id, ddir)
+        model_path = await download_base_model(args.model, mdir)
         print("Downloading clip models", flush=True)
-        CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir="/cache/hf_cache")
-        CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir="/cache/hf_cache")
+        CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir="/cache/hf_cache/")
+        CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir="/cache/hf_cache/")
         snapshot_download(
             repo_id="google/t5-v1_1-xxl",
             repo_type="model",
-            local_dir="/cache/hf_cache/google--t5-v1_1-xxl",
+            cache_dir="/cache/hf_cache/",
             local_dir_use_symlinks=False,
-            allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "tokenizer.json"],
+            allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "config.json"],
         )
     else:
-        dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format, dataset_dir)
-        model_path = await download_axolotl_base_model(args.model, model_dir)
+        dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format, ddir)
+        model_path = await download_axolotl_base_model(args.model, mdir)
 
     print(f"Model path: {model_path}", flush=True)
     print(f"Dataset path: {dataset_dir}", flush=True)
