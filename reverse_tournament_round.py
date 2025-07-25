@@ -160,10 +160,10 @@ async def reverse_tournament_round(tournament_id: str, round_id_to_delete: str, 
                 """
                 await connection.execute(query, round_id_to_delete)
 
-                # 6. Set previous round to completed (so cycle can pick it up)
+                # 6. Set previous round to active (so cycle can check completion and advance)
                 if previous_round:
-                    await update_round_status(previous_round.round_id, RoundStatus.COMPLETED, psql_db)
-                    logger.info(f"Set previous round {previous_round.round_id} to completed status")
+                    await update_round_status(previous_round.round_id, RoundStatus.ACTIVE, psql_db)
+                    logger.info(f"Set previous round {previous_round.round_id} to active status")
 
                 # 7. Set tournament back to active if it was completed
                 if tournament.status == TournamentStatus.COMPLETED:
