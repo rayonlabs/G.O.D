@@ -289,15 +289,13 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
                     if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
                         logger.warning(
-                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}), popping from queue"
+                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}), marking as FAILURE"
                         )
-                        # Increment the n_training_attempts in the database
                         logger.info(
-                            f"Incrementing n_training_attempts for task {training_task.task.task_id} with hotkey {training_task.hotkey}. "
-                            f"Current attempts: {oldest_task_training.n_training_attempts}"
+                            f"Current n_training_attempts: {oldest_task_training.n_training_attempts} for task {training_task.task.task_id} with hotkey {training_task.hotkey}"
                         )
-                        await tournament_sql.increment_training_attempts(
-                            training_task.task.task_id, training_task.hotkey, config.psql_db
+                        await tournament_sql.update_tournament_task_training_status(
+                            training_task.task.task_id, training_task.hotkey, TrainingStatus.FAILURE, config.psql_db
                         )
                         pending_training_tasks.pop()
                     else:
@@ -313,15 +311,13 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
             if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
                 logger.warning(
-                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}) due to exception, popping from queue"
+                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}) due to exception, marking as FAILURE"
                 )
-                # Increment the n_training_attempts in the database
                 logger.info(
-                    f"Incrementing n_training_attempts for task {training_task.task.task_id} with hotkey {training_task.hotkey}. "
-                    f"Current attempts: {oldest_task_training.n_training_attempts}"
+                    f"Current n_training_attempts: {oldest_task_training.n_training_attempts} for task {training_task.task.task_id} with hotkey {training_task.hotkey}"
                 )
-                await tournament_sql.increment_training_attempts(
-                    training_task.task.task_id, training_task.hotkey, config.psql_db
+                await tournament_sql.update_tournament_task_training_status(
+                    training_task.task.task_id, training_task.hotkey, TrainingStatus.FAILURE, config.psql_db
                 )
                 pending_training_tasks.pop()
             else:
