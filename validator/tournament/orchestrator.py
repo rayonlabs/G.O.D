@@ -287,6 +287,9 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                         logger.warning(
                             f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}), popping from queue"
                         )
+                        await tournament_sql.increment_training_attempts(
+                            training_task.task.task_id, training_task.hotkey, config.psql_db
+                        )
                         pending_training_tasks.pop()
                     else:
                         logger.info(
@@ -302,6 +305,9 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
             if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
                 logger.warning(
                     f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}) due to exception, popping from queue"
+                )
+                await tournament_sql.increment_training_attempts(
+                    training_task.task.task_id, training_task.hotkey, config.psql_db
                 )
                 pending_training_tasks.pop()
             else:
