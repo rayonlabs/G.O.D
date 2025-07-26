@@ -107,9 +107,9 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
             trainer_ip_with_port = trainer_ip
 
         url = f"http://{trainer_ip_with_port}{PROXY_TRAINING_IMAGE_ENDPOINT}"
-        logger.info(f"Requesting training from trainer at {url} with payload: {validated_request.model_dump(mode='json')}")
+        logger.info(f"Requesting training from trainer at {url} with payload: {validated_request.model_dump(mode='json', exclude_none=True)}")
 
-        response = await client.post(url, json=validated_request.model_dump(mode='json'))
+        response = await client.post(url, json=validated_request.model_dump(mode='json', exclude_none=True))
         response.raise_for_status()
 
         return response.json()["message"] == cst.EXPECTED_TRAINING_START_MESSAGE
