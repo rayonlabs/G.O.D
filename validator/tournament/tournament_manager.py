@@ -169,7 +169,7 @@ async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, ro
                             f"Assigned {hotkey} to group task {task.task_id} with expected_repo_name: {expected_repo_name}"
                         )
     else:
-        logger.info(f"Processing KNOCKOUT round assignment")
+        logger.info("Processing KNOCKOUT round assignment")
         round_tasks = await get_tournament_tasks(round_id, psql_db)
         logger.info(f"Found {len(round_tasks)} tasks for round {round_id}")
 
@@ -214,13 +214,13 @@ async def create_next_round(
         elif len(winners) % 2 == 1:
             if cst.EMISSION_BURN_HOTKEY not in winners:
                 winners.append(cst.EMISSION_BURN_HOTKEY)
-                logger.info(f"Added burn hotkey to make even number of participants")
+                logger.info("Added burn hotkey to make even number of participants")
             else:
                 if len(winners) == 1:
                     next_round_is_final = True
                 else:
                     winners = [w for w in winners if w != cst.EMISSION_BURN_HOTKEY]
-                    logger.info(f"Removed burn hotkey to make even number of participants")
+                    logger.info("Removed burn hotkey to make even number of participants")
 
         winner_nodes = []
         for hotkey in winners:
@@ -234,7 +234,7 @@ async def create_next_round(
         if not winner_nodes:
             logger.error("No winner nodes found, cannot create next round")
             return
-        
+
         logger.info(f"Successfully found {len(winner_nodes)} nodes out of {len(winners)} winners")
 
         round_structure = organise_tournament_round(winner_nodes, config)
@@ -579,7 +579,7 @@ async def process_pending_rounds(config: Config):
                         logger.info(f"Found tournament {tournament.tournament_id} with status {tournament.status}")
 
                         if round_data.round_type == RoundType.GROUP:
-                            logger.info(f"Processing GROUP round")
+                            logger.info("Processing GROUP round")
                             groups_data = await get_tournament_groups(round_data.round_id, config.psql_db)
                             logger.info(f"Found {len(groups_data)} groups")
                             groups = []
@@ -590,7 +590,7 @@ async def process_pending_rounds(config: Config):
                                 logger.info(f"Group {group_data.group_id}: {len(member_ids)} members")
                             round_structure = GroupRound(groups=groups)
                         else:
-                            logger.info(f"Processing KNOCKOUT round")
+                            logger.info("Processing KNOCKOUT round")
                             pairs = await get_tournament_pairs(round_data.round_id, config.psql_db)
                             logger.info(f"Found {len(pairs)} pairs: {[(p.hotkey1, p.hotkey2) for p in pairs]}")
                             round_structure = KnockoutRound(pairs=[(pair.hotkey1, pair.hotkey2) for pair in pairs])
@@ -606,11 +606,11 @@ async def process_pending_rounds(config: Config):
                         )
                         logger.info(f"Created {len(tasks)} tasks for round {round_data.round_id}")
 
-                        logger.info(f"About to assign nodes to tournament tasks")
+                        logger.info("About to assign nodes to tournament tasks")
                         await assign_nodes_to_tournament_tasks(
                             round_data.tournament_id, round_data.round_id, round_structure, config.psql_db
                         )
-                        logger.info(f"Finished assigning nodes to tournament tasks")
+                        logger.info("Finished assigning nodes to tournament tasks")
 
                         logger.info(f"Setting round {round_data.round_id} to ACTIVE status")
                         await update_round_status(round_data.round_id, RoundStatus.ACTIVE, config.psql_db)
@@ -653,7 +653,7 @@ async def process_active_tournaments(config: Config):
                                 )
                                 await advance_tournament(tournament, current_round, config, config.psql_db)
         except Exception as e:
-            logger.error(f"Error processing active tournaments: {e}")
+            logger.error(f"Error processing active tournaments: {e}", exc_info=True)
         finally:
             await asyncio.sleep(t_cst.TOURNAMENT_ACTIVE_CYCLE_INTERVAL)
 
