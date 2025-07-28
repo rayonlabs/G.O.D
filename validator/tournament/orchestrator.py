@@ -107,12 +107,40 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
             trainer_ip_with_port = trainer_ip
 
         url = f"http://{trainer_ip_with_port}{PROXY_TRAINING_IMAGE_ENDPOINT}"
-        logger.info(f"Requesting training from trainer at {url} with payload: {validated_request.model_dump()}")
+        
+        # Log key information about the training request
+        training_data = validated_request.training_data
+        logger.info(f"Starting training task:")
+        logger.info(f"  - Trainer: {trainer_ip_with_port}")
+        logger.info(f"  - Task ID: {training_data.task_id}")
+        logger.info(f"  - Model: {training_data.model}")
+        logger.info(f"  - Hours to complete: {training_data.hours_to_complete}")
+        logger.info(f"  - GitHub repo: {validated_request.github_repo}")
+        logger.info(f"  - Hotkey: {validated_request.hotkey[:8]}...")
+        logger.info(f"  - GPU IDs: {validated_request.gpu_ids}")
+        
+        logger.debug(f"Full request payload: {validated_request.model_dump()}")
 
-        response = await client.post(url, json=validated_request.model_dump())
-        response.raise_for_status()
-
-        return response.json()["message"] == cst.EXPECTED_TRAINING_START_MESSAGE
+        try:
+            response = await client.post(url, json=validated_request.model_dump())
+            response.raise_for_status()
+            
+            response_data = response.json()
+            success = response_data.get("message") == cst.EXPECTED_TRAINING_START_MESSAGE
+            
+            if success:
+                logger.info(f"✓ Training started successfully on trainer {trainer_ip} for task {training_data.task_id}")
+            else:
+                logger.error(f"✗ Training failed to start on trainer {trainer_ip}. Response: {response_data}")
+                
+            return success
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error when starting training on {trainer_ip}: {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error when starting training on {trainer_ip}: {str(e)}")
+            raise
 
 
 @simple_retry
@@ -170,25 +198,43 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
         logger.info("No tournament tasks found, skipping cycle")
         return
 
+    # Log details about each task found
+    for task in tasks:
+        logger.info(f"Task {task.task_id}: created_at={task.created_at}, model_id={task.model_id}, task_type={task.task_type}")
+
     task_hotkey_triples = []
     tasks_to_update = []
+    tasks_without_nodes = []
 
     for task in tasks:
         nodes = await task_sql.get_nodes_assigned_to_task(task.task_id, config.psql_db)
         hotkeys = [node.hotkey for node in nodes]
+        
+        logger.info(f"Task {task.task_id}: Found {len(nodes)} assigned nodes")
+        if nodes:
+            for node in nodes:
+                logger.debug(f"  - Node: hotkey={node.hotkey[:8]}..., node_id={node.node_id}")
 
         if hotkeys:
             for hotkey in hotkeys:
                 task_hotkey_triples.append((task.task_id, hotkey, task.created_at))
             tasks_to_update.append(task)
+        else:
+            tasks_without_nodes.append(task)
+            logger.warning(f"Task {task.task_id} has no nodes assigned - will remain in LOOKING_FOR_NODES status")
+
+    if tasks_without_nodes:
+        logger.warning(f"Found {len(tasks_without_nodes)} tasks without assigned nodes: {[str(t.task_id) for t in tasks_without_nodes]}")
 
     if task_hotkey_triples:
+        logger.info(f"Adding {len(task_hotkey_triples)} task-hotkey pairs to tournament_task_hotkey_trainings table")
         await tournament_sql.add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples, config.psql_db)
 
     for task in tasks_to_update:
+        hotkey_count = len([t for t in task_hotkey_triples if t[0] == task.task_id])
+        logger.info(f"Updating task {task.task_id} from LOOKING_FOR_NODES to TRAINING status (with {hotkey_count} hotkeys)")
         task.status = TaskStatus.TRAINING
         await task_sql.update_task(task, config.psql_db)
-        logger.info(f"Updated task {task.task_id} to training status with {len(task_hotkey_triples)} hotkeys")
 
     logger.info(f"Successfully processed {len(tasks_to_update)} tasks in fetch_tournament_tasks_ready_to_train cycle")
 
@@ -203,6 +249,13 @@ async def process_pending_tournament_tasks(config: Config):
             )
 
             logger.info(f"Fetched {len(pending_training_tasks)} pending tournament tasks")
+            
+            # Log details about pending tasks
+            if pending_training_tasks:
+                for task_training in pending_training_tasks[:5]:  # Log first 5 for brevity
+                    logger.info(f"Pending task: task_id={task_training.task.task_id}, hotkey={task_training.hotkey[:8]}..., "
+                              f"n_training_attempts={task_training.n_training_attempts}, "
+                              f"model={task_training.task.model_id}, task_type={task_training.task.task_type}")
 
             if not pending_training_tasks:
                 logger.info("No pending tasks found, waiting to avoid tight loop")
@@ -223,6 +276,8 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
     # Track failed attempts for this scheduling session
     failed_attempts = {}
     MAX_SCHEDULING_ATTEMPTS = 3
+    
+    logger.info(f"Starting schedule_tasks_for_training with {len(pending_training_tasks)} pending tasks")
 
     while pending_training_tasks:
         oldest_task_training = pending_training_tasks[-1]
@@ -232,6 +287,9 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
         ):
             task = oldest_task_training.task
             task_key = f"{task.task_id}_{oldest_task_training.hotkey}"
+            
+            logger.info(f"Processing task {task.task_id} with hotkey {oldest_task_training.hotkey[:8]}... "
+                       f"(attempt {oldest_task_training.n_training_attempts}/{cst.MAX_TRAINING_ATTEMPTS})")
 
             # Check max attempts
             if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
@@ -247,15 +305,19 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
             # Determine required GPUs for this task
             required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
-            logger.info(f"Task {task.task_id} requires {required_gpus.value}")
+            logger.info(f"Task {task.task_id} (model: {task.model_id}, params: {task.model_params_count}) requires {required_gpus.value}")
+            
+            logger.info(f"Checking for suitable GPUs for requirement {required_gpus.value}...")
             suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
             if not suitable_gpus_result:
-                logger.info(f"No suitable GPUs found for requirement {required_gpus.value}, waiting before retry")
+                logger.warning(f"No suitable GPUs found for requirement {required_gpus.value}, waiting {cst.GPU_AVAILABILITY_CHECK_RETRY_INTERVAL}s before retry")
+                logger.info(f"Keeping task {task.task_id} in pending queue, will retry later")
                 await asyncio.sleep(cst.GPU_AVAILABILITY_CHECK_RETRY_INTERVAL)
                 continue
 
             trainer_ip, gpu_ids = suitable_gpus_result
+            logger.info(f"Found suitable GPUs on trainer {trainer_ip}: GPU IDs {gpu_ids}")
 
         try:
             training_task = pending_training_tasks[-1]
@@ -339,22 +401,47 @@ async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) ->
     """
     try:
         trainers = await tournament_sql.get_trainers(config.psql_db)
+        logger.info(f"Checking {len(trainers)} trainers for suitable GPUs (requirement: {required_gpus.value})")
+
+        total_gpus = sum(len(trainer.gpus) for trainer in trainers)
+        logger.info(f"Total GPUs across all trainers: {total_gpus}")
 
         for trainer in trainers:
-            logger.debug(f"Checking trainer {trainer.trainer_ip} with {len(trainer.gpus)} GPUs")
+            logger.info(f"Checking trainer {trainer.trainer_ip} with {len(trainer.gpus)} GPUs")
+            
+            # Count available GPUs by type
+            available_h100s = 0
+            available_a100s = 0
+            total_h100s = 0
+            total_a100s = 0
+            
             for gpu in trainer.gpus:
+                if gpu.gpu_type == GPUType.H100:
+                    total_h100s += 1
+                    if gpu.available:
+                        available_h100s += 1
+                elif gpu.gpu_type == GPUType.A100:
+                    total_a100s += 1
+                    if gpu.available:
+                        available_a100s += 1
+                        
                 logger.debug(f"  GPU {gpu.gpu_id} ({gpu.gpu_type}): available={gpu.available}, used_until={gpu.used_until}")
+            
+            logger.info(f"  Trainer {trainer.trainer_ip} summary: H100s: {available_h100s}/{total_h100s} available, "
+                       f"A100s: {available_a100s}/{total_a100s} available")
 
             gpu_ids = _trainer_has_sufficient_gpus(trainer.gpus, required_gpus)
             if gpu_ids:
-                logger.info(f"Found suitable GPUs on trainer {trainer.trainer_ip} for requirement {required_gpus.value}")
+                logger.info(f"✓ Found suitable GPUs on trainer {trainer.trainer_ip} for requirement {required_gpus.value}: GPU IDs {gpu_ids}")
                 return trainer.trainer_ip, gpu_ids
+            else:
+                logger.info(f"✗ Trainer {trainer.trainer_ip} does not have sufficient GPUs for requirement {required_gpus.value}")
 
-        logger.info(f"No suitable GPUs found across all trainers for requirement {required_gpus.value}")
+        logger.warning(f"No suitable GPUs found across all {len(trainers)} trainers for requirement {required_gpus.value}")
         return None
 
     except Exception as e:
-        logger.error(f"Error checking suitable GPUs: {str(e)}")
+        logger.error(f"Error checking suitable GPUs: {str(e)}", exc_info=True)
         return None
 
 
@@ -434,18 +521,52 @@ def _trainer_has_sufficient_gpus(trainer_gpus: list[GPUInfo], requirement: GpuRe
     """
     available_h100s = [gpu for gpu in trainer_gpus if gpu.available and gpu.gpu_type == GPUType.H100]
     available_a100s = [gpu for gpu in trainer_gpus if gpu.available and gpu.gpu_type == GPUType.A100]
+    
+    logger.debug(f"_trainer_has_sufficient_gpus: Found {len(available_h100s)} available H100s, {len(available_a100s)} available A100s")
+    logger.debug(f"Checking against requirement: {requirement.value}")
 
     if requirement == GpuRequirement.A100:
-        return [available_a100s[0].gpu_id] if len(available_a100s) >= 1 else []
+        if len(available_a100s) >= 1:
+            gpu_ids = [available_a100s[0].gpu_id]
+            logger.debug(f"Requirement A100 met: returning GPU IDs {gpu_ids}")
+            return gpu_ids
+        else:
+            logger.debug(f"Requirement A100 NOT met: need 1, have {len(available_a100s)}")
+            return []
     elif requirement == GpuRequirement.H100_1X:
-        return [available_h100s[0].gpu_id] if len(available_h100s) >= 1 else []
+        if len(available_h100s) >= 1:
+            gpu_ids = [available_h100s[0].gpu_id]
+            logger.debug(f"Requirement H100_1X met: returning GPU IDs {gpu_ids}")
+            return gpu_ids
+        else:
+            logger.debug(f"Requirement H100_1X NOT met: need 1, have {len(available_h100s)}")
+            return []
     elif requirement == GpuRequirement.H100_2X:
-        return [gpu.gpu_id for gpu in available_h100s[:2]] if len(available_h100s) >= 2 else []
+        if len(available_h100s) >= 2:
+            gpu_ids = [gpu.gpu_id for gpu in available_h100s[:2]]
+            logger.debug(f"Requirement H100_2X met: returning GPU IDs {gpu_ids}")
+            return gpu_ids
+        else:
+            logger.debug(f"Requirement H100_2X NOT met: need 2, have {len(available_h100s)}")
+            return []
     elif requirement == GpuRequirement.H100_4X:
-        return [gpu.gpu_id for gpu in available_h100s[:4]] if len(available_h100s) >= 4 else []
+        if len(available_h100s) >= 4:
+            gpu_ids = [gpu.gpu_id for gpu in available_h100s[:4]]
+            logger.debug(f"Requirement H100_4X met: returning GPU IDs {gpu_ids}")
+            return gpu_ids
+        else:
+            logger.debug(f"Requirement H100_4X NOT met: need 4, have {len(available_h100s)}")
+            return []
     elif requirement == GpuRequirement.H100_8X:
-        return [gpu.gpu_id for gpu in available_h100s[:8]] if len(available_h100s) >= 8 else []
+        if len(available_h100s) >= 8:
+            gpu_ids = [gpu.gpu_id for gpu in available_h100s[:8]]
+            logger.debug(f"Requirement H100_8X met: returning GPU IDs {gpu_ids}")
+            return gpu_ids
+        else:
+            logger.debug(f"Requirement H100_8X NOT met: need 8, have {len(available_h100s)}")
+            return []
 
+    logger.warning(f"Unknown GPU requirement: {requirement}")
     return []
 
 
