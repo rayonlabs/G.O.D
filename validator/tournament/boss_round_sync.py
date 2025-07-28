@@ -31,15 +31,14 @@ async def sync_boss_round_tasks_to_general(
 
     logger.info(f"Found {len(boss_round_tasks)} boss round tasks to sync")
 
+    # Sync all tasks immediately instead of with random delays
     for i, tournament_task in enumerate(boss_round_tasks):
-        if i == 0:
-            delay_hours = 0
-        else:
-            delay_hours = random.randint(1, 4)
-        asyncio.create_task(_schedule_task_sync(tournament_task.task_id, delay_hours, psql_db, config))
-        logger.info(
-            f"Scheduled task {tournament_task.task_id} to sync in {delay_hours} hours (task {i + 1} of {len(boss_round_tasks)})"
-        )
+        try:
+            await _copy_task_to_general(tournament_task.task_id, psql_db)
+            logger.info(f"Successfully synced task {tournament_task.task_id} (task {i + 1} of {len(boss_round_tasks)})")
+        except Exception as e:
+            logger.error(f"Failed to sync task {tournament_task.task_id}: {e}")
+            raise  # Re-raise to prevent tournament from completing with incomplete sync
 
 
 async def _schedule_task_sync(tournament_task_id: str, delay_hours: int, psql_db: PSQLDB, config: Config):
