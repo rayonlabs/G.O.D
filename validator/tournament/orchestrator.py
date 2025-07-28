@@ -195,12 +195,7 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
     logger.info(f"Found {len(tasks)} tournament tasks looking for nodes")
 
     if not tasks:
-        logger.info("No tournament tasks found, skipping cycle")
         return
-
-    # Log details about each task found
-    for task in tasks:
-        logger.info(f"Task {task.task_id}: created_at={task.created_at}, model_id={task.model_id}, task_type={task.task_type}")
 
     task_hotkey_triples = []
     tasks_to_update = []
@@ -209,11 +204,6 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
     for task in tasks:
         nodes = await task_sql.get_nodes_assigned_to_task(task.task_id, config.psql_db)
         hotkeys = [node.hotkey for node in nodes]
-        
-        logger.info(f"Task {task.task_id}: Found {len(nodes)} assigned nodes")
-        if nodes:
-            for node in nodes:
-                logger.debug(f"  - Node: hotkey={node.hotkey[:8]}..., node_id={node.node_id}")
 
         if hotkeys:
             for hotkey in hotkeys:
@@ -221,44 +211,31 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
             tasks_to_update.append(task)
         else:
             tasks_without_nodes.append(task)
-            logger.warning(f"Task {task.task_id} has no nodes assigned - will remain in LOOKING_FOR_NODES status")
 
     if tasks_without_nodes:
         logger.warning(f"Found {len(tasks_without_nodes)} tasks without assigned nodes: {[str(t.task_id) for t in tasks_without_nodes]}")
 
     if task_hotkey_triples:
-        logger.info(f"Adding {len(task_hotkey_triples)} task-hotkey pairs to tournament_task_hotkey_trainings table")
         await tournament_sql.add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples, config.psql_db)
 
     for task in tasks_to_update:
-        hotkey_count = len([t for t in task_hotkey_triples if t[0] == task.task_id])
-        logger.info(f"Updating task {task.task_id} from LOOKING_FOR_NODES to TRAINING status (with {hotkey_count} hotkeys)")
         task.status = TaskStatus.TRAINING
         await task_sql.update_task(task, config.psql_db)
 
-    logger.info(f"Successfully processed {len(tasks_to_update)} tasks in fetch_tournament_tasks_ready_to_train cycle")
+    logger.info(f"Moved {len(tasks_to_update)} tasks to TRAINING status")
 
 
 async def process_pending_tournament_tasks(config: Config):
     while True:
         try:
-            logger.info("Processing pending tournament tasks")
             pending_training_tasks = await tournament_sql.get_tournament_training_tasks(
                 config.psql_db,
                 TrainingStatus.PENDING,
             )
 
             logger.info(f"Fetched {len(pending_training_tasks)} pending tournament tasks")
-            
-            # Log details about pending tasks
-            if pending_training_tasks:
-                for task_training in pending_training_tasks[:5]:  # Log first 5 for brevity
-                    logger.info(f"Pending task: task_id={task_training.task.task_id}, hotkey={task_training.hotkey[:8]}..., "
-                              f"n_training_attempts={task_training.n_training_attempts}, "
-                              f"model={task_training.task.model_id}, task_type={task_training.task.task_type}")
 
             if not pending_training_tasks:
-                logger.info("No pending tasks found, waiting to avoid tight loop")
                 await asyncio.sleep(cst.PROCESS_PENDING_TASKS_CYCLE_INTERVAL)
                 continue
 
