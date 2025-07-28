@@ -332,7 +332,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                     logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
                 return
             else:
-                logger.error(f"Failed to sync all tasks. Only {len(snyced_task_ids)} out of {len(completed_round.tasks)} tasks synced.")
+                logger.error(f"Failed to sync all tasks. Only {len(snyced_task_ids)} out of {len(task_ids)} tasks synced.")
         else:
             await create_next_round(tournament, completed_round, winners, config, psql_db)
 
