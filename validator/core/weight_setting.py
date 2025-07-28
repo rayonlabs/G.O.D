@@ -529,10 +529,12 @@ def calculate_weight_redistribution(performance_diff: float) -> tuple[float, flo
 async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]:
     from core.models.tournament_models import TournamentType
 
+    logger.info("=== CALCULATING TOURNAMENT BURN DATA ===")
     weighted_performance_diff = 0.0
     total_weight = 0.0
 
     tournament_weights = {TournamentType.TEXT: cts.TOURNAMENT_TEXT_WEIGHT, TournamentType.IMAGE: cts.TOURNAMENT_IMAGE_WEIGHT}
+    logger.info(f"Tournament type weights: TEXT={cts.TOURNAMENT_TEXT_WEIGHT}, IMAGE={cts.TOURNAMENT_IMAGE_WEIGHT}")
 
     for tournament_type, weight in tournament_weights.items():
         performance_diff = None
