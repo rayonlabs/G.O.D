@@ -502,7 +502,9 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
         else:
             logger.warning(f"Could not find scores for winner {task_pair.winner_hotkey} in task pair {i+1}")
 
-    return sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
+    average_performance_diff = sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
+    logger.info(f"Average performance difference: {average_performance_diff} from {len(performance_differences)} task pairs")
+    return average_performance_diff
 
 
 def calculate_burn_proportion(performance_diff: float) -> float:
