@@ -451,16 +451,22 @@ async def check_boss_round_synthetic_tasks_complete(tournament_id: str, psql_db)
 
 
 async def calculate_performance_difference(tournament_id: str, psql_db) -> float:
+    logger.info(f"=== CALCULATING PERFORMANCE DIFFERENCE FOR TOURNAMENT {tournament_id} ===")
     task_pairs = await get_boss_round_winner_task_pairs(tournament_id, psql_db)
+    logger.info(f"Found {len(task_pairs)} task pairs for performance comparison")
 
     if not task_pairs:
+        logger.info("No task pairs found, returning 0.0 performance difference")
         return 0.0
 
     performance_differences = []
 
-    for task_pair in task_pairs:
+    for i, task_pair in enumerate(task_pairs):
+        logger.info(f"Processing task pair {i+1}/{len(task_pairs)}: tournament={task_pair.tournament_task_id}, synthetic={task_pair.synthetic_task_id}, winner={task_pair.winner_hotkey}")
+        
         tournament_scores = await get_task_scores_as_models(task_pair.tournament_task_id, psql_db)
         synthetic_scores = await get_task_scores_as_models(task_pair.synthetic_task_id, psql_db)
+        logger.info(f"Found {len(tournament_scores)} tournament scores and {len(synthetic_scores)} synthetic scores")
 
         winner_tournament_score = None
         winner_synthetic_score = None
@@ -468,15 +474,18 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
         for score in tournament_scores:
             if score.hotkey == task_pair.winner_hotkey:
                 winner_tournament_score = max(score.test_loss, score.synth_loss)
+                logger.info(f"Winner tournament score for {task_pair.winner_hotkey}: {winner_tournament_score}")
                 break
 
         for score in synthetic_scores:
             if score.hotkey == task_pair.winner_hotkey:
                 winner_synthetic_score = max(score.test_loss, score.synth_loss)
+                logger.info(f"Winner synthetic score for {task_pair.winner_hotkey}: {winner_synthetic_score}")
                 break
 
         if winner_tournament_score is not None and winner_synthetic_score is not None:
             task_type = TaskType(task_pair.task_type)
+            logger.info(f"Task type: {task_type}")
             if task_type == TaskType.GRPOTASK:
                 if winner_synthetic_score > 0:
                     performance_diff = (winner_tournament_score - winner_synthetic_score) / winner_synthetic_score
@@ -488,7 +497,10 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
                 else:
                     performance_diff = 0.0
 
+            logger.info(f"Performance difference for task pair {i+1}: {performance_diff}")
             performance_differences.append(performance_diff)
+        else:
+            logger.warning(f"Could not find scores for winner {task_pair.winner_hotkey} in task pair {i+1}")
 
     return sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
 
