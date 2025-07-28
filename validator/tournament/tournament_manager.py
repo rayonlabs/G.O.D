@@ -642,6 +642,7 @@ async def process_active_tournaments(config: Config):
     while True:
         try:
             active_tournaments = await get_tournaments_with_status(TournamentStatus.ACTIVE, config.psql_db)
+            logger.info(f"Found {len(active_tournaments)} active tournaments")
             for tournament in active_tournaments:
                 with LogContext(tournament_id=tournament.tournament_id):
                     logger.info(f"Processing active tournament {tournament.tournament_id}")
