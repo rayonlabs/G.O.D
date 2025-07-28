@@ -254,28 +254,31 @@ class TestAutomaticTournamentScheduling:
         """Test that both TEXT and IMAGE tournament types are checked independently."""
         from validator.tournament.tournament_manager import process_tournament_scheduling
         
-        # Mock the sleep to avoid waiting in tests
-        with patch("asyncio.sleep", return_value=None):
-            # Run one iteration of the scheduling process
-            task = asyncio.create_task(process_tournament_scheduling(mock_config))
+        # Create a mock that will raise an exception after being called twice
+        call_count = 0
+        async def side_effect(*args):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise Exception("Stop after checking both types")
             
-            # Let it run briefly then cancel
-            await asyncio.sleep(0.01)
-            task.cancel()
-            
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            
-            # Should have called check_and_start_tournament for both types
-            assert mock_check_and_start.call_count >= 2
-            calls = mock_check_and_start.call_args_list
-            
-            # Verify both tournament types were checked
-            tournament_types_checked = {call[0][0] for call in calls}
-            assert TournamentType.TEXT in tournament_types_checked
-            assert TournamentType.IMAGE in tournament_types_checked
+        mock_check_and_start.side_effect = side_effect
+        
+        # Run the scheduling process - it should call check_and_start for both types then stop
+        try:
+            await process_tournament_scheduling(mock_config)
+        except Exception as e:
+            if "Stop after checking both types" not in str(e):
+                raise
+        
+        # Should have called check_and_start_tournament for both types
+        assert mock_check_and_start.call_count == 2
+        calls = mock_check_and_start.call_args_list
+        
+        # Verify both tournament types were checked
+        tournament_types_checked = {call[0][0] for call in calls}
+        assert TournamentType.TEXT in tournament_types_checked
+        assert TournamentType.IMAGE in tournament_types_checked
 
 
 if __name__ == "__main__":
