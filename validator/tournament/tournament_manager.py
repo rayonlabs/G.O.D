@@ -325,7 +325,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 return
             else:
                 logger.info(
-                    f"Tournament not completed yet. Synced {len(snyced_task_ids)} tasks out of {len(completed_round.tasks)}."
+                    f"Tournament not completed yet. Synced {len(snyced_task_ids)} tasks out of {len(task_ids)}."
                 )
         else:
             await create_next_round(tournament, completed_round, winners, config, psql_db)
