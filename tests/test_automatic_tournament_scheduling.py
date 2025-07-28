@@ -288,7 +288,7 @@ class TestAutomaticTournamentScheduling:
         mock_create_tournament,
         mock_config,
     ):
-        """Test that exceptions during tournament creation are handled gracefully."""
+        """Test that exceptions during tournament creation propagate up (current behavior)."""
         # Mock setup: no tournaments exist, should create new one
         mock_get_active.return_value = None
         mock_get_with_status.return_value = []
@@ -297,12 +297,12 @@ class TestAutomaticTournamentScheduling:
         # Mock create_basic_tournament to raise an exception
         mock_create_tournament.side_effect = Exception("Database connection failed")
         
-        # Should not raise exception, just log error
-        with patch("validator.tournament.tournament_manager.logger") as mock_logger:
+        # Should raise the exception (current behavior - no exception handling in the function)
+        with pytest.raises(Exception, match="Database connection failed"):
             await check_and_start_tournament(TournamentType.TEXT, mock_config.psql_db, mock_config)
             
-            # Should still attempt to create tournament
-            mock_create_tournament.assert_called_once()
+        # Should still attempt to create tournament
+        mock_create_tournament.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("validator.tournament.tournament_manager.get_latest_tournament_with_created_at")
