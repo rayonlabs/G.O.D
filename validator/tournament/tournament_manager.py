@@ -305,17 +305,16 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             return
 
         if len(winners) == 1 and completed_round.is_final_round:
-            snyced_task_ids = await get_synced_task_ids(completed_round.tasks, psql_db)
+            round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
+            task_ids = [task.task_id for task in round_tasks]
+            snyced_task_ids = await get_synced_task_ids(task_ids, psql_db)
             
-            # If not all tasks are synced, sync the remaining ones
-            if len(snyced_task_ids) < len(completed_round.tasks):
-                logger.info(f"Only {len(snyced_task_ids)} out of {len(completed_round.tasks)} tasks are synced. Syncing remaining tasks...")
+            if len(snyced_task_ids) < len(task_ids):
+                logger.info(f"Only {len(snyced_task_ids)} out of {len(task_ids)} tasks are synced. Syncing remaining tasks...")
                 await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
-                # Re-fetch synced task IDs after syncing
-                snyced_task_ids = await get_synced_task_ids(completed_round.tasks, psql_db)
+                snyced_task_ids = await get_synced_task_ids(task_ids, psql_db)
             
-            # Now check if all synced tasks are completed
-            if len(snyced_task_ids) == len(completed_round.tasks):
+            if len(snyced_task_ids) == len(task_ids):
                 all_tasks_finished = True
                 for synced_task_id in snyced_task_ids:
                     task = await task_sql.get_task(synced_task_id, psql_db)
