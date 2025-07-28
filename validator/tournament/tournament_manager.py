@@ -1,6 +1,8 @@
 import asyncio
 import math
 import random
+from datetime import datetime
+from datetime import timezone
 
 from fiber.chain.models import Node
 
@@ -31,6 +33,9 @@ from validator.db.sql.tournaments import calculate_boosted_stake
 from validator.db.sql.tournaments import count_completed_tournament_entries
 from validator.db.sql.tournaments import create_tournament
 from validator.db.sql.tournaments import eliminate_tournament_participants
+from validator.db.sql.tournaments import get_active_tournament
+from validator.db.sql.tournaments import get_latest_completed_tournament
+from validator.db.sql.tournaments import get_latest_tournament_with_created_at
 from validator.db.sql.tournaments import get_participants_with_insufficient_stake
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
@@ -721,3 +726,80 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
     else:
         logger.info(f"All tasks in round {round_data.round_id} are completed, marking round as completed")
         return True
+
+
+async def process_tournament_scheduling(config: Config):
+    """
+    Process tournament scheduling to automatically start new tournaments when the previous ones finish.
+    Checks both text and image tournaments independently.
+    """
+    logger.info("Processing tournament scheduling...")
+    
+    while True:
+        try:
+            # Check both tournament types
+            for tournament_type in [TournamentType.TEXT, TournamentType.IMAGE]:
+                await check_and_start_tournament(tournament_type, config.psql_db, config)
+                        
+        except Exception as e:
+            logger.error(f"Error processing tournament scheduling: {e}")
+        finally:
+            await asyncio.sleep(t_cst.TOURNAMENT_ACTIVE_CYCLE_INTERVAL)
+
+
+async def check_and_start_tournament(tournament_type: TournamentType, psql_db: PSQLDB, config: Config):
+    """
+    Check if we should start a new tournament of the given type.
+    """
+    with LogContext(tournament_type=tournament_type.value):
+        # Check if there's already an active tournament of this type
+        active_tournament = await get_active_tournament(psql_db, tournament_type)
+        if active_tournament:
+            logger.info(f"Active {tournament_type.value} tournament exists: {active_tournament.tournament_id}")
+            return
+        
+        # Check if there's a pending tournament of this type
+        pending_tournaments = await get_tournaments_with_status(TournamentStatus.PENDING, psql_db)
+        pending_of_type = [t for t in pending_tournaments if t.tournament_type == tournament_type]
+        if pending_of_type:
+            logger.info(f"Pending {tournament_type.value} tournament exists: {pending_of_type[0].tournament_id}")
+            return
+        
+        # Get the latest completed tournament and check if enough time has passed
+        latest_tournament, created_at = await get_latest_tournament_with_created_at(psql_db, tournament_type)
+        
+        if latest_tournament and latest_tournament.status == TournamentStatus.COMPLETED:
+            if await should_start_new_tournament_after_interval(created_at):
+                logger.info(f"Starting new {tournament_type.value} tournament after {cst.TOURNAMENT_INTERVAL_HOURS} hours since {latest_tournament.tournament_id}")
+                
+                # Create new tournament of the same type
+                new_tournament_id = await create_basic_tournament(tournament_type, psql_db, config)
+                logger.info(f"Created new {tournament_type.value} tournament: {new_tournament_id}")
+            else:
+                logger.info(f"Not enough time has passed since last {tournament_type.value} tournament completion")
+        elif not latest_tournament:
+            # No tournaments of this type exist, create the first one
+            logger.info(f"No {tournament_type.value} tournaments found, creating first one")
+            new_tournament_id = await create_basic_tournament(tournament_type, psql_db, config)
+            logger.info(f"Created first {tournament_type.value} tournament: {new_tournament_id}")
+
+
+async def should_start_new_tournament_after_interval(last_created_at) -> bool:
+    """
+    Check if enough time has passed since the last tournament was created based on TOURNAMENT_INTERVAL_HOURS.
+    """
+    if not last_created_at:
+        return True
+    
+    now = datetime.now(timezone.utc)
+    
+    # Ensure both timestamps are timezone-aware
+    if last_created_at.tzinfo is None:
+        last_created_at = last_created_at.replace(tzinfo=timezone.utc)
+    
+    time_diff = now - last_created_at
+    hours_passed = time_diff.total_seconds() / 3600
+    
+    logger.info(f"Hours since last tournament: {hours_passed:.2f}, required: {cst.TOURNAMENT_INTERVAL_HOURS}")
+    
+    return hours_passed >= cst.TOURNAMENT_INTERVAL_HOURS
