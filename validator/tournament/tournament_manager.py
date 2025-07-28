@@ -305,10 +305,12 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             return
 
         if len(winners) == 1 and completed_round.is_final_round:
-            snyced_task_ids = await get_synced_task_ids(completed_round.tasks, psql_db)
+            round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
+            task_ids = [task.task_id for task in round_tasks]
+            snyced_task_ids = await get_synced_task_ids(task_ids, psql_db)
             if len(snyced_task_ids) == 0:
                 await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
-            elif len(snyced_task_ids) == len(completed_round.tasks):
+            elif len(snyced_task_ids) == len(task_ids):
                 for synced_task_id in snyced_task_ids:
                     task = await task_sql.get_task(synced_task_id, psql_db)
                     if task.status == TaskStatus.COMPLETED or task.status == TaskStatus.FAILED:
