@@ -652,6 +652,7 @@ async def process_active_tournaments(config: Config):
                         await create_first_round_for_active_tournament(tournament.tournament_id, config, config.psql_db)
                     else:
                         current_round = rounds[-1]
+                        logger.info(f"Current round {current_round.round_id} has status: {current_round.status}")
 
                         if current_round.status == RoundStatus.ACTIVE:
                             if await check_if_round_is_completed(current_round, config):
@@ -660,6 +661,11 @@ async def process_active_tournaments(config: Config):
                                     f"Tournament {tournament.tournament_id} round {current_round.round_id} is completed, advancing..."
                                 )
                                 await advance_tournament(tournament, current_round, config, config.psql_db)
+                        elif current_round.status == RoundStatus.COMPLETED:
+                            logger.info(f"Current round is already completed, checking if tournament needs advancement...")
+                            await advance_tournament(tournament, current_round, config, config.psql_db)
+                        else:
+                            logger.info(f"Current round has status {current_round.status}, skipping")
         except Exception as e:
             logger.error(f"Error processing active tournaments: {e}")
         finally:
