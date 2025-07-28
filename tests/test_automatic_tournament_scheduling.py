@@ -275,6 +275,157 @@ class TestAutomaticTournamentScheduling:
         assert image_call[0][1] == mock_config.psql_db
         assert image_call[0][2] == mock_config
 
+    @pytest.mark.asyncio
+    @patch("validator.tournament.tournament_manager.create_basic_tournament")
+    @patch("validator.tournament.tournament_manager.get_latest_tournament_with_created_at")
+    @patch("validator.tournament.tournament_manager.get_tournaments_with_status")
+    @patch("validator.tournament.tournament_manager.get_active_tournament")
+    async def test_check_and_start_tournament_exception_handling(
+        self,
+        mock_get_active,
+        mock_get_with_status,
+        mock_get_latest,
+        mock_create_tournament,
+        mock_config,
+    ):
+        """Test that exceptions during tournament creation are handled gracefully."""
+        # Mock setup: no tournaments exist, should create new one
+        mock_get_active.return_value = None
+        mock_get_with_status.return_value = []
+        mock_get_latest.return_value = (None, None)
+        
+        # Mock create_basic_tournament to raise an exception
+        mock_create_tournament.side_effect = Exception("Database connection failed")
+        
+        # Should not raise exception, just log error
+        with patch("validator.tournament.tournament_manager.logger") as mock_logger:
+            await check_and_start_tournament(TournamentType.TEXT, mock_config.psql_db, mock_config)
+            
+            # Should still attempt to create tournament
+            mock_create_tournament.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("validator.tournament.tournament_manager.get_latest_tournament_with_created_at")
+    @patch("validator.tournament.tournament_manager.get_tournaments_with_status")
+    @patch("validator.tournament.tournament_manager.get_active_tournament")
+    async def test_check_and_start_tournament_completed_but_no_created_at(
+        self,
+        mock_get_active,
+        mock_get_with_status,
+        mock_get_latest,
+        mock_config,
+        mock_tournament_data,
+    ):
+        """Test handling when completed tournament exists but created_at is None."""
+        # Mock setup: no active/pending tournaments, completed tournament but no created_at
+        mock_get_active.return_value = None
+        mock_get_with_status.return_value = []
+        mock_get_latest.return_value = (mock_tournament_data["text_completed"], None)
+        
+        with patch("validator.tournament.tournament_manager.should_start_new_tournament_after_interval") as mock_should_start:
+            mock_should_start.return_value = True
+            
+            with patch("validator.tournament.tournament_manager.create_basic_tournament") as mock_create:
+                mock_create.return_value = "new_tournament_123"
+                
+                await check_and_start_tournament(TournamentType.TEXT, mock_config.psql_db, mock_config)
+                
+                # Should call should_start_new_tournament_after_interval with None
+                mock_should_start.assert_called_once_with(None)
+
+    @pytest.mark.asyncio
+    async def test_should_start_new_tournament_edge_case_exactly_24_hours(self):
+        """Test the exact boundary case of 24 hours."""
+        # Test exactly 24 hours - should return True
+        exactly_24h = datetime.now(timezone.utc) - timedelta(hours=24, seconds=0)
+        result = await should_start_new_tournament_after_interval(exactly_24h)
+        assert result is True
+        
+        # Test 1 second less than 24 hours - should return False  
+        just_under_24h = datetime.now(timezone.utc) - timedelta(hours=23, minutes=59, seconds=59)
+        result = await should_start_new_tournament_after_interval(just_under_24h)
+        assert result is False
+
+    @pytest.mark.asyncio
+    @patch("validator.tournament.tournament_manager.get_tournaments_with_status")
+    @patch("validator.tournament.tournament_manager.get_active_tournament")
+    async def test_check_and_start_tournament_multiple_pending_same_type(
+        self,
+        mock_get_active,
+        mock_get_with_status,
+        mock_config,
+    ):
+        """Test behavior when multiple pending tournaments of same type exist."""
+        # Mock setup: no active tournament, multiple pending tournaments of same type
+        mock_get_active.return_value = None
+        
+        # Create multiple pending tournaments
+        pending_tournaments = [
+            TournamentData(
+                tournament_id="pending_1",
+                tournament_type=TournamentType.TEXT,
+                status=TournamentStatus.PENDING,
+            ),
+            TournamentData(
+                tournament_id="pending_2", 
+                tournament_type=TournamentType.TEXT,
+                status=TournamentStatus.PENDING,
+            ),
+            TournamentData(
+                tournament_id="pending_image",
+                tournament_type=TournamentType.IMAGE,
+                status=TournamentStatus.PENDING,
+            ),
+        ]
+        mock_get_with_status.return_value = pending_tournaments
+        
+        with patch("validator.tournament.tournament_manager.logger") as mock_logger:
+            await check_and_start_tournament(TournamentType.TEXT, mock_config.psql_db, mock_config)
+            
+            # Should log that pending tournament exists (should pick first one)
+            mock_logger.info.assert_called_with(
+                f"Pending {TournamentType.TEXT.value} tournament exists: pending_1"
+            )
+
+    @pytest.mark.asyncio
+    async def test_should_start_new_tournament_future_timestamp(self):
+        """Test handling of future timestamps (should not happen in practice but good to test)."""
+        # Future timestamp - should return False
+        future_timestamp = datetime.now(timezone.utc) + timedelta(hours=1)
+        result = await should_start_new_tournament_after_interval(future_timestamp)
+        assert result is False
+
+    @pytest.mark.asyncio
+    @patch("validator.tournament.tournament_manager.get_latest_tournament_with_created_at")
+    @patch("validator.tournament.tournament_manager.get_tournaments_with_status") 
+    @patch("validator.tournament.tournament_manager.get_active_tournament")
+    async def test_check_and_start_tournament_active_tournament_has_status_check(
+        self,
+        mock_get_active,
+        mock_get_with_status,
+        mock_get_latest,
+        mock_config,
+        mock_tournament_data,
+    ):
+        """Test that we properly check the status of the tournament returned by get_latest_tournament_with_created_at."""
+        # Mock setup: no active/pending tournaments
+        mock_get_active.return_value = None
+        mock_get_with_status.return_value = []
+        
+        # Return a tournament that's still ACTIVE (not COMPLETED)
+        active_tournament = TournamentData(
+            tournament_id="still_active_123",
+            tournament_type=TournamentType.TEXT,
+            status=TournamentStatus.ACTIVE,  # Not completed!
+        )
+        mock_get_latest.return_value = (active_tournament, datetime.now(timezone.utc) - timedelta(hours=25))
+        
+        with patch("validator.tournament.tournament_manager.create_basic_tournament") as mock_create:
+            await check_and_start_tournament(TournamentType.TEXT, mock_config.psql_db, mock_config)
+            
+            # Should NOT create new tournament because latest tournament is still ACTIVE
+            mock_create.assert_not_called()
+
 
 if __name__ == "__main__":
     # Run the tests
