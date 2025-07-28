@@ -4,13 +4,14 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import validator.core.constants as cst
-from core.models.tournament_models import TournamentData, TournamentStatus, TournamentType
+from core.models.tournament_models import TournamentData, TournamentStatus, TournamentType, TournamentRoundData, RoundStatus, RoundType
 from validator.core.config import Config
 from validator.db.database import PSQLDB
 from validator.tournament.tournament_manager import (
     check_and_start_tournament,
     should_start_new_tournament_after_interval,
 )
+from validator.endpoints.tournament_analytics import get_next_tournament_dates
 
 
 class TestAutomaticTournamentScheduling:
@@ -425,6 +426,287 @@ class TestAutomaticTournamentScheduling:
             
             # Should NOT create new tournament because latest tournament is still ACTIVE
             mock_create.assert_not_called()
+
+
+class TestTournamentAnalyticsEndpoint:
+    """Test suite for the tournament analytics endpoint."""
+
+    @pytest.fixture
+    def mock_config(self):
+        """Create a mock config object."""
+        config = MagicMock(spec=Config)
+        config.psql_db = MagicMock(spec=PSQLDB)
+        return config
+
+    @pytest.mark.asyncio
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_tournament_rounds")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_active_tournament")
+    async def test_endpoint_returns_round_number_for_active_tournament(
+        self, mock_get_active, mock_get_rounds, mock_config
+    ):
+        """Test that endpoint returns current round number when tournament is active."""
+        # Mock active tournament
+        active_tournament = TournamentData(
+            tournament_id="active_text_123",
+            tournament_type=TournamentType.TEXT,
+            status=TournamentStatus.ACTIVE,
+        )
+        mock_get_active.return_value = active_tournament
+        
+        # Mock 3 rounds exist
+        mock_rounds = [
+            TournamentRoundData(
+                round_id="round_1", tournament_id="active_text_123", round_number=1,
+                round_type=RoundType.GROUP, is_final_round=False, status=RoundStatus.COMPLETED
+            ),
+            TournamentRoundData(
+                round_id="round_2", tournament_id="active_text_123", round_number=2,
+                round_type=RoundType.KNOCKOUT, is_final_round=False, status=RoundStatus.COMPLETED
+            ),
+            TournamentRoundData(
+                round_id="round_3", tournament_id="active_text_123", round_number=3,
+                round_type=RoundType.KNOCKOUT, is_final_round=True, status=RoundStatus.ACTIVE
+            ),
+        ]
+        mock_get_rounds.return_value = mock_rounds
+        
+        # Mock no active IMAGE tournament
+        def get_active_side_effect(psql_db, tournament_type):
+            if tournament_type == TournamentType.TEXT:
+                return active_tournament
+            return None
+        mock_get_active.side_effect = get_active_side_effect
+        
+        # Mock other calls for IMAGE tournament
+        with patch("validator.endpoints.tournament_analytics.tournament_sql.get_tournaments_with_status") as mock_get_with_status:
+            with patch("validator.endpoints.tournament_analytics.tournament_sql.get_latest_tournament_with_created_at") as mock_get_latest:
+                mock_get_with_status.return_value = []
+                mock_get_latest.return_value = (None, None)
+                
+                # Call the endpoint
+                result = await get_next_tournament_dates(config=mock_config)
+                
+                # Check TEXT tournament result
+                assert result.text.tournament_type == TournamentType.TEXT
+                assert result.text.current_round_number == 3  # Should return number of rounds
+                assert result.text.tournament_status == "active"
+                assert result.text.interval_hours == cst.TOURNAMENT_INTERVAL_HOURS
+                assert result.text.next_start_date is None
+                assert result.text.next_end_date is None
+
+    @pytest.mark.asyncio
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_tournaments_with_status")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_active_tournament")
+    async def test_endpoint_returns_round_1_for_pending_tournament(
+        self, mock_get_active, mock_get_with_status, mock_config
+    ):
+        """Test that endpoint returns round 1 when tournament is pending."""
+        # Mock no active tournament
+        mock_get_active.return_value = None
+        
+        # Mock pending tournament
+        pending_tournament = TournamentData(
+            tournament_id="pending_image_456",
+            tournament_type=TournamentType.IMAGE,
+            status=TournamentStatus.PENDING,
+        )
+        
+        def get_with_status_side_effect(status, psql_db):
+            if status == TournamentStatus.PENDING:
+                return [pending_tournament]
+            return []
+        mock_get_with_status.side_effect = get_with_status_side_effect
+        
+        # Mock other calls for TEXT tournament
+        with patch("validator.endpoints.tournament_analytics.tournament_sql.get_latest_tournament_with_created_at") as mock_get_latest:
+            mock_get_latest.return_value = (None, None)
+            
+            # Call the endpoint
+            result = await get_next_tournament_dates(config=mock_config)
+            
+            # Check IMAGE tournament result
+            assert result.image.tournament_type == TournamentType.IMAGE
+            assert result.image.current_round_number == 1
+            assert result.image.tournament_status == "pending"
+            assert result.image.interval_hours == cst.TOURNAMENT_INTERVAL_HOURS
+            assert result.image.next_start_date is None
+            assert result.image.next_end_date is None
+
+    @pytest.mark.asyncio
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_latest_tournament_with_created_at")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_tournaments_with_status")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_active_tournament")
+    async def test_endpoint_returns_countdown_when_waiting(
+        self, mock_get_active, mock_get_with_status, mock_get_latest, mock_config
+    ):
+        """Test that endpoint returns countdown dates when no active/pending tournaments."""
+        # Mock no active tournaments
+        mock_get_active.return_value = None
+        
+        # Mock no pending tournaments
+        mock_get_with_status.return_value = []
+        
+        # Mock completed tournament from 10 hours ago
+        completed_tournament = TournamentData(
+            tournament_id="completed_text_789",
+            tournament_type=TournamentType.TEXT,
+            status=TournamentStatus.COMPLETED,
+        )
+        created_at = datetime.now(timezone.utc) - timedelta(hours=10)
+        mock_get_latest.return_value = (completed_tournament, created_at)
+        
+        # Call the endpoint
+        result = await get_next_tournament_dates(config=mock_config)
+        
+        # Check TEXT tournament result
+        assert result.text.tournament_type == TournamentType.TEXT
+        assert result.text.current_round_number is None
+        assert result.text.tournament_status == "waiting"
+        assert result.text.interval_hours == cst.TOURNAMENT_INTERVAL_HOURS
+        assert result.text.next_start_date is not None
+        assert result.text.next_end_date is not None
+        
+        # Next start should be in the future (14 hours from now since tournament was 10 hours ago)
+        expected_start = created_at + timedelta(hours=cst.TOURNAMENT_INTERVAL_HOURS)
+        assert abs((result.text.next_start_date - expected_start).total_seconds()) < 60  # Within 1 minute
+
+    @pytest.mark.asyncio
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_latest_tournament_with_created_at")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_tournaments_with_status")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_active_tournament")
+    async def test_endpoint_returns_immediate_start_when_overdue(
+        self, mock_get_active, mock_get_with_status, mock_get_latest, mock_config
+    ):
+        """Test that endpoint returns immediate start when tournament is overdue."""
+        # Mock no active tournaments
+        mock_get_active.return_value = None
+        
+        # Mock no pending tournaments
+        mock_get_with_status.return_value = []
+        
+        # Mock completed tournament from 30 hours ago (overdue)
+        completed_tournament = TournamentData(
+            tournament_id="overdue_text_999",
+            tournament_type=TournamentType.TEXT,
+            status=TournamentStatus.COMPLETED,
+        )
+        created_at = datetime.now(timezone.utc) - timedelta(hours=30)
+        mock_get_latest.return_value = (completed_tournament, created_at)
+        
+        # Call the endpoint
+        result = await get_next_tournament_dates(config=mock_config)
+        
+        # Check TEXT tournament result
+        assert result.text.tournament_type == TournamentType.TEXT
+        assert result.text.current_round_number is None
+        assert result.text.tournament_status == "waiting"
+        assert result.text.interval_hours == cst.TOURNAMENT_INTERVAL_HOURS
+        assert result.text.next_start_date is not None
+        assert result.text.next_end_date is not None
+        
+        # Next start should be approximately now (overdue case)
+        now = datetime.now(timezone.utc)
+        assert abs((result.text.next_start_date - now).total_seconds()) < 60  # Within 1 minute
+
+    @pytest.mark.asyncio
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_latest_tournament_with_created_at")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_tournaments_with_status")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_active_tournament")
+    async def test_endpoint_returns_immediate_start_when_no_previous_tournaments(
+        self, mock_get_active, mock_get_with_status, mock_get_latest, mock_config
+    ):
+        """Test that endpoint returns immediate start when no previous tournaments exist."""
+        # Mock no active tournaments
+        mock_get_active.return_value = None
+        
+        # Mock no pending tournaments
+        mock_get_with_status.return_value = []
+        
+        # Mock no previous tournaments
+        mock_get_latest.return_value = (None, None)
+        
+        # Call the endpoint
+        result = await get_next_tournament_dates(config=mock_config)
+        
+        # Check both tournament results
+        for tournament_result in [result.text, result.image]:
+            assert tournament_result.current_round_number is None
+            assert tournament_result.tournament_status == "waiting"
+            assert tournament_result.interval_hours == cst.TOURNAMENT_INTERVAL_HOURS
+            assert tournament_result.next_start_date is not None
+            assert tournament_result.next_end_date is not None
+            
+            # Next start should be approximately now
+            now = datetime.now(timezone.utc)
+            assert abs((tournament_result.next_start_date - now).total_seconds()) < 60  # Within 1 minute
+
+    @pytest.mark.asyncio
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_tournament_rounds")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_latest_tournament_with_created_at")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_tournaments_with_status")
+    @patch("validator.endpoints.tournament_analytics.tournament_sql.get_active_tournament")
+    async def test_endpoint_handles_mixed_tournament_states(
+        self, mock_get_active, mock_get_with_status, mock_get_latest, mock_get_rounds, mock_config
+    ):
+        """Test endpoint when TEXT is active and IMAGE is waiting."""
+        # Mock TEXT tournament as active
+        text_active = TournamentData(
+            tournament_id="active_text_123",
+            tournament_type=TournamentType.TEXT,
+            status=TournamentStatus.ACTIVE,
+        )
+        
+        # Mock IMAGE tournament as completed (waiting for next)
+        image_completed = TournamentData(
+            tournament_id="completed_image_456",
+            tournament_type=TournamentType.IMAGE,
+            status=TournamentStatus.COMPLETED,
+        )
+        
+        def get_active_side_effect(psql_db, tournament_type):
+            if tournament_type == TournamentType.TEXT:
+                return text_active
+            return None
+        mock_get_active.side_effect = get_active_side_effect
+        
+        # Mock no pending tournaments
+        mock_get_with_status.return_value = []
+        
+        # Mock rounds for TEXT tournament
+        mock_get_rounds.return_value = [
+            TournamentRoundData(
+                round_id="round_1", tournament_id="active_text_123", round_number=1,
+                round_type=RoundType.GROUP, is_final_round=False, status=RoundStatus.COMPLETED
+            ),
+            TournamentRoundData(
+                round_id="round_2", tournament_id="active_text_123", round_number=2,
+                round_type=RoundType.KNOCKOUT, is_final_round=True, status=RoundStatus.ACTIVE
+            ),
+        ]
+        
+        # Mock latest tournament for IMAGE
+        def get_latest_side_effect(psql_db, tournament_type):
+            if tournament_type == TournamentType.IMAGE:
+                return (image_completed, datetime.now(timezone.utc) - timedelta(hours=10))
+            return (text_active, datetime.now(timezone.utc) - timedelta(hours=5))
+        mock_get_latest.side_effect = get_latest_side_effect
+        
+        # Call the endpoint
+        result = await get_next_tournament_dates(config=mock_config)
+        
+        # Check TEXT tournament (active)
+        assert result.text.tournament_type == TournamentType.TEXT
+        assert result.text.current_round_number == 2
+        assert result.text.tournament_status == "active"
+        assert result.text.next_start_date is None
+        assert result.text.next_end_date is None
+        
+        # Check IMAGE tournament (waiting)
+        assert result.image.tournament_type == TournamentType.IMAGE
+        assert result.image.current_round_number is None
+        assert result.image.tournament_status == "waiting"
+        assert result.image.next_start_date is not None
+        assert result.image.next_end_date is not None
 
 
 if __name__ == "__main__":
