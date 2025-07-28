@@ -56,7 +56,8 @@ async def get_task_scores_as_models(task_id: str, psql_db: PSQLDB) -> list[TaskS
             quality_score=score[cst.TASK_NODE_QUALITY_SCORE]
         )
         for score in raw_scores
-        if score[cst.TEST_LOSS] is not None and score[cst.SYNTH_LOSS] is not None
+        if (score[cst.TEST_LOSS] is not None and not (isinstance(score[cst.TEST_LOSS], float) and score[cst.TEST_LOSS] != score[cst.TEST_LOSS])) and 
+           (score[cst.SYNTH_LOSS] is not None and not (isinstance(score[cst.SYNTH_LOSS], float) and score[cst.SYNTH_LOSS] != score[cst.SYNTH_LOSS]))
     ]
 
 
