@@ -306,25 +306,34 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
 
         if len(winners) == 1 and completed_round.is_final_round:
             snyced_task_ids = await get_synced_task_ids(completed_round.tasks, psql_db)
-            if len(snyced_task_ids) == 0:
+            
+            # If not all tasks are synced, sync the remaining ones
+            if len(snyced_task_ids) < len(completed_round.tasks):
+                logger.info(f"Only {len(snyced_task_ids)} out of {len(completed_round.tasks)} tasks are synced. Syncing remaining tasks...")
                 await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
-            elif len(snyced_task_ids) == len(completed_round.tasks):
+                # Re-fetch synced task IDs after syncing
+                snyced_task_ids = await get_synced_task_ids(completed_round.tasks, psql_db)
+            
+            # Now check if all synced tasks are completed
+            if len(snyced_task_ids) == len(completed_round.tasks):
+                all_tasks_finished = True
                 for synced_task_id in snyced_task_ids:
                     task = await task_sql.get_task(synced_task_id, psql_db)
                     if task.status == TaskStatus.SUCCESS or task.status == TaskStatus.FAILED:
                         logger.info(f"Task {synced_task_id} finished with status {task.status}")
                     else:
                         logger.info(f"Tournament not completed yet. Synced task {synced_task_id} has status: {task.status}.")
-                        return
-                winner = winners[0]
-                await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
-                await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
-                logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
+                        all_tasks_finished = False
+                        break
+                
+                if all_tasks_finished:
+                    winner = winners[0]
+                    await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
+                    await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
+                    logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
                 return
             else:
-                logger.info(
-                    f"Tournament not completed yet. Synced {len(snyced_task_ids)} tasks out of {len(completed_round.tasks)}."
-                )
+                logger.error(f"Failed to sync all tasks. Only {len(snyced_task_ids)} out of {len(completed_round.tasks)} tasks synced.")
         else:
             await create_next_round(tournament, completed_round, winners, config, psql_db)
 

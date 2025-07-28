@@ -31,14 +31,30 @@ async def sync_boss_round_tasks_to_general(
 
     logger.info(f"Found {len(boss_round_tasks)} boss round tasks to sync")
 
-    for i, tournament_task in enumerate(boss_round_tasks):
+    # Check which tasks are already synced
+    task_ids = [task.task_id for task in boss_round_tasks]
+    already_synced_ids = await get_already_synced_tournament_tasks(task_ids, psql_db)
+    
+    if already_synced_ids:
+        logger.info(f"{len(already_synced_ids)} tasks already synced: {already_synced_ids}")
+
+    # Only sync tasks that haven't been synced yet
+    tasks_to_sync = [task for task in boss_round_tasks if task.task_id not in already_synced_ids]
+    
+    if not tasks_to_sync:
+        logger.info("All tasks already synced, nothing to do")
+        return
+        
+    logger.info(f"Need to sync {len(tasks_to_sync)} remaining tasks")
+
+    for i, tournament_task in enumerate(tasks_to_sync):
         if i == 0:
             delay_hours = 0
         else:
             delay_hours = random.randint(1, 4)
         asyncio.create_task(_schedule_task_sync(tournament_task.task_id, delay_hours, psql_db, config))
         logger.info(
-            f"Scheduled task {tournament_task.task_id} to sync in {delay_hours} hours (task {i + 1} of {len(boss_round_tasks)})"
+            f"Scheduled task {tournament_task.task_id} to sync in {delay_hours} hours (task {i + 1} of {len(tasks_to_sync)})"
         )
 
 
@@ -118,3 +134,14 @@ async def get_synced_task_ids(tournament_task_ids: list[str], psql_db: PSQLDB) -
         """
         general_task_ids = await connection.fetch(query, tournament_task_ids)
         return [general_task_id for (general_task_id,) in general_task_ids]
+
+
+async def get_already_synced_tournament_tasks(tournament_task_ids: list[str], psql_db: PSQLDB) -> set[str]:
+    """Returns the set of tournament task IDs that have already been synced."""
+    async with await psql_db.connection() as connection:
+        query = """
+            SELECT tournament_task_id FROM boss_round_synced_tasks 
+            WHERE tournament_task_id = ANY($1)
+        """
+        synced_records = await connection.fetch(query, tournament_task_ids)
+        return {record['tournament_task_id'] for record in synced_records}
