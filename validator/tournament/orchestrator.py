@@ -253,8 +253,6 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
     # Track failed attempts for this scheduling session
     failed_attempts = {}
     MAX_SCHEDULING_ATTEMPTS = 3
-    
-    logger.info(f"Starting schedule_tasks_for_training with {len(pending_training_tasks)} pending tasks")
 
     while pending_training_tasks:
         oldest_task_training = pending_training_tasks[-1]
@@ -264,9 +262,6 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
         ):
             task = oldest_task_training.task
             task_key = f"{task.task_id}_{oldest_task_training.hotkey}"
-            
-            logger.info(f"Processing task {task.task_id} with hotkey {oldest_task_training.hotkey[:8]}... "
-                       f"(attempt {oldest_task_training.n_training_attempts}/{cst.MAX_TRAINING_ATTEMPTS})")
 
             # Check max attempts
             if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
@@ -282,19 +277,16 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
             # Determine required GPUs for this task
             required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
-            logger.info(f"Task {task.task_id} (model: {task.model_id}, params: {task.model_params_count}) requires {required_gpus.value}")
+            logger.info(f"Task {task.task_id} requires {required_gpus.value}")
             
-            logger.info(f"Checking for suitable GPUs for requirement {required_gpus.value}...")
             suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
             if not suitable_gpus_result:
-                logger.warning(f"No suitable GPUs found for requirement {required_gpus.value}, waiting {cst.GPU_AVAILABILITY_CHECK_RETRY_INTERVAL}s before retry")
-                logger.info(f"Keeping task {task.task_id} in pending queue, will retry later")
+                logger.info(f"No suitable GPUs found for requirement {required_gpus.value}, waiting before retry")
                 await asyncio.sleep(cst.GPU_AVAILABILITY_CHECK_RETRY_INTERVAL)
                 continue
 
             trainer_ip, gpu_ids = suitable_gpus_result
-            logger.info(f"Found suitable GPUs on trainer {trainer_ip}: GPU IDs {gpu_ids}")
 
         try:
             training_task = pending_training_tasks[-1]
