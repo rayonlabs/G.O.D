@@ -84,8 +84,9 @@ async def create_image_tournament_tasks(
                 tasks.append(task)
     elif is_final_round:
         logger.info("Creating final image tournament (3 image tasks)")
+        pair_id = f"{round_id}_pair_001"
+        
         for i in range(3):
-            pair_id = f"{round_id}_pair_{i + 1:03d}"
             while True:
                 try:
                     task = await create_synthetic_image_task(config, image_models)
@@ -108,7 +109,7 @@ async def create_image_tournament_tasks(
         logger.info(f"Creating image tournament for {num_pairs} knockout pairs (1 per pair)")
 
         for i, pair in enumerate(round_data.pairs):
-            pair_id = f"{round_id}_pair_{1:03d}"
+            pair_id = f"{round_id}_pair_{i + 1:03d}"
             logger.info(f"  Pair {i + 1} ({pair[0]} vs {pair[1]}):")
             while True:
                 try:

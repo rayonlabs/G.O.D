@@ -20,6 +20,7 @@ from core.models.tournament_models import NextTournamentDates
 from core.models.tournament_models import NextTournamentInfo
 from core.models.tournament_models import TournamentDetailsResponse
 from core.models.tournament_models import TournamentResultsWithWinners
+from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskStatus
@@ -218,9 +219,35 @@ async def get_tournament_gpu_requirements(
 async def get_next_tournament_dates(
     config: Config = Depends(get_config),
 ) -> NextTournamentDates:
-    """Get the next tournament start and end dates for both text and image tournaments."""
+    """Get the next tournament info - either countdown to next tournament or current round number."""
     try:
-        async def get_next_dates_for_type(tournament_type: TournamentType) -> NextTournamentInfo:
+        async def get_tournament_info_for_type(tournament_type: TournamentType) -> NextTournamentInfo:
+            # Check if there's an active tournament first
+            active_tournament = await tournament_sql.get_active_tournament(config.psql_db, tournament_type)
+            if active_tournament:
+                # Get current round number
+                rounds = await tournament_sql.get_tournament_rounds(active_tournament.tournament_id, config.psql_db)
+                current_round = len(rounds) if rounds else 1
+                
+                return NextTournamentInfo(
+                    tournament_type=tournament_type,
+                    current_round_number=current_round,
+                    tournament_status="active",
+                    interval_hours=cts.TOURNAMENT_INTERVAL_HOURS,
+                )
+            
+            # Check if there's a pending tournament
+            pending_tournaments = await tournament_sql.get_tournaments_with_status(TournamentStatus.PENDING, config.psql_db)
+            pending_of_type = [t for t in pending_tournaments if t.tournament_type == tournament_type]
+            if pending_of_type:
+                return NextTournamentInfo(
+                    tournament_type=tournament_type,
+                    current_round_number=1,
+                    tournament_status="pending",
+                    interval_hours=cts.TOURNAMENT_INTERVAL_HOURS,
+                )
+            
+            # No active/pending tournament, calculate next start time
             tournament, created_at = await tournament_sql.get_latest_tournament_with_created_at(
                 config.psql_db, tournament_type
             )
@@ -229,34 +256,35 @@ async def get_next_tournament_dates(
                 # No previous tournament, start from now
                 next_start = datetime.now(timezone.utc)
             else:
-                # Next tournament starts TOURNAMENT_INTERVAL_DAYS after the last one started
-                next_start = created_at + timedelta(days=cts.TOURNAMENT_INTERVAL_DAYS)
+                # Next tournament starts TOURNAMENT_INTERVAL_HOURS after the last one started
+                next_start = created_at + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
 
                 # If the calculated start date is in the past, use current time
                 current_time = datetime.now(timezone.utc)
                 if next_start < current_time:
                     next_start = current_time
 
-            # Tournament ends TOURNAMENT_INTERVAL_DAYS after it starts
-            next_end = next_start + timedelta(days=cts.TOURNAMENT_INTERVAL_DAYS)
+            # Tournament ends TOURNAMENT_INTERVAL_HOURS after it starts (placeholder)
+            next_end = next_start + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
 
             return NextTournamentInfo(
                 tournament_type=tournament_type,
                 next_start_date=next_start,
                 next_end_date=next_end,
-                interval_days=cts.TOURNAMENT_INTERVAL_DAYS,
+                interval_hours=cts.TOURNAMENT_INTERVAL_HOURS,
+                tournament_status="waiting",
             )
 
         response = NextTournamentDates(
-            text=await get_next_dates_for_type(TournamentType.TEXT),
-            image=await get_next_dates_for_type(TournamentType.IMAGE),
+            text=await get_tournament_info_for_type(TournamentType.TEXT),
+            image=await get_tournament_info_for_type(TournamentType.IMAGE),
         )
 
-        logger.info("Retrieved next tournament dates")
+        logger.info("Retrieved tournament info")
         return response
 
     except Exception as e:
-        logger.error(f"Error retrieving next tournament dates: {str(e)}")
+        logger.error(f"Error retrieving tournament info: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 

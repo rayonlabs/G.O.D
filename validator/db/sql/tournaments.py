@@ -1001,3 +1001,14 @@ async def get_tournament_id_by_task_id(task_id: str, psql_db: PSQLDB) -> str | N
         if result:
             return result[cst.TOURNAMENT_ID]
         return None
+
+
+async def is_synced_task(task_id: str, psql_db: PSQLDB) -> bool:
+    """Check if a task is a synced task (should not be set to failure during round reversal)."""
+    async with await psql_db.connection() as connection:
+        query = """
+            SELECT 1 FROM boss_round_synced_tasks 
+            WHERE tournament_task_id = $1
+        """
+        result = await connection.fetchval(query, task_id)
+        return result is not None
