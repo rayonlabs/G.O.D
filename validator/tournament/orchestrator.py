@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 
 import httpx
 from dotenv import load_dotenv
@@ -43,6 +44,42 @@ simple_retry = retry(
     wait=wait_exponential(multiplier=2, min=4, max=10),
     reraise=True,
 )
+
+
+async def validate_repo_security(repo_url: str) -> bool:
+    """
+    Validate that a repository is safe using the security validation.
+
+    Args:
+        repo_url: The repository URL to validate
+
+    Returns:
+        bool: True if repo is safe, False if not
+    """
+
+    try:
+        proc = subprocess.run(
+            [cst.SECURITY_VALIDATION_PATH, "--repo", repo_url],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        logger.info(f"Security validation output: {proc.stdout}")
+
+        if proc.returncode == 0:
+            logger.info(f"Repo {repo_url} is safe (exit code 0)")
+            return True
+        else:
+            logger.warning(f"Repo {repo_url} is not safe (exit code {proc.returncode})")
+            return False
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Security validation timed out for repo {repo_url}")
+        return False
+    except Exception as e:
+        logger.error(f"Security validation failed for repo {repo_url}: {str(e)}")
+        return False
 
 
 @simple_retry
@@ -241,6 +278,28 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                     f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), marking as failed"
                 )
 
+                await tournament_sql.update_tournament_task_training_status(
+                    task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
+                )
+                pending_training_tasks.pop()
+                continue
+
+            # Validate repository security
+            training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(oldest_task_training.hotkey, config.psql_db)
+
+            if training_repo is None:
+                logger.error(f"No training repository found for hotkey {oldest_task_training.hotkey} in tournament_participants table")
+                await tournament_sql.update_tournament_task_training_status(
+                    task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
+                )
+                pending_training_tasks.pop()
+                continue
+
+            logger.info(f"Validating security for repository: {training_repo}")
+            is_safe = await validate_repo_security(training_repo)
+
+            if not is_safe:
+                logger.warning(f"Repository {training_repo} failed security validation for hotkey {oldest_task_training.hotkey}")
                 await tournament_sql.update_tournament_task_training_status(
                     task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
                 )
