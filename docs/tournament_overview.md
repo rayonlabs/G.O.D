@@ -143,11 +143,6 @@ Tournament results feed into exponential weight decay system:
 - Output models to exact paths: `/app/checkpoints/{task_id}/{expected_repo_name}`
 - Handle all task types within your tournament category
 
-### For Validators  
-- Run trainer nodes with GPU availability tracking
-- Execute tournament orchestrator cycles
-- Monitor training via WandB logs in `WANDB_LOGS_DIR = "/cache/wandb_logs"`
-- Handle tournament task evaluation and scoring
 
 ## Getting Started
 
