@@ -469,38 +469,55 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
         logger.info(f"Found {len(tournament_scores)} tournament scores and {len(synthetic_scores)} synthetic scores")
 
         winner_tournament_score = None
-        winner_synthetic_score = None
+        best_synthetic_score = None
 
+        # Get the winner's score from the tournament task
         for score in tournament_scores:
             if score.hotkey == task_pair.winner_hotkey:
                 winner_tournament_score = max(score.test_loss, score.synth_loss)
                 logger.info(f"Winner tournament score for {task_pair.winner_hotkey}: {winner_tournament_score}")
                 break
 
-        for score in synthetic_scores:
-            if score.hotkey == task_pair.winner_hotkey:
-                winner_synthetic_score = max(score.test_loss, score.synth_loss)
-                logger.info(f"Winner synthetic score for {task_pair.winner_hotkey}: {winner_synthetic_score}")
-                break
+        # Get the best score from the synthetic task (from other miners)
+        if synthetic_scores:
+            # For lower-is-better metrics (loss), we want the minimum
+            # For higher-is-better metrics (GRPO), we want the maximum
+            task_type = TaskType(task_pair.task_type)
+            
+            if task_type == TaskType.GRPOTASK:
+                # GRPO: higher is better
+                best_synthetic_score = max(max(score.test_loss, score.synth_loss) for score in synthetic_scores)
+                logger.info(f"Best synthetic score (GRPO - higher is better): {best_synthetic_score}")
+            else:
+                # Other tasks: lower is better
+                best_synthetic_score = min(max(score.test_loss, score.synth_loss) for score in synthetic_scores)
+                logger.info(f"Best synthetic score (lower is better): {best_synthetic_score}")
 
-        if winner_tournament_score is not None and winner_synthetic_score is not None:
+        if winner_tournament_score is not None and best_synthetic_score is not None:
             task_type = TaskType(task_pair.task_type)
             logger.info(f"Task type: {task_type}")
             if task_type == TaskType.GRPOTASK:
-                if winner_synthetic_score > 0:
-                    performance_diff = (winner_tournament_score - winner_synthetic_score) / winner_synthetic_score
+                # GRPO: higher is better
+                # If winner scored higher than best synthetic, it's an improvement
+                if best_synthetic_score > 0:
+                    performance_diff = (winner_tournament_score - best_synthetic_score) / best_synthetic_score
                 else:
                     performance_diff = 0.0
             else:
+                # Other tasks: lower is better (loss)
+                # If winner scored lower than best synthetic, it's an improvement
                 if winner_tournament_score > 0:
-                    performance_diff = (winner_synthetic_score - winner_tournament_score) / winner_tournament_score
+                    performance_diff = (best_synthetic_score - winner_tournament_score) / winner_tournament_score
                 else:
                     performance_diff = 0.0
 
             logger.info(f"Performance difference for task pair {i+1}: {performance_diff}")
             performance_differences.append(performance_diff)
         else:
-            logger.warning(f"Could not find scores for winner {task_pair.winner_hotkey} in task pair {i+1}")
+            if winner_tournament_score is None:
+                logger.warning(f"Could not find winner {task_pair.winner_hotkey} score in tournament task for pair {i+1}")
+            if best_synthetic_score is None:
+                logger.warning(f"Could not find any scores in synthetic task for pair {i+1}")
 
     average_performance_diff = sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
     logger.info(f"Average performance difference: {average_performance_diff} from {len(performance_differences)} task pairs")
