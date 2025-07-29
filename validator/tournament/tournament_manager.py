@@ -803,3 +803,4 @@ async def should_start_new_tournament_after_interval(last_created_at) -> bool:
     logger.info(f"Hours since last tournament: {hours_passed:.2f}, required: {cst.TOURNAMENT_INTERVAL_HOURS}")
     
     return hours_passed >= cst.TOURNAMENT_INTERVAL_HOURS
+

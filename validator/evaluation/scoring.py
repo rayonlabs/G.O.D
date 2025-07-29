@@ -825,7 +825,6 @@ async def process_miners_pool(
 
     is_tournament_task = await is_task_in_tournament(str(task.task_id), config.psql_db)
     miner_repos: dict[str, str] = {}
-
     failed_results = []
 
     for miner in miners:

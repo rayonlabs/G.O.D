@@ -34,7 +34,6 @@ def calculate_final_round_winner(task: TournamentTaskScore, prev_winner_hotkey: 
         elif contender_hotkey is None:
             contender_hotkey = hotkey
             contender_score = (test_loss, synth_loss)
-
     if prev_winner_score and not contender_score:
         return prev_winner_hotkey
     elif contender_score and not prev_winner_score:
