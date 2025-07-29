@@ -313,7 +313,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             elif len(snyced_task_ids) == len(task_ids):
                 for synced_task_id in snyced_task_ids:
                     task = await task_sql.get_task(synced_task_id, psql_db)
-                    if task.status == TaskStatus.COMPLETED or task.status == TaskStatus.FAILED:
+                    if task.status == TaskStatus.SUCCESS or task.status == TaskStatus.FAILURE:
                         logger.info(f"Task {synced_task_id} finished with status {task.status}")
                     else:
                         logger.info(f"Tournament not completed yet. Synced task {synced_task_id} has status: {task.status}.")
