@@ -681,6 +681,30 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
         logger.info(f"Round {round_data.round_id} not ready for completion yet")
         return False
     else:
+        # For final rounds, we need to check ALL synced tasks, not just failed ones
+        if round_data.is_final_round:
+            task_ids = [task.task_id for task in round_tasks]
+            synced_task_ids = await get_synced_task_ids(task_ids, config.psql_db)
+            
+            if synced_task_ids:
+                logger.info(f"Final round has {len(synced_task_ids)} synced tasks, checking their status...")
+                for synced_task_id in synced_task_ids:
+                    synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
+                    if synced_task_obj:
+                        if synced_task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
+                            logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
+                            waiting_for_synced_tasks = True
+                            break
+                        else:
+                            logger.info(f"Synced task {synced_task_id} completed with status: {synced_task_obj.status}")
+                
+                if not waiting_for_synced_tasks:
+                    logger.info(f"All synced tasks for final round {round_data.round_id} are completed")
+                else:
+                    logger.info(f"Final round {round_data.round_id} waiting for synced tasks to complete")
+                    return False
+        
+        # Check for failed tasks that need syncing (for all rounds)
         for task in round_tasks:
             synced_task_id = await get_synced_task_id(task.task_id, config.psql_db)
             if synced_task_id:
