@@ -514,10 +514,16 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
             logger.info(f"Performance difference for task pair {i+1}: {performance_diff}")
             performance_differences.append(performance_diff)
         else:
-            if winner_tournament_score is None:
-                logger.warning(f"Could not find winner {task_pair.winner_hotkey} score in tournament task for pair {i+1}")
-            if best_synthetic_score is None:
-                logger.warning(f"Could not find any scores in synthetic task for pair {i+1}")
+            if winner_tournament_score is None and best_synthetic_score is not None:
+                # Winner didn't complete the task but synthetic miners did - apply max penalty
+                logger.warning(f"Winner {task_pair.winner_hotkey} has no score in tournament task but synthetic miners do - applying max burn reduction")
+                performance_diff = cts.MAX_BURN_REDUCTION / cts.BURN_REDUCTION_RATE  # This will result in max burn reduction
+                performance_differences.append(performance_diff)
+            else:
+                if winner_tournament_score is None:
+                    logger.warning(f"Could not find winner {task_pair.winner_hotkey} score in tournament task for pair {i+1}")
+                if best_synthetic_score is None:
+                    logger.warning(f"Could not find any scores in synthetic task for pair {i+1}")
 
     average_performance_diff = sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
     logger.info(f"Average performance difference: {average_performance_diff} from {len(performance_differences)} task pairs")
