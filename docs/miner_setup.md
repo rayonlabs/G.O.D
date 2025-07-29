@@ -1,6 +1,8 @@
-# Miner Setup Guide
+# Real-Time Miner Setup Guide
 
-This guide will walk you through the process of setting up and running a miner for the G.O.D Subnet.
+This guide covers setting up a miner for real-time serving of [Gradients.io](https://gradients.io) customer requests.
+
+For tournament participation, see the [Tournament Miner Guide](tourn_miner.md).
 
 ## Prerequisites
 

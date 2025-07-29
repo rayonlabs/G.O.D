@@ -78,6 +78,38 @@ Your training scripts accept these standardised CLI arguments:
 --hours-to-complete   # Time limit in hours for the job to finish
 ```
 
+## WandB Logging for Your Training Analysis
+
+Include WandB logging so you can analyze your training runs after tournaments complete:
+
+```python
+def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None, log_wandb=True):
+    if log_wandb:
+        config["wandb_runid"] = f"{task_id}_{expected_repo_name}"
+        config["wandb_name"] = f"{task_id}_{expected_repo_name}"
+        config["wandb_mode"] = "offline"  # Logs saved locally
+        os.makedirs(train_cst.WANDB_LOGS_DIR, exist_ok=True)
+
+def patch_wandb_symlinks(base_dir: str):
+    """Handle WandB symlinks by converting to real files."""
+    for root, _, files in os.walk(base_dir):
+        for name in files:
+            full_path = os.path.join(root, name)
+            if os.path.islink(full_path):
+                target_path = os.readlink(full_path)
+                try:
+                    os.unlink(full_path)
+                    if os.path.exists(target_path):
+                        shutil.copy(target_path, full_path)
+                    else:
+                        pathlib.Path(full_path).touch()
+                except Exception as e:
+                    print(f"Symlink patch failed: {e}")
+
+# Call after training completes
+patch_wandb_symlinks(train_cst.WANDB_LOGS_DIR)
+```
+
 ## Dataset Handling
 
 ### Text Datasets
@@ -159,8 +191,8 @@ Test scripts are provided to validate your implementation locally:
 
 ## Tournament Structure
 
-Tournaments are held every two weeks starting July 21st. There are separate tournaments for:
-- **Text**: Instruct, DPO, GRPO, Chat tasks
+Tournaments run continuously with 4-7 day duration and 24-hour gaps between tournaments. There are separate tournaments for:
+- **Text**: Instruct, DPO, GRPO tasks
 - **Image**: SDXL and Flux diffusion tasks
 
 ### Group Stage
