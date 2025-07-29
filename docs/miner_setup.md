@@ -2,7 +2,7 @@
 
 This guide covers setting up a miner for real-time serving of [Gradients.io](https://gradients.io) customer requests.
 
-For tournament participation, see the [Tournament Miner Guide](tournament_miner_guide.md).
+For tournament participation, see the [Tournament Miner Guide](tourn_miner.md).
 
 ## Prerequisites
 
