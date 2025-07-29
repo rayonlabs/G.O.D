@@ -1,7 +1,47 @@
 import os
+import subprocess
+import re
+import glob
+import wandb
+import shutil
 
 from huggingface_hub import HfApi
 from huggingface_hub import login
+
+            
+def sync_wandb_logs(cache_dir: str):
+    sync_root = os.path.join(cache_dir, "wandb")
+    run_dirs = glob.glob(os.path.join(sync_root, "offline-run-*"))
+
+    if not run_dirs:
+        print("No offline runs found.")
+        return
+
+    for run_dir in run_dirs:
+        run_id = os.path.basename(run_dir).split("-")[-1]
+        print(f"Syncing run: {run_dir}")
+
+        try:
+            proc = subprocess.run(
+                ["wandb", "sync", "--include-offline", run_dir],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+
+            output = proc.stdout + proc.stderr
+            match = re.search(r"https://wandb\.ai/\S+", output)
+            run_url = match.group(0) if match else None
+
+            if run_url:
+                print(f"Synced W&B Run: {run_url}")
+
+            print(f"Synced Run: {run_id}")
+            shutil.rmtree(run_dir)
+            print(f"Deleted synced folder: {run_dir}")
+
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to sync {run_dir}: {e}")
 
 def main():
     hf_token = os.getenv("HUGGINGFACE_TOKEN")
@@ -11,6 +51,8 @@ def main():
     repo_name = os.getenv("EXPECTED_REPO_NAME")
     local_folder = os.getenv("LOCAL_FOLDER")
     repo_subfolder = os.getenv("HF_REPO_SUBFOLDER", None)
+    wandb_logs_path = os.getenv("WANDB_LOGS_PATH", None)
+
     if repo_subfolder:
         repo_subfolder = repo_subfolder.strip("/")
 
@@ -41,6 +83,13 @@ def main():
     )
 
     print(f"Uploaded successfully to https://huggingface.co/{repo_id}", flush=True)
+
+    if wandb_token:
+        try:
+            wandb.login(key=wandb_token)
+            sync_wandb_logs(cache_dir=wandb_logs_path)
+        except Exception as e:
+            print(f"Failed to sync W&B logs: {e}", flush=True)
 
 
 if __name__ == "__main__":

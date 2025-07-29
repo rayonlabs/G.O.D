@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+import pathlib
 
 import yaml
 from transformers import AutoTokenizer
@@ -33,6 +34,32 @@ from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskType
 from miner.logic.job_handler import create_reward_funcs_file
+
+
+def patch_wandb_symlinks(base_dir:str):
+    for root, _, files in os.walk(base_dir):
+        for name in files:
+            full_path = os.path.join(root, name)
+
+            if os.path.islink(full_path):
+                target_path = os.readlink(full_path)
+
+                print(f"Symlink: {full_path} → {target_path}")
+                try:
+                    os.unlink(full_path)
+                except Exception as e:
+                    print(f"Failed to unlink {full_path}: {e}")
+                    continue
+
+                if os.path.exists(target_path):
+                    print("Copying real file")
+                    try:
+                        shutil.copy(target_path, full_path)
+                    except Exception as e:
+                        print(f"Failed to copy: {e}")
+                else:
+                    print("Target not found, creating dummy")
+                    pathlib.Path(full_path).touch()
 
 
 def patch_model_metadata(output_dir: str, base_model_id: str):
@@ -86,8 +113,7 @@ def copy_dataset_to_axolotl_directories(dataset_path):
     return data_path
 
 
-def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None,
-                huggingface_username=None, huggingface_token=None, disable_upload=True):
+def create_config(task_id, model, dataset, dataset_type, file_format, output_dir, expected_repo_name=None, log_wandb=True):
     """Create the axolotl config file with appropriate settings."""
     config_path = train_paths.get_axolotl_base_config_path(dataset_type)
 
@@ -101,6 +127,16 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
     os.makedirs(output_dir, exist_ok=True)
     config["output_dir"] = str(output_dir)
 
+    if log_wandb:
+        config["wandb_runid"] = f"{task_id}_{expected_repo_name}"
+        config["wandb_name"] = f"{task_id}_{expected_repo_name}"
+        config["wandb_mode"] = "offline"
+        os.makedirs(train_cst.WANDB_LOGS_DIR, exist_ok=True)
+    else:
+        for key in list(config.keys()):
+            if key.startswith("wandb"):
+                config.pop(key)
+
     config = update_flash_attention(config, model)
 
     if isinstance(dataset_type, DpoDatasetType):
@@ -113,20 +149,6 @@ def create_config(task_id, model, dataset, dataset_type, file_format, output_dir
         )
         config["trl"]["reward_funcs"] = [f"{filename}.{func_name}" for func_name in reward_funcs_names]
         config["trl"]["reward_weights"] = [reward_function.reward_weight for reward_function in dataset_type.reward_functions]
-
-    if not disable_upload:
-        hf_username = huggingface_username or os.environ.get("HUGGINGFACE_USERNAME", "rayonlabs")
-        os.environ["HUGGINGFACE_USERNAME"] = hf_username
-
-        repo_name = expected_repo_name or str(uuid.uuid4())
-        config["hub_model_id"] = f"{hf_username}/{repo_name}"
-
-        if huggingface_token:
-            os.environ["HUGGINGFACE_TOKEN"] = huggingface_token
-    else:
-        for key in list(config.keys()):
-            if key.startswith("wandb") or key.startswith("hub"):
-                config.pop(key)
 
     if file_format != FileFormat.HF.value:
         for ds in config["datasets"]:
@@ -238,11 +260,14 @@ async def main():
         args.file_format,
         output_dir,
         args.expected_repo_name,
+        log_wandb=True
     )
 
     run_training(config_path)
 
     patch_model_metadata(output_dir, args.model)
+
+    patch_wandb_symlinks(train_cst.WANDB_LOGS_DIR)
 
 
 if __name__ == "__main__":
