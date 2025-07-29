@@ -152,6 +152,5 @@ Tournament results feed into exponential weight decay system:
 ## Getting Started
 
 Ready to compete? Check out:
-- [Tournament Miner Guide](tourn_miner.md) - Complete setup instructions
-- [Tournament Miner Documentation](tourn_miner.md) - Technical details and requirements
+- [Tournament Miner Guide](tourn_miner.md) - Complete setup instructions and technical details
 - [Example Scripts](../examples/) - Reference implementations for testing
