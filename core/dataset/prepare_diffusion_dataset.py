@@ -61,5 +61,5 @@ def prepare_dataset(
     if os.path.exists(extraction_dir):
         shutil.rmtree(extraction_dir)
 
-    if os.path.exists(training_images_zip_path):
+    if os.path.exists(training_images_zip_path) and "tourn" not in os.path.basename(training_images_zip_path):
         os.remove(training_images_zip_path)

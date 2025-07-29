@@ -280,9 +280,11 @@ class RespondingNode(BaseModel):
 
 class NextTournamentInfo(BaseModel):
     tournament_type: TournamentType
-    next_start_date: datetime
-    next_end_date: datetime
-    interval_days: int
+    next_start_date: datetime | None = None
+    next_end_date: datetime | None = None
+    interval_hours: int | None = None
+    current_round_number: int | None = None
+    tournament_status: str | None = None
 
 
 class NextTournamentDates(BaseModel):
