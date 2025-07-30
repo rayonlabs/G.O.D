@@ -33,6 +33,20 @@ from validator.utils.logging import stream_image_build_logs
 logger = get_logger(__name__)
 
 
+def calculate_container_resources(gpu_ids: list[int]) -> tuple[str, int]:
+    """Calculate memory limit and CPU limit based on GPU count.
+    
+    Returns:
+        tuple: (memory_limit_str, cpu_limit_nanocpus)
+    """
+    num_gpus = len(gpu_ids)
+    memory_limit = f"{num_gpus * cst.MEMORY_PER_GPU_GB}g"
+    cpu_limit_nanocpus = num_gpus * cst.CPUS_PER_GPU * 1_000_000_000
+    
+    logger.info(f"Allocating resources for {num_gpus} GPUs: {memory_limit} memory, {num_gpus * cst.CPUS_PER_GPU} CPUs")
+    return memory_limit, cpu_limit_nanocpus
+
+
 def build_docker_image(
     dockerfile_path: str, context_path: str = ".", is_image_task: bool = False, tag: str = None, no_cache: bool = True
 ) -> tuple[str, str | None]:
@@ -106,13 +120,9 @@ async def run_trainer_container_image(
     ]
 
     container_name = f"image-trainer-{uuid.uuid4().hex}"
-
-    # Calculate resources based on GPU count
-    num_gpus = len(gpu_ids)
-    memory_limit = f"{num_gpus * cst.MEMORY_PER_GPU_GB}g"
-    cpu_limit = num_gpus * cst.CPUS_PER_GPU
     
-    logger.info(f"Allocating resources for {num_gpus} GPUs: {memory_limit} memory, {cpu_limit} CPUs")
+    # Calculate resources based on GPU count
+    memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
     
     try:
         container: Container = client.containers.run(
@@ -125,7 +135,7 @@ async def run_trainer_container_image(
             remove=False,
             name=container_name,
             mem_limit=memory_limit,
-            nano_cpus=cpu_limit * 1_000_000_000,
+            nano_cpus=cpu_limit_nanocpus,
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
@@ -178,13 +188,9 @@ async def run_trainer_container_text(
     ]
 
     container_name = f"text-trainer-{uuid.uuid4().hex}"
-
-    # Calculate resources based on GPU count
-    num_gpus = len(gpu_ids)
-    memory_limit = f"{num_gpus * cst.MEMORY_PER_GPU_GB}g"
-    cpu_limit = num_gpus * cst.CPUS_PER_GPU
     
-    logger.info(f"Allocating resources for {num_gpus} GPUs: {memory_limit} memory, {cpu_limit} CPUs")
+    # Calculate resources based on GPU count
+    memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
     
     try:
         container: Container = client.containers.run(
@@ -197,7 +203,7 @@ async def run_trainer_container_text(
             remove=False,
             name=container_name,
             mem_limit=memory_limit,
-            nano_cpus=cpu_limit * 1_000_000_000,
+            nano_cpus=cpu_limit_nanocpus,
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
