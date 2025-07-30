@@ -28,7 +28,6 @@ def sync_wandb_logs(cache_dir: str):
                 capture_output=True,
                 text=True
             )
-
             output = proc.stdout + proc.stderr
             match = re.search(r"https://wandb\.ai/\S+", output)
             run_url = match.group(0) if match else None
@@ -40,7 +39,7 @@ def sync_wandb_logs(cache_dir: str):
             shutil.rmtree(run_dir)
             print(f"Deleted synced folder: {run_dir}")
 
-        except subprocess.CalledProcessError as e:
+        except Exception as e:
             print(f"Failed to sync {run_dir}: {e}")
 
 def main():

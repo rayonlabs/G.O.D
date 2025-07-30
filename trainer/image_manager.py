@@ -323,7 +323,8 @@ async def upload_repo_to_hf(
         }
 
         volumes = {
-            cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"}
+            cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
+            cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"}
         }
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
