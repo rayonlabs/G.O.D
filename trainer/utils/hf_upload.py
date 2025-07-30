@@ -22,13 +22,13 @@ def sync_wandb_logs(cache_dir: str):
         print(f"Syncing run: {run_dir}")
 
         try:
+            tag_replacements = "old_tag1=new_tag1,old_tag2=new_tag2"
             proc = subprocess.run(
-                ["wandb", "sync", "--include-offline", run_dir],
+                ["wandb", "sync", "--include-offline", "--replace-tags", tag_replacements, run_dir],
                 check=True,
                 capture_output=True,
                 text=True
             )
-
             output = proc.stdout + proc.stderr
             match = re.search(r"https://wandb\.ai/\S+", output)
             run_url = match.group(0) if match else None
