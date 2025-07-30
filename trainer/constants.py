@@ -23,7 +23,6 @@ CACHE_CLEANUP_CUTOFF_HOURS = 12
 IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH = "/workspace/core/config"
 IMAGE_CONTAINER_CONFIG_SAVE_PATH = "/dataset/configs"
 IMAGE_CONTAINER_IMAGES_PATH = "/dataset/images"
-OUTPUT_CHECKPOINTS_PATH = "/app/checkpoints/"
 TEXT_CONTAINER_SAVE_PATH = "/workspace/axolotl/outputs/"
 
 #Directories
