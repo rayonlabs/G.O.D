@@ -107,6 +107,13 @@ async def run_trainer_container_image(
 
     container_name = f"image-trainer-{uuid.uuid4().hex}"
 
+    # Calculate resources based on GPU count
+    num_gpus = len(gpu_ids)
+    memory_limit = f"{num_gpus * cst.MEMORY_PER_GPU_GB}g"
+    cpu_limit = num_gpus * cst.CPUS_PER_GPU
+    
+    logger.info(f"Allocating resources for {num_gpus} GPUs: {memory_limit} memory, {cpu_limit} CPUs")
+    
     try:
         container: Container = client.containers.run(
             image=tag,
@@ -117,8 +124,8 @@ async def run_trainer_container_image(
             },
             remove=False,
             name=container_name,
-            mem_limit=cst.DEFAULT_TRAINING_CONTAINER_MEM_LIMIT,
-            nano_cpus=cst.DEFAULT_TRAINING_CONTAINER_NANO_CPUS * 1_000_000_000,
+            mem_limit=memory_limit,
+            nano_cpus=cpu_limit * 1_000_000_000,
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
@@ -172,6 +179,13 @@ async def run_trainer_container_text(
 
     container_name = f"text-trainer-{uuid.uuid4().hex}"
 
+    # Calculate resources based on GPU count
+    num_gpus = len(gpu_ids)
+    memory_limit = f"{num_gpus * cst.MEMORY_PER_GPU_GB}g"
+    cpu_limit = num_gpus * cst.CPUS_PER_GPU
+    
+    logger.info(f"Allocating resources for {num_gpus} GPUs: {memory_limit} memory, {cpu_limit} CPUs")
+    
     try:
         container: Container = client.containers.run(
             image=tag,
@@ -182,8 +196,8 @@ async def run_trainer_container_text(
             },
             remove=False,
             name=container_name,
-            mem_limit=cst.DEFAULT_TRAINING_CONTAINER_MEM_LIMIT,
-            nano_cpus=cst.DEFAULT_TRAINING_CONTAINER_NANO_CPUS * 1_000_000_000,
+            mem_limit=memory_limit,
+            nano_cpus=cpu_limit * 1_000_000_000,
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
