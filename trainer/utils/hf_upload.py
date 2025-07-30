@@ -22,9 +22,8 @@ def sync_wandb_logs(cache_dir: str):
         print(f"Syncing run: {run_dir}")
 
         try:
-            tag_replacements = "old_tag1=new_tag1,old_tag2=new_tag2"
             proc = subprocess.run(
-                ["wandb", "sync", "--include-offline", "--replace-tags", tag_replacements, run_dir],
+                ["wandb", "sync", "--include-offline", run_dir],
                 check=True,
                 capture_output=True,
                 text=True
@@ -40,7 +39,7 @@ def sync_wandb_logs(cache_dir: str):
             shutil.rmtree(run_dir)
             print(f"Deleted synced folder: {run_dir}")
 
-        except subprocess.CalledProcessError as e:
+        except Exception as e:
             print(f"Failed to sync {run_dir}: {e}")
 
 def main():
