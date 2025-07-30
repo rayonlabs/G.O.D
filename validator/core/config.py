@@ -34,6 +34,8 @@ class Config:
     refresh_nodes: bool
     httpx_client: httpx.AsyncClient
     set_metagraph_weights_with_high_updated_to_not_dereg: bool
+    github_token: str | None = None
+    github_username: str | None = None
     testnet: bool = os.getenv("SUBTENSOR_NETWORK", "").lower() == "test"
     debug: bool = os.getenv("ENV", "prod").lower() != "prod"
 
@@ -90,6 +92,9 @@ def load_config() -> Config:
             os.getenv("SET_METAGRAPH_WEIGHTS_WITH_HIGH_UPDATED_TO_NOT_DEREG", "false").lower() == "true"
         )
 
+        github_token = os.getenv("GITHUB_TOKEN")
+        github_username = os.getenv("GITHUB_USERNAME")
+
         _config = Config(
             substrate=substrate,
             keypair=keypair,
@@ -102,5 +107,7 @@ def load_config() -> Config:
             httpx_client=httpx_client,
             debug=dev_env,
             set_metagraph_weights_with_high_updated_to_not_dereg=set_metagraph_weights_with_high_updated_to_not_dereg,
+            github_token=github_token,
+            github_username=github_username,
         )
     return _config
