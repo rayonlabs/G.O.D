@@ -1,4 +1,3 @@
-import os
 import tempfile
 from typing import Optional
 
@@ -13,9 +12,10 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def create_github_repository(name: str, description: str, token: str) -> dict:
+async def create_github_repository(name: str, description: str, token: str, username: str) -> dict:
     """Create a new repository on GitHub."""
-    url = "https://api.github.com/user/repos"
+    url = f"https://api.github.com/orgs/{username}/repos"
+
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json",
@@ -59,7 +59,13 @@ def clone_and_push_repository(repo_url: str, new_repo_url: str, github_token: st
                 if remote.name == "origin":
                     repo.delete_remote("origin")
 
-            new_repo_url_with_token = new_repo_url.replace("https://", f"https://{github_token}@")
+            if new_repo_url.startswith("https://github.com/"):
+                org_repo = new_repo_url.replace("https://github.com/", "").replace(".git", "")
+                new_repo_url_with_token = f"https://{github_token}@github.com/{org_repo}.git"
+                logger.info(f"Using token-based URL for push: https://***@github.com/{org_repo}.git")
+            else:
+                new_repo_url_with_token = new_repo_url.replace("https://", f"https://{github_token}@")
+
             repo.create_remote("origin", new_repo_url_with_token)
 
             try:
@@ -76,6 +82,9 @@ def clone_and_push_repository(repo_url: str, new_repo_url: str, github_token: st
             commit_message = f"Tournament winner repository - Commit: {commit_hash[:8] if commit_hash else 'latest'}"
             repo.git.commit("-m", commit_message)
 
+            repo.git.config("--local", "user.name", "GOD Tournament Bot")
+            repo.git.config("--local", "user.email", "tournament@god.ai")
+
             repo.git.push("origin", "main", "--force")
 
             logger.info(f"Successfully pushed to {new_repo_url} with only the specified commit")
@@ -91,13 +100,11 @@ async def upload_tournament_winner_repository(
     tournament_type: str,
     winner_hotkey: str,
     training_repo: str,
-    commit_hash: Optional[str],
-    github_token: Optional[str],
-    github_username: Optional[str],
-    config: Optional[Config],
+    commit_hash: str,
+    config: Config,
 ) -> Optional[str]:
-    github_token = github_token or (config.github_token if config else None) or os.getenv("GITHUB_TOKEN")
-    github_username = github_username or (config.github_username if config else None) or os.getenv("GITHUB_USERNAME")
+    github_token = config.github_token
+    github_username = config.github_username
 
     if not github_token:
         logger.warning("GitHub token not available, skipping repository upload")
@@ -115,12 +122,12 @@ async def upload_tournament_winner_repository(
         logger.info(f"Generated name: {repo_name}")
 
         if await repository_exists(repo_name, github_token, github_username):
-            logger.warning(f"Repository {repo_name} already exists, skipping...")
-            return f"https://github.com/{github_username}/{repo_name}"
-
-        logger.info(f"Creating repository: {repo_name}")
-        new_repo = await create_github_repository(repo_name, description, github_token)
-        new_repo_url = new_repo["clone_url"]
+            logger.info(f"Repository {repo_name} already exists, will force push to it...")
+            new_repo_url = f"https://github.com/{github_username}/{repo_name}.git"
+        else:
+            logger.info(f"Creating repository: {repo_name}")
+            new_repo = await create_github_repository(repo_name, description, github_token, github_username)
+            new_repo_url = new_repo["clone_url"]
 
         logger.info(f"Cloning and pushing {training_repo}...")
         clone_and_push_repository(training_repo, new_repo_url, github_token, commit_hash)
