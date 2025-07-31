@@ -1,7 +1,3 @@
-#!/bin/bash
-
-# Example configuration for Image Model Training
-
 # Unique task identifier
 TASK_ID="9a877904-5fe9-402a-8c75-be5eb1b51f7e"
 
@@ -58,6 +54,7 @@ docker run --rm --gpus all \
   --memory=32g \
   --cpus=8 \
   --network none \
+  --env TRANSFORMERS_CACHE=/cache/hf_cache \
   --volume "$CHECKPOINTS_DIR:/cache:rw" \
   --volume "$OUTPUTS_DIR:/app/checkpoints/:rw" \
   --name image-trainer-example \
@@ -68,6 +65,7 @@ docker run --rm --gpus all \
   --model-type "$MODEL_TYPE" \
   --expected-repo-name "$EXPECTED_REPO_NAME" \
   --hours-to-complete 1
+
 
 echo "Uploading model to HuggingFace..."
 docker run --rm --gpus all \
