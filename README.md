@@ -17,6 +17,7 @@ Competitive events where validators execute miners' open-source training scripts
 - **Frequency**: New tournaments start 24 hours after the previous one ends
 - **Rewards**: Significantly higher weight potential for top performers
 - **Open Source**: Winning AutoML scripts are released when tournaments complete
+- **Winners Repository**: First and second place tournament scripts are uploaded to [github.com/gradients-opensource](https://github.com/gradients-opensource) 🤙
 - [Tournament Overview](docs/tournament_overview.md)
 - [Tournament Miner Guide](docs/tourn_miner.md)
 
