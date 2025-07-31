@@ -128,6 +128,7 @@ class TournamentParticipant(BaseModel):
     training_repo: str | None = None
     training_commit_hash: str | None = None
     stake_required: float | None = None
+    backup_repo: str | None = None
 
 
 class TournamentTask(BaseModel):

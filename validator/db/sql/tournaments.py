@@ -11,20 +11,21 @@ from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentGroupData
 from core.models.tournament_models import TournamentPairData
 from core.models.tournament_models import TournamentParticipant
+from core.models.tournament_models import TournamentResults
 from core.models.tournament_models import TournamentRoundData
+from core.models.tournament_models import TournamentRoundResult
 from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentTask
+from core.models.tournament_models import TournamentTaskScore
 from core.models.tournament_models import TournamentTaskTraining
 from core.models.tournament_models import TournamentType
-from core.models.tournament_models import TournamentResults
-from core.models.tournament_models import TournamentRoundResult
-from core.models.tournament_models import TournamentTaskScore
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import TrainerInfo
 from core.models.utility_models import TrainingStatus
 from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
-from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task, get_task_winners
+from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
+from validator.db.sql.submissions_and_scoring import get_task_winners
 from validator.utils.logging import get_logger
 
 
@@ -479,11 +480,22 @@ async def update_tournament_participant_training_repo(
         logger.info(f"Updated training repo for participant {hotkey} in tournament {tournament_id}")
 
 
+async def update_tournament_participant_backup_repo(tournament_id: str, hotkey: str, backup_repo: str, psql_db: PSQLDB):
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENT_PARTICIPANTS_TABLE}
+            SET {cst.BACKUP_REPO} = $1
+            WHERE {cst.TOURNAMENT_ID} = $2 AND {cst.HOTKEY} = $3
+        """
+        await connection.execute(query, backup_repo, tournament_id, hotkey)
+        logger.info(f"Updated backup repo for participant {hotkey} in tournament {tournament_id}")
+
+
 async def get_tournament_participant(tournament_id: str, hotkey: str, psql_db: PSQLDB) -> TournamentParticipant | None:
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.ELIMINATED_IN_ROUND_ID}, 
-                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.STAKE_REQUIRED}
+                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.STAKE_REQUIRED}, {cst.BACKUP_REPO}
             FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1 AND {cst.HOTKEY} = $2
         """
@@ -497,6 +509,7 @@ async def get_tournament_participant(tournament_id: str, hotkey: str, psql_db: P
                 training_repo=result[cst.TRAINING_REPO],
                 training_commit_hash=result[cst.TRAINING_COMMIT_HASH],
                 stake_required=result[cst.STAKE_REQUIRED],
+                backup_repo=result[cst.BACKUP_REPO],
             )
         return None
 
@@ -506,7 +519,7 @@ async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> li
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.HOTKEY}, {cst.ELIMINATED_IN_ROUND_ID}, 
-                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.STAKE_REQUIRED}
+                   {cst.FINAL_POSITION}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.STAKE_REQUIRED}, {cst.BACKUP_REPO}
             FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1
         """
@@ -520,6 +533,7 @@ async def get_tournament_participants(tournament_id: str, psql_db: PSQLDB) -> li
                 training_repo=row[cst.TRAINING_REPO],
                 training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
                 stake_required=row[cst.STAKE_REQUIRED],
+                backup_repo=row[cst.BACKUP_REPO],
             )
             for row in results
         ]
@@ -806,7 +820,7 @@ async def eliminate_tournament_participants(tournament_id: str, round_id: str, h
     """Mark tournament participants as eliminated in the specified round."""
     if not hotkeys:
         return
-    
+
     async with await psql_db.connection() as connection:
         query = f"""
             UPDATE {cst.TOURNAMENT_PARTICIPANTS_TABLE}
@@ -835,8 +849,10 @@ async def get_participants_with_insufficient_stake(tournament_id: str, psql_db: 
 
 def calculate_boosted_stake(actual_stake: float, completed_entries: int) -> float:
     """Calculate stake with repeat participant bonus."""
-    boost_percentage = min(completed_entries * validator.core.constants.TOURNAMENT_REPEAT_BOOST_PERCENTAGE, 
-                          validator.core.constants.TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE)
+    boost_percentage = min(
+        completed_entries * validator.core.constants.TOURNAMENT_REPEAT_BOOST_PERCENTAGE,
+        validator.core.constants.TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE,
+    )
     return actual_stake * (1 + boost_percentage / 100)
 
 
@@ -872,17 +888,17 @@ async def get_active_tournament_participants(psql_db: PSQLDB) -> list[str]:
 
 async def get_tournament_full_results(tournament_id: str, psql_db: PSQLDB) -> TournamentResults:
     rounds = await get_tournament_rounds(tournament_id, psql_db)
-    
+
     round_results = []
-    
+
     for round_data in rounds:
         tasks = await get_tournament_tasks(round_data.round_id, psql_db)
-        
+
         task_scores = []
         task_ids = [task.task_id for task in tasks]
         if task_ids:
             task_winners = await get_task_winners(task_ids, psql_db)
-            
+
             for task in tasks:
                 participant_scores = await get_all_scores_and_losses_for_task(task.task_id, psql_db)
                 task_score = TournamentTaskScore(
@@ -890,23 +906,20 @@ async def get_tournament_full_results(tournament_id: str, psql_db: PSQLDB) -> To
                     group_id=task.group_id,
                     pair_id=task.pair_id,
                     winner=task_winners.get(str(task.task_id)),
-                    participant_scores=participant_scores
+                    participant_scores=participant_scores,
                 )
                 task_scores.append(task_score)
-        
+
         round_result = TournamentRoundResult(
             round_id=round_data.round_id,
             round_number=round_data.round_number,
             round_type=round_data.round_type,
             is_final_round=round_data.is_final_round,
-            tasks=task_scores
+            tasks=task_scores,
         )
         round_results.append(round_result)
-    
-    return TournamentResults(
-        tournament_id=tournament_id,
-        rounds=round_results
-    )
+
+    return TournamentResults(tournament_id=tournament_id, rounds=round_results)
 
 
 async def get_tournament_with_created_at(tournament_id: str, psql_db: PSQLDB) -> tuple[TournamentData | None, datetime | None]:
@@ -955,7 +968,9 @@ async def get_active_tournament(psql_db: PSQLDB, tournament_type: TournamentType
         return None
 
 
-async def get_latest_tournament_with_created_at(psql_db: PSQLDB, tournament_type: TournamentType) -> tuple[TournamentData | None, datetime | None]:
+async def get_latest_tournament_with_created_at(
+    psql_db: PSQLDB, tournament_type: TournamentType
+) -> tuple[TournamentData | None, datetime | None]:
     """Get the latest tournament (active or completed) with its created_at timestamp."""
     async with await psql_db.connection() as connection:
         query = f"""
