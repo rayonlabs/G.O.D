@@ -59,7 +59,7 @@ from validator.tournament.boss_round_sync import _copy_task_to_general
 from validator.tournament.boss_round_sync import get_synced_task_id
 from validator.tournament.boss_round_sync import get_synced_task_ids
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
-from validator.tournament.repo_uploader import upload_tournament_winner_repository
+from validator.tournament.repo_uploader import upload_tournament_participant_repository
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
 from validator.tournament.utils import get_base_contestant
@@ -313,12 +313,11 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
 
-            await upload_tournament_winner_repository_on_completion(
-                tournament.tournament_id, tournament.tournament_type, winner, config
-            )
+            await upload_participant_repository(tournament.tournament_id, tournament.tournament_type, winner, 1, config, psql_db)
             return
 
         if len(winners) == 1 and completed_round.is_final_round:
+            winner = winners[0]
             round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
             snyced_task_ids = await get_synced_task_ids([task.task_id for task in round_tasks], psql_db)
             if len(snyced_task_ids) == 0:
@@ -331,14 +330,26 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                     else:
                         logger.info(f"Tournament not completed yet. Synced task {synced_task_id} has status: {task.status}.")
                         return
-                winner = winners[0]
                 await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
                 await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
                 logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
 
-                await upload_tournament_winner_repository_on_completion(
-                    tournament.tournament_id, tournament.tournament_type, winner, config
-                )
+                try:
+                    participant1, participant2 = await get_final_round_participants(completed_round, psql_db)
+                    runner_up = participant2 if participant1 == winner else participant1
+
+                    await upload_participant_repository(
+                        tournament.tournament_id, tournament.tournament_type, winner, 1, config, psql_db
+                    )
+                    if runner_up:
+                        await upload_participant_repository(
+                            tournament.tournament_id, tournament.tournament_type, runner_up, 2, config, psql_db
+                        )
+                except Exception as e:
+                    logger.error(f"Error determining final round participants: {e}")
+                    await upload_participant_repository(
+                        tournament.tournament_id, tournament.tournament_type, winner, 1, config, psql_db
+                    )
                 return
             else:
                 logger.info(f"Tournament not completed yet. Synced {len(snyced_task_ids)} tasks out of {len(round_tasks)}.")
@@ -818,34 +829,44 @@ async def should_start_new_tournament_after_interval(last_created_at) -> bool:
     return hours_passed >= cst.TOURNAMENT_INTERVAL_HOURS
 
 
-async def upload_tournament_winner_repository_on_completion(
-    tournament_id: str, tournament_type: str, winner_hotkey: str, config: Config
+async def get_final_round_participants(completed_round: TournamentRoundData, psql_db: PSQLDB) -> tuple[str, str]:
+    if completed_round.round_type == RoundType.KNOCKOUT:
+        pairs = await get_tournament_pairs(completed_round.round_id, psql_db)
+        if not pairs:
+            raise ValueError(f"No pairs found for final round {completed_round.round_id}")
+
+        pair = pairs[0]
+
+        return pair.hotkey1, pair.hotkey2
+    else:
+        raise ValueError(f"Expected a knockout round, got {completed_round.round_type}")
+
+
+async def upload_participant_repository(
+    tournament_id: str, tournament_type: str, hotkey: str, position: int, config: Config, psql_db: PSQLDB
 ):
-    try:
-        winner_participant = await get_tournament_participant(tournament_id, winner_hotkey, config.psql_db)
+    logger.info(f"Uploading repository for tournament participant: {hotkey} (position: {position})")
 
-        if not winner_participant or not winner_participant.training_repo:
-            logger.warning(f"No training repository found for tournament winner {winner_hotkey}")
-            return
+    participant = await get_tournament_participant(tournament_id, hotkey, psql_db)
 
-        logger.info(f"Starting automatic upload of tournament winner repository for tournament {tournament_id}")
+    if not participant or not participant.training_repo:
+        logger.warning(f"No training repository found for participant {hotkey}")
+        return None
 
-        backup_repo_url = await upload_tournament_winner_repository(
-            tournament_id=tournament_id,
-            tournament_type=tournament_type,
-            winner_hotkey=winner_hotkey,
-            training_repo=winner_participant.training_repo,
-            commit_hash=winner_participant.training_commit_hash,
-            config=config,
-        )
+    backup_repo_url = await upload_tournament_participant_repository(
+        tournament_id=tournament_id,
+        tournament_type=tournament_type,
+        participant_hotkey=hotkey,
+        training_repo=participant.training_repo,
+        commit_hash=participant.training_commit_hash or "",
+        config=config,
+        position=position,
+    )
 
-        if backup_repo_url:
-            await update_tournament_participant_backup_repo(tournament_id, winner_hotkey, backup_repo_url, config.psql_db)
-            logger.info(f"Successfully stored backup repository URL in database: {backup_repo_url}")
-        else:
-            logger.warning(f"Repository upload failed for tournament {tournament_id}, not updating database")
+    if backup_repo_url:
+        await update_tournament_participant_backup_repo(tournament_id, hotkey, backup_repo_url, psql_db)
+        logger.info(f"Successfully stored backup repository URL for {hotkey}: {backup_repo_url}")
+    else:
+        logger.warning(f"Repository upload failed for participant {hotkey}")
 
-        logger.info(f"Successfully completed tournament winner repository upload for tournament {tournament_id}")
-
-    except Exception as e:
-        logger.error(f"Error uploading tournament winner repository for {tournament_id}: {e}")
+    return backup_repo_url

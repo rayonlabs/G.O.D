@@ -95,14 +95,16 @@ def clone_and_push_repository(repo_url: str, new_repo_url: str, github_token: st
         raise RuntimeError(f"Unexpected error: {str(e)}")
 
 
-async def upload_tournament_winner_repository(
+async def upload_tournament_participant_repository(
     tournament_id: str,
     tournament_type: str,
-    winner_hotkey: str,
+    participant_hotkey: str,
     training_repo: str,
     commit_hash: str,
     config: Config,
+    position: Optional[int] = None,
 ) -> Optional[str]:
+    """Upload a tournament participant's repository to GitHub."""
     github_token = config.github_token
     github_username = config.github_username
 
@@ -115,10 +117,10 @@ async def upload_tournament_winner_repository(
         return None
 
     try:
-        repo_name = f"god-{tournament_type}-winner-{tournament_id}".replace("_", "-")
-        description = f"G.O.D {tournament_type.title()} Tournament Winner - {tournament_id} - Winner: {winner_hotkey[:8]}..."
+        repo_name = f"god-{tournament_type}-{tournament_id}-position-{position}".replace("_", "-")
+        description = f"G.O.D {tournament_type.title()} Tournament {position}{'st' if position == 1 else 'nd' if position == 2 else 'rd' if position == 3 else 'th'} Place - {tournament_id} - Participant: {participant_hotkey}"
 
-        logger.info(f"Processing tournament winner repository: {training_repo}")
+        logger.info(f"Processing tournament participant repository: {training_repo}")
         logger.info(f"Generated name: {repo_name}")
 
         if await repository_exists(repo_name, github_token, github_username):
@@ -137,5 +139,5 @@ async def upload_tournament_winner_repository(
         return new_repo_url
 
     except Exception as e:
-        logger.error(f"Error uploading tournament winner repository {training_repo}: {e}")
+        logger.error(f"Error uploading tournament participant repository {training_repo}: {e}")
         return None
