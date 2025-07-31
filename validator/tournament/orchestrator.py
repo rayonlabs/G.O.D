@@ -46,39 +46,39 @@ simple_retry = retry(
 )
 
 
-async def validate_repo_security(repo_url: str) -> bool:
+async def validate_repo_obfuscation(repo_url: str) -> bool:
     """
-    Validate that a repository is safe using the security validation.
+    Validate that a repository is not obfuscated using the obfuscation detection.
 
     Args:
         repo_url: The repository URL to validate
 
     Returns:
-        bool: True if repo is safe, False if not
+        bool: True if repo is not obfuscated, False if obfuscated
     """
 
     try:
         proc = subprocess.run(
-            [cst.SECURITY_VALIDATION_PATH, "--repo", repo_url],
+            [cst.OBFUSCATION_DETECTION_PATH, "--repo", repo_url],
             capture_output=True,
             text=True,
             timeout=30,
         )
 
-        logger.info(f"Security validation output: {proc.stdout}")
+        logger.info(f"Obfuscation detection output: {proc.stdout}")
 
         if proc.returncode == 0:
-            logger.info(f"Repo {repo_url} is safe (exit code 0)")
+            logger.info(f"Repo {repo_url} is not obfuscated (exit code 0)")
             return True
         else:
-            logger.warning(f"Repo {repo_url} is not safe (exit code {proc.returncode})")
+            logger.warning(f"Repo {repo_url} is obfuscated (exit code {proc.returncode})")
             return False
 
     except subprocess.TimeoutExpired:
-        logger.error(f"Security validation timed out for repo {repo_url}")
+        logger.error(f"Obfuscation detection timed out for repo {repo_url}")
         return False
     except Exception as e:
-        logger.error(f"Security validation failed for repo {repo_url}: {str(e)}")
+        logger.error(f"Obfuscation detection failed for repo {repo_url}: {str(e)}")
         return False
 
 
@@ -284,7 +284,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 pending_training_tasks.pop()
                 continue
 
-            # Validate repository security
+            # Validate repository obfuscation
             training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(oldest_task_training.hotkey, config.psql_db)
 
             if training_repo is None:
@@ -295,11 +295,11 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 pending_training_tasks.pop()
                 continue
 
-            logger.info(f"Validating security for repository: {training_repo}")
-            is_safe = await validate_repo_security(training_repo)
+            logger.info(f"Validating obfuscation for repository: {training_repo}")
+            is_not_obfuscated = await validate_repo_obfuscation(training_repo)
 
-            if not is_safe:
-                logger.warning(f"Repository {training_repo} failed security validation for hotkey {oldest_task_training.hotkey}")
+            if not is_not_obfuscated:
+                logger.warning(f"Repository {training_repo} failed obfuscation validation for hotkey {oldest_task_training.hotkey}")
                 await tournament_sql.update_tournament_task_training_status(
                     task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
                 )
@@ -309,7 +309,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
             # Determine required GPUs for this task
             required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
             logger.info(f"Task {task.task_id} requires {required_gpus.value}")
-            
+
             suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
             if not suitable_gpus_result:
