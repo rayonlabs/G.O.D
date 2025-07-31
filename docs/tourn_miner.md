@@ -150,13 +150,13 @@ model_path = f"/cache/models/{model.replace('/', '--')}"
 
 ### Image Dataset Path
 ```python
-# Models are pre-downloaded to this location by the downloader container
+# Datasets are pre-downloaded to this location by the downloader container
 model_path = f"/cache/datasets/{task_id}_tourn.zip"
 ```
 
 ### Text Dataset Path
 ```python
-# Models are pre-downloaded to this location by the downloader container
+# Datasets are pre-downloaded to this location by the downloader container
 model_path = f"/cache/datasets/{task_id}_train_data.json"
 ```
 
