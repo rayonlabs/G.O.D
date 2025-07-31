@@ -1,3 +1,4 @@
+import json
 from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
@@ -25,6 +26,8 @@ from core.models.tournament_models import TournamentType
 from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
+from validator.core.constants import LATEST_TOURNAMENTS_CACHE_KEY
+from validator.core.constants import LATEST_TOURNAMENTS_CACHE_TTL
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.db.sql import tasks as task_sql
@@ -132,6 +135,15 @@ async def get_latest_tournaments_details(
     config: Config = Depends(get_config),
 ) -> dict[str, TournamentDetailsResponse | None]:
     try:
+        cached_data = await config.redis_db.get(LATEST_TOURNAMENTS_CACHE_KEY)
+        if cached_data:
+            logger.info("Returning cached latest tournament details")
+            cached_dict = json.loads(cached_data)
+            return {
+                key: TournamentDetailsResponse.model_validate(value) if value is not None else None
+                for key, value in cached_dict.items()
+            }
+        
         latest_text = await tournament_sql.get_latest_completed_tournament(config.psql_db, TournamentType.TEXT)
         latest_image = await tournament_sql.get_latest_completed_tournament(config.psql_db, TournamentType.IMAGE)
 
@@ -146,6 +158,15 @@ async def get_latest_tournaments_details(
             result["image"] = await get_tournament_details(latest_image.tournament_id, config)
         else:
             result["image"] = None
+
+        # Cache the result as JSON - convert Pydantic models to dicts for serialization
+        cache_data = {
+            key: value.model_dump() if value is not None else None
+            for key, value in result.items()
+        }
+        
+        await config.redis_db.set(LATEST_TOURNAMENTS_CACHE_KEY, json.dumps(cache_data), ex=LATEST_TOURNAMENTS_CACHE_TTL)
+        logger.info(f"Cached latest tournament details for {LATEST_TOURNAMENTS_CACHE_TTL} seconds")
 
         logger.info(
             f"Retrieved latest tournament details: text={latest_text.tournament_id if latest_text else None}, image={latest_image.tournament_id if latest_image else None}"
