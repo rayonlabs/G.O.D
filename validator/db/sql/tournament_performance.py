@@ -26,10 +26,11 @@ async def get_boss_round_synthetic_task_completion(tournament_id: str, psql_db: 
 async def get_boss_round_winner_task_pairs(tournament_id: str, psql_db: PSQLDB) -> list[BossRoundTaskPair]:
     async with await psql_db.connection() as connection:
         query = """
-            SELECT t.task_id, t.task_type, tt.winner_hotkey, brst.general_task_id
+            SELECT t.task_id, t.task_type, tourn.winner_hotkey, brst.general_task_id
             FROM tasks t
             JOIN tournament_tasks tt ON tt.task_id = t.task_id
             JOIN tournament_rounds tr ON tr.round_id = tt.round_id
+            JOIN tournaments tourn ON tourn.tournament_id = tr.tournament_id
             JOIN boss_round_synced_tasks brst ON brst.tournament_task_id = t.task_id
             WHERE tr.tournament_id = $1 AND tr.is_final_round = true
         """
@@ -55,7 +56,8 @@ async def get_task_scores_as_models(task_id: str, psql_db: PSQLDB) -> list[TaskS
             quality_score=score[cst.TASK_NODE_QUALITY_SCORE]
         )
         for score in raw_scores
-        if score[cst.TEST_LOSS] is not None and score[cst.SYNTH_LOSS] is not None
+        if (score[cst.TEST_LOSS] is not None and not (isinstance(score[cst.TEST_LOSS], float) and score[cst.TEST_LOSS] != score[cst.TEST_LOSS])) and 
+           (score[cst.SYNTH_LOSS] is not None and not (isinstance(score[cst.SYNTH_LOSS], float) and score[cst.SYNTH_LOSS] != score[cst.SYNTH_LOSS]))
     ]
 
 

@@ -1,14 +1,15 @@
 import asyncio
 import json
 import os
-import uuid
 import re
+import uuid
 
 import docker
 from docker.errors import APIError
 from docker.errors import BuildError
 from docker.models.containers import Container
 
+import trainer.utils.training_paths as train_paths
 from core.models.payload_models import TrainerProxyRequest
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
@@ -22,7 +23,6 @@ from trainer.tasks import complete_task
 from trainer.tasks import log_task
 from trainer.tasks import update_wandb_url
 from trainer.utils.misc import build_wandb_env
-import trainer.utils.training_paths as train_paths
 from trainer.utils.misc import extract_container_error
 from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
@@ -35,14 +35,14 @@ logger = get_logger(__name__)
 
 def calculate_container_resources(gpu_ids: list[int]) -> tuple[str, int]:
     """Calculate memory limit and CPU limit based on GPU count.
-    
+
     Returns:
         tuple: (memory_limit_str, cpu_limit_nanocpus)
     """
     num_gpus = len(gpu_ids)
     memory_limit = f"{num_gpus * cst.MEMORY_PER_GPU_GB}g"
     cpu_limit_nanocpus = num_gpus * cst.CPUS_PER_GPU * 1_000_000_000
-    
+
     logger.info(f"Allocating resources for {num_gpus} GPUs: {memory_limit} memory, {num_gpus * cst.CPUS_PER_GPU} CPUs")
     return memory_limit, cpu_limit_nanocpus
 
@@ -100,7 +100,7 @@ async def run_trainer_container_image(
     model_type: str,
     expected_repo_name: str,
     hours_to_complete: float,
-    gpu_ids: list[int] = [0]
+    gpu_ids: list[int] = [0],
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
 
@@ -120,10 +120,10 @@ async def run_trainer_container_image(
     ]
 
     container_name = f"image-trainer-{uuid.uuid4().hex}"
-    
+
     # Calculate resources based on GPU count
     memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
-    
+
     try:
         container: Container = client.containers.run(
             image=tag,
@@ -184,14 +184,14 @@ async def run_trainer_container_text(
         "--expected-repo-name",
         expected_repo_name,
         "--hours-to-complete",
-        str(hours_to_complete)
+        str(hours_to_complete),
     ]
 
     container_name = f"text-trainer-{uuid.uuid4().hex}"
-    
+
     # Calculate resources based on GPU count
     memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
-    
+
     try:
         container: Container = client.containers.run(
             image=tag,
@@ -323,7 +323,7 @@ async def upload_repo_to_hf(
 
         volumes = {
             cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-            cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"}
+            cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
         }
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
@@ -339,9 +339,7 @@ async def upload_repo_to_hf(
             name=container_name,
         )
 
-
         log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
-
 
         result = container.wait()
         logs = container.logs().decode("utf-8", errors="ignore")
@@ -356,7 +354,9 @@ async def upload_repo_to_hf(
         else:
             error_message = extract_container_error(logs)
             if error_message:
-                await log_task(task_id, hotkey, f"[ERROR] Upload container failed | ExitCode: {exit_code} | LastError: {error_message}")
+                await log_task(
+                    task_id, hotkey, f"[ERROR] Upload container failed | ExitCode: {exit_code} | LastError: {error_message}"
+                )
                 logger.error(f"Upload container failed: {error_message}")
 
     except Exception as e:

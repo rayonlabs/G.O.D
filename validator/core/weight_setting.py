@@ -451,46 +451,83 @@ async def check_boss_round_synthetic_tasks_complete(tournament_id: str, psql_db)
 
 
 async def calculate_performance_difference(tournament_id: str, psql_db) -> float:
+    logger.info(f"=== CALCULATING PERFORMANCE DIFFERENCE FOR TOURNAMENT {tournament_id} ===")
     task_pairs = await get_boss_round_winner_task_pairs(tournament_id, psql_db)
+    logger.info(f"Found {len(task_pairs)} task pairs for performance comparison")
 
     if not task_pairs:
+        logger.info("No task pairs found, returning 0.0 performance difference")
         return 0.0
 
     performance_differences = []
 
-    for task_pair in task_pairs:
+    for i, task_pair in enumerate(task_pairs):
+        logger.info(f"Processing task pair {i+1}/{len(task_pairs)}: tournament={task_pair.tournament_task_id}, synthetic={task_pair.synthetic_task_id}, winner={task_pair.winner_hotkey}")
+        
         tournament_scores = await get_task_scores_as_models(task_pair.tournament_task_id, psql_db)
         synthetic_scores = await get_task_scores_as_models(task_pair.synthetic_task_id, psql_db)
+        logger.info(f"Found {len(tournament_scores)} tournament scores and {len(synthetic_scores)} synthetic scores")
 
         winner_tournament_score = None
-        winner_synthetic_score = None
+        best_synthetic_score = None
 
+        # Get the winner's score from the tournament task
         for score in tournament_scores:
             if score.hotkey == task_pair.winner_hotkey:
                 winner_tournament_score = max(score.test_loss, score.synth_loss)
+                logger.info(f"Winner tournament score for {task_pair.winner_hotkey}: {winner_tournament_score}")
                 break
 
-        for score in synthetic_scores:
-            if score.hotkey == task_pair.winner_hotkey:
-                winner_synthetic_score = max(score.test_loss, score.synth_loss)
-                break
-
-        if winner_tournament_score is not None and winner_synthetic_score is not None:
+        # Get the best score from the synthetic task (from other miners)
+        if synthetic_scores:
+            # For lower-is-better metrics (loss), we want the minimum
+            # For higher-is-better metrics (GRPO), we want the maximum
             task_type = TaskType(task_pair.task_type)
+            
             if task_type == TaskType.GRPOTASK:
-                if winner_synthetic_score > 0:
-                    performance_diff = (winner_tournament_score - winner_synthetic_score) / winner_synthetic_score
+                # GRPO: higher is better
+                best_synthetic_score = max(max(score.test_loss, score.synth_loss) for score in synthetic_scores)
+                logger.info(f"Best synthetic score (GRPO - higher is better): {best_synthetic_score}")
+            else:
+                # Other tasks: lower is better
+                best_synthetic_score = min(max(score.test_loss, score.synth_loss) for score in synthetic_scores)
+                logger.info(f"Best synthetic score (lower is better): {best_synthetic_score}")
+
+        if winner_tournament_score is not None and best_synthetic_score is not None:
+            task_type = TaskType(task_pair.task_type)
+            logger.info(f"Task type: {task_type}")
+            if task_type == TaskType.GRPOTASK:
+                # GRPO: higher is better
+                # If winner scored higher than best synthetic, it's an improvement
+                if best_synthetic_score > 0:
+                    performance_diff = (winner_tournament_score - best_synthetic_score) / best_synthetic_score
                 else:
                     performance_diff = 0.0
             else:
+                # Other tasks: lower is better (loss)
+                # If winner scored lower than best synthetic, it's an improvement
                 if winner_tournament_score > 0:
-                    performance_diff = (winner_synthetic_score - winner_tournament_score) / winner_tournament_score
+                    performance_diff = (best_synthetic_score - winner_tournament_score) / winner_tournament_score
                 else:
                     performance_diff = 0.0
 
+            logger.info(f"Performance difference for task pair {i+1}: {performance_diff}")
             performance_differences.append(performance_diff)
+        else:
+            if winner_tournament_score is None and best_synthetic_score is not None:
+                # Winner didn't complete the task but synthetic miners did - apply max penalty
+                logger.warning(f"Winner {task_pair.winner_hotkey} has no score in tournament task but synthetic miners do - applying max burn reduction")
+                performance_diff = cts.MAX_BURN_REDUCTION / cts.BURN_REDUCTION_RATE  # This will result in max burn reduction
+                performance_differences.append(performance_diff)
+            else:
+                if winner_tournament_score is None:
+                    logger.warning(f"Could not find winner {task_pair.winner_hotkey} score in tournament task for pair {i+1}")
+                if best_synthetic_score is None:
+                    logger.warning(f"Could not find any scores in synthetic task for pair {i+1}")
 
-    return sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
+    average_performance_diff = sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
+    logger.info(f"Average performance difference: {average_performance_diff} from {len(performance_differences)} task pairs")
+    return average_performance_diff
 
 
 def calculate_burn_proportion(performance_diff: float) -> float:
@@ -515,17 +552,24 @@ def calculate_weight_redistribution(performance_diff: float) -> tuple[float, flo
 async def get_active_tournament_burn_data(psql_db) -> tuple[float, float, float]:
     from core.models.tournament_models import TournamentType
 
+    logger.info("=== CALCULATING TOURNAMENT BURN DATA ===")
     weighted_performance_diff = 0.0
     total_weight = 0.0
 
     tournament_weights = {TournamentType.TEXT: cts.TOURNAMENT_TEXT_WEIGHT, TournamentType.IMAGE: cts.TOURNAMENT_IMAGE_WEIGHT}
+    logger.info(f"Tournament type weights: TEXT={cts.TOURNAMENT_TEXT_WEIGHT}, IMAGE={cts.TOURNAMENT_IMAGE_WEIGHT}")
 
     for tournament_type, weight in tournament_weights.items():
+        logger.info(f"Processing {tournament_type} tournament type")
         performance_diff = None
 
         latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
         if latest_tournament:
-            if await check_boss_round_synthetic_tasks_complete(latest_tournament.tournament_id, psql_db):
+            logger.info(f"Found latest {tournament_type} tournament: {latest_tournament.tournament_id}")
+            synth_tasks_complete = await check_boss_round_synthetic_tasks_complete(latest_tournament.tournament_id, psql_db)
+            logger.info(f"Boss round synthetic tasks complete for {tournament_type}: {synth_tasks_complete}")
+            
+            if synth_tasks_complete:
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
                 logger.info(
                     f"Using latest {tournament_type} tournament {latest_tournament.tournament_id} performance: {performance_diff}"

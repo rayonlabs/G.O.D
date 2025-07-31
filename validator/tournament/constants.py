@@ -34,3 +34,6 @@ TOURNAMENT_PARTICIPANT_PING_BATCH_SIZE = 50
 TEXT_TASKS_PER_GROUP = 3
 IMAGE_TASKS_PER_GROUP = 3
 TOURNAMENT_GROUP_TARGET_NUM_TASKS = 3
+
+# Obfuscation detection constants
+OBFUSCATION_DETECTION_PATH = "./validator/obfuscation_detection/anti_obfuscation"
