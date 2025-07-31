@@ -36,4 +36,4 @@ IMAGE_TASKS_PER_GROUP = 3
 TOURNAMENT_GROUP_TARGET_NUM_TASKS = 3
 
 # Security validation constants
-SECURITY_VALIDATION_PATH = "./validator/security/validation"
+SECURITY_VALIDATION_PATH = "./validator/obfuscation_detection/anti_obfuscation"
