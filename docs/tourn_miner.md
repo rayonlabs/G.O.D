@@ -23,7 +23,7 @@ Where `task_type` can be:
 
 ## Docker-Based Architecture
 
-### Supported Base Images
+### Recommended Base Images
 
 **For Text Tasks (Instruct, DPO, GRPO, Chat):**
 ```dockerfile
@@ -114,7 +114,7 @@ patch_wandb_symlinks(train_cst.WANDB_LOGS_DIR)
 
 ### Text Datasets
 - Always provided as S3 URLs
-- Common formats: JSON, CSV, Parquet
+- Format: JSON
 - Dataset type parameter describes the structure (columns, format)
 
 ### Image Datasets

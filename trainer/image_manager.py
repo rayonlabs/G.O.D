@@ -157,7 +157,7 @@ async def run_trainer_container_text(
     tag: str,
     model: str,
     dataset: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
     task_type: TaskType,
     file_format: FileFormat,
     expected_repo_name: str,
@@ -302,7 +302,6 @@ async def upload_repo_to_hf(
     expected_repo_name: str,
     huggingface_token: str,
     huggingface_username: str,
-    task_type: TaskType,
     wandb_token: str | None = None,
     path_in_repo: str | None = None,
 ):
@@ -532,7 +531,6 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     expected_repo_name=training_data.expected_repo_name,
                     huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
                     huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
-                    task_type=task_type,
                     wandb_token=wandb_token,
                     path_in_repo=path_in_repo,
                 )
