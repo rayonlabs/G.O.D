@@ -13,7 +13,7 @@ pm2 delete tournament_cycle || true
 
 # Load variables from .vali.env
 set -a # Automatically export all variables
-source .vali.env
+. .vali.env
 set +a # Stop automatic export
 
 # Start the validator service using opentelemetry-instrument with combined env vars
