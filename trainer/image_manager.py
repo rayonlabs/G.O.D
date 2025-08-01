@@ -201,7 +201,7 @@ async def run_trainer_container_text(
                 cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
             },
             remove=False,
-            shm_size="16g",
+            shm_size="8g",
             name=container_name,
             mem_limit=memory_limit,
             nano_cpus=cpu_limit_nanocpus,
