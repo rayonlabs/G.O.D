@@ -134,7 +134,6 @@ async def run_trainer_container_image(
             },
             remove=False,
             name=container_name,
-	    shm_size="16g",
             mem_limit=memory_limit,
             nano_cpus=cpu_limit_nanocpus,
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
