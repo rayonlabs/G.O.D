@@ -42,11 +42,6 @@ your-training-repo/
 ├── dockerfiles/
 │   ├── standalone-text-trainer.dockerfile
 │   └── standalone-image-trainer.dockerfile
-├── scripts/
-│   ├── text_trainer.py
-│   └── image_trainer.py
-├── configs/
-└── requirements.txt
 ```
 
 **Important:** The dockerfile paths must be exactly:
