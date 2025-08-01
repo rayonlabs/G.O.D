@@ -99,3 +99,8 @@ NOTE: You will need a wandb token & a huggingface token.
 ```bash
 task miner
 ```
+
+## Additional Resources
+
+### GRPO Reward Functions
+For miners working on GRPO (Gradient Reward Policy Optimization) tasks, the reward functions used for training can be found in [`core/manual_reward_funcs.py`](https://github.com/rayonlabs/G.O.D/blob/main/core/manual_reward_funcs.py).
