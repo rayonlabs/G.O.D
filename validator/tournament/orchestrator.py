@@ -327,6 +327,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 )
 
                 tasks_without_gpus.append(pending_training_tasks.pop())
+                await asyncio.sleep(1)  # TODO: put in constant or even remove
                 continue
 
             trainer_ip, gpu_ids = suitable_gpus_result
