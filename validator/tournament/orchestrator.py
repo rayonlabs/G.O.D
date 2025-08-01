@@ -265,6 +265,8 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
     failed_attempts = {}
     MAX_SCHEDULING_ATTEMPTS = 3
 
+    tasks_without_gpus = []
+
     while pending_training_tasks:
         oldest_task_training = pending_training_tasks[-1]
         tournament_id = await get_tournament_id_by_task_id(oldest_task_training.task.task_id, config.psql_db)
@@ -320,8 +322,11 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
             suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
             if not suitable_gpus_result:
-                logger.info(f"No suitable GPUs found for requirement {required_gpus.value}, waiting before retry")
-                await asyncio.sleep(cst.GPU_AVAILABILITY_CHECK_RETRY_INTERVAL)
+                logger.info(
+                    f"No suitable GPUs found for requirement {required_gpus.value}, skipping this task and continuing with next"
+                )
+
+                tasks_without_gpus.append(pending_training_tasks.pop())
                 continue
 
             trainer_ip, gpu_ids = suitable_gpus_result
@@ -391,6 +396,11 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 )
                 await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
             continue
+
+    if tasks_without_gpus:
+        logger.info(
+            f"Skipped {len(tasks_without_gpus)} tasks due to GPU unavailability. They will get picked up in the next cycle."
+        )
 
     logger.info(f"Completed scheduling cycle, {len(pending_training_tasks)} tasks remaining")
 
