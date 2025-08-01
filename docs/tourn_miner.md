@@ -6,6 +6,24 @@ This guide covers everything you need to know about creating and running a train
 
 The tournament system builds and runs your training code in Docker containers. Your code will compete against other miners by training models on provided datasets within time and resource constraints.
 
+## Prerequisites for Tournament Participation
+
+To compete in tournaments, miners must meet the following requirements:
+
+1. **Subnet Registration**: You must be registered on the G.O.D subnet (netuid 56 on mainnet, 241 on testnet)
+   - Register using: `btcli s register` (mainnet) or `btcli s register --network test` (testnet)
+   - Post your IP to the metagraph using fiber: `fiber-post-ip --netuid 56 --subtensor.network finney --external_port 7999 --wallet.name default --wallet.hotkey default --external_ip [YOUR-IP]`
+
+2. **Active Miner**: Your miner must be running and listening for training repository requests
+   - The miner must expose the `/training_repo/{task_type}` endpoint that returns your training repository details
+   - Start your miner with: `task miner`
+
+3. **Sufficient Stake**: You must have enough stake on your hotkey to be in the **top 32 miners by stake**
+   - The tournament system selects participants based on stake rankings
+   - Miners who have participated in previous tournaments receive a stake boost (5% per completed tournament, max 25%)
+   - Your actual stake requirement depends on the current competition but you must be in the top 32 to be eligible
+   - **Important**: Stake must be maintained throughout the entire tournament. Winners who fall below the required stake threshold will be eliminated even after winning rounds
+
 ## Tournament Registration
 
 The miner already includes the required endpoint at `/training_repo/{task_type}` that returns:
