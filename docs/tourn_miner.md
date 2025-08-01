@@ -81,6 +81,8 @@ Your training scripts accept these standardised CLI arguments:
 --hours-to-complete   # Time limit in hours for the job to finish
 ```
 
+**Note:** For GRPO tasks, the reward functions used for training can be found in [`core/manual_reward_funcs.py`](https://github.com/rayonlabs/G.O.D/blob/main/core/manual_reward_funcs.py).
+
 ### Image Training Arguments
 ```bash
 --task-id             # Unique task identifier
