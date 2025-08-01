@@ -978,6 +978,7 @@ async def get_latest_tournament_with_created_at(
                    {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.CREATED_AT}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1
+              AND {cst.TOURNAMENT_STATUS} != 'cancelled'
             ORDER BY {cst.CREATED_AT} DESC
             LIMIT 1
         """
