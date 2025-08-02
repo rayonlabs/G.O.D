@@ -738,13 +738,13 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                     if synced_task_obj.status == TaskStatus.SUCCESS.value:
                         logger.info(f"Synced task {synced_task_id} completed successfully")
                         continue
-                    elif synced_task_obj.status == TaskStatus.FAILURE.value:
+                    elif synced_task_obj.status == TaskStatus.FAILURE.value or synced_task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
                         original_task_obj = await task_sql.get_task(task.task_id, config.psql_db)
                         if original_task_obj.status == TaskStatus.SUCCESS.value:
                             logger.info(f"Synced task {synced_task_id} failed. Original task was successful. Ignoring...")
                             continue
                         else:
-                            logger.info(f"Synced task {synced_task_id} failed. Original task  also failed. Replacing...")
+                            logger.info(f"Synced task {synced_task_id} failed with status {synced_task_obj.status}. Original task also failed. Replacing...")
 
                         new_task_id = await replace_tournament_task(
                             original_task_id=task.task_id,
