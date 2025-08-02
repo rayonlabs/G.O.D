@@ -45,7 +45,6 @@ Validators run your code on dedicated **trainer nodes** with:
 - All models: 1x A100
 
 #### Container Limits
-- **Memory**: 24GB per training job
-- **CPU**: 8 cores per training job
+- **Memory**: 135GB per GPU (dynamically allocated)
+- **CPU**: 24 cores per GPU (dynamically allocated)
 - **Network**: Isolated (no internet during training)
-- **Storage**: 2TB+ for model/dataset caching
