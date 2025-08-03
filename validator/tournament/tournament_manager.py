@@ -7,6 +7,7 @@ from datetime import timezone
 from fiber.chain.models import Node
 
 import validator.core.constants as cst
+from validator.core.constants import EMISSION_BURN_HOTKEY
 from core.models.payload_models import TrainingRepoResponse
 from core.models.tournament_models import Group
 from core.models.tournament_models import GroupRound
@@ -153,7 +154,7 @@ async def _create_tournament_tasks(
     return tasks
 
 
-async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, round_structure: Round, psql_db: PSQLDB) -> None:
+async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, round_structure: Round, psql_db: PSQLDB, is_final_round: bool = False) -> None:
     """Assign nodes to tournament tasks for the given round."""
 
     if isinstance(round_structure, GroupRound):
@@ -189,7 +190,14 @@ async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, ro
 
             for pair_task in pair_tasks:
                 logger.info(f"Assigning nodes to task {pair_task.task_id}")
-                for hotkey in pair:
+                participants_to_assign = list(pair)
+                
+                # For final rounds, also assign the boss contestant
+                if is_final_round:
+                    participants_to_assign.append(EMISSION_BURN_HOTKEY)
+                    logger.info(f"Final round detected - adding boss contestant {EMISSION_BURN_HOTKEY} to task {pair_task.task_id}")
+                
+                for hotkey in participants_to_assign:
                     node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
                         await task_sql.assign_node_to_task(pair_task.task_id, node, psql_db)
@@ -633,7 +641,7 @@ async def process_pending_rounds(config: Config):
 
                         logger.info("About to assign nodes to tournament tasks")
                         await assign_nodes_to_tournament_tasks(
-                            round_data.tournament_id, round_data.round_id, round_structure, config.psql_db
+                            round_data.tournament_id, round_data.round_id, round_structure, config.psql_db, round_data.is_final_round
                         )
                         logger.info("Finished assigning nodes to tournament tasks")
 

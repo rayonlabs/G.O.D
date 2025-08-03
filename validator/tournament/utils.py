@@ -353,8 +353,15 @@ async def get_knockout_winners(
                         f"{opponent_loss:.6f} <= {boss_loss * 0.95:.6f}"
                     )
 
-        boss_round_winner = Counter(task_winners).most_common(1)[0][0]
-        logger.info(f"Boss round winner: {boss_round_winner}")
+        if not task_winners:
+            logger.error("No valid task winners found in boss round - all tasks failed to determine winners")
+            # Default to boss winning if no tasks could be properly evaluated
+            boss_round_winner = boss_hotkey
+            logger.info(f"Defaulting to boss as winner due to evaluation failures: {boss_round_winner}")
+        else:
+            boss_round_winner = Counter(task_winners).most_common(1)[0][0]
+            logger.info(f"Boss round winner: {boss_round_winner}")
+        
         winners = [boss_round_winner]
 
     return winners
