@@ -181,7 +181,7 @@ async def get_latest_completed_tournament(psql_db: PSQLDB, tournament_type: Tour
             SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'completed'
-            ORDER BY {cst.UPDATED_AT} DESC
+            ORDER BY {cst.CREATED_AT} DESC
             LIMIT 1
         """
         result = await connection.fetchrow(query, tournament_type.value)
