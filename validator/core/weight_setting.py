@@ -806,7 +806,7 @@ async def get_node_weights_from_period_scores(
 
     tournament_weights = get_tournament_weights_from_data(text_tournament_data, image_tournament_data)
     
-    # Apply tournament type weights if only one tournament type completed
+    # Apply tournament type weights based on what tournaments completed
     if text_tournament_data and not image_tournament_data:
         # Only text tournament - scale weights by text proportion
         tournament_weights = {hotkey: weight * cts.TOURNAMENT_TEXT_WEIGHT for hotkey, weight in tournament_weights.items()}
@@ -815,6 +815,21 @@ async def get_node_weights_from_period_scores(
         # Only image tournament - scale weights by image proportion  
         tournament_weights = {hotkey: weight * cts.TOURNAMENT_IMAGE_WEIGHT for hotkey, weight in tournament_weights.items()}
         logger.info(f"Only image tournament completed - scaled weights by {cts.TOURNAMENT_IMAGE_WEIGHT}")
+    elif text_tournament_data and image_tournament_data:
+        # Both tournaments completed - need to cap weights by tournament type participation
+        text_weights = get_tournament_weights_from_data(text_tournament_data, None)
+        image_weights = get_tournament_weights_from_data(None, image_tournament_data)
+        
+        # Apply type-specific scaling
+        text_weights = {hotkey: weight * cts.TOURNAMENT_TEXT_WEIGHT for hotkey, weight in text_weights.items()}
+        image_weights = {hotkey: weight * cts.TOURNAMENT_IMAGE_WEIGHT for hotkey, weight in image_weights.items()}
+        
+        # Combine the properly scaled weights
+        tournament_weights = {}
+        for hotkey in set(list(text_weights.keys()) + list(image_weights.keys())):
+            tournament_weights[hotkey] = text_weights.get(hotkey, 0) + image_weights.get(hotkey, 0)
+            
+        logger.info(f"Both tournaments completed - applied text scaling ({cts.TOURNAMENT_TEXT_WEIGHT}) and image scaling ({cts.TOURNAMENT_IMAGE_WEIGHT})")
 
     logger.info(f"Tournament weights returned: {tournament_weights}")
     logger.info(f"Tournament weights length: {len(tournament_weights)}")
