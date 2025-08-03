@@ -145,7 +145,7 @@ TOURNAMENT_PARTICIPATION_WEIGHT = 0.0001  # Weight given to active participants
 
 # Tournament weight distribution
 TOURNAMENT_WINNER_MIN_WEIGHT = 0.5  # Minimum weight proportion for tournament winner
-TOURNAMENT_WEIGHT_DECAY_RATE = 20.0  # Controls exponential decay for non-winners
+TOURNAMENT_WEIGHT_DECAY_RATE = 16.0  # Controls exponential decay for non-winners
 
 
 # General miner pool sizes
@@ -277,7 +277,7 @@ TOURNAMENT_INTERVAL_HOURS = 24
 BURN_REDUCTION_RATE = 5.0
 MAX_BURN_REDUCTION = 0.85
 BASE_REGULAR_WEIGHT = 0.3
-BASE_TOURNAMENT_WEIGHT = 0.375
+BASE_TOURNAMENT_WEIGHT = 0.35
 
 # Emission distribution when performance diff occurs
 LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25
