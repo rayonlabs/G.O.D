@@ -349,7 +349,19 @@ async def get_knockout_winners(
                     logger.info(f"Both training failed - boss wins by default for task {task.task_id}")
                     task_winners.append(boss_hotkey)
                 else:
-                    logger.warning(f"Both training succeeded but missing evaluation results - skipping task {task.task_id}")
+                    # Both training succeeded but at least one has missing/invalid evaluation results
+                    # Check who has valid evaluation results and award to them
+                    boss_has_valid_eval = boss_loss is not None
+                    opponent_has_valid_eval = opponent_loss is not None
+                    
+                    if opponent_has_valid_eval and not boss_has_valid_eval:
+                        logger.info(f"Boss evaluation failed, opponent succeeded - opponent wins task {task.task_id}")
+                        task_winners.append(opponent_hotkey)
+                    elif boss_has_valid_eval and not opponent_has_valid_eval:
+                        logger.info(f"Opponent evaluation failed, boss succeeded - boss wins task {task.task_id}")
+                        task_winners.append(boss_hotkey)
+                    else:
+                        logger.warning(f"Both evaluation failed or both succeeded but missing results - skipping task {task.task_id}")
                 continue
 
             logger.info(f"Boss round task {task.task_id}: Boss loss: {boss_loss:.6f}, Opponent loss: {opponent_loss:.6f}")
