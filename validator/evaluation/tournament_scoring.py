@@ -97,8 +97,8 @@ def exponential_decline_mapping(total_participants: int, rank: float) -> float:
     if total_participants <= 1:
         return 1.0
     
-    decay_factor = (rank - 1) / (total_participants - 1)
-    return 1.0 / (cts.TOURNAMENT_WEIGHT_DECAY_RATE ** decay_factor)
+    # Simple exponential decay: 1st=1.0, 2nd=0.2, 3rd=0.04, etc.
+    return cts.TOURNAMENT_SIMPLE_DECAY_BASE ** (rank - 1)
 
 
 
