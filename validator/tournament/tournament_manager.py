@@ -279,10 +279,15 @@ async def create_next_round(
 
 async def advance_tournament(tournament: TournamentData, completed_round: TournamentRoundData, config: Config, psql_db: PSQLDB):
     with LogContext(tournament_id=tournament.tournament_id, round_id=completed_round.round_id):
+        logger.info(f"=== ADVANCE TOURNAMENT CALLED ===")
+        logger.info(f"Tournament: {tournament.tournament_id}, Status: {tournament.status}")
+        logger.info(f"Completed Round: {completed_round.round_id}, Round #: {completed_round.round_number}")
+        logger.info(f"Is Final Round: {completed_round.is_final_round}")
         logger.info(f"Advancing tournament {tournament.tournament_id} from round {completed_round.round_id}")
 
         winners = await get_round_winners(completed_round, psql_db, config)
         logger.info(f"Round winners: {winners}")
+        logger.info(f"Number of winners: {len(winners)}")
 
         # Get all active participants and handle eliminations
         all_participants = await get_tournament_participants(tournament.tournament_id, psql_db)
@@ -325,18 +330,47 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
 
         if len(winners) == 1 and completed_round.is_final_round:
             winner = winners[0]
+            logger.info(f"Processing final round completion for tournament {tournament.tournament_id}")
+            logger.info(f"Final round winner: {winner}")
+            
             round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
-            snyced_task_ids = await get_synced_task_ids([task.task_id for task in round_tasks], psql_db)
+            logger.info(f"Found {len(round_tasks)} tasks in final round")
+            
+            # Get task IDs for logging
+            task_ids = [task.task_id for task in round_tasks]
+            logger.info(f"Tournament task IDs: {task_ids}")
+            
+            snyced_task_ids = await get_synced_task_ids(task_ids, psql_db)
+            logger.info(f"Found {len(snyced_task_ids)} synced task IDs: {snyced_task_ids}")
+            
             if len(snyced_task_ids) == 0:
+                logger.info("No synced tasks found, initiating sync to general tasks")
                 await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
             elif len(snyced_task_ids) >= len(round_tasks):
-                for synced_task_id in snyced_task_ids:
+                logger.info(f"All {len(round_tasks)} tasks have been synced, checking their status...")
+                
+                all_tasks_complete = True
+                for i, synced_task_id in enumerate(snyced_task_ids):
+                    logger.info(f"Checking synced task {i+1}/{len(snyced_task_ids)}: {synced_task_id}")
                     task = await task_sql.get_task(synced_task_id, psql_db)
-                    if task.status == TaskStatus.SUCCESS or task.status == TaskStatus.FAILURE:
+                    
+                    if not task:
+                        logger.error(f"Could not find synced task {synced_task_id} in database!")
+                        all_tasks_complete = False
+                        break
+                    
+                    logger.info(f"Synced task {synced_task_id} status: {task.status}, comparing with SUCCESS={TaskStatus.SUCCESS.value}, FAILURE={TaskStatus.FAILURE.value}")
+                    
+                    if task.status == TaskStatus.SUCCESS.value or task.status == TaskStatus.FAILURE.value:
                         logger.info(f"Task {synced_task_id} finished with status {task.status}")
                     else:
                         logger.info(f"Tournament not completed yet. Synced task {synced_task_id} has status: {task.status}.")
-                        return
+                        all_tasks_complete = False
+                        break
+                
+                if not all_tasks_complete:
+                    logger.info("Not all synced tasks are complete, tournament remains active")
+                    return
                 await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
                 await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
                 logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
@@ -827,9 +861,12 @@ async def check_and_start_tournament(tournament_type: TournamentType, psql_db: P
         latest_tournament, created_at = await get_latest_tournament_with_created_at(psql_db, tournament_type)
 
         if latest_tournament and latest_tournament.status == TournamentStatus.COMPLETED:
-            if await should_start_new_tournament_after_interval(created_at):
+            # For completed tournaments, we should check time since completion, not creation
+            # Get the updated_at time which will be the completion time
+            completed_at = await get_tournament_completion_time(latest_tournament.tournament_id, psql_db)
+            if await should_start_new_tournament_after_interval(completed_at or created_at):
                 logger.info(
-                    f"Starting new {tournament_type.value} tournament after {cst.TOURNAMENT_INTERVAL_HOURS} hours since {latest_tournament.tournament_id}"
+                    f"Starting new {tournament_type.value} tournament after {cst.TOURNAMENT_INTERVAL_HOURS} hours since {latest_tournament.tournament_id} completed"
                 )
 
                 # Create new tournament of the same type
@@ -842,6 +879,18 @@ async def check_and_start_tournament(tournament_type: TournamentType, psql_db: P
             logger.info(f"No {tournament_type.value} tournaments found, creating first one")
             new_tournament_id = await create_basic_tournament(tournament_type, psql_db, config)
             logger.info(f"Created first {tournament_type.value} tournament: {new_tournament_id}")
+
+
+async def get_tournament_completion_time(tournament_id: str, psql_db: PSQLDB) -> datetime | None:
+    """Get the completion time (updated_at) for a completed tournament."""
+    async with await psql_db.connection() as connection:
+        query = """
+            SELECT updated_at 
+            FROM tournaments 
+            WHERE tournament_id = $1 AND status = 'completed'
+        """
+        result = await connection.fetchval(query, tournament_id)
+        return result
 
 
 async def should_start_new_tournament_after_interval(last_created_at) -> bool:
@@ -859,7 +908,7 @@ async def should_start_new_tournament_after_interval(last_created_at) -> bool:
     time_diff = now - last_created_at
     hours_passed = time_diff.total_seconds() / 3600
 
-    logger.info(f"Hours since last tournament: {hours_passed:.2f}, required: {cst.TOURNAMENT_INTERVAL_HOURS}")
+    logger.info(f"Hours since last tournament completion: {hours_passed:.2f}, required: {cst.TOURNAMENT_INTERVAL_HOURS}")
 
     return hours_passed >= cst.TOURNAMENT_INTERVAL_HOURS
 

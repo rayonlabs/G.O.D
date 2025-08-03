@@ -26,6 +26,7 @@ from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.submissions_and_scoring import get_task_winners
 from validator.db.sql.tasks import get_task
 from validator.db.sql.tournaments import add_tournament_tasks
+from validator.db.sql.tournaments import count_champion_consecutive_wins
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
