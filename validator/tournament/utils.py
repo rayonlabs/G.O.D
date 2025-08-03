@@ -28,6 +28,7 @@ from validator.db.sql.tasks import get_task
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import count_champion_consecutive_wins
 from validator.db.sql.tournaments import get_latest_completed_tournament
+from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_participant
@@ -39,6 +40,24 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def get_progressive_threshold(consecutive_wins: int) -> float:
+    """
+    Calculate the progressive threshold based on consecutive wins.
+    - 1st competition after becoming champion: 10% advantage needed
+    - 2nd competition: 7.5% advantage needed  
+    - 3rd+ competition: 5% advantage needed
+    """
+    if consecutive_wins == 0:
+        # First time becoming champion - use 10%
+        return t_cst.FIRST_DEFENSE_THRESHOLD
+    elif consecutive_wins == 1:
+        # After 1 successful defense - use 7.5%
+        return t_cst.SECOND_DEFENSE_THRESHOLD
+    else:
+        # After 2+ successful defenses - use 5%
+        return t_cst.STEADY_STATE_THRESHOLD
 
 
 async def replace_tournament_task(
@@ -299,11 +318,24 @@ async def get_knockout_winners(
             if winner:
                 winners.append(winner)
     else:
-        # Boss round. You need to beat the boss by 5% to win the task.
-        # Best of 3 wins the round.
+        # Boss round. Progressive threshold system based on consecutive wins.
         boss_hotkey = EMISSION_BURN_HOTKEY
         opponent_hotkey = None
         task_winners = []
+
+        # Get tournament info to determine the current champion and their consecutive wins
+        tournament = await get_tournament(completed_round.tournament_id, psql_db)
+        if not tournament:
+            logger.error(f"Could not find tournament {completed_round.tournament_id}")
+            return []
+
+        # Get the current champion (base_winner_hotkey) and count their consecutive wins
+        current_champion = tournament.base_winner_hotkey or boss_hotkey
+        consecutive_wins = await count_champion_consecutive_wins(psql_db, tournament.tournament_type, current_champion)
+        
+        # Calculate the progressive threshold
+        threshold_percentage = get_progressive_threshold(consecutive_wins)
+        logger.info(f"Champion {current_champion} has {consecutive_wins} consecutive wins, using {threshold_percentage*100:.1f}% threshold")
 
         for task in round_tasks:
             logger.info(f"Processing boss round task {task.task_id}")
@@ -367,24 +399,30 @@ async def get_knockout_winners(
 
             logger.info(f"Boss round task {task.task_id}: Boss loss: {boss_loss:.6f}, Opponent loss: {opponent_loss:.6f}")
 
+            # Apply progressive threshold system
+            boss_multiplier = 1 + threshold_percentage  # For higher-is-better tasks
+            boss_divisor = 1 - threshold_percentage     # For lower-is-better tasks
+
             if task_object.task_type == TaskType.GRPOTASK:
-                if boss_loss * 1.05 > opponent_loss:
+                # For GRPO tasks, higher scores are better
+                if boss_loss * boss_multiplier > opponent_loss:
                     task_winners.append(boss_hotkey)
-                    logger.info(f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} > {opponent_loss * 1.05:.6f}")
+                    logger.info(f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * {boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}")
                 else:
                     task_winners.append(opponent_hotkey)
-                    logger.info(f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= {boss_loss * 1.05:.6f}")
+                    logger.info(f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= {boss_loss * boss_multiplier:.6f}")
             else:
-                if boss_loss * 0.95 < opponent_loss:
+                # For other tasks, lower scores are better
+                if boss_loss * boss_divisor < opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} < {opponent_loss * 1.05:.6f}"
+                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} * {boss_divisor:.3f} = {boss_loss * boss_divisor:.6f} < {opponent_loss:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)
                     logger.info(
                         f"{task_object.task_type} task: Opponent wins (lower is better): "
-                        f"{opponent_loss:.6f} <= {boss_loss * 0.95:.6f}"
+                        f"{opponent_loss:.6f} <= {boss_loss * boss_divisor:.6f}"
                     )
 
         if not task_winners:

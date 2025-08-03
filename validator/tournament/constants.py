@@ -35,5 +35,10 @@ TEXT_TASKS_PER_GROUP = 3
 IMAGE_TASKS_PER_GROUP = 3
 TOURNAMENT_GROUP_TARGET_NUM_TASKS = 3
 
+# Progressive championship threshold constants
+FIRST_DEFENSE_THRESHOLD = 0.10    # 10% advantage needed on first defense after becoming champion
+SECOND_DEFENSE_THRESHOLD = 0.075  # 7.5% advantage needed on second defense
+STEADY_STATE_THRESHOLD = 0.05     # 5% advantage needed from third defense onwards
+
 # Obfuscation detection constants
 OBFUSCATION_DETECTION_PATH = "./validator/obfuscation_detection/anti_obfuscation"
