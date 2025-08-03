@@ -726,6 +726,18 @@ async def get_training_attempts(task_id: str, hotkey: str, psql_db: PSQLDB) -> i
         return result[cst.N_TRAINING_ATTEMPTS] if result else 0
 
 
+async def get_training_status_for_task_and_hotkeys(task_id: str, hotkeys: list[str], psql_db: PSQLDB) -> dict[str, str]:
+    """Get the training status for a task and list of hotkeys"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.HOTKEY}, {cst.TRAINING_STATUS}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = ANY($2)
+        """
+        results = await connection.fetch(query, task_id, hotkeys)
+        return {row[cst.HOTKEY]: row[cst.TRAINING_STATUS] for row in results}
+
+
 async def get_tournament_training_repo_and_commit(hotkey: str, psql_db: PSQLDB) -> tuple[str | None, str | None]:
     """Get the training_repo and training_commit_hash for a hotkey from tournament_participants table"""
     async with await psql_db.connection() as connection:

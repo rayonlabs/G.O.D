@@ -11,6 +11,7 @@ from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskType
+from core.models.utility_models import TrainingStatus
 from validator.core.config import Config
 from validator.core.constants import DEFAULT_PARTICIPANT_COMMIT
 from validator.core.constants import DEFAULT_PARTICIPANT_REPO
@@ -30,6 +31,7 @@ from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_participant
 from validator.db.sql.tournaments import get_tournament_tasks
+from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament.task_creator import create_new_task_of_same_type
 from validator.utils.logging import get_logger
@@ -329,6 +331,25 @@ async def get_knockout_winners(
 
             if boss_loss is None or opponent_loss is None:
                 logger.warning(f"Boss round task {task.task_id} missing boss or opponent loss")
+                # Check training status to determine winner when evaluation results are missing
+                training_statuses = await get_training_status_for_task_and_hotkeys(
+                    task.task_id, [boss_hotkey, opponent_hotkey], psql_db
+                )
+                
+                boss_training_success = training_statuses.get(boss_hotkey) == TrainingStatus.SUCCESS
+                opponent_training_success = training_statuses.get(opponent_hotkey) == TrainingStatus.SUCCESS
+                
+                if opponent_training_success and not boss_training_success:
+                    logger.info(f"Boss training failed, opponent succeeded - opponent wins task {task.task_id}")
+                    task_winners.append(opponent_hotkey)
+                elif boss_training_success and not opponent_training_success:
+                    logger.info(f"Opponent training failed, boss succeeded - boss wins task {task.task_id}")
+                    task_winners.append(boss_hotkey)
+                elif not boss_training_success and not opponent_training_success:
+                    logger.info(f"Both training failed - boss wins by default for task {task.task_id}")
+                    task_winners.append(boss_hotkey)
+                else:
+                    logger.warning(f"Both training succeeded but missing evaluation results - skipping task {task.task_id}")
                 continue
 
             logger.info(f"Boss round task {task.task_id}: Boss loss: {boss_loss:.6f}, Opponent loss: {opponent_loss:.6f}")
