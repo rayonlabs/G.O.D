@@ -704,7 +704,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
     all_tasks_completed = True
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-        if task_obj and task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value]:
+        if task_obj and task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value, TaskStatus.REPLACED_ON_PREP_TASK_FAILURE.value]:
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
             break
@@ -774,9 +774,22 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                     await _copy_task_to_general(task.task_id, config.psql_db)
                     waiting_for_synced_tasks = True
                 elif task_obj and task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
-                    logger.info(f"Task {task.task_id} failed during preparation, copying to main cycle to check.")
-                    await _copy_task_to_general(task.task_id, config.psql_db)
-                    waiting_for_synced_tasks = True
+                    logger.info(f"Task {task.task_id} failed during preparation, creating replacement immediately.")
+                    
+                    # Mark original task as replaced
+                    task_obj.status = TaskStatus.REPLACED_ON_PREP_TASK_FAILURE.value
+                    await task_sql.update_task(task_obj, config.psql_db)
+                    
+                    # Create replacement task immediately
+                    new_task_id = await replace_tournament_task(
+                        original_task_id=task.task_id,
+                        tournament_id=round_data.tournament_id,
+                        round_id=round_data.round_id,
+                        group_id=task.group_id,
+                        pair_id=task.pair_id,
+                        config=config,
+                    )
+                    logger.info(f"Successfully replaced prep failed task {task.task_id} with {new_task_id}")
 
     if waiting_for_synced_tasks:
         logger.info(f"Waiting for synced tasks to complete in round {round_data.round_id}")

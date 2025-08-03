@@ -165,6 +165,7 @@ def is_task_in_flight(task: AnyTypeTask) -> bool:
         TaskStatus.FAILURE,
         TaskStatus.FAILURE_FINDING_NODES,
         TaskStatus.PREP_TASK_FAILURE,
+        TaskStatus.REPLACED_ON_PREP_TASK_FAILURE,
     ]
 
 

@@ -27,6 +27,7 @@ class TaskStatus(str, Enum):
     PENDING = "pending"
     PREPARING_DATA = "preparing_data"
     PREP_TASK_FAILURE = "prep_task_failure"
+    REPLACED_ON_PREP_TASK_FAILURE = "replaced_on_prep_task_failure"
     LOOKING_FOR_NODES = "looking_for_nodes"
     FAILURE_FINDING_NODES = "failure_finding_nodes"
     DELAYED = "delayed"
