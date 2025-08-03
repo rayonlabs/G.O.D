@@ -719,6 +719,13 @@ async def process_active_tournaments(config: Config):
                                     f"Tournament {tournament.tournament_id} round {current_round.round_id} is completed, advancing..."
                                 )
                                 await advance_tournament(tournament, current_round, config, config.psql_db)
+                        elif current_round.status == RoundStatus.COMPLETED:
+                            # If the round is already completed but tournament is still active,
+                            # we need to advance the tournament
+                            logger.info(
+                                f"Tournament {tournament.tournament_id} round {current_round.round_id} is already completed, checking if tournament should advance..."
+                            )
+                            await advance_tournament(tournament, current_round, config, config.psql_db)
         except Exception as e:
             logger.error(f"Error processing active tournaments: {e}", exc_info=True)
         finally:
