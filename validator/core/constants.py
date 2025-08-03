@@ -138,14 +138,14 @@ MINIMUM_MINER_POOL = 1
 MIN_MINERS_FOR_TOURN = 8
 
 # Tournament Selection by Stake
-TOURNAMENT_TOP_N_BY_STAKE = 32
+TOURNAMENT_TOP_N_BY_STAKE = 16
 TOURNAMENT_REPEAT_BOOST_PERCENTAGE = 5  # 5% boost per previous entry
 TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE = 25  # Maximum 25% boost
 TOURNAMENT_PARTICIPATION_WEIGHT = 0.0001  # Weight given to active participants
 
 # Tournament weight distribution
 TOURNAMENT_WINNER_MIN_WEIGHT = 0.5  # Minimum weight proportion for tournament winner
-TOURNAMENT_WEIGHT_DECAY_RATE = 8.0  # Controls exponential decay for non-winners
+TOURNAMENT_WEIGHT_DECAY_RATE = 12.0  # Controls exponential decay for non-winners
 
 
 # General miner pool sizes
@@ -276,8 +276,8 @@ TOURNAMENT_IMAGE_WEIGHT = 0.35
 TOURNAMENT_INTERVAL_HOURS = 24
 BURN_REDUCTION_RATE = 5.0
 MAX_BURN_REDUCTION = 0.85
-BASE_REGULAR_WEIGHT = 0.325
-BASE_TOURNAMENT_WEIGHT = 0.375
+BASE_REGULAR_WEIGHT = 0.3
+BASE_TOURNAMENT_WEIGHT = 0.35
 
 # Emission distribution when performance diff occurs
 LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25
