@@ -7,7 +7,6 @@ from datetime import timezone
 from fiber.chain.models import Node
 
 import validator.core.constants as cst
-from validator.core.constants import EMISSION_BURN_HOTKEY
 from core.models.payload_models import TrainingRepoResponse
 from core.models.tournament_models import Group
 from core.models.tournament_models import GroupRound
@@ -25,6 +24,7 @@ from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
+from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
@@ -191,12 +191,12 @@ async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, ro
             for pair_task in pair_tasks:
                 logger.info(f"Assigning nodes to task {pair_task.task_id}")
                 participants_to_assign = list(pair)
-                
+
                 # For final rounds, also assign the boss contestant
-                if is_final_round:
+                if is_final_round and EMISSION_BURN_HOTKEY not in participants_to_assign:
                     participants_to_assign.append(EMISSION_BURN_HOTKEY)
                     logger.info(f"Final round detected - adding boss contestant {EMISSION_BURN_HOTKEY} to task {pair_task.task_id}")
-                
+
                 for hotkey in participants_to_assign:
                     node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
@@ -279,7 +279,7 @@ async def create_next_round(
 
 async def advance_tournament(tournament: TournamentData, completed_round: TournamentRoundData, config: Config, psql_db: PSQLDB):
     with LogContext(tournament_id=tournament.tournament_id, round_id=completed_round.round_id):
-        logger.info(f"=== ADVANCE TOURNAMENT CALLED ===")
+        logger.info("=== ADVANCE TOURNAMENT CALLED ===")
         logger.info(f"Tournament: {tournament.tournament_id}, Status: {tournament.status}")
         logger.info(f"Completed Round: {completed_round.round_id}, Round #: {completed_round.round_number}")
         logger.info(f"Is Final Round: {completed_round.is_final_round}")
@@ -332,42 +332,42 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             winner = winners[0]
             logger.info(f"Processing final round completion for tournament {tournament.tournament_id}")
             logger.info(f"Final round winner: {winner}")
-            
+
             round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
             logger.info(f"Found {len(round_tasks)} tasks in final round")
-            
+
             # Get task IDs for logging
             task_ids = [task.task_id for task in round_tasks]
             logger.info(f"Tournament task IDs: {task_ids}")
-            
+
             snyced_task_ids = await get_synced_task_ids(task_ids, psql_db)
             logger.info(f"Found {len(snyced_task_ids)} synced task IDs: {snyced_task_ids}")
-            
+
             if len(snyced_task_ids) == 0:
                 logger.info("No synced tasks found, initiating sync to general tasks")
                 await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
             elif len(snyced_task_ids) >= len(round_tasks):
                 logger.info(f"All {len(round_tasks)} tasks have been synced, checking their status...")
-                
+
                 all_tasks_complete = True
                 for i, synced_task_id in enumerate(snyced_task_ids):
                     logger.info(f"Checking synced task {i+1}/{len(snyced_task_ids)}: {synced_task_id}")
                     task = await task_sql.get_task(synced_task_id, psql_db)
-                    
+
                     if not task:
                         logger.error(f"Could not find synced task {synced_task_id} in database!")
                         all_tasks_complete = False
                         break
-                    
+
                     logger.info(f"Synced task {synced_task_id} status: {task.status}, comparing with SUCCESS={TaskStatus.SUCCESS.value}, FAILURE={TaskStatus.FAILURE.value}")
-                    
+
                     if task.status == TaskStatus.SUCCESS.value or task.status == TaskStatus.FAILURE.value:
                         logger.info(f"Task {synced_task_id} finished with status {task.status}")
                     else:
                         logger.info(f"Tournament not completed yet. Synced task {synced_task_id} has status: {task.status}.")
                         all_tasks_complete = False
                         break
-                
+
                 if not all_tasks_complete:
                     logger.info("Not all synced tasks are complete, tournament remains active")
                     return
@@ -892,8 +892,8 @@ async def get_tournament_completion_time(tournament_id: str, psql_db: PSQLDB) ->
     """Get the completion time (updated_at) for a completed tournament."""
     async with await psql_db.connection() as connection:
         query = """
-            SELECT updated_at 
-            FROM tournaments 
+            SELECT updated_at
+            FROM tournaments
             WHERE tournament_id = $1 AND status = 'completed'
         """
         result = await connection.fetchval(query, tournament_id)
