@@ -7,7 +7,6 @@ from datetime import timezone
 from fiber.chain.models import Node
 
 import validator.core.constants as cst
-from validator.core.constants import EMISSION_BURN_HOTKEY
 from core.models.payload_models import TrainingRepoResponse
 from core.models.tournament_models import Group
 from core.models.tournament_models import GroupRound
@@ -25,6 +24,7 @@ from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
+from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
@@ -191,12 +191,12 @@ async def assign_nodes_to_tournament_tasks(tournament_id: str, round_id: str, ro
             for pair_task in pair_tasks:
                 logger.info(f"Assigning nodes to task {pair_task.task_id}")
                 participants_to_assign = list(pair)
-                
+
                 # For final rounds, also assign the boss contestant
-                if is_final_round:
+                if is_final_round and EMISSION_BURN_HOTKEY not in participants_to_assign:
                     participants_to_assign.append(EMISSION_BURN_HOTKEY)
                     logger.info(f"Final round detected - adding boss contestant {EMISSION_BURN_HOTKEY} to task {pair_task.task_id}")
-                
+
                 for hotkey in participants_to_assign:
                     node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
@@ -288,6 +288,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
         winners = await get_round_winners(completed_round, psql_db, config)
         logger.info(f"Round winners: {winners}")
         logger.info(f"Number of winners: {len(winners)}")
+        logger.info(f"Number of winners: {len(winners)}")
 
         # Get all active participants and handle eliminations
         all_participants = await get_tournament_participants(tournament.tournament_id, psql_db)
@@ -344,6 +345,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             logger.info(f"Found {len(snyced_task_ids)} synced task IDs: {snyced_task_ids}")
             
             if len(snyced_task_ids) == 0:
+                logger.info("No synced tasks found, initiating sync to general tasks")
                 logger.info("No synced tasks found, initiating sync to general tasks")
                 await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
             elif len(snyced_task_ids) >= len(round_tasks):
@@ -726,6 +728,15 @@ async def process_active_tournaments(config: Config):
                                 f"Tournament {tournament.tournament_id} round {current_round.round_id} is already completed, checking if tournament should advance..."
                             )
                             await advance_tournament(tournament, current_round, config, config.psql_db)
+                                )
+                                await advance_tournament(tournament, current_round, config, config.psql_db)
+                        elif current_round.status == RoundStatus.COMPLETED:
+                            # If the round is already completed but tournament is still active,
+                            # we need to advance the tournament
+                            logger.info(
+                                f"Tournament {tournament.tournament_id} round {current_round.round_id} is already completed, checking if tournament should advance..."
+                            )
+                            await advance_tournament(tournament, current_round, config, config.psql_db)
         except Exception as e:
             logger.error(f"Error processing active tournaments: {e}", exc_info=True)
         finally:
@@ -872,7 +883,12 @@ async def check_and_start_tournament(tournament_type: TournamentType, psql_db: P
             # Get the updated_at time which will be the completion time
             completed_at = await get_tournament_completion_time(latest_tournament.tournament_id, psql_db)
             if await should_start_new_tournament_after_interval(completed_at or created_at):
+            # For completed tournaments, we should check time since completion, not creation
+            # Get the updated_at time which will be the completion time
+            completed_at = await get_tournament_completion_time(latest_tournament.tournament_id, psql_db)
+            if await should_start_new_tournament_after_interval(completed_at or created_at):
                 logger.info(
+                    f"Starting new {tournament_type.value} tournament after {cst.TOURNAMENT_INTERVAL_HOURS} hours since {latest_tournament.tournament_id} completed"
                     f"Starting new {tournament_type.value} tournament after {cst.TOURNAMENT_INTERVAL_HOURS} hours since {latest_tournament.tournament_id} completed"
                 )
 
@@ -915,6 +931,7 @@ async def should_start_new_tournament_after_interval(last_created_at) -> bool:
     time_diff = now - last_created_at
     hours_passed = time_diff.total_seconds() / 3600
 
+    logger.info(f"Hours since last tournament completion: {hours_passed:.2f}, required: {cst.TOURNAMENT_INTERVAL_HOURS}")
     logger.info(f"Hours since last tournament completion: {hours_passed:.2f}, required: {cst.TOURNAMENT_INTERVAL_HOURS}")
 
     return hours_passed >= cst.TOURNAMENT_INTERVAL_HOURS
