@@ -511,12 +511,5 @@ class BenchmarkRootTaskResults(BaseModel):
     results: list[BenchmarkResult]
 
 
-class AllBenchmarkResults(BaseModel):
-    """All benchmark results across all root tasks"""
-
-    success: bool
-    results: list[BenchmarkRootTaskResults]
-
-
 # Type alias for task details types
 AnyTypeTaskDetails = InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails

@@ -8,7 +8,6 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Response
 
-from core.models.payload_models import AllBenchmarkResults
 from core.models.payload_models import AllOfNodeResults
 from core.models.payload_models import AnyTypeTaskDetails
 from core.models.payload_models import BenchmarkResult
@@ -567,7 +566,7 @@ async def create_benchmark_root_task_from_existing(
 
 async def get_benchmark_results(
     config: Config = Depends(get_config),
-) -> AllBenchmarkResults:
+) -> list[BenchmarkRootTaskResults]:
     """
     Get all benchmark results across all root tasks.
 
@@ -611,7 +610,7 @@ async def get_benchmark_results(
             )
 
         logger.info(f"Retrieved benchmark results for {len(benchmark_results)} root tasks")
-        return AllBenchmarkResults(success=True, results=benchmark_results)
+        return benchmark_results
 
     except Exception as e:
         logger.error(f"Error retrieving benchmark results: {str(e)}", exc_info=True)
