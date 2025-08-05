@@ -319,7 +319,14 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
 
 async def _process_and_upload_datasets(
     task: AnyTextTypeRawTask,
-    train_dataset, test_dataset, synthetic_data, columns_to_sample, should_reupload_train, should_reupload_test, ds_hf_name=None
+    train_dataset,
+    test_dataset,
+    synthetic_data,
+    columns_to_sample,
+    should_reupload_train,
+    should_reupload_test,
+    ds_hf_name=None,
+    psql_db=None,
 ):
     files_to_delete = []
     logger.info("Processing and uploading datasets to MinIO storage")
@@ -331,8 +338,7 @@ async def _process_and_upload_datasets(
         if should_reupload_train:
             train_data_json = change_to_json_format(train_dataset, columns_to_sample, task)
             
-            if psql_db:
-                await _validate_and_filter_grpo_reward_functions(task, train_data_json, psql_db)
+            await _validate_and_filter_grpo_reward_functions(task, train_data_json, psql_db)
             
             train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
             files_to_delete.append(train_json_path)
@@ -860,6 +866,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
         should_reupload_train,
         should_reupload_test,
         train_dataset_name if task.file_format == FileFormat.HF else None,
+        psql_db,
     )
 
 
