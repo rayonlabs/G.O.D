@@ -6,7 +6,7 @@ from validator.core.weight_setting import (
     calculate_performance_difference,
     calculate_burn_proportion,
     calculate_weight_redistribution,
-    get_active_tournament_burn_data,
+    get_tournament_burn_details,
     check_boss_round_synthetic_tasks_complete
 )
 import validator.core.constants as cts

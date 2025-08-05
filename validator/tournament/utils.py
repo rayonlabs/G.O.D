@@ -20,6 +20,7 @@ from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
+from validator.tournament import constants as t_cst
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
@@ -64,12 +65,23 @@ def get_progressive_threshold(consecutive_wins: int) -> float:
 async def replace_tournament_task(
     original_task_id: str, tournament_id: str, round_id: str, group_id: str | None, pair_id: str | None, config: Config
 ) -> str:
+    logger.info(f"Starting task replacement for task {original_task_id}")
+    logger.info(f"Tournament: {tournament_id}, Round: {round_id}, Group: {group_id}, Pair: {pair_id}")
+    
     original_task_obj = await task_sql.get_task(original_task_id, config.psql_db)
     if not original_task_obj:
         logger.error(f"Could not find original task {original_task_id}")
         raise ValueError(f"Original task {original_task_id} not found")
+    
+    logger.info(f"Found original task - Type: {original_task_obj.task_type}, Status: {original_task_obj.status}")
+    logger.info(f"Original task model params: {original_task_obj.model_params_count}")
 
-    new_task = await create_new_task_of_same_type(original_task_obj, config)
+    try:
+        new_task = await create_new_task_of_same_type(original_task_obj, config)
+        logger.info(f"Successfully created new task {new_task.task_id} of type {new_task.task_type}")
+    except Exception as e:
+        logger.error(f"Failed to create new task of type {original_task_obj.task_type}: {str(e)}", exc_info=True)
+        raise
 
     new_tournament_task = TournamentTask(
         tournament_id=tournament_id,
@@ -78,8 +90,13 @@ async def replace_tournament_task(
         group_id=group_id,
         pair_id=pair_id,
     )
-    await add_tournament_tasks([new_tournament_task], config.psql_db)
-    logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
+    
+    try:
+        await add_tournament_tasks([new_tournament_task], config.psql_db)
+        logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
+    except Exception as e:
+        logger.error(f"Failed to add tournament task to database: {str(e)}", exc_info=True)
+        raise
 
     original_assigned_nodes = await task_sql.get_nodes_assigned_to_task(original_task_id, config.psql_db)
     for node in original_assigned_nodes:

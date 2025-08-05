@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections import defaultdict
 from datetime import datetime
@@ -19,6 +20,8 @@ from core.models.tournament_models import DetailedTournamentRoundResult
 from core.models.tournament_models import DetailedTournamentTaskScore
 from core.models.tournament_models import NextTournamentDates
 from core.models.tournament_models import NextTournamentInfo
+from core.models.tournament_models import LatestTournamentsDetailsResponse
+from core.models.tournament_models import TournamentBurnData
 from core.models.tournament_models import TournamentDetailsResponse
 from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentStatus
@@ -26,6 +29,12 @@ from core.models.tournament_models import TournamentType
 from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
+from validator.tournament.performance_calculator import calculate_boss_round_performance_differences
+from validator.tournament.performance_calculator import get_tournament_performance_data
+from validator.core.weight_setting import get_tournament_burn_details
+from validator.tournament.tournament_manager import get_tournament_completion_time
+from validator.tournament.tournament_manager import should_start_new_tournament_after_interval
+
 from validator.core.constants import LATEST_TOURNAMENTS_CACHE_KEY
 from validator.core.constants import LATEST_TOURNAMENTS_CACHE_TTL
 from validator.core.dependencies import get_api_key
@@ -50,12 +59,17 @@ async def get_tournament_details(
     config: Config = Depends(get_config),
 ) -> TournamentDetailsResponse:
     try:
-        tournament = await tournament_sql.get_tournament(tournament_id, config.psql_db)
+        # Fetch tournament, participants, and rounds in parallel
+        tournament_task = tournament_sql.get_tournament(tournament_id, config.psql_db)
+        participants_task = tournament_sql.get_tournament_participants(tournament_id, config.psql_db)
+        rounds_task = tournament_sql.get_tournament_rounds(tournament_id, config.psql_db)
+        
+        tournament, participants, rounds = await asyncio.gather(
+            tournament_task, participants_task, rounds_task
+        )
+        
         if not tournament:
             raise HTTPException(status_code=404, detail="Tournament not found")
-
-        participants = await tournament_sql.get_tournament_participants(tournament_id, config.psql_db)
-        rounds = await tournament_sql.get_tournament_rounds(tournament_id, config.psql_db)
 
         detailed_rounds = []
         for round_data in rounds:
@@ -73,21 +87,34 @@ async def get_tournament_details(
                     round_participants.extend([pair.hotkey1, pair.hotkey2])
 
             detailed_tasks = []
-            for task in tasks:
-                task_details = await task_sql.get_task(task.task_id, config.psql_db)
-                participant_scores = await tournament_sql.get_all_scores_and_losses_for_task(task.task_id, config.psql_db)
-                task_winners = await tournament_sql.get_task_winners([task.task_id], config.psql_db)
-                winner = task_winners.get(str(task.task_id))
+            
+            # Collect all task IDs for batch operations
+            task_ids = [task.task_id for task in tasks]
+            
+            # Fetch all task details, scores, and winners in parallel
+            if task_ids:
+                task_details_tasks = [task_sql.get_task(task_id, config.psql_db) for task_id in task_ids]
+                scores_tasks = [tournament_sql.get_all_scores_and_losses_for_task(task_id, config.psql_db) for task_id in task_ids]
+                winners_task = tournament_sql.get_task_winners(task_ids, config.psql_db)
+                
+                task_details_results = await asyncio.gather(*task_details_tasks)
+                scores_results = await asyncio.gather(*scores_tasks)
+                task_winners = await winners_task
+                
+                for i, task in enumerate(tasks):
+                    task_details = task_details_results[i]
+                    participant_scores = scores_results[i]
+                    winner = task_winners.get(str(task.task_id))
 
-                detailed_task = DetailedTournamentTaskScore(
-                    task_id=str(task.task_id),
-                    group_id=task.group_id,
-                    pair_id=task.pair_id,
-                    winner=winner,
-                    participant_scores=participant_scores,
-                    task_type=task_details.task_type if task_details else None,
-                )
-                detailed_tasks.append(detailed_task)
+                    detailed_task = DetailedTournamentTaskScore(
+                        task_id=str(task.task_id),
+                        group_id=task.group_id,
+                        pair_id=task.pair_id,
+                        winner=winner,
+                        participant_scores=participant_scores,
+                        task_type=task_details.task_type if task_details else None,
+                    )
+                    detailed_tasks.append(detailed_task)
 
             detailed_round = DetailedTournamentRoundResult(
                 round_id=round_data.round_id,
@@ -110,6 +137,24 @@ async def get_tournament_details(
             TournamentType(tournament.tournament_type), tournament_results_with_winners
         )
 
+        boss_round_performance = None
+        sync_performance = None
+        
+        if tournament.status == TournamentStatus.COMPLETED:
+            final_round = next((r for r in detailed_rounds if r.is_final_round), None)
+            if final_round:
+                try:
+                    boss_round_performance = await calculate_boss_round_performance_differences(
+                        tournament.tournament_id, final_round.round_id, config.psql_db
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to get boss round performance data: {e}")
+            
+            try:
+                sync_performance = await get_tournament_performance_data(tournament.tournament_id, config.psql_db)
+            except Exception as e:
+                logger.warning(f"Failed to get sync performance data: {e}")
+        
         response = TournamentDetailsResponse(
             tournament_id=tournament.tournament_id,
             tournament_type=tournament.tournament_type,
@@ -121,6 +166,8 @@ async def get_tournament_details(
             final_scores=tournament_type_result.scores,
             text_tournament_weight=cts.TOURNAMENT_TEXT_WEIGHT,
             image_tournament_weight=cts.TOURNAMENT_IMAGE_WEIGHT,
+            boss_round_performance=boss_round_performance,
+            sync_performance=sync_performance,
         )
 
         logger.info(f"Retrieved tournament details for {tournament_id}")
@@ -133,43 +180,42 @@ async def get_tournament_details(
 
 async def get_latest_tournaments_details(
     config: Config = Depends(get_config),
-) -> dict[str, TournamentDetailsResponse | None]:
+) -> LatestTournamentsDetailsResponse:
     try:
         cached_data = await config.redis_db.get(LATEST_TOURNAMENTS_CACHE_KEY)
         if cached_data:
             logger.info("Returning cached latest tournament details")
             cached_dict = json.loads(cached_data)
-            return {
-                key: TournamentDetailsResponse.model_validate(value) if value is not None else None
-                for key, value in cached_dict.items()
-            }
+            return LatestTournamentsDetailsResponse.model_validate(cached_dict)
         
         latest_text = await tournament_sql.get_latest_completed_tournament(config.psql_db, TournamentType.TEXT)
         latest_image = await tournament_sql.get_latest_completed_tournament(config.psql_db, TournamentType.IMAGE)
 
-        result = {}
+        text_details = None
+        image_details = None
 
         if latest_text:
-            result["text"] = await get_tournament_details(latest_text.tournament_id, config)
-        else:
-            result["text"] = None
+            text_details = await get_tournament_details(latest_text.tournament_id, config)
 
         if latest_image:
-            result["image"] = await get_tournament_details(latest_image.tournament_id, config)
-        else:
-            result["image"] = None
+            image_details = await get_tournament_details(latest_image.tournament_id, config)
 
-        # Cache the result as JSON - convert Pydantic models to dicts for serialization
-        cache_data = {
-            key: value.model_dump() if value is not None else None
-            for key, value in result.items()
-        }
+        burn_data = await get_tournament_burn_details(config.psql_db)
         
+        result = LatestTournamentsDetailsResponse(
+            text=text_details,
+            image=image_details,
+            burn_data=burn_data
+        )
+
+        cache_data = result.model_dump()
         await config.redis_db.set(LATEST_TOURNAMENTS_CACHE_KEY, json.dumps(cache_data), ex=LATEST_TOURNAMENTS_CACHE_TTL)
         logger.info(f"Cached latest tournament details for {LATEST_TOURNAMENTS_CACHE_TTL} seconds")
 
         logger.info(
-            f"Retrieved latest tournament details: text={latest_text.tournament_id if latest_text else None}, image={latest_image.tournament_id if latest_image else None}"
+            f"Retrieved latest tournament details: text={latest_text.tournament_id if latest_text else None}, "
+            f"image={latest_image.tournament_id if latest_image else None}, "
+            f"burn_weight={burn_data.burn_weight:.4f}"
         )
         return result
 
@@ -268,30 +314,55 @@ async def get_next_tournament_dates(
                     interval_hours=cts.TOURNAMENT_INTERVAL_HOURS,
                 )
             
-            # No active/pending tournament, calculate next start time
+            # No active/pending tournament, calculate next start time using same logic as scheduler
             tournament, created_at = await tournament_sql.get_latest_tournament_with_created_at(
                 config.psql_db, tournament_type
             )
 
-            if created_at is None:
-                # No previous tournament, start from now
-                next_start = datetime.now(timezone.utc)
+            current_time = datetime.now(timezone.utc)
+            
+            if not tournament:
+                # No previous tournament, would start on next scheduler check
+                # Round up to next 15-minute interval
+                minutes_to_next_check = 15 - (current_time.minute % 15)
+                if minutes_to_next_check == 0:
+                    minutes_to_next_check = 15
+                next_start = current_time + timedelta(minutes=minutes_to_next_check)
+                next_start = next_start.replace(second=0, microsecond=0)
             else:
-                # Next tournament starts TOURNAMENT_INTERVAL_HOURS after the last one started
-                next_start = created_at + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
-
-                # If the calculated start date is in the past, use current time
-                current_time = datetime.now(timezone.utc)
-                if next_start < current_time:
-                    next_start = current_time
-
-            # Tournament ends TOURNAMENT_INTERVAL_HOURS after it starts (placeholder)
-            next_end = next_start + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
+                # Check completion time like the scheduler does
+                if tournament.status == TournamentStatus.COMPLETED:
+                    completed_at = await get_tournament_completion_time(tournament.tournament_id, config.psql_db)
+                    time_reference = completed_at or created_at
+                else:
+                    time_reference = created_at
+                
+                # Check if we should start a new tournament
+                if await should_start_new_tournament_after_interval(time_reference):
+                    # Tournament can start on next scheduler check
+                    minutes_to_next_check = 15 - (current_time.minute % 15)
+                    if minutes_to_next_check == 0:
+                        minutes_to_next_check = 15
+                    next_start = current_time + timedelta(minutes=minutes_to_next_check)
+                    next_start = next_start.replace(second=0, microsecond=0)
+                else:
+                    # Calculate when 24 hours will have passed
+                    if time_reference.tzinfo is None:
+                        time_reference = time_reference.replace(tzinfo=timezone.utc)
+                    
+                    next_start = time_reference + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
+                    
+                    # Round to next 15-minute scheduler check after that time
+                    minutes = next_start.minute
+                    remainder = minutes % 15
+                    if remainder != 0:
+                        next_start = next_start + timedelta(minutes=(15 - remainder))
+                    next_start = next_start.replace(second=0, microsecond=0)
 
             return NextTournamentInfo(
                 tournament_type=tournament_type,
                 next_start_date=next_start,
-                next_end_date=next_end,
+                next_end_date=None,
                 interval_hours=cts.TOURNAMENT_INTERVAL_HOURS,
                 tournament_status="waiting",
             )

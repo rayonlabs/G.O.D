@@ -61,6 +61,43 @@ async def get_task_scores_as_models(task_id: str, psql_db: PSQLDB) -> list[TaskS
     ]
 
 
+async def get_task_scores_batch(task_ids: list[str], psql_db: PSQLDB) -> dict[str, list[TaskScore]]:
+    """Fetch task scores for multiple tasks in a single query to avoid N+1 problem."""
+    if not task_ids:
+        return {}
+    
+    async with await psql_db.connection() as connection:
+        # Convert task_ids to UUIDs for query
+        query = f"""
+            SELECT task_id, hotkey, test_loss, synth_loss, quality_score
+            FROM {cst.TASK_NODES_TABLE}
+            WHERE task_id = ANY($1::uuid[])
+        """
+        results = await connection.fetch(query, task_ids)
+        
+        # Group results by task_id
+        task_scores = {}
+        for row in results:
+            task_id = str(row['task_id'])
+            if task_id not in task_scores:
+                task_scores[task_id] = []
+            
+            # Filter out NaN values
+            test_loss = row['test_loss']
+            synth_loss = row['synth_loss']
+            
+            if (test_loss is not None and not (isinstance(test_loss, float) and test_loss != test_loss)) and \
+               (synth_loss is not None and not (isinstance(synth_loss, float) and synth_loss != synth_loss)):
+                task_scores[task_id].append(TaskScore(
+                    hotkey=row['hotkey'],
+                    test_loss=test_loss,
+                    synth_loss=synth_loss,
+                    quality_score=row['quality_score']
+                ))
+        
+        return task_scores
+
+
 async def get_previous_completed_tournament(psql_db: PSQLDB, tournament_type: str, exclude_tournament_id: str = None) -> str | None:
     async with await psql_db.connection() as connection:
         if exclude_tournament_id:

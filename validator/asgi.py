@@ -18,6 +18,7 @@ from scalar_fastapi import get_scalar_api_reference
 
 from validator.core.config import load_config
 from validator.endpoints.auditing import factory_router as auditing_router
+from validator.endpoints.grpo import factory_router as grpo_router
 from validator.endpoints.health import factory_router as health_router
 from validator.endpoints.miner_details import factory_router as miner_details_router
 from validator.endpoints.tasks import factory_router as tasks_router
@@ -63,6 +64,7 @@ def factory() -> FastAPI:
     app.include_router(health_router())
     app.include_router(tasks_router())
     app.include_router(auditing_router())
+    app.include_router(grpo_router())
     app.include_router(miner_details_router())
     app.include_router(tournament_analytics_router())
     app.include_router(tournament_orchestrator_router())

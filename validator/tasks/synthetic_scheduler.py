@@ -34,7 +34,7 @@ from validator.core.models import InstructTextRawTask
 from validator.core.models import ChatRawTask
 from validator.core.models import RawTask
 from validator.core.models import RewardFunction
-from validator.db.sql.tasks import _get_generic_reward_functions_from_db
+from validator.db.sql.grpo import get_generic_reward_functions_from_db
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
 from validator.tasks.diffusion_synth import create_synthetic_image_task
@@ -396,7 +396,7 @@ async def _get_generic_reward_functions(config: Config) -> list[RewardFunction]:
     num_generic_rewards_from_db = max(1, int(total_rewards * cst.PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_DB))
     num_generic_rewards_from_llm = total_rewards - num_generic_rewards_from_db
 
-    reward_functions += await _get_generic_reward_functions_from_db(config.psql_db, num_generic_rewards_from_db)
+    reward_functions += await get_generic_reward_functions_from_db(config.psql_db, num_generic_rewards_from_db)
 
     if num_generic_rewards_from_llm > 0:
         reward_functions += await _generate_generic_reward_functions_from_llm(config.keypair, num_generic_rewards_from_llm)
