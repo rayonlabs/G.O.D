@@ -1132,67 +1132,6 @@ async def is_benchmark_task(task_id: str, psql_db: PSQLDB) -> bool:
         return result is not None
 
 
-async def get_benchmark_results_for_root_task(root_task_id: str, psql_db: PSQLDB) -> list[dict]:
-    """
-    Get all benchmark results for a specific root task.
-
-    Args:
-        root_task_id: The ID of the benchmark root task
-        psql_db: Database connection
-
-    Returns:
-        List of benchmark results with participant info and scores
-    """
-    async with await psql_db.connection() as connection:
-        query = f"""
-            SELECT 
-                btc.{cst.COPY_TASK_ID},
-                btc.{cst.PARTICIPANT_HOTKEY},
-                btc.{cst.TOURNAMENT_ID},
-                btc.{cst.CREATED_AT},
-                t.{cst.MODEL_ID},
-                t.{cst.DS},
-                t.{cst.TASK_TYPE},
-                tn.{cst.TASK_NODE_QUALITY_SCORE} as quality_score,
-                tn.{cst.TEST_LOSS},
-                tn.{cst.SYNTH_LOSS},
-                s.{cst.REPO},
-                t.{cst.COMPLETED_AT}
-            FROM {cst.BENCHMARK_TASK_COPIES_TABLE} btc
-            JOIN {cst.TASKS_TABLE} t ON btc.{cst.COPY_TASK_ID} = t.{cst.TASK_ID}
-            LEFT JOIN {cst.TASK_NODES_TABLE} tn ON btc.{cst.COPY_TASK_ID} = tn.{cst.TASK_ID} 
-                AND btc.{cst.PARTICIPANT_HOTKEY} = tn.{cst.HOTKEY}
-            LEFT JOIN {cst.SUBMISSIONS_TABLE} s ON btc.{cst.COPY_TASK_ID} = s.{cst.TASK_ID} 
-                AND btc.{cst.PARTICIPANT_HOTKEY} = s.{cst.HOTKEY}
-            WHERE btc.{cst.ROOT_TASK_ID} = $1
-            AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
-            ORDER BY tn.{cst.TASK_NODE_QUALITY_SCORE} DESC
-        """
-        rows = await connection.fetch(query, root_task_id)
-
-        results = []
-        for row in rows:
-            results.append(
-                {
-                    "copy_task_id": str(row[cst.COPY_TASK_ID]),
-                    "participant_hotkey": row[cst.PARTICIPANT_HOTKEY],
-                    "tournament_id": row[cst.TOURNAMENT_ID],
-                    "quality_score": row["quality_score"],
-                    "test_loss": row[cst.TEST_LOSS],
-                    "synth_loss": row[cst.SYNTH_LOSS],
-                    "repo": row[cst.REPO],
-                    "completed_at": row[cst.COMPLETED_AT],
-                    "created_at": row[cst.CREATED_AT],
-                    "model_id": row[cst.MODEL_ID],
-                    "dataset": row[cst.DS],
-                    "task_type": row[cst.TASK_TYPE],
-                }
-            )
-
-        logger.info(f"Retrieved {len(results)} benchmark results for root task {root_task_id}")
-        return results
-
-
 async def get_all_benchmark_results(psql_db: PSQLDB) -> list[dict]:
     """
     Get all benchmark results across all root tasks.

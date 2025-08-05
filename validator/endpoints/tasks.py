@@ -73,7 +73,6 @@ UPDATE_TRAINING_REPO_BACKUP_ENDPOINT = "/v1/tasks/{task_id}/training_repo_backup
 UPDATE_RESULT_MODEL_NAME_ENDPOINT = "/v1/tasks/{task_id}/result_model_name"
 CREATE_BENCHMARK_ROOT_TASK_ENDPOINT = "/v1/tasks/{task_id}/create_benchmark_root"
 GET_BENCHMARK_RESULTS_ENDPOINT = "/v1/benchmark/results"
-GET_BENCHMARK_RESULTS_FOR_ROOT_TASK_ENDPOINT = "/v1/benchmark/results/{root_task_id}"
 
 
 async def delete_task(
@@ -619,60 +618,6 @@ async def get_benchmark_results(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve benchmark results: {str(e)}")
 
 
-async def get_benchmark_results_for_root_task(
-    root_task_id: UUID,
-    config: Config = Depends(get_config),
-) -> BenchmarkRootTaskResults:
-    """
-    Get benchmark results for a specific root task.
-
-    Args:
-        root_task_id: The ID of the benchmark root task
-
-    Returns:
-        Benchmark results for the specified root task
-    """
-    try:
-        root_task = await task_sql.get_task(root_task_id, config.psql_db)
-        if not root_task:
-            raise HTTPException(status_code=404, detail="Benchmark root task not found")
-
-        results = await tournament_sql.get_benchmark_results_for_root_task(root_task_id, config.psql_db)
-
-        benchmark_results = [
-            BenchmarkResult(
-                copy_task_id=result["copy_task_id"],
-                participant_hotkey=result["participant_hotkey"],
-                tournament_id=result["tournament_id"],
-                quality_score=result["quality_score"],
-                test_loss=result["test_loss"],
-                synth_loss=result["synth_loss"],
-                repo=result["repo"],
-                completed_at=result["completed_at"],
-                created_at=result["created_at"],
-                model_id=result["model_id"],
-                dataset=result["dataset"],
-                task_type=result["task_type"],
-            )
-            for result in results
-        ]
-
-        logger.info(f"Retrieved {len(benchmark_results)} benchmark results for root task {root_task_id}")
-        return BenchmarkRootTaskResults(
-            root_task_id=str(root_task_id),
-            model_id=root_task.model_id,
-            dataset=root_task.ds,
-            task_type=root_task.task_type.value,
-            results=benchmark_results,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving benchmark results for root task {root_task_id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve benchmark results: {str(e)}")
-
-
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Gradients On Demand"], dependencies=[Depends(get_api_key)])
     router.add_api_route(TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT, create_task_instruct_text, methods=["POST"])
@@ -695,5 +640,4 @@ def factory_router() -> APIRouter:
     router.add_api_route(UPDATE_RESULT_MODEL_NAME_ENDPOINT, update_result_model_name, methods=["PUT"])
     router.add_api_route(CREATE_BENCHMARK_ROOT_TASK_ENDPOINT, create_benchmark_root_task_from_existing, methods=["POST"])
     router.add_api_route(GET_BENCHMARK_RESULTS_ENDPOINT, get_benchmark_results, methods=["GET"])
-    router.add_api_route(GET_BENCHMARK_RESULTS_FOR_ROOT_TASK_ENDPOINT, get_benchmark_results_for_root_task, methods=["GET"])
     return router
