@@ -488,5 +488,22 @@ class TournamentGpuRequirementsResponse(BaseModel):
     total_hours: float
 
 
+class RewardFunctionInfo(BaseModel):
+    name: str
+    description: str
+    code: str
+
+
+class RewardFunctionsResponse(BaseModel):
+    reward_functions: dict[str, RewardFunctionInfo]
+
+
+class AddRewardFunctionRequest(BaseModel):
+    name: str
+    description: str
+    code: str
+    reward_weight: float | None = None
+
+
 # Type alias for task details types
 AnyTypeTaskDetails = InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
