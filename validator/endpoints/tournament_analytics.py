@@ -34,6 +34,7 @@ from validator.tournament.performance_calculator import get_tournament_performan
 from validator.core.weight_setting import get_tournament_burn_details
 from validator.tournament.tournament_manager import get_tournament_completion_time
 from validator.tournament.tournament_manager import should_start_new_tournament_after_interval
+
 from validator.core.constants import LATEST_TOURNAMENTS_CACHE_KEY
 from validator.core.constants import LATEST_TOURNAMENTS_CACHE_TTL
 from validator.core.dependencies import get_api_key
