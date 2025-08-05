@@ -11,6 +11,7 @@ from datetime import timezone
 from dotenv import load_dotenv
 
 from core.models.tournament_models import TournamentAuditData
+from core.models.tournament_models import TournamentBurnData
 from core.models.tournament_models import TournamentPerformanceData
 from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentType
