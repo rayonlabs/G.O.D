@@ -749,10 +749,11 @@ async def get_training_status_for_task_and_hotkeys(task_id: str, hotkeys: list[s
 
 
 async def get_tournament_training_repo_and_commit(hotkey: str, psql_db: PSQLDB) -> tuple[str | None, str | None]:
-    """Get the training_repo and training_commit_hash for a hotkey from tournament_participants table"""
+    """Get the training_repo and training_commit_hash for a hotkey from tournament_participants table.
+    If backup_repo is present, it will be used instead of training_repo."""
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
+            SELECT {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.BACKUP_REPO}
             FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
             WHERE {cst.HOTKEY} = $1
             ORDER BY {cst.CREATED_AT} DESC
@@ -760,7 +761,12 @@ async def get_tournament_training_repo_and_commit(hotkey: str, psql_db: PSQLDB) 
         """
         result = await connection.fetchrow(query, hotkey)
         if result:
-            return result[cst.TRAINING_REPO], result[cst.TRAINING_COMMIT_HASH]
+            if result[cst.BACKUP_REPO]:
+                logger.info(f"Using backup repo for hotkey {hotkey}: {result[cst.BACKUP_REPO]}")
+                repo = result[cst.BACKUP_REPO]
+            else:
+                repo = result[cst.TRAINING_REPO]
+            return repo, result[cst.TRAINING_COMMIT_HASH]
         return None, None
 
 
