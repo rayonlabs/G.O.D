@@ -989,7 +989,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
 
 
 async def get_tasks_by_ids(
-    task_ids: list[UUID], psql_db: PSQLDB, connection: Connection | None = None, exclude_benchmark_tasks: bool = True
+    task_ids: list[UUID], psql_db: PSQLDB, connection: Connection | None = None
 ) -> list[AnyTypeTask]:
     """Get multiple tasks by their IDs efficiently in batch.
 
@@ -997,7 +997,6 @@ async def get_tasks_by_ids(
         task_ids: List of task IDs to fetch
         psql_db: Database connection
         connection: Optional existing connection to reuse
-        exclude_benchmark_tasks: Whether to exclude benchmark tasks (default: True)
 
     Returns:
         List of task objects in the exact same order as input task_ids
@@ -1007,20 +1006,10 @@ async def get_tasks_by_ids(
 
     async def _get_tasks_by_ids_inner(conn: Connection) -> list[AnyTypeTask]:
         # Get base task data for all IDs
-        benchmark_filter = ""
-        if exclude_benchmark_tasks:
-            benchmark_filter = f"""
-                AND {cst.TASK_ID} NOT IN (
-                    SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
-                    UNION
-                    SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
-                )
-            """
-
+        
         base_query = f"""
             SELECT * FROM {cst.TASKS_TABLE}
             WHERE {cst.TASK_ID} = ANY($1)
-            {benchmark_filter}
             ORDER BY array_position($1, {cst.TASK_ID})
         """
         base_rows = await conn.fetch(base_query, task_ids)
