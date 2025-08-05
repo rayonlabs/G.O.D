@@ -358,13 +358,10 @@ async def get_next_tournament_dates(
                         next_start = next_start + timedelta(minutes=(15 - remainder))
                     next_start = next_start.replace(second=0, microsecond=0)
 
-            # Tournament ends TOURNAMENT_INTERVAL_HOURS after it starts (placeholder)
-            next_end = next_start + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
-
             return NextTournamentInfo(
                 tournament_type=tournament_type,
                 next_start_date=next_start,
-                next_end_date=next_end,
+                next_end_date=None,
                 interval_hours=cts.TOURNAMENT_INTERVAL_HOURS,
                 tournament_status="waiting",
             )
