@@ -13,10 +13,11 @@ from validator.utils.query_substrate import query_substrate
 
 logger = get_logger(__name__)
 
+
 async def get_eligible_nodes(psql_db: PSQLDB) -> list[Node]:
     """
     Get all nodes eligible for tasks.
-    
+
     Includes nodes that either:
     a) Do not have any entries in the task_nodes table (new nodes with no scores)
     b) Have at least one positive quality_score within the last 7 days
@@ -63,6 +64,7 @@ async def get_eligible_nodes(psql_db: PSQLDB) -> list[Node]:
         logger.info(f"Found {len(eligible_nodes)} eligible nodes")
         return eligible_nodes
 
+
 async def get_all_nodes(psql_db: PSQLDB) -> list[Node]:
     """Get all nodes for the current NETUID"""
     logger.info("Attempting to get all nodes")
@@ -74,7 +76,6 @@ async def get_all_nodes(psql_db: PSQLDB) -> list[Node]:
         """
         rows = await connection.fetch(query, NETUID)
         nodes = [Node(**dict(row)) for row in rows]
-        logger.info(f"Here is the list of nodes {nodes}")
         return nodes
 
 
@@ -243,5 +244,3 @@ async def get_node_id_by_hotkey(hotkey: str, psql_db: PSQLDB) -> int | None:
             WHERE {dcst.HOTKEY} = $1 AND {dcst.NETUID} = $2
         """
         return await connection.fetchval(query, hotkey, NETUID)
-        
-        

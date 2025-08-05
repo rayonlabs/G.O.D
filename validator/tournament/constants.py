@@ -1,0 +1,44 @@
+MAX_TRAINING_ATTEMPTS = 2
+
+# Orchestrator cycle intervals (in seconds)
+FETCH_TASKS_CYCLE_INTERVAL = 15 * 60  # 20 minutes
+PROCESS_PENDING_TASKS_CYCLE_INTERVAL = 15 * 60  # 20 minutes
+MONITOR_TRAINING_TASKS_CYCLE_INTERVAL = 15 * 60  # 20 minutes
+MOVE_COMPLETED_TASKS_CYCLE_INTERVAL = 15 * 60  # 20 minutes
+PERIODIC_GPU_AVAILABILITY_UPDATE_INTERVAL = 15 * 60  # 15 minutes
+
+TOURNAMENT_PENDING_CYCLE_INTERVAL = 15 * 60
+TOURNAMENT_ACTIVE_CYCLE_INTERVAL = 15 * 60
+TOURNAMENT_PREP_TASK_CYCLE_INTERVAL = 15 * 60
+TOURNAMENT_PENDING_ROUND_CYCLE_INTERVAL = 15 * 60
+
+
+# Retry intervals (in seconds)
+GPU_AVAILABILITY_CHECK_RETRY_INTERVAL = 15 * 60  # 15 minutes
+TRAINING_START_RETRY_INTERVAL = 1 * 60  # 15 minutes
+
+# Trainer requests
+TRAINER_HTTP_TIMEOUT = 30.0  # seconds
+EXPECTED_TRAINING_START_MESSAGE = "Started Training!"
+
+
+# Tournament structure constants
+MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND = 16
+EXPECTED_GROUP_SIZE = 8
+MIN_GROUP_SIZE = 6
+
+
+TOURNAMENT_PARTICIPANT_PING_BATCH_SIZE = 50
+
+# Tournament task allocation
+TEXT_TASKS_PER_GROUP = 3
+IMAGE_TASKS_PER_GROUP = 3
+TOURNAMENT_GROUP_TARGET_NUM_TASKS = 3
+
+# Progressive championship threshold constants
+FIRST_DEFENSE_THRESHOLD = 0.10    # 10% advantage needed on first defense after becoming champion
+SECOND_DEFENSE_THRESHOLD = 0.075  # 7.5% advantage needed on second defense
+STEADY_STATE_THRESHOLD = 0.05     # 5% advantage needed from third defense onwards
+
+# Obfuscation detection constants
+OBFUSCATION_DETECTION_PATH = "./validator/obfuscation_detection/anti_obfuscation"

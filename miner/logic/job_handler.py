@@ -110,7 +110,7 @@ def _load_and_modify_config(
     return config
 
 
-def create_reward_funcs_file(reward_funcs: list[str], task_id: str) -> list[str]:
+def create_reward_funcs_file(reward_funcs: list[str], task_id: str, destination_dir: str = cst.CONFIG_DIR) -> list[str]:
     """
     Create a Python file with reward functions for GRPO training.
 
@@ -119,7 +119,7 @@ def create_reward_funcs_file(reward_funcs: list[str], task_id: str) -> list[str]
         task_id: Unique task identifier
     """
     filename = f"rewards_{task_id}"
-    filepath = os.path.join(cst.CONFIG_DIR, f"{filename}.py")
+    filepath = os.path.join(destination_dir, f"{filename}.py")
 
     func_names = []
     for reward_func in reward_funcs:

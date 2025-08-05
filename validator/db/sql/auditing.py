@@ -6,7 +6,9 @@ from fastapi import Depends
 from fastapi import HTTPException
 from loguru import logger  # noqa
 
-from core.models.utility_models import ImageTextPair, RewardFunction, TaskType
+from core.models.utility_models import ImageTextPair
+from core.models.utility_models import RewardFunction
+from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.dependencies import get_config
 from validator.core.models import AnyTypeTask
@@ -40,28 +42,40 @@ def normalise_float(float: float | None) -> float | None:
 
 
 async def get_recent_tasks(
-    hotkeys: list[str] | None = None, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
+    hotkeys: list[str] | None = None,
+    limit: int = 100,
+    page: int = 1,
+    config: Config = Depends(get_config),
+    include_tournament_tasks=False,
 ) -> list[AnyTypeTask]:
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
+    tournament_tasks_clause_hotkeys = (
+        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     async with await config.psql_db.connection() as connection:
         connection: Connection
         base_query = f"""
         WITH task_ids AS (
             {
-                f'''
+            f'''
                 SELECT DISTINCT s.{cst.TASK_ID}
                 FROM {cst.SUBMISSIONS_TABLE} s
                 WHERE s.{cst.HOTKEY} = ANY($1)
+                {tournament_tasks_clause_hotkeys}
                 ORDER BY s.{cst.CREATED_ON} DESC
                 LIMIT $2 OFFSET $3
                 '''
-                if hotkeys is not None else
-                f'''
+            if hotkeys is not None
+            else f'''
                 SELECT {cst.TASK_ID}
                 FROM {cst.TASKS_TABLE}
+                {tournament_tasks_clause}
                 ORDER BY {cst.CREATED_AT} DESC
                 LIMIT $1 OFFSET $2
                 '''
-            }
+        }
         ),
         image_pairs AS (
             SELECT 
@@ -141,15 +155,15 @@ async def get_recent_tasks(
         for row in rows:
             task_data = dict(row)
             task_type = task_data[cst.TASK_TYPE]
-            
+
             if task_type == TaskType.INSTRUCTTEXTTASK.value:
-                task_data['field_system'] = task_data.pop('itt_field_system')
-                task_data['format'] = task_data.pop('itt_format')
-                task_data['synthetic_data'] = task_data.pop('itt_synthetic_data')
-                task_data['file_format'] = task_data.pop('itt_file_format')
+                task_data["field_system"] = task_data.pop("itt_field_system")
+                task_data["format"] = task_data.pop("itt_format")
+                task_data["synthetic_data"] = task_data.pop("itt_synthetic_data")
+                task_data["file_format"] = task_data.pop("itt_file_format")
                 task = InstructTextTask(**{k: v for k, v in task_data.items() if k in InstructTextTask.model_fields})
             elif task_type == TaskType.IMAGETASK.value:
-                image_text_pairs = task_data.pop('image_text_pairs') or []
+                image_text_pairs = task_data.pop("image_text_pairs") or []
                 if isinstance(image_text_pairs, str):
                     try:
                         image_text_pairs = json.loads(image_text_pairs)
@@ -163,29 +177,30 @@ async def get_recent_tasks(
                         ]
                     except json.JSONDecodeError:
                         image_text_pairs = []
-                
-                task = ImageTask(**{k: v for k, v in task_data.items() if k in ImageTask.model_fields}, 
-                               image_text_pairs=image_text_pairs)
+
+                task = ImageTask(
+                    **{k: v for k, v in task_data.items() if k in ImageTask.model_fields}, image_text_pairs=image_text_pairs
+                )
             elif task_type == TaskType.DPOTASK.value:
-                task_data['field_prompt'] = task_data.pop('dpo_field_prompt')
-                task_data['synthetic_data'] = task_data.pop('dpo_synthetic_data')
-                task_data['file_format'] = task_data.pop('dpo_file_format')
+                task_data["field_prompt"] = task_data.pop("dpo_field_prompt")
+                task_data["synthetic_data"] = task_data.pop("dpo_synthetic_data")
+                task_data["file_format"] = task_data.pop("dpo_file_format")
                 task = DpoTask(**{k: v for k, v in task_data.items() if k in DpoTask.model_fields})
             elif task_type == TaskType.GRPOTASK.value:
-                task_data['field_prompt'] = task_data.pop('grpo_field_prompt')
-                task_data['synthetic_data'] = task_data.pop('grpo_synthetic_data')
-                task_data['file_format'] = task_data.pop('grpo_file_format')
-                
+                task_data["field_prompt"] = task_data.pop("grpo_field_prompt")
+                task_data["synthetic_data"] = task_data.pop("grpo_synthetic_data")
+                task_data["file_format"] = task_data.pop("grpo_file_format")
+
                 reward_functions = []
-                if task_data.get('reward_functions'):
-                    for rf_str in task_data['reward_functions']:
+                if task_data.get("reward_functions"):
+                    for rf_str in task_data["reward_functions"]:
                         try:
                             rf_dict = json.loads(rf_str)
                             reward_functions.append(RewardFunction(**rf_dict))
                         except (json.JSONDecodeError, TypeError):
                             continue
-                task_data['reward_functions'] = reward_functions
-                
+                task_data["reward_functions"] = reward_functions
+
                 task = GrpoTask(**{k: v for k, v in task_data.items() if k in GrpoTask.model_fields})
             elif task_type == TaskType.CHATTASK.value:
                 task_data['synthetic_data'] = task_data.pop('chat_synthetic_data')
@@ -202,11 +217,14 @@ async def get_recent_tasks(
 
 
 async def _process_task_batch(
-    connection, hotkey: str, task_ids: list[str]
+    connection, hotkey: str, task_ids: list[str], include_tournament_tasks=False
 ) -> list[AnyTypeTaskWithHotkeyDetails]:
     """
     Helper function to process a batch of task IDs.
     """
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     tasks_with_details = []
 
     tasks_by_id = {}
@@ -219,6 +237,7 @@ async def _process_task_batch(
                 {cst.TASKS_TABLE} t
             WHERE
                 t.{cst.TASK_ID} IN ({task_placeholders})
+                {tournament_tasks_clause}
         """
 
         tasks_rows = await connection.fetch(tasks_query, *task_ids)
@@ -352,7 +371,7 @@ async def _process_task_batch(
         """
         rows = await connection.fetch(query, *grpo_task_ids)
         grpo_task_data = {str(row[cst.TASK_ID]): dict(row) for row in rows}
-        
+
         # Fetch reward functions for each GRPO task
         for task_id in grpo_task_ids:
             reward_functions_query = f"""
@@ -367,10 +386,11 @@ async def _process_task_batch(
                     reward_func=row[cst.REWARD_FUNC],
                     func_hash=row[cst.FUNC_HASH],
                     is_generic=row[cst.IS_GENERIC],
-                    reward_weight=row[cst.REWARD_WEIGHT]
-                ) for row in reward_rows
+                    reward_weight=row[cst.REWARD_WEIGHT],
+                )
+                for row in reward_rows
             ]
-            
+
             if task_id in grpo_task_data:
                 grpo_task_data[task_id]["reward_functions"] = reward_functions
 
@@ -440,13 +460,15 @@ async def _process_task_batch(
 
 
 async def get_recent_tasks_for_hotkey(
-    hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config)
+    hotkey: str, limit: int = 100, page: int = 1, config: Config = Depends(get_config), include_tournament_tasks=False
 ) -> list[AnyTypeTaskWithHotkeyDetails]:
     """
     Retrieves recent tasks for a specific hotkey with detailed information.
     """
     MAX_BATCH_SIZE = 500
-
+    tournament_tasks_clause = (
+        "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
+    )
     async with await config.psql_db.connection() as connection:
         task_ids_query = f"""
             SELECT
@@ -455,6 +477,7 @@ async def get_recent_tasks_for_hotkey(
                 {cst.SUBMISSIONS_TABLE} s
             WHERE
                 s.{cst.HOTKEY} = $1
+                {tournament_tasks_clause}
             ORDER BY
                 s.{cst.CREATED_ON} DESC
             LIMIT $2 OFFSET $3
@@ -471,11 +494,12 @@ async def get_recent_tasks_for_hotkey(
             all_results = []
             for i in range(0, len(task_ids), MAX_BATCH_SIZE):
                 batch_ids = task_ids[i : i + MAX_BATCH_SIZE]
-                batch_results = await _process_task_batch(connection, hotkey, batch_ids)
+                batch_results = await _process_task_batch(connection, hotkey, batch_ids, include_tournament_tasks)
                 all_results.extend(batch_results)
             return all_results
 
-        return await _process_task_batch(connection, hotkey, task_ids)
+        return await _process_task_batch(connection, hotkey, task_ids, include_tournament_tasks)
+
 
 async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(get_config)) -> AnyTypeTaskWithHotkeyDetails:
     # First get all the task details like normal

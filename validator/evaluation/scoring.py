@@ -6,20 +6,28 @@ from datetime import datetime
 
 import numpy as np
 from fiber.chain.models import Node
+from huggingface_hub import HfApi
 
 import validator.core.constants as cts
 from core.models.payload_models import DiffusionLosses
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import TextDatasetType
 from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ChatTemplateDatasetType
+from core.models.utility_models import MinerSubmission
 from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import MinerSubmission
+
+from validator.utils.hash_verification import verify_model_hash
+
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from core.models.utility_models import TextDatasetType
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.models import AnyTypeRawTask
@@ -36,10 +44,12 @@ from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
+from validator.db.sql.tournaments import is_task_in_tournament
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
+from validator.utils.hash_verification import verify_model_hash
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
@@ -107,12 +117,12 @@ def calculate_node_quality_scores(
 
         node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
         std_score = float(np.std(node_agg.task_raw_scores))
-        
+
         if node_agg.average_raw_score < 0:
             score = 0.0
         else:
             score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
-        
+
         node_agg.quality_score = score
 
         final_scores.append(
@@ -149,6 +159,11 @@ def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
             sigmoid_score = pow(sigmoid_part, cts.SIGMOID_POWER)
             linear_score = normalised_input
             node_period_score.normalised_score = (cts.SIGMOID_WEIGHT * sigmoid_score) + (cts.LINEAR_WEIGHT * linear_score)
+
+    total_score = sum(ps.normalised_score for ps in period_scores)
+    if total_score > 0:
+        for node_period_score in period_scores:
+            node_period_score.normalised_score = node_period_score.normalised_score / total_score
 
     return period_scores
 
@@ -208,11 +223,7 @@ def _is_synth_loss_valid_for_group(valid_results: list[MinerResults], max_ratio:
     valid_miners = len(real_synth_miners)
     valid_ratios = 0
 
-    miners_with_ratios = [
-        (result, result.synth_loss / result.test_loss)
-        for result in real_synth_miners
-        if result.test_loss > 0
-    ]
+    miners_with_ratios = [(result, result.synth_loss / result.test_loss) for result in real_synth_miners if result.test_loss > 0]
 
     valid_ratios = sum(1 for _, ratio in miners_with_ratios if ratio <= max_ratio)
     ratio = valid_ratios / valid_miners if valid_miners > 0 else 0
@@ -278,11 +289,8 @@ def calculate_miner_ranking_and_scores(
 
         ranked_results = []
         for result in valid_results:
-            adjusted_loss = calculate_weighted_loss(
-                result.test_loss,
-                result.synth_loss,
-                use_max_of_synth_test=use_max_approach
-            )
+            adjusted_loss = calculate_weighted_loss(result.test_loss, result.synth_loss, use_max_of_synth_test=use_max_approach)
+            result.adjusted_loss = adjusted_loss
             ranked_results.append((result, adjusted_loss))
             logger.info(f"Miner {result.hotkey}: calculated ranking loss {adjusted_loss:.6f}")
 
@@ -301,7 +309,10 @@ def calculate_miner_ranking_and_scores(
                 ranking_type = "weighted_loss"
     else:
         logger.info("Using test loss only for ranking (all synth losses are invalid)")
-        ranked_results = [(result, result.test_loss) for result in valid_results]
+        ranked_results = []
+        for result in valid_results:
+            result.adjusted_loss = result.test_loss  # Store the adjusted loss
+            ranked_results.append((result, result.test_loss))
 
         if is_grpo_task:
             # For GRPO, sort in reverse order (higher value is better)
@@ -464,11 +475,19 @@ def _calculate_weighted_loss_for_image_eval(eval_result: EvaluationResultImage) 
     return None
 
 
-async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> str | None:
+async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> MinerSubmission | None:
     url = f"{cts.SUBMISSION_ENDPOINT}{task_id}"
     try:
-        repo = str(await process_non_stream_fiber_get(url, config, miner))
-        return None if repo == "None" else repo
+        response = await process_non_stream_fiber_get(url, config, miner)
+
+        if isinstance(response, dict):
+            return MinerSubmission(repo=response["repo"], model_hash=response.get("model_hash"))
+        else:
+            repo = str(response)
+            if repo == "None":
+                return None
+            return MinerSubmission(repo=repo, model_hash=None)
+
     except Exception as e:
         logger.error(f"Failed to get submission for miner {miner.hotkey}: {e}")
         return None
@@ -623,9 +642,7 @@ async def _clear_up_s3(file_paths: list[str]) -> None:
             logger.error(f"Failed to delete file {file_path} from MinIO: {e}")
 
 
-async def _update_scores(
-    task: AnyTypeRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db
-) -> None:
+async def _update_scores(task: AnyTypeRawTask, task_results: list[MinerResultsText | MinerResultsImage], psql_db) -> None:
     assert task.task_id is not None, "task id needs to be set to update scores"
     for result in task_results:
         with LogContext(miner_hotkey=result.hotkey):
@@ -678,6 +695,20 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
     return loss_groups
 
 
+def get_hf_upload_timestamp(repo_url: str) -> datetime | None:
+    try:
+        repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
+        api = HfApi()
+        
+        model_info = api.model_info(repo_path, timeout=5.0)
+        if model_info and model_info.lastModified:
+            return model_info.lastModified
+            
+    except Exception as e:
+        logger.error(f"Failed to get upload timestamp for {repo_url}: {e}")
+    return None
+
+
 async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
@@ -685,15 +716,59 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
     for losses, submissions in loss_groups.items():
         if len(submissions) > 1:
             logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
-            duplicates = submissions
 
-            for hotkey, repo in duplicates:
-                with LogContext(miner_hotkey=hotkey):
+
+            submissions_with_hashes = []
+            submissions_without_hashes = []
+
+
+            for hotkey, repo in submissions:
+                result = next(r for r in task_results if r.hotkey == hotkey)
+                if result.submission and result.submission.model_hash:
+                    submissions_with_hashes.append((hotkey, repo, result.submission.model_hash))
+                else:
+                    submissions_without_hashes.append((hotkey, repo))
+
+            # If we have both hashed and non-hashed submissions, prioritize hashed ones
+            if submissions_with_hashes and submissions_without_hashes:
+                logger.warning("Mixed hash/no-hash submissions with identical losses - prioritizing hashed submissions")
+                for hotkey, repo in submissions_without_hashes:
                     keep_submission[hotkey] = False
-                    logger.warning(
-                        f"Marking duplicate submission for node {hotkey} (repo: {repo}) "
-                        f"as it has identical losses to another submission"
-                    )
+                    logger.warning(f"Marking duplicate {hotkey} (no hash provided, hashed submission exists)")
+
+            # Handle multiple submissions with hashes - group by hash
+            if len(submissions_with_hashes) > 1:
+                hash_groups = {}
+                for hotkey, repo, model_hash in submissions_with_hashes:
+                    if model_hash not in hash_groups:
+                        hash_groups[model_hash] = []
+                    hash_groups[model_hash].append((hotkey, repo))
+
+                for model_hash, hash_submissions in hash_groups.items():
+                    if len(hash_submissions) > 1:
+                        logger.warning(f"Found {len(hash_submissions)} submissions with identical hash {model_hash[:16]}...")
+                        for hotkey, repo in hash_submissions[1:]:
+                            keep_submission[hotkey] = False
+                            logger.warning(f"Marking duplicate {hotkey} (identical model hash)")
+
+            # Handle multiple submissions without hashes (only if no hashed submissions exist)
+            if len(submissions_without_hashes) > 1 and not submissions_with_hashes:
+                logger.warning("Multiple submissions without hashes, using timestamp fallback")
+                submissions_with_timestamps = [
+                    (hotkey, repo, get_hf_upload_timestamp(repo)) for hotkey, repo in submissions_without_hashes
+                ]
+                valid_timestamps = [(h, r, t) for h, r, t in submissions_with_timestamps if t]
+
+                if valid_timestamps:
+                    earliest_hotkey = min(valid_timestamps, key=lambda x: x[2])[0]
+                    for hotkey, repo in submissions_without_hashes:
+                        if hotkey != earliest_hotkey:
+                            keep_submission[hotkey] = False
+                            logger.warning(f"Marking duplicate {hotkey} (later commit)")
+                else:
+                    for hotkey, repo in submissions_without_hashes:
+                        keep_submission[hotkey] = False
+                        logger.warning(f"Marking duplicate {hotkey} (no timestamps)")
 
     return keep_submission
 
@@ -703,7 +778,8 @@ def zero_duplicate_scores(
 ) -> list[MinerResultsText | MinerResultsImage]:
     # Count remaining valid submissions after filtering duplicates
     remaining_valid_count = sum(
-        1 for result in task_results
+        1
+        for result in task_results
         if result.is_finetune and not np.isnan(result.test_loss) and keep_submission.get(result.hotkey, False)
     )
 
@@ -734,31 +810,60 @@ async def process_miners_pool(
 ) -> list[MinerResultsText | MinerResultsImage]:
     assert task.task_id is not None, "We should have a task id when processing miners"
 
-
+    is_tournament_task = await is_task_in_tournament(str(task.task_id), config.psql_db)
     miner_repos: dict[str, str] = {}
+    failed_results = []
+
     for miner in miners:
         with LogContext(miner_hotkey=miner.hotkey):
             expected_name = await get_expected_repo_name(task.task_id, miner.hotkey, config.psql_db)
-            repo = await _get_submission_repo(miner, str(task.task_id), config)
-            if repo is not None:
-                repo_parts = repo.split("/")
-                if len(repo_parts) >= 2:
-                    submitted_name = repo_parts[-1]
 
-                    if expected_name and submitted_name != expected_name:
-                        logger.warning(
-                            f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
-                            f"but expected {expected_name}. Marking as failed."
-                        )
-                        continue
+            if is_tournament_task and expected_name:
+                repo = f"{cts.RAYONLABS_HF_USERNAME}/{expected_name}"
+                logger.info(f"Tournament task: constructed repo {repo} for miner {miner.hotkey}")
+                miner_repos[miner.hotkey] = repo
+            else:
+                submission = await _get_submission_repo(miner, str(task.task_id), config)
+                if submission is not None and submission.repo is not None:
+                    repo_parts = submission.repo.split("/")
+                    if len(repo_parts) >= 2:
+                        submitted_name = repo_parts[-1]
 
-                    miner_repos[miner.hotkey] = repo
-            logger.info(f"Found repo {repo} for miner {miner.hotkey}")
+                        if expected_name and submitted_name != expected_name:
+                            logger.warning(
+                                f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
+                                f"but expected {expected_name}. Marking as failed."
+                            )
+                            failed_results.append(
+                                _create_failed_miner_result(
+                                    miner.hotkey, score_reason="Repository name mismatch", task_type=task.task_type
+                                )
+                            )
+                            continue
 
-    results = [
+                        # Hash verification
+                        if submission.model_hash is not None:
+                            if verify_model_hash(submission.repo, submission.model_hash):
+                                logger.info(f"Hash verification passed for miner {miner.hotkey}")
+                            else:
+                                logger.warning(f"Hash verification failed for miner {miner.hotkey}. Marking as failed.")
+                                failed_results.append(
+                                    _create_failed_miner_result(
+                                        miner.hotkey, score_reason="Hash verification failed", task_type=task.task_type
+                                    )
+                                )
+                                continue
+                        else:
+                            logger.info(f"No hash provided by miner {miner.hotkey}, skipping verification")
+
+                        miner_repos[miner.hotkey] = submission.repo
+
+                logger.info(f"Found repo {submission.repo if submission else None} for miner {miner.hotkey}")
+
+    results = failed_results + [
         _create_failed_miner_result(miner.hotkey, score_reason="Invalid/No repo submitted", task_type=task.task_type)
         for miner in miners
-        if miner.hotkey not in miner_repos
+        if miner.hotkey not in miner_repos and miner.hotkey not in [r.hotkey for r in failed_results]
     ]
 
     if miner_repos:
@@ -782,7 +887,7 @@ async def process_miners_pool(
                                 miner.hotkey,
                                 score_reason=f"Evaluation failed: {str(eval_result)[:350]}",
                                 task_type=task.task_type,
-                                )
+                            )
                         )
                         continue
                     elif task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK]:
@@ -832,15 +937,13 @@ async def process_miners_pool(
                 [
                     _create_failed_miner_result(
                         miner.hotkey, score_reason=f"Evaluation failed: {str(e)[:350]}", task_type=task.task_type
-                        )
+                    )
                     for miner in miners
                     if miner.hotkey not in [r.hotkey for r in results]
                 ]
             )
 
     return results
-
-
 
 
 async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: Config) -> AnyTypeRawTask:

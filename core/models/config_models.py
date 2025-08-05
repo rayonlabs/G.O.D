@@ -23,11 +23,6 @@ class MinerConfig(BaseConfig):
 
 @dataclass
 class ValidatorConfig(BaseConfig):
-    postgres_user: str | None = None
-    postgres_password: str | None = None
-    postgres_db: str | None = None
-    postgres_host: str | None = None
-    postgres_port: str | None = None
     s3_compatible_endpoint: str
     s3_compatible_access_key: str
     s3_compatible_secret_key: str
@@ -37,6 +32,11 @@ class ValidatorConfig(BaseConfig):
     set_metagraph_weights: bool
     validator_port: str
     gpu_ids: str
+    postgres_user: str | None = None
+    postgres_password: str | None = None
+    postgres_db: str | None = None
+    postgres_host: str | None = None
+    postgres_port: str | None = None
     gpu_server: str | None = None
     localhost: bool = False
     env_file: str = ".vali.env"
@@ -45,6 +45,13 @@ class ValidatorConfig(BaseConfig):
     refresh_nodes: bool = True
     database_url: str | None = None
     postgres_profile: str = "default"
+
+
+@dataclass
+class TrainerConfig:
+    wandb_token: str
+    huggingface_username: str
+    huggingface_token: str
 
 
 @dataclass

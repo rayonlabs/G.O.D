@@ -1,6 +1,8 @@
-# Miner Setup Guide
+# Real-Time Miner Setup Guide
 
-This guide will walk you through the process of setting up and running a miner for the G.O.D Subnet.
+This guide covers setting up a miner for real-time serving of [Gradients.io](https://gradients.io) customer requests.
+
+For tournament participation, see the [Tournament Miner Guide](tourn_miner.md).
 
 ## Prerequisites
 
@@ -97,3 +99,8 @@ NOTE: You will need a wandb token & a huggingface token.
 ```bash
 task miner
 ```
+
+## Additional Resources
+
+### GRPO Reward Functions
+For miners working on GRPO (Gradient Reward Policy Optimization) tasks, the reward functions used for training can be found in [`core/manual_reward_funcs.py`](https://github.com/rayonlabs/G.O.D/blob/main/core/manual_reward_funcs.py).

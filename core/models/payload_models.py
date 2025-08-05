@@ -11,6 +11,7 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
+
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import TextDatasetType
 from core.models.utility_models import FileFormat
@@ -18,13 +19,13 @@ from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
-from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import JobStatus
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import RewardFunction
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
+from core.models.utility_models import TextDatasetType
 from validator.core.models import AllNodeStats
 
 
@@ -34,7 +35,7 @@ logger = get_logger(__name__)
 class MinerTaskOffer(BaseModel):
     ds_size: int | None = None
     model: str
-    hours_to_complete: int
+    hours_to_complete: float
     task_id: str
     task_type: TaskType
     model_params_count: int | None = None
@@ -45,7 +46,7 @@ class MinerTaskOffer(BaseModel):
 class TrainRequest(BaseModel):
     model: str = Field(..., description="Name or path of the model to be trained", min_length=1)
     task_id: str
-    hours_to_complete: int
+    hours_to_complete: float
     expected_repo_name: str | None = None
 
 
@@ -79,9 +80,31 @@ class TrainRequestImage(TrainRequest):
     model_type: ImageModelType = ImageModelType.SDXL
 
 
+class TrainerProxyRequest(BaseModel):
+    training_data: TrainRequestImage | TrainRequestText
+    github_repo: str
+    gpu_ids: list[int]
+    hotkey: str
+    github_branch: str | None = None
+    github_commit_hash: str | None = None
+
+
+class TrainerTaskLog(TrainerProxyRequest):
+    status: TaskStatus
+    started_at: datetime | None
+    finished_at: datetime | None
+    wandb_url: str | None = None
+    logs: list[str] = []
+
+
 class TrainResponse(BaseModel):
     message: str
     task_id: UUID
+
+
+class TrainingRepoResponse(BaseModel):
+    github_repo: str = Field(..., description="The GitHub repository URL")
+    commit_hash: str = Field(..., description="The commit hash of the repository")
 
 
 class JobStatusPayload(BaseModel):
@@ -143,7 +166,7 @@ class InstructTextDatasetColumnsResponse(BaseModel):
 
 class NewTaskRequest(BaseModel):
     account_id: UUID
-    hours_to_complete: int = Field(..., description="The number of hours to complete the task", examples=[1])
+    hours_to_complete: float = Field(..., description="The number of hours to complete the task", examples=[1])
     result_model_name: str | None = Field(None, description="The name to give to a model that is created by this task")
 
 
@@ -192,7 +215,13 @@ class NewTaskRequestChat(NewTaskRequest):
 
     @model_validator(mode="before")
     def convert_empty_strings(cls, values):
-        string_fields = ["chat_column", "chat_role_field", "chat_content_field", "chat_user_reference", "chat_assistant_reference"]
+        string_fields = [
+            "chat_column",
+            "chat_role_field",
+            "chat_content_field",
+            "chat_user_reference",
+            "chat_assistant_reference",
+        ]
         for field in string_fields:
             if field in values and isinstance(values[field], str):
                 values[field] = values[field].strip() or None
@@ -355,7 +384,7 @@ class TaskDetails(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
-    hours_to_complete: int
+    hours_to_complete: float
     trained_model_repository: str | None
     task_type: TaskType
     result_model_name: str | None = None
@@ -445,6 +474,35 @@ class ImageModelInfo(BaseModel):
 
 class ImageModelsResponse(BaseModel):
     models: list[ImageModelInfo]
+
+
+class GpuRequirementSummary(BaseModel):
+    gpu_type: str
+    count: int
+    total_hours: float
+
+
+class TournamentGpuRequirementsResponse(BaseModel):
+    gpu_requirements: list[GpuRequirementSummary]
+    total_tasks: int
+    total_hours: float
+
+
+class RewardFunctionInfo(BaseModel):
+    name: str
+    description: str
+    code: str
+
+
+class RewardFunctionsResponse(BaseModel):
+    reward_functions: dict[str, RewardFunctionInfo]
+
+
+class AddRewardFunctionRequest(BaseModel):
+    name: str
+    description: str
+    code: str
+    reward_weight: float | None = None
 
 
 # Type alias for task details types

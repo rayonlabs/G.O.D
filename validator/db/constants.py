@@ -22,6 +22,16 @@ GRPO_TASKS_TABLE = "grpo_tasks"
 REWARD_FUNCTIONS_TABLE = "reward_functions"
 GRPO_TASK_FUNCTIONS_TABLE = "grpo_task_functions"
 
+# Tournament Tables
+TOURNAMENTS_TABLE = "tournaments"
+TOURNAMENT_ROUNDS_TABLE = "tournament_rounds"
+TOURNAMENT_PARTICIPANTS_TABLE = "tournament_participants"
+TOURNAMENT_GROUPS_TABLE = "tournament_groups"
+TOURNAMENT_GROUP_MEMBERS_TABLE = "tournament_group_members"
+TOURNAMENT_PAIRS_TABLE = "tournament_pairs"
+TOURNAMENT_TASKS_TABLE = "tournament_tasks"
+TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE = "tournament_task_hotkey_trainings"
+
 # Node Table Columns
 NODE_ID = "node_id"
 HOTKEY = "hotkey"
@@ -131,6 +141,42 @@ SCORE_REASON = "score_reason"
 
 # Offer Responses Table Columns
 OFFER_RESPONSE = "offer_response"
+
+
+# Tournament Table Columns
+TOURNAMENT_ID = "tournament_id"
+TOURNAMENT_TYPE = "tournament_type"
+TOURNAMENT_STATUS = "status"
+BASE_WINNER_HOTKEY = "base_winner_hotkey"
+WINNER_HOTKEY = "winner_hotkey"
+ROUND_ID = "round_id"
+ROUND_NUMBER = "round_number"
+ROUND_TYPE = "round_type"
+IS_FINAL_ROUND = "is_final_round"
+ROUND_STATUS = "status"
+STARTED_AT = "started_at"
+COMPLETED_AT = "completed_at"
+GROUP_ID = "group_id"
+PAIR_ID = "pair_id"
+HOTKEY1 = "hotkey1"
+HOTKEY2 = "hotkey2"
+ELIMINATED_IN_ROUND_ID = "eliminated_in_round_id"
+FINAL_POSITION = "final_position"
+TASK_ORDER = "task_order"
+TRAINING_STATUS = "training_status"
+N_TRAINING_ATTEMPTS = "n_training_attempts"
+TRAINING_REPO = "training_repo"
+TRAINING_COMMIT_HASH = "training_commit_hash"
+STAKE_REQUIRED = "stake_required"
+BACKUP_REPO = "backup_repo"
+
+# Trainer GPUs Table
+TRAINERS_GPUS_TABLE = "trainers_gpus"
+TRAINER_IP = "trainer_ip"
+GPU_ID = "gpu_id"
+GPU_TYPE = "gpu_type"
+VRAM_GB = "vram_gb"
+USED_UNTIL = "used_until"
 
 
 # Common Column Names (shared between tables)

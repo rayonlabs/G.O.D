@@ -51,11 +51,14 @@ HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 WANDB_TOKEN = os.getenv("WANDB_TOKEN")
 
 HUGGINGFACE_USERNAME = os.getenv("HUGGINGFACE_USERNAME")
+RAYONLABS_HF_USERNAME = "rayonlabs"
+
 CUSTOM_DATASET_TYPE = "custom"
 
 # DPO default dataset type
-DPO_DEFAULT_DATASET_TYPE = "chatml.intel"
-DPO_DEFAULT_FIELD_PROMPT = "question"
+DPO_DEFAULT_DATASET_TYPE = "chatml.default" 
+# Field names must match exactly what Axolotl's formatter expects
+DPO_DEFAULT_FIELD_PROMPT = "question"  # chatml.intel expects 'question'
 DPO_DEFAULT_FIELD_SYSTEM = "system"
 DPO_DEFAULT_FIELD_CHOSEN = "chosen"
 DPO_DEFAULT_FIELD_REJECTED = "rejected"

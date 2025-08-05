@@ -18,12 +18,18 @@ from pydantic import ValidationError
 import core.constants as cst
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
+from core.models.utility_models import MinerSubmission
+from validator.utils.hash_verification import calculate_model_hash
+
+from core.models.payload_models import TrainingRepoResponse
+
 from core.models.payload_models import TrainRequestGrpo
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
 from core.models.payload_models import TrainResponse
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskType
+from core.models.tournament_models import TournamentType
 from core.utils import download_s3_file
 from miner.config import WorkerConfig
 from miner.dependencies import get_worker_config
@@ -137,22 +143,29 @@ async def tune_model_diffusion(
     return {"message": "Training job enqueued.", "task_id": job.job_id}
 
 
-async def get_latest_model_submission(task_id: str) -> str:
+async def get_latest_model_submission(task_id: str) -> MinerSubmission:
     try:
-        # Temporary work around in order to not change the vali a lot
-        # Could send the task type from vali instead of matching file names
         config_filename = f"{task_id}.yml"
         config_path = os.path.join(cst.CONFIG_DIR, config_filename)
+        repo_id = None
+        
         if os.path.exists(config_path):
             with open(config_path, "r") as file:
                 config_data = yaml.safe_load(file)
-                return config_data.get("hub_model_id", None)
+                repo_id = config_data.get("hub_model_id", None)
         else:
             config_filename = f"{task_id}.toml"
             config_path = os.path.join(cst.CONFIG_DIR, config_filename)
             with open(config_path, "r") as file:
                 config_data = toml.load(file)
-                return config_data.get("huggingface_repo_id", None)
+                repo_id = config_data.get("huggingface_repo_id", None)
+
+        if repo_id is None:
+            raise HTTPException(status_code=404, detail=f"No model submission found for task {task_id}")
+
+        model_hash = calculate_model_hash(repo_id)
+        
+        return MinerSubmission(repo=repo_id, model_hash=model_hash)
 
     except FileNotFoundError as e:
         logger.error(f"No submission found for task {task_id}: {str(e)}")
@@ -242,6 +255,12 @@ async def task_offer_image(
         raise HTTPException(status_code=500, detail=f"Error processing task offer: {str(e)}")
 
 
+async def get_training_repo(task_type: TournamentType) -> TrainingRepoResponse:
+    return TrainingRepoResponse(
+        github_repo="https://github.com/rayonlabs/G.O.D", commit_hash="076e87fc746985e272015322cc91fb3bbbca2f26"
+    )
+
+
 def factory_router() -> APIRouter:
     router = APIRouter()
     router.add_api_route(
@@ -267,11 +286,23 @@ def factory_router() -> APIRouter:
         get_latest_model_submission,
         tags=["Subnet"],
         methods=["GET"],
-        response_model=str,
+        response_model=MinerSubmission,
         summary="Get Latest Model Submission",
         description="Retrieve the latest model submission for a given task ID",
         dependencies=[Depends(blacklist_low_stake), Depends(verify_get_request)],
     )
+
+    router.add_api_route(
+        "/training_repo/{task_type}",
+        get_training_repo,
+        tags=["Subnet"],
+        methods=["GET"],
+        response_model=TrainingRepoResponse,
+        summary="Get Training Repo",
+        description="Retrieve the training repository and commit hash for the tournament.",
+        dependencies=[Depends(blacklist_low_stake), Depends(verify_get_request)],
+    )
+
     router.add_api_route(
         "/start_training/",  # TODO: change to /start_training_text or similar
         tune_model_text,

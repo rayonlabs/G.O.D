@@ -28,7 +28,9 @@ logger = get_logger(__name__)
 
 def _get_headers_for_signed_https_request(keypair: Keypair):
     nonce = f"{time.time_ns()}"
+    
     signature = chain_utils.sign_message(keypair, nonce)
+
     headers = {
         "validator-hotkey": keypair.ss58_address,
         "signature": signature,
@@ -36,6 +38,7 @@ def _get_headers_for_signed_https_request(keypair: Keypair):
         "netuid": str(NETUID),
         "Content-Type": "application/json",
     }
+
     return headers
 
 

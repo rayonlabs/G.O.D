@@ -10,6 +10,7 @@ import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
+import validator.db.sql.tournaments as tournaments_sql
 from core.constants import IS_PROD_ENV
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
@@ -257,7 +258,9 @@ def _attempt_delay_task(task: AnyTypeRawTask):
 
 
 async def _find_miners_for_task(config: Config):
-    pending_tasks = await tasks_sql.get_tasks_with_status(status=TaskStatus.LOOKING_FOR_NODES, psql_db=config.psql_db)
+    pending_tasks = await tasks_sql.get_tasks_with_status(
+        status=TaskStatus.LOOKING_FOR_NODES, psql_db=config.psql_db, tournament_filter="exclude"
+    )
     await asyncio.gather(
         *[_find_and_select_miners_for_task(task, config) for task in pending_tasks[: cst.MAX_CONCURRENT_MINER_ASSIGNMENTS]]
     )
@@ -302,7 +305,11 @@ async def _start_training_task(task: AnyTypeRawTask, config: Config) -> None:
 
 
 async def _process_ready_to_train_tasks(config: Config):
-    ready_to_train_tasks = await tasks_sql.get_tasks_with_status(status=TaskStatus.READY, psql_db=config.psql_db)
+    ready_to_train_tasks = await tasks_sql.get_tasks_with_status(
+        status=TaskStatus.READY,
+        psql_db=config.psql_db,
+        tournament_filter="exclude",
+    )
     if len(ready_to_train_tasks) > 0:
         logger.info(f"There are {len(ready_to_train_tasks)} ready to train")
         await asyncio.gather(
@@ -337,7 +344,9 @@ async def _move_back_to_looking_for_nodes(task: AnyTypeRawTask, config: Config):
 
 
 async def _handle_delayed_tasks(config: Config):
-    finished_delay_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.DELAYED, psql_db=config.psql_db)
+    finished_delay_tasks = await tasks_sql.get_tasks_with_status(
+        TaskStatus.DELAYED, psql_db=config.psql_db, tournament_filter="exclude"
+    )
     logger.info(f"We have {len(finished_delay_tasks)} that we're ready to offer to miners again")
     await asyncio.gather(*[_move_back_to_looking_for_nodes(task, config) for task in finished_delay_tasks])
 
@@ -386,7 +395,7 @@ async def process_pending_tasks(config: Config) -> None:
 async def move_tasks_to_preevaluation_loop(config: Config):
     await _move_any_evaluating_tasks_to_pending_evaluation(config)
     while True:
-        completed_tasks = await tasks_sql.get_tasks_ready_to_evaluate(config.psql_db)
+        completed_tasks = await tasks_sql.get_tasks_exceeding_termination_time(config.psql_db, include_tournament_tasks=False)
         if completed_tasks:
             await _move_to_preevaluation(completed_tasks, config)
         else:

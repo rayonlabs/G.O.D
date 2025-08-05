@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import inspect
 from typing import Callable
@@ -43,6 +42,36 @@ async def manually_store_reward_functions(
                 logger.info(f"Stored/Skipped function: {func.__name__}")
     finally:
         await pool.close()
+
+
+async def update_is_manual_for_reward_functions(
+    connection_string: str,
+    is_manual: bool,
+    func_names: list[str] | None
+):
+    """Update the is_manual field for reward functions.
+
+    Args:
+        connection_string: Database connection string
+        is_manual: Boolean value to set for is_manual field
+    """
+
+    pool = await asyncpg.create_pool(connection_string)
+
+    try:
+        async with pool.acquire() as conn:
+            for func_name in func_names:
+                query = f"""
+                    UPDATE {cst.REWARD_FUNCTIONS_TABLE}
+                    SET {cst.IS_MANUAL} = $1
+                    WHERE {cst.REWARD_FUNC} LIKE $2
+                """
+                pattern = f"%def {func_name}%"
+                result = await conn.execute(query, is_manual, pattern)
+                logger.info(f"Updated is_manual={is_manual} for function: {func_name}")
+    finally:
+        await pool.close()
+
 
 if __name__ == "__main__":
     pass

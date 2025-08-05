@@ -13,6 +13,7 @@ def prepare_dataset(
     job_id: str,
     regularization_images_dir: str = None,
     regularization_images_repeat: int = None,
+    output_dir: str = None,
 ):
     extraction_dir = f"{cst.DIFFUSION_DATASET_DIR}/tmp/{job_id}/"
     os.makedirs(extraction_dir, exist_ok=True)
@@ -25,7 +26,10 @@ def prepare_dataset(
     else:
         training_images_dir = extraction_dir
 
-    output_dir = f"{cst.DIFFUSION_DATASET_DIR}/{job_id}/"
+    if output_dir is None:
+        output_dir = f"{cst.DIFFUSION_DATASET_DIR}/{job_id}/"
+    else:
+        output_dir = f"{output_dir}/{job_id}/"
     os.makedirs(output_dir, exist_ok=True)
 
     training_dir = os.path.join(
@@ -57,5 +61,5 @@ def prepare_dataset(
     if os.path.exists(extraction_dir):
         shutil.rmtree(extraction_dir)
 
-    if os.path.exists(training_images_zip_path):
+    if os.path.exists(training_images_zip_path) and "tourn" not in os.path.basename(training_images_zip_path):
         os.remove(training_images_zip_path)

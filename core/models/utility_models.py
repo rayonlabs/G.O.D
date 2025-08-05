@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
@@ -25,17 +26,16 @@ class JobStatus(str, Enum):
 class TaskStatus(str, Enum):
     PENDING = "pending"
     PREPARING_DATA = "preparing_data"
-    READY = "ready"
-    SUCCESS = "success"
-    LOOKING_FOR_NODES = "looking_for_nodes"
-    DELAYED = "delayed"
-    EVALUATING = "evaluating"
-    PREEVALUATION = "preevaluation"
-    TRAINING = "training"
-    FAILURE = "failure"
-    FAILURE_FINDING_NODES = "failure_finding_nodes"
     PREP_TASK_FAILURE = "prep_task_failure"
-    NODE_TRAINING_FAILURE = "node_training_failure"
+    LOOKING_FOR_NODES = "looking_for_nodes"
+    FAILURE_FINDING_NODES = "failure_finding_nodes"
+    DELAYED = "delayed"
+    READY = "ready"
+    TRAINING = "training"
+    PREEVALUATION = "preevaluation"
+    EVALUATING = "evaluating"
+    SUCCESS = "success"
+    FAILURE = "failure"
 
 
 class WinningSubmission(BaseModel):
@@ -45,6 +45,11 @@ class WinningSubmission(BaseModel):
 
     # Turn off protected namespace for model
     model_config = ConfigDict(protected_namespaces=())
+
+
+class MinerSubmission(BaseModel):
+    repo: str
+    model_hash: str | None = None
 
 
 class MinerTaskResult(BaseModel):
@@ -183,3 +188,27 @@ class ImageTextPair(BaseModel):
     text_url: str = Field(..., description="Presigned URL for the text file")
 
 
+class GPUType(str, Enum):
+    H100 = "H100"
+    A100 = "A100"
+    A6000 = "A6000"
+
+
+class TrainingStatus(str, Enum):
+    PENDING = "pending"
+    TRAINING = "training"
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+class GPUInfo(BaseModel):
+    gpu_id: int = Field(..., description="GPU ID")
+    gpu_type: GPUType = Field(..., description="GPU Type")
+    vram_gb: int = Field(..., description="GPU VRAM in GB")
+    available: bool = Field(..., description="GPU Availability")
+    used_until: datetime | None = Field(default=None, description="GPU Used Until")
+
+
+class TrainerInfo(BaseModel):
+    trainer_ip: str = Field(..., description="Trainer IP address")
+    gpus: list[GPUInfo] = Field(..., description="List of GPUs available on this trainer")

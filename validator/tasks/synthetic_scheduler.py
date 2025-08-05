@@ -22,11 +22,11 @@ from core.models.utility_models import FileFormat
 from validator.augmentation.augmentation import load_prompts
 from validator.core.config import Config
 from validator.core.constants import END_OF_REASONING_TAG
+from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
+from validator.core.constants import MIN_DATASETS_FOR_AUGMENTATION
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
 from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
-from validator.core.constants import MIN_DATASETS_FOR_AUGMENTATION
-from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
 from validator.core.models import Dataset
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
@@ -34,7 +34,7 @@ from validator.core.models import InstructTextRawTask
 from validator.core.models import ChatRawTask
 from validator.core.models import RawTask
 from validator.core.models import RewardFunction
-from validator.db.sql.tasks import _get_generic_reward_functions_from_db
+from validator.db.sql.grpo import get_generic_reward_functions_from_db
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
 from validator.tasks.diffusion_synth import create_synthetic_image_task
@@ -43,6 +43,7 @@ from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
 from validator.utils.logging import get_logger
 from validator.utils.reward_functions import validate_reward_function
+from validator.utils.util import retry_with_backoff
 from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import upload_file_to_minio
 
@@ -103,7 +104,11 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
             random.shuffle(datasets)
 
             for dataset in datasets:
-                logger.info(dataset)
+                logger.info(
+                    f"Dataset: {dataset.dataset_id} (rows: {dataset.num_rows}, "
+                    f"bytes: {dataset.num_bytes_parquet_files}, "
+                    f"dpo_available: {dataset.dpo_available})"
+                )
                 yield dataset
 
         except Exception as e:
@@ -156,6 +161,7 @@ async def _get_columns_for_instruct_dataset(
     keypair: Keypair,
 ) -> InstructTextDatasetColumnsResponse:
     from validator.utils.call_endpoint import call_content_service_fast
+
     url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
     logger.info(f"Getting columns for dataset {dataset_id} - ACTUAL MAPPING CALL")
 
@@ -186,25 +192,26 @@ async def get_multiple_datasets(
     datasets_generator: AsyncGenerator[Dataset, None],
     num_datasets: int | None = None,
     task_type: TaskType | None = None,
-    keypair: Keypair | None = None
+    keypair: Keypair | None = None,
 ) -> list[Dataset]:
     """Get multiple unique datasets from the generator, validating column availability."""
     if num_datasets is None:
         num_datasets = random.randint(MIN_DATASETS_FOR_AUGMENTATION, MAX_DATASETS_FOR_AUGMENTATION)
-    
+
     selected_datasets = []
     selected_ids = set()
     failed_ids = set()
-    
+
     while len(selected_datasets) < num_datasets:
         dataset = await anext(datasets_generator)
-        
+
         if dataset.dataset_id in selected_ids or dataset.dataset_id in failed_ids:
             continue
-            
+
         if task_type and keypair and task_type != TaskType.DPOTASK:
             try:
                 from validator.utils.call_endpoint import call_content_service_fast
+
                 url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
                 logger.info(f"PRE-VALIDATION: Checking column mapping for dataset {dataset.dataset_id}")
                 await call_content_service_fast(url, keypair)
@@ -213,10 +220,10 @@ async def get_multiple_datasets(
                 logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
                 failed_ids.add(dataset.dataset_id)
                 continue
-        
+
         selected_datasets.append(dataset)
         selected_ids.add(dataset.dataset_id)
-    
+
     logger.info(f"Selected {len(selected_datasets)} unique datasets for task (validated)")
     return selected_datasets
 
@@ -278,6 +285,7 @@ async def merge_and_upload_chat_datasets(dataset_ids: list[str], input_field: st
     return uploaded_url
 
 
+@retry_with_backoff
 async def create_synthetic_dpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
@@ -286,17 +294,20 @@ async def create_synthetic_dpo_task(
     logger.info("DPO task")
     model_id = await anext(models)
     logger.info(f"We picked {model_id}")
-    
+
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.DPOTASK, keypair=config.keypair)
-    
+
     primary_dataset = selected_datasets[0]
-    logger.info(f"Primary dataset: {primary_dataset}")
-    
+    logger.info(
+        f"Primary dataset: {primary_dataset.dataset_id} "
+        f"(rows: {primary_dataset.num_rows}, bytes: {primary_dataset.num_bytes_parquet_files})"
+    )
+
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     assert primary_dataset.dpo_rejected_column, "we should have a reject column"
     assert primary_dataset.dpo_accepted_column, "we should have a accepted column"
     assert primary_dataset.dpo_prompt_column, "we should have a prompt column"
-    
+
     dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
 
     current_time = datetime.utcnow()
@@ -330,7 +341,7 @@ def process_reward_functions(result: str) -> list[str]:
     """
     valid_reward_functions = []
     try:
-        list_str = result[result.find('['):result.rfind(']') + 1]
+        list_str = result[result.find("[") : result.rfind("]") + 1]
         func_list = literal_eval(list_str)
         if not isinstance(func_list, list):
             raise ValueError("Expected a list")
@@ -356,7 +367,7 @@ async def _generate_generic_reward_functions_from_llm(keypair: Keypair, num_rewa
 
     messages = [
         Message(role=Role.SYSTEM, content=prompts.reward_function_generation_sys),
-        Message(role=Role.USER, content=prompts.reward_function_generation_user.format(num_rewards=num_rewards_with_margin))
+        Message(role=Role.USER, content=prompts.reward_function_generation_user.format(num_rewards=num_rewards_with_margin)),
     ]
 
     payload = convert_to_nineteen_payload(
@@ -372,11 +383,8 @@ async def _generate_generic_reward_functions_from_llm(keypair: Keypair, num_rewa
         valid_reward_functions = process_reward_functions(result)
 
     reward_functions = [
-        RewardFunction(
-            reward_func=valid_reward_function,
-            is_generic=True,
-            reward_weight=1.0
-        ) for valid_reward_function in valid_reward_functions[:num_rewards]
+        RewardFunction(reward_func=valid_reward_function, is_generic=True, reward_weight=1.0)
+        for valid_reward_function in valid_reward_functions[:num_rewards]
     ]
     return reward_functions
 
@@ -388,7 +396,7 @@ async def _get_generic_reward_functions(config: Config) -> list[RewardFunction]:
     num_generic_rewards_from_db = max(1, int(total_rewards * cst.PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_DB))
     num_generic_rewards_from_llm = total_rewards - num_generic_rewards_from_db
 
-    reward_functions += await _get_generic_reward_functions_from_db(config.psql_db, num_generic_rewards_from_db)
+    reward_functions += await get_generic_reward_functions_from_db(config.psql_db, num_generic_rewards_from_db)
 
     if num_generic_rewards_from_llm > 0:
         reward_functions += await _generate_generic_reward_functions_from_llm(config.keypair, num_generic_rewards_from_llm)
@@ -404,26 +412,28 @@ def _randomize_reward_weights(reward_functions: list[RewardFunction]) -> list[Re
             reward_func=reward_function.reward_func,
             func_hash=reward_function.func_hash,
             is_generic=reward_function.is_generic,
-            reward_weight=random.uniform(0.0, 10.0)
-            ) for reward_function in reward_functions
-            ]
+            reward_weight=random.uniform(0.0, 10.0),
+        )
+        for reward_function in reward_functions
+    ]
 
 
+@retry_with_backoff
 async def create_synthetic_grpo_task(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
-    
+
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.GRPOTASK, keypair=config.keypair)
-    
+
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-    
+
     dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
-    
+
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
@@ -448,23 +458,24 @@ async def create_synthetic_grpo_task(
     return task
 
 
+@retry_with_backoff
 async def create_synthetic_instruct_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
-    
+
     logger.info("INSTRUCT_TASK: Starting dataset selection...")
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
     logger.info(f"INSTRUCT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
-    
+
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-    
+
     dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
-    
+
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
