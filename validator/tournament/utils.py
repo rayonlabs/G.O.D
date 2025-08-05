@@ -20,6 +20,7 @@ from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
+from validator.tournament import constants as t_cst
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
