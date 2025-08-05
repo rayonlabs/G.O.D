@@ -245,10 +245,10 @@ async def get_tasks_with_status(
     psql_db: PSQLDB,
     include_not_ready_tasks: bool = False,
     tournament_filter: Literal["all", "only", "exclude"] = "all",
-    benchmark_filter: Literal["include", "exclude"] = "exclude",
+    benchmark_filter: Literal["include", "exclude", "only"] = "exclude",
 ) -> list[AnyTypeRawTask]:
-    if benchmark_filter == "include" and tournament_filter == "only":
-        raise ValueError("Cannot include benchmark tasks and only tournament tasks")
+    if (benchmark_filter == "include" or benchmark_filter == "only") and tournament_filter == "only":
+        raise ValueError(f"Cannot include benchmark tasks and only tournament tasks: {benchmark_filter} and {tournament_filter}")
 
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
@@ -262,6 +262,14 @@ async def get_tasks_with_status(
 
     if benchmark_filter == "include":
         benchmark_tasks_clause = ""
+    elif benchmark_filter == "only":
+        benchmark_tasks_clause = f"""
+            AND {cst.TASK_ID} IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
+        """
     else:
         benchmark_tasks_clause = f"""
             AND {cst.TASK_ID} NOT IN (

@@ -206,14 +206,17 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
     )
     logger.info(f"Found {len(tasks)} regular tournament tasks looking for nodes")
 
-    benchmark_tasks = await task_sql.get_tasks_with_status(
-        TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only", benchmark_filter="include"
-    )
-    logger.info(f"Found {len(benchmark_tasks)} benchmark tasks looking for nodes")
+    if tasks:
+        await _process_tasks_for_training(tasks, config, priority=1)
 
-    await _process_tasks_for_training(tasks, config, priority=1)
+    else:
+        logger.info("No regular tournament tasks looking for nodes, checking benchmark tasks")
+        benchmark_tasks = await task_sql.get_tasks_with_status(
+            TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="exclude", benchmark_filter="only"
+        )
+        logger.info(f"Found {len(benchmark_tasks)} benchmark tournament tasks looking for nodes")
 
-    await _process_tasks_for_training(benchmark_tasks, config, priority=2)
+        await _process_tasks_for_training(benchmark_tasks, config, priority=2)
 
 
 async def _process_tasks_for_training(tasks: list, config: Config, priority: int):
