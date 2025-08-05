@@ -550,7 +550,7 @@ async def create_benchmark_root_task_from_existing(
         copied_task = await task_sql.copy_task_for_benchmark(original_task, config.psql_db)
 
         await tournament_sql.add_benchmark_root_task(
-            task_id=str(copied_task.task_id), task_type=copied_task.task_type, config=config
+            task_id=str(copied_task.task_id), task_type=copied_task.task_type, psql_db=config.psql_db
         )
 
         logger.info(f"Created benchmark root task {copied_task.task_id} from original task {task_id}")
