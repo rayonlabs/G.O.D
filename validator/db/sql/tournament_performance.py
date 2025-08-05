@@ -68,9 +68,9 @@ async def get_task_scores_batch(task_ids: list[str], psql_db: PSQLDB) -> dict[st
     
     async with await psql_db.connection() as connection:
         # Convert task_ids to UUIDs for query
-        query = """
+        query = f"""
             SELECT task_id, hotkey, test_loss, synth_loss, quality_score
-            FROM tasks_nodes
+            FROM {cst.TASK_NODES_TABLE}
             WHERE task_id = ANY($1::uuid[])
         """
         results = await connection.fetch(query, task_ids)
