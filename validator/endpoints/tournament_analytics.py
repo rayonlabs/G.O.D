@@ -32,6 +32,9 @@ from validator.core.config import Config
 from validator.tournament.performance_calculator import calculate_boss_round_performance_differences
 from validator.tournament.performance_calculator import get_tournament_performance_data
 from validator.core.weight_setting import get_tournament_burn_details
+from validator.tournament.tournament_manager import get_tournament_completion_time
+from validator.tournament.tournament_manager import should_start_new_tournament_after_interval
+
 from validator.core.constants import LATEST_TOURNAMENTS_CACHE_KEY
 from validator.core.constants import LATEST_TOURNAMENTS_CACHE_TTL
 from validator.core.dependencies import get_api_key
@@ -311,30 +314,55 @@ async def get_next_tournament_dates(
                     interval_hours=cts.TOURNAMENT_INTERVAL_HOURS,
                 )
             
-            # No active/pending tournament, calculate next start time
+            # No active/pending tournament, calculate next start time using same logic as scheduler
             tournament, created_at = await tournament_sql.get_latest_tournament_with_created_at(
                 config.psql_db, tournament_type
             )
 
-            if created_at is None:
-                # No previous tournament, start from now
-                next_start = datetime.now(timezone.utc)
+            current_time = datetime.now(timezone.utc)
+            
+            if not tournament:
+                # No previous tournament, would start on next scheduler check
+                # Round up to next 15-minute interval
+                minutes_to_next_check = 15 - (current_time.minute % 15)
+                if minutes_to_next_check == 0:
+                    minutes_to_next_check = 15
+                next_start = current_time + timedelta(minutes=minutes_to_next_check)
+                next_start = next_start.replace(second=0, microsecond=0)
             else:
-                # Next tournament starts TOURNAMENT_INTERVAL_HOURS after the last one started
-                next_start = created_at + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
-
-                # If the calculated start date is in the past, use current time
-                current_time = datetime.now(timezone.utc)
-                if next_start < current_time:
-                    next_start = current_time
-
-            # Tournament ends TOURNAMENT_INTERVAL_HOURS after it starts (placeholder)
-            next_end = next_start + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
+                # Check completion time like the scheduler does
+                if tournament.status == TournamentStatus.COMPLETED:
+                    completed_at = await get_tournament_completion_time(tournament.tournament_id, config.psql_db)
+                    time_reference = completed_at or created_at
+                else:
+                    time_reference = created_at
+                
+                # Check if we should start a new tournament
+                if await should_start_new_tournament_after_interval(time_reference):
+                    # Tournament can start on next scheduler check
+                    minutes_to_next_check = 15 - (current_time.minute % 15)
+                    if minutes_to_next_check == 0:
+                        minutes_to_next_check = 15
+                    next_start = current_time + timedelta(minutes=minutes_to_next_check)
+                    next_start = next_start.replace(second=0, microsecond=0)
+                else:
+                    # Calculate when 24 hours will have passed
+                    if time_reference.tzinfo is None:
+                        time_reference = time_reference.replace(tzinfo=timezone.utc)
+                    
+                    next_start = time_reference + timedelta(hours=cts.TOURNAMENT_INTERVAL_HOURS)
+                    
+                    # Round to next 15-minute scheduler check after that time
+                    minutes = next_start.minute
+                    remainder = minutes % 15
+                    if remainder != 0:
+                        next_start = next_start + timedelta(minutes=(15 - remainder))
+                    next_start = next_start.replace(second=0, microsecond=0)
 
             return NextTournamentInfo(
                 tournament_type=tournament_type,
                 next_start_date=next_start,
-                next_end_date=next_end,
+                next_end_date=None,
                 interval_hours=cts.TOURNAMENT_INTERVAL_HOURS,
                 tournament_status="waiting",
             )
