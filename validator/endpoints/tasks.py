@@ -8,12 +8,15 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Response
 
+from core.models.payload_models import AllBenchmarkResults
 from core.models.payload_models import AllOfNodeResults
 from core.models.payload_models import AnyTypeTaskDetails
+from core.models.payload_models import BenchmarkResult
+from core.models.payload_models import BenchmarkRootTaskResults
 from core.models.payload_models import LeaderboardRow
+from core.models.payload_models import NewTaskRequestChat
 from core.models.payload_models import NewTaskRequestDPO
 from core.models.payload_models import NewTaskRequestGrpo
-from core.models.payload_models import NewTaskRequestChat
 from core.models.payload_models import NewTaskRequestImage
 from core.models.payload_models import NewTaskRequestInstructText
 from core.models.payload_models import NewTaskResponse
@@ -29,15 +32,16 @@ from validator.core.config import Config
 from validator.core.constants import MAX_CONCURRENT_JOBS
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
+from validator.core.models import ChatRawTask
+from validator.core.models import DetailedNetworkStats
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
-from validator.core.models import ChatRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import NetworkStats
-from validator.core.models import DetailedNetworkStats
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
+from validator.db.sql import tournaments as tournament_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.utils.logging import get_logger
 from validator.utils.util import convert_task_to_task_details
@@ -67,6 +71,9 @@ COMPLETED_ORGANIC_TASKS_ENDPOINT = "/v1/tasks/organic/completed"
 GET_NETWORK_DETAILED_STATUS = "/v1/network/detailed_status"
 UPDATE_TRAINING_REPO_BACKUP_ENDPOINT = "/v1/tasks/{task_id}/training_repo_backup"
 UPDATE_RESULT_MODEL_NAME_ENDPOINT = "/v1/tasks/{task_id}/result_model_name"
+CREATE_BENCHMARK_ROOT_TASK_ENDPOINT = "/v1/tasks/{task_id}/create_benchmark_root"
+GET_BENCHMARK_RESULTS_ENDPOINT = "/v1/benchmark/results"
+GET_BENCHMARK_RESULTS_FOR_ROOT_TASK_ENDPOINT = "/v1/benchmark/results/{root_task_id}"
 
 
 async def delete_task(
@@ -530,6 +537,142 @@ async def update_result_model_name(
     return Response(status_code=200)
 
 
+async def create_benchmark_root_task_from_existing(
+    task_id: UUID,
+    config: Config = Depends(get_config),
+) -> NewTaskResponse:
+    try:
+        original_task = await task_sql.get_task(task_id, config.psql_db)
+
+        if not original_task:
+            raise HTTPException(status_code=404, detail="Task not found.")
+
+        copied_task = await task_sql.copy_task_for_benchmark(original_task, config.psql_db)
+
+        await tournament_sql.add_benchmark_root_task(
+            task_id=str(copied_task.task_id), task_type=copied_task.task_type, config=config
+        )
+
+        logger.info(f"Created benchmark root task {copied_task.task_id} from original task {task_id}")
+
+        return NewTaskResponse(
+            success=True, task_id=copied_task.task_id, created_at=copied_task.created_at, account_id=copied_task.account_id
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating benchmark root task from {task_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create benchmark root task: {str(e)}")
+
+
+async def get_benchmark_results(
+    config: Config = Depends(get_config),
+) -> AllBenchmarkResults:
+    """
+    Get all benchmark results across all root tasks.
+
+    Returns:
+        All benchmark results grouped by root task
+    """
+    try:
+        results_by_root = await tournament_sql.get_all_benchmark_results(config.psql_db)
+
+        benchmark_results = []
+        for root_task_id, results in results_by_root.items():
+            root_task = await task_sql.get_task(UUID(root_task_id), config.psql_db)
+            if not root_task:
+                logger.warning(f"Root task {root_task_id} not found, skipping")
+                continue
+
+            benchmark_results.append(
+                BenchmarkRootTaskResults(
+                    root_task_id=root_task_id,
+                    model_id=root_task.model_id,
+                    dataset=root_task.ds,
+                    task_type=root_task.task_type.value,
+                    results=[
+                        BenchmarkResult(
+                            copy_task_id=result["copy_task_id"],
+                            participant_hotkey=result["participant_hotkey"],
+                            tournament_id=result["tournament_id"],
+                            quality_score=result["quality_score"],
+                            test_loss=result["test_loss"],
+                            synth_loss=result["synth_loss"],
+                            repo=result["repo"],
+                            completed_at=result["completed_at"],
+                            created_at=result["created_at"],
+                            model_id=result["model_id"],
+                            dataset=result["dataset"],
+                            task_type=result["task_type"],
+                        )
+                        for result in results
+                    ],
+                )
+            )
+
+        logger.info(f"Retrieved benchmark results for {len(benchmark_results)} root tasks")
+        return AllBenchmarkResults(success=True, results=benchmark_results)
+
+    except Exception as e:
+        logger.error(f"Error retrieving benchmark results: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve benchmark results: {str(e)}")
+
+
+async def get_benchmark_results_for_root_task(
+    root_task_id: UUID,
+    config: Config = Depends(get_config),
+) -> BenchmarkRootTaskResults:
+    """
+    Get benchmark results for a specific root task.
+
+    Args:
+        root_task_id: The ID of the benchmark root task
+
+    Returns:
+        Benchmark results for the specified root task
+    """
+    try:
+        root_task = await task_sql.get_task(root_task_id, config.psql_db)
+        if not root_task:
+            raise HTTPException(status_code=404, detail="Benchmark root task not found")
+
+        results = await tournament_sql.get_benchmark_results_for_root_task(root_task_id, config.psql_db)
+
+        benchmark_results = [
+            BenchmarkResult(
+                copy_task_id=result["copy_task_id"],
+                participant_hotkey=result["participant_hotkey"],
+                tournament_id=result["tournament_id"],
+                quality_score=result["quality_score"],
+                test_loss=result["test_loss"],
+                synth_loss=result["synth_loss"],
+                repo=result["repo"],
+                completed_at=result["completed_at"],
+                created_at=result["created_at"],
+                model_id=result["model_id"],
+                dataset=result["dataset"],
+                task_type=result["task_type"],
+            )
+            for result in results
+        ]
+
+        logger.info(f"Retrieved {len(benchmark_results)} benchmark results for root task {root_task_id}")
+        return BenchmarkRootTaskResults(
+            root_task_id=str(root_task_id),
+            model_id=root_task.model_id,
+            dataset=root_task.ds,
+            task_type=root_task.task_type.value,
+            results=benchmark_results,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving benchmark results for root task {root_task_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve benchmark results: {str(e)}")
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Gradients On Demand"], dependencies=[Depends(get_api_key)])
     router.add_api_route(TASKS_CREATE_ENDPOINT_INSTRUCT_TEXT, create_task_instruct_text, methods=["POST"])
@@ -550,4 +693,7 @@ def factory_router() -> APIRouter:
     router.add_api_route(COMPLETED_ORGANIC_TASKS_ENDPOINT, get_completed_organic_tasks, methods=["GET"])
     router.add_api_route(UPDATE_TRAINING_REPO_BACKUP_ENDPOINT, update_training_repo_backup, methods=["PUT"])
     router.add_api_route(UPDATE_RESULT_MODEL_NAME_ENDPOINT, update_result_model_name, methods=["PUT"])
+    router.add_api_route(CREATE_BENCHMARK_ROOT_TASK_ENDPOINT, create_benchmark_root_task_from_existing, methods=["POST"])
+    router.add_api_route(GET_BENCHMARK_RESULTS_ENDPOINT, get_benchmark_results, methods=["GET"])
+    router.add_api_route(GET_BENCHMARK_RESULTS_FOR_ROOT_TASK_ENDPOINT, get_benchmark_results_for_root_task, methods=["GET"])
     return router

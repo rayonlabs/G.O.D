@@ -1,7 +1,6 @@
 import math
 import os
 import re
-import requests
 from datetime import datetime
 
 import numpy as np
@@ -14,17 +13,10 @@ from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
-from core.models.utility_models import TextDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
-from core.models.utility_models import MinerSubmission
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import MinerSubmission
-
-from validator.utils.hash_verification import verify_model_hash
-
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.models.utility_models import TextDatasetType
@@ -44,6 +36,7 @@ from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
+from validator.db.sql.tournaments import is_benchmark_task
 from validator.db.sql.tournaments import is_task_in_tournament
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
@@ -708,20 +701,6 @@ def get_hf_upload_timestamp(repo_url: str) -> datetime | None:
     return None
 
 
-def get_hf_upload_timestamp(repo_url: str) -> datetime | None:
-    try:
-        repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
-        api = HfApi()
-        
-        model_info = api.model_info(repo_path, timeout=5.0)
-        if model_info and model_info.lastModified:
-            return model_info.lastModified
-            
-    except Exception as e:
-        logger.error(f"Failed to get upload timestamp for {repo_url}: {e}")
-    return None
-
-
 async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
@@ -730,10 +709,8 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
         if len(submissions) > 1:
             logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
 
-
             submissions_with_hashes = []
             submissions_without_hashes = []
-
 
             for hotkey, repo in submissions:
                 result = next(r for r in task_results if r.hotkey == hotkey)
@@ -824,6 +801,7 @@ async def process_miners_pool(
     assert task.task_id is not None, "We should have a task id when processing miners"
 
     is_tournament_task = await is_task_in_tournament(str(task.task_id), config.psql_db)
+    is_benchmark = await is_benchmark_task(str(task.task_id), config.psql_db)
     miner_repos: dict[str, str] = {}
     failed_results = []
 
@@ -831,7 +809,7 @@ async def process_miners_pool(
         with LogContext(miner_hotkey=miner.hotkey):
             expected_name = await get_expected_repo_name(task.task_id, miner.hotkey, config.psql_db)
 
-            if is_tournament_task and expected_name:
+            if (is_tournament_task or is_benchmark) and expected_name:
                 repo = f"{cts.RAYONLABS_HF_USERNAME}/{expected_name}"
                 logger.info(f"Tournament task: constructed repo {repo} for miner {miner.hotkey}")
                 miner_repos[miner.hotkey] = repo

@@ -199,10 +199,32 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
     """
     Fetch tasks that are looking for nodes and are part of tournaments,
     then move them to training status and record the hotkey assignments.
+    Handle regular tournament tasks and benchmark tasks separately with different priorities.
     """
-    tasks = await task_sql.get_tasks_with_status(TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only")
-    logger.info(f"Found {len(tasks)} tournament tasks looking for nodes")
+    tasks = await task_sql.get_tasks_with_status(
+        TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only", benchmark_filter="exclude"
+    )
+    logger.info(f"Found {len(tasks)} regular tournament tasks looking for nodes")
 
+    benchmark_tasks = await task_sql.get_tasks_with_status(
+        TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only", benchmark_filter="include"
+    )
+    logger.info(f"Found {len(benchmark_tasks)} benchmark tasks looking for nodes")
+
+    await _process_tasks_for_training(tasks, config, priority=1)
+
+    await _process_tasks_for_training(benchmark_tasks, config, priority=2)
+
+
+async def _process_tasks_for_training(tasks: list, config: Config, priority: int):
+    """
+    Process a list of tasks for training with the specified priority.
+
+    Args:
+        tasks: List of tasks to process
+        config: Configuration object
+        priority: Training priority
+    """
     if not tasks:
         return
 
@@ -223,17 +245,17 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
 
     if tasks_without_nodes:
         logger.warning(
-            f"Found {len(tasks_without_nodes)} tasks without assigned nodes: {[str(t.task_id) for t in tasks_without_nodes]}"
+            f"Found {len(tasks_without_nodes)} tasks with priority {priority} without assigned nodes: {[str(t.task_id) for t in tasks_without_nodes]}"
         )
 
     if task_hotkey_triples:
-        await tournament_sql.add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples, config.psql_db)
+        await tournament_sql.add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples, config.psql_db, priority=priority)
 
     for task in tasks_to_update:
         task.status = TaskStatus.TRAINING
         await task_sql.update_task(task, config.psql_db)
 
-    logger.info(f"Moved {len(tasks_to_update)} tasks to TRAINING status")
+    logger.info(f"Moved {len(tasks_to_update)} tasks with priority {priority} to TRAINING status")
 
 
 async def process_pending_tournament_tasks(config: Config):
