@@ -6,7 +6,7 @@ from validator.db.sql.tournaments import count_champion_consecutive_wins, get_to
 from validator.db.sql.tasks import get_task
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament.utils import get_progressive_threshold, get_task_results_for_ranking
-from validator.tournament.constants import EMISSION_BURN_HOTKEY
+from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
