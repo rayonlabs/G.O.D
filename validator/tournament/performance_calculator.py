@@ -55,8 +55,35 @@ async def calculate_boss_round_performance_differences(
                 challenger_hotkey = result.hotkey
                 challenger_score = result.adjusted_loss
         
-        if boss_score is None or challenger_score is None:
-            logger.warning(f"Missing scores for task {task.task_id}")
+        if boss_score is None and challenger_score is None:
+            logger.warning(f"Both boss and challenger missing scores for task {task.task_id}")
+            continue
+            
+        # Handle cases where one participant failed
+        if boss_score is None:
+            logger.warning(f"Boss failed evaluation for task {task.task_id} - challenger wins by default")
+            performance_differences.append(TaskPerformanceDifference(
+                task_id=str(task.task_id),
+                task_type=task_obj.task_type.value,
+                boss_score=None,  # Boss failed
+                challenger_score=challenger_score,
+                threshold_used=threshold,
+                performance_difference=None,  # No comparison possible
+                challenger_won=True  # Challenger wins by default
+            ))
+            continue
+            
+        if challenger_score is None:
+            logger.warning(f"Challenger failed evaluation for task {task.task_id} - boss wins by default")
+            performance_differences.append(TaskPerformanceDifference(
+                task_id=str(task.task_id),
+                task_type=task_obj.task_type.value,
+                boss_score=boss_score,
+                challenger_score=None,  # Challenger failed
+                threshold_used=threshold,
+                performance_difference=None,  # No comparison possible
+                challenger_won=False  # Boss wins by default
+            ))
             continue
         
         if task_obj.task_type == TaskType.GRPOTASK:

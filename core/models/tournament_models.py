@@ -233,10 +233,10 @@ class TaskPerformanceDifference(BaseModel):
     """Performance difference data for a single task"""
     task_id: str
     task_type: str
-    boss_score: float
-    challenger_score: float
+    boss_score: float | None
+    challenger_score: float | None
     threshold_used: float  # 0.05, 0.075, or 0.10
-    performance_difference: float  # Percentage difference (positive = challenger better)
+    performance_difference: float | None  # Percentage difference (positive = challenger better)
     challenger_won: bool
 
 
