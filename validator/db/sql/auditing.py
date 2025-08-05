@@ -13,15 +13,15 @@ from validator.core.config import Config
 from validator.core.dependencies import get_config
 from validator.core.models import AnyTypeTask
 from validator.core.models import AnyTypeTaskWithHotkeyDetails
+from validator.core.models import ChatTask
+from validator.core.models import ChatTaskWithHotkeyDetails
 from validator.core.models import DpoTask
 from validator.core.models import DpoTaskWithHotkeyDetails
 from validator.core.models import GrpoTask
-from validator.core.models import ChatTask
 from validator.core.models import GrpoTaskWithHotkeyDetails
 from validator.core.models import HotkeyDetails
 from validator.core.models import ImageTask
 from validator.core.models import ImageTaskWithHotkeyDetails
-from validator.core.models import ChatTaskWithHotkeyDetails
 from validator.core.models import InstructTextTask
 from validator.core.models import InstructTextTaskWithHotkeyDetails
 from validator.db import constants as cst
@@ -54,6 +54,16 @@ async def get_recent_tasks(
     tournament_tasks_clause_hotkeys = (
         "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
+
+    # Always exclude benchmark tasks from auditing
+    benchmark_tasks_clause = f"""
+        AND {cst.TASK_ID} NOT IN (
+            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+            UNION
+            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+        )
+    """
+
     async with await config.psql_db.connection() as connection:
         connection: Connection
         base_query = f"""
@@ -64,6 +74,7 @@ async def get_recent_tasks(
                 FROM {cst.SUBMISSIONS_TABLE} s
                 WHERE s.{cst.HOTKEY} = ANY($1)
                 {tournament_tasks_clause_hotkeys}
+                {benchmark_tasks_clause}
                 ORDER BY s.{cst.CREATED_ON} DESC
                 LIMIT $2 OFFSET $3
                 '''
@@ -72,6 +83,7 @@ async def get_recent_tasks(
                 SELECT {cst.TASK_ID}
                 FROM {cst.TASKS_TABLE}
                 {tournament_tasks_clause}
+                {benchmark_tasks_clause}
                 ORDER BY {cst.CREATED_AT} DESC
                 LIMIT $1 OFFSET $2
                 '''
@@ -203,13 +215,13 @@ async def get_recent_tasks(
 
                 task = GrpoTask(**{k: v for k, v in task_data.items() if k in GrpoTask.model_fields})
             elif task_type == TaskType.CHATTASK.value:
-                task_data['synthetic_data'] = task_data.pop('chat_synthetic_data')
-                task_data['file_format'] = task_data.pop('chat_file_format')
+                task_data["synthetic_data"] = task_data.pop("chat_synthetic_data")
+                task_data["file_format"] = task_data.pop("chat_file_format")
                 task = ChatTask(**{k: v for k, v in task_data.items() if k in ChatTask.model_fields})
             else:
                 logger.warning(f"Unknown task type: {task_type}, skipping task {task_data.get('task_id')}")
                 continue
-            
+
             task = hide_sensitive_data_till_finished(task)
             tasks_processed.append(task)
 
@@ -225,6 +237,16 @@ async def _process_task_batch(
     tournament_tasks_clause = (
         "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
+
+    # Always exclude benchmark tasks from auditing
+    benchmark_tasks_clause = f"""
+        AND {cst.TASK_ID} NOT IN (
+            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+            UNION
+            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+        )
+    """
+
     tasks_with_details = []
 
     tasks_by_id = {}
@@ -238,6 +260,7 @@ async def _process_task_batch(
             WHERE
                 t.{cst.TASK_ID} IN ({task_placeholders})
                 {tournament_tasks_clause}
+                {benchmark_tasks_clause}
         """
 
         tasks_rows = await connection.fetch(tasks_query, *task_ids)
@@ -469,6 +492,16 @@ async def get_recent_tasks_for_hotkey(
     tournament_tasks_clause = (
         "" if include_tournament_tasks else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID} FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
+
+    # Always exclude benchmark tasks from auditing
+    benchmark_tasks_clause = f"""
+        AND {cst.TASK_ID} NOT IN (
+            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+            UNION
+            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+        )
+    """
+
     async with await config.psql_db.connection() as connection:
         task_ids_query = f"""
             SELECT
@@ -478,6 +511,7 @@ async def get_recent_tasks_for_hotkey(
             WHERE
                 s.{cst.HOTKEY} = $1
                 {tournament_tasks_clause}
+                {benchmark_tasks_clause}
             ORDER BY
                 s.{cst.CREATED_ON} DESC
             LIMIT $2 OFFSET $3
