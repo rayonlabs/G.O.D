@@ -1,3 +1,4 @@
+import hashlib
 from typing import Literal
 from uuid import UUID
 
@@ -1422,23 +1423,6 @@ async def get_reward_functions(task_id: UUID, psql_db: PSQLDB, connection: Conne
 
     async with await psql_db.connection() as connection:
         return await _get_reward_functions(connection)
-
-
-async def _get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: int) -> list[RewardFunction]:
-    query = f"""
-        SELECT {cst.FUNC_HASH}, {cst.REWARD_FUNC}, {cst.IS_GENERIC}
-        FROM {cst.REWARD_FUNCTIONS_TABLE}
-        WHERE {cst.IS_GENERIC} = true
-        AND {cst.IS_MANUAL} = true
-        ORDER BY RANDOM()
-        LIMIT $1
-    """
-
-    async with await psql_db.connection() as conn:
-        rows = await conn.fetch(query, num_rewards)
-        return [
-            RewardFunction(reward_func=row[cst.REWARD_FUNC], is_generic=row[cst.IS_GENERIC], reward_weight=1.0) for row in rows
-        ]
 
 
 async def get_model_cache_stats(psql_db: PSQLDB, tau_days: float = 10, max_lookup_days: float = 30) -> dict[str, dict]:
