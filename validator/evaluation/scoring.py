@@ -678,23 +678,6 @@ def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float
     return loss_groups
 
 
-
-def get_hf_commit_timestamp(repo_url: str) -> datetime | None:
-    """Get latest commit timestamp from HuggingFace repo."""
-    try:
-        repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
-        api_url = f"https://huggingface.co/api/models/{repo_path}/commits?limit=1"
-        
-        response = requests.get(api_url, timeout=10)
-        commits = response.json()
-        
-        if commits and (date_str := commits[0].get("date")):
-            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-    except Exception as e:
-        logger.error(f"Failed to get commit timestamp for {repo_url}: {e}")
-    return None
-
-
 async def handle_duplicate_submissions(task_results: list[MinerResultsText | MinerResultsImage]) -> dict[str, bool]:
     keep_submission = {result.hotkey: True for result in task_results}
     loss_groups = group_by_losses(task_results)
@@ -702,23 +685,15 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
     for losses, submissions in loss_groups.items():
         if len(submissions) > 1:
             logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
-            
-            # Get commit timestamps and keep only the earliest
-            submissions_with_timestamps = [(hotkey, repo, get_hf_commit_timestamp(repo)) 
-                                         for hotkey, repo in submissions]
-            valid_timestamps = [(h, r, t) for h, r, t in submissions_with_timestamps if t]
-            
-            if valid_timestamps:
-                earliest_hotkey = min(valid_timestamps, key=lambda x: x[2])[0]
-                for hotkey, repo in submissions:
-                    if hotkey != earliest_hotkey:
-                        keep_submission[hotkey] = False
-                        logger.warning(f"Marking duplicate {hotkey} (later commit)")
-            else:
-                # Fallback: mark all duplicates
-                for hotkey, repo in submissions:
+            duplicates = submissions
+
+            for hotkey, repo in duplicates:
+                with LogContext(miner_hotkey=hotkey):
                     keep_submission[hotkey] = False
-                    logger.warning(f"Marking duplicate {hotkey} (no timestamps)")
+                    logger.warning(
+                        f"Marking duplicate submission for node {hotkey} (repo: {repo}) "
+                        f"as it has identical losses to another submission"
+                    )
 
     return keep_submission
 
