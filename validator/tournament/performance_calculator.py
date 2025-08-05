@@ -145,9 +145,9 @@ async def get_tournament_performance_data(tournament_id: str, psql_db) -> list[T
                 else:
                     performance_diff = 0.0
             else:
-                if winner_tournament_score > 0:
+                if best_synthetic_score > 0:
                     # For non-GRPO: lower is better, so positive diff means tournament is worse
-                    performance_diff = (winner_tournament_score - best_synthetic_score) / winner_tournament_score
+                    performance_diff = (winner_tournament_score - best_synthetic_score) / best_synthetic_score
                 else:
                     performance_diff = 0.0
 
