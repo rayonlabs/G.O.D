@@ -229,6 +229,38 @@ class TournamentTypeResult(BaseModel):
     prev_winner_won_final: bool
 
 
+class TaskPerformanceDifference(BaseModel):
+    """Performance difference data for a single task"""
+    task_id: str
+    task_type: str
+    boss_score: float
+    challenger_score: float
+    threshold_used: float  # 0.05, 0.075, or 0.10
+    performance_difference: float  # Percentage difference (positive = challenger better)
+    challenger_won: bool
+
+
+class TournamentPerformanceData(BaseModel):
+    """Performance data for tournament vs sync comparison"""
+    tournament_task_id: str
+    synthetic_task_id: str
+    task_type: str
+    tournament_winner_score: float
+    best_synthetic_score: float
+    performance_difference: float  # Percentage difference (positive = tournament better)
+
+
+class TournamentBurnData(BaseModel):
+    """Data explaining emission burn calculation"""
+    text_performance_diff: float | None
+    image_performance_diff: float | None
+    weighted_average_diff: float
+    burn_proportion: float
+    tournament_weight: float
+    regular_weight: float
+    burn_weight: float
+
+
 class TournamentDetailsResponse(BaseModel):
     tournament_id: str
     tournament_type: TournamentType
