@@ -4,9 +4,8 @@ from validator.core import constants as cts
 from validator.db.sql.tournament_performance import get_boss_round_winner_task_pairs, get_task_scores_as_models, get_task_scores_batch
 from validator.db.sql.tournaments import count_champion_consecutive_wins, get_tournament, get_tournament_tasks
 from validator.db.sql.tasks import get_task
-from validator.db.sql.submissions_and_scoring import get_task_results_for_ranking
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
-from validator.tournament.utils import get_progressive_threshold
+from validator.tournament.utils import get_progressive_threshold, get_task_results_for_ranking
 from validator.tournament.constants import EMISSION_BURN_HOTKEY
 from validator.utils.logging import get_logger
 
