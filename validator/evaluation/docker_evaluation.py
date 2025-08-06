@@ -55,7 +55,7 @@ async def get_evaluation_results(container):
 
 
 def process_evaluation_results(results: dict, is_image: bool = False) -> DockerEvaluationResults:
-    model_params_count = results.pop("model_params_count", None)
+    model_params_count = results.pop("model_params_count", 0)
 
     processed_results = {}
     for repo, result in results.items():
