@@ -4,6 +4,9 @@ from pathlib import Path
 from pydantic import TypeAdapter
 import json
 
+# Allow torch.load for transformers 4.46+ security check
+os.environ['TRANSFORMERS_ALLOW_TORCH_LOAD'] = 'true'
+
 import torch
 from accelerate.utils import find_executable_batch_size
 from axolotl.utils.data import load_tokenized_prepared_datasets
