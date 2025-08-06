@@ -5,6 +5,11 @@ WORKDIR /app
 COPY validator/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Force upgrade PyTorch to fix CVE-2025-32434 vulnerability
+# Uninstall existing torch first to ensure clean upgrade
+RUN pip uninstall -y torch torchvision torchaudio && \
+    pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cu118
+
 COPY . .
 
 ENV JOB_ID=""
