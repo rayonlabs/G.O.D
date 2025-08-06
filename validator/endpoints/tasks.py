@@ -128,6 +128,7 @@ async def create_task_grpo(
         ds=request.ds_repo,
         file_format=request.file_format,
         field_prompt=request.field_prompt,
+        extra_column=request.extra_column,
         reward_functions=request.reward_functions,
         is_organic=True,
         status=TaskStatus.PENDING,
