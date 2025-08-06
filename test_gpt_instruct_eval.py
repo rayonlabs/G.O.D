@@ -1,22 +1,15 @@
 #!/usr/bin/env python3
 """
 Test script for instruct evaluation of GPT-OSS-20B model.
-This tests the base model directly as if it were a fine-tuned submission.
+This runs the evaluation in the proper Docker container.
 """
 
-import os
 import sys
 import json
 import subprocess
 import argparse
 from pathlib import Path
 from uuid import uuid4
-
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent))
-
-from validator.core.models import EvaluationArgs
-from core.models.utility_models import InstructTextDatasetType, FileFormat
 
 
 def create_test_dataset(output_path: Path) -> str:
@@ -75,121 +68,123 @@ def create_test_dataset(output_path: Path) -> str:
 
 def main():
     """Main test function."""
-    parser = argparse.ArgumentParser(description='Test GPT-OSS-20B instruct evaluation')
+    parser = argparse.ArgumentParser(description='Test GPT-OSS-20B instruct evaluation in Docker container')
     parser.add_argument('--model', type=str, default='openai/gpt-oss-20b', help='Model ID to evaluate')
     parser.add_argument('--dataset', type=str, default=None, help='Path to dataset JSON file')
     parser.add_argument('--output-dir', type=str, default='./test_eval_output', help='Output directory')
     parser.add_argument('--field-instruction', type=str, default='instruction', help='Field name for instructions')
     parser.add_argument('--field-output', type=str, default='output', help='Field name for outputs')
+    parser.add_argument('--container-image', type=str, default='validator', help='Docker image to use')
+    parser.add_argument('--dry-run', action='store_true', help='Just print the docker command without running')
     
     args = parser.parse_args()
     
     print("="*60)
-    print("GPT-OSS-20B Instruct Evaluation Test Script")
+    print("GPT-OSS-20B Instruct Evaluation Test (Docker Container)")
     print("="*60)
     
     # Configuration
     MODEL_ID = args.model
-    OUTPUT_DIR = Path(args.output_dir)
+    OUTPUT_DIR = Path(args.output_dir).absolute()
     OUTPUT_DIR.mkdir(exist_ok=True)
     
     # Create or use provided dataset
     if args.dataset:
-        dataset_path = args.dataset
-        if not Path(dataset_path).exists():
+        dataset_path = Path(args.dataset).absolute()
+        if not dataset_path.exists():
             print(f"Error: Dataset file {dataset_path} does not exist")
             sys.exit(1)
         print(f"Using provided dataset: {dataset_path}")
     else:
-        dataset_path = create_test_dataset(OUTPUT_DIR)
+        dataset_path = Path(create_test_dataset(OUTPUT_DIR)).absolute()
     
     # Define dataset type for instruct evaluation
-    dataset_type = InstructTextDatasetType(
-        field_instruction=args.field_instruction,
-        field_output=args.field_output
-    )
-    
-    # Set environment variables that the evaluation script expects
-    os.environ["DATASET"] = dataset_path
-    os.environ["ORIGINAL_MODEL"] = MODEL_ID
-    os.environ["DATASET_TYPE"] = json.dumps(dataset_type.model_dump())
-    os.environ["FILE_FORMAT"] = "json"
-    os.environ["MODELS"] = MODEL_ID  # Testing the base model itself
+    dataset_type = {
+        "field_instruction": args.field_instruction,
+        "field_output": args.field_output
+    }
     
     print(f"\nConfiguration:")
     print(f"  Model to evaluate: {MODEL_ID}")
-    print(f"  Dataset: {dataset_path}")
-    print(f"  Dataset Type: {dataset_type.model_dump()}")
-    print(f"  File Format: json")
+    print(f"  Dataset (host): {dataset_path}")
+    print(f"  Dataset (container): /data/{dataset_path.name}")
+    print(f"  Dataset Type: {dataset_type}")
     print(f"  Output Dir: {OUTPUT_DIR}")
+    print(f"  Container Image: {args.container_image}")
     
-    # Create evaluation arguments
-    eval_args = EvaluationArgs(
-        dataset=dataset_path,
-        original_model=MODEL_ID,
-        dataset_type=dataset_type,
-        file_format=FileFormat.JSON,
-        repo=MODEL_ID  # Evaluate the base model directly
-    )
+    # Build Docker command
+    docker_cmd = [
+        "docker", "run", "--rm",
+        "--gpus", "all",
+        # Mount the dataset directory
+        "-v", f"{dataset_path.parent}:/data:ro",
+        # Mount output directory
+        "-v", f"{OUTPUT_DIR}:/output:rw",
+        # Environment variables
+        "-e", f"DATASET=/data/{dataset_path.name}",
+        "-e", f"ORIGINAL_MODEL={MODEL_ID}",
+        "-e", f"DATASET_TYPE={json.dumps(dataset_type)}",
+        "-e", f"FILE_FORMAT=json",
+        "-e", f"MODELS={MODEL_ID}",  # Testing the base model itself
+        # Container and command
+        args.container_image,
+        "python", "-m", "validator.evaluation.eval_instruct_text"
+    ]
     
     print("\n" + "="*60)
-    print("Running Instruct Evaluation")
+    print("Docker Command:")
     print("="*60)
-    print("\nNote: This will evaluate the base model directly.")
-    print("The expected_repo_name is only used when evaluating fine-tuned models from miners.")
+    print(" \\\n  ".join(docker_cmd))
     
-    # Run the evaluation
-    try:
-        # Run evaluation subprocess (same pattern as the actual evaluation)
-        result = subprocess.run([
-            sys.executable,
-            "-m",
-            "validator.evaluation.single_eval_instruct_text",
-            eval_args.model_dump_json()
-        ], capture_output=True, text=True, check=False)
+    if not args.dry_run:
+        print("\n" + "="*60)
+        print("Running Evaluation in Container")
+        print("="*60)
         
-        print("\nEvaluation Output:")
-        print(result.stdout)
-        
-        if result.stderr:
-            print("\nErrors/Warnings:")
-            print(result.stderr)
-        
-        if result.returncode == 0:
-            print("\n✓ Evaluation completed successfully")
-        else:
-            print(f"\n⚠ Evaluation exited with code {result.returncode}")
+        try:
+            # Check if docker is available
+            subprocess.run(["docker", "--version"], capture_output=True, check=True)
             
-        # Check for results file
-        results_file = Path("results.json")
-        if results_file.exists():
-            with open(results_file, 'r') as f:
-                results = json.load(f)
-                print("\n" + "="*60)
-                print("Evaluation Results:")
-                print("="*60)
-                print(json.dumps(results, indent=2))
+            # Run the container
+            result = subprocess.run(docker_cmd, capture_output=False, text=True, check=False)
+            
+            if result.returncode == 0:
+                print("\n✓ Container evaluation completed successfully")
+            else:
+                print(f"\n⚠ Container exited with code {result.returncode}")
+            
+            # Check for results
+            results_file = OUTPUT_DIR / "results.json"
+            if results_file.exists():
+                with open(results_file, 'r') as f:
+                    results = json.load(f)
+                    print("\n" + "="*60)
+                    print("Evaluation Results:")
+                    print("="*60)
+                    print(json.dumps(results, indent=2))
+                    
+                    if MODEL_ID in results:
+                        print(f"\nSummary:")
+                        print(f"  Model: {MODEL_ID}")
+                        print(f"  Eval Loss: {results[MODEL_ID].get('eval_loss', 'N/A')}")
+                        print(f"  Is Finetune: {results[MODEL_ID].get('is_finetune', 'N/A')}")
+            else:
+                print(f"\nNote: Results file not found at {results_file}")
+                print("Check container output above for details.")
                 
-                if MODEL_ID in results:
-                    print(f"\nSummary:")
-                    print(f"  Model: {MODEL_ID}")
-                    print(f"  Eval Loss: {results[MODEL_ID].get('eval_loss', 'N/A')}")
-                    print(f"  Is Finetune: {results[MODEL_ID].get('is_finetune', 'N/A')}")
-        else:
-            print(f"\nNote: Results file not found. Check current directory or logs for details.")
-            
-    except Exception as e:
-        print(f"\nError during evaluation: {e}")
-        import traceback
-        traceback.print_exc()
+        except subprocess.CalledProcessError:
+            print("\nError: Docker is not installed or not available")
+            sys.exit(1)
+        except Exception as e:
+            print(f"\nError running container: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print("\n[DRY RUN] - Docker command printed above. Use without --dry-run to execute.")
     
     print("\n" + "="*60)
     print("Script Complete")
     print("="*60)
-    print("\nUsage examples:")
-    print("  python test_gpt_instruct_eval.py")
-    print("  python test_gpt_instruct_eval.py --model meta-llama/Llama-2-7b-hf")
-    print("  python test_gpt_instruct_eval.py --dataset /path/to/custom/dataset.json")
 
 
 if __name__ == "__main__":
