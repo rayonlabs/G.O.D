@@ -74,7 +74,7 @@ def main():
     parser.add_argument('--output-dir', type=str, default='./test_eval_output', help='Output directory')
     parser.add_argument('--field-instruction', type=str, default='instruction', help='Field name for instructions')
     parser.add_argument('--field-output', type=str, default='output', help='Field name for outputs')
-    parser.add_argument('--container-image', type=str, default='validator', help='Docker image to use')
+    parser.add_argument('--container-image', type=str, default='weightswandering/tuning_vali:latest', help='Docker image to use')
     parser.add_argument('--dry-run', action='store_true', help='Just print the docker command without running')
     
     args = parser.parse_args()
