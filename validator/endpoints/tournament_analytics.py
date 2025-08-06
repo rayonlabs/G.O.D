@@ -23,6 +23,8 @@ from core.models.tournament_models import NextTournamentInfo
 from core.models.tournament_models import LatestTournamentsDetailsResponse
 from core.models.tournament_models import TournamentBurnData
 from core.models.tournament_models import TournamentDetailsResponse
+from core.models.tournament_models import TournamentHistoryEntry
+from core.models.tournament_models import TournamentHistoryResponse
 from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentType
@@ -52,6 +54,7 @@ GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT = "/v1/tournaments/latest/details"
 GET_TOURNAMENT_GPU_REQUIREMENTS_ENDPOINT = "/v1/tournaments/gpu-requirements"
 GET_NEXT_TOURNAMENT_DATES_ENDPOINT = "/v1/tournaments/next-dates"
 GET_ACTIVE_TOURNAMENTS_ENDPOINT = "/v1/tournaments/active"
+GET_TOURNAMENT_HISTORY_ENDPOINT = "/v1/tournaments/history"
 
 
 async def get_tournament_details(
@@ -427,6 +430,53 @@ async def get_active_tournaments(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+async def get_tournament_history(
+    config: Config = Depends(get_config),
+) -> TournamentHistoryResponse:
+    """Get the history of all active and completed tournaments."""
+    try:
+        # Get all active tournaments
+        active_tournaments = await tournament_sql.get_tournaments_with_status(TournamentStatus.ACTIVE, config.psql_db)
+        
+        # Get all completed tournaments
+        completed_tournaments = await tournament_sql.get_tournaments_with_status(TournamentStatus.COMPLETED, config.psql_db)
+        
+        # Combine and sort by created_at (newest first)
+        all_tournaments = active_tournaments + completed_tournaments
+        
+        # Get created_at dates for sorting
+        tournament_entries = []
+        for tournament in all_tournaments:
+            _, created_at = await tournament_sql.get_tournament_with_created_at(
+                tournament.tournament_id, config.psql_db
+            )
+            
+            tournament_entries.append(
+                TournamentHistoryEntry(
+                    tournament_id=tournament.tournament_id,
+                    tournament_type=tournament.tournament_type,
+                    status=tournament.status,
+                    winner_hotkey=tournament.winner_hotkey,
+                    base_winner_hotkey=tournament.base_winner_hotkey,
+                    created_at=created_at,
+                )
+            )
+        
+        # Sort by created_at (newest first)
+        tournament_entries.sort(key=lambda x: x.created_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        
+        response = TournamentHistoryResponse(
+            tournaments=tournament_entries
+        )
+        
+        logger.info(f"Retrieved tournament history: {len(tournament_entries)} tournaments")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error retrieving tournament history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Tournament Analytics"], dependencies=[Depends(get_api_key)])
     router.add_api_route(GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT, get_latest_tournaments_details, methods=["GET"])
@@ -434,4 +484,5 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_TOURNAMENT_GPU_REQUIREMENTS_ENDPOINT, get_tournament_gpu_requirements, methods=["GET"])
     router.add_api_route(GET_NEXT_TOURNAMENT_DATES_ENDPOINT, get_next_tournament_dates, methods=["GET"])
     router.add_api_route(GET_ACTIVE_TOURNAMENTS_ENDPOINT, get_active_tournaments, methods=["GET"])
+    router.add_api_route(GET_TOURNAMENT_HISTORY_ENDPOINT, get_tournament_history, methods=["GET"])
     return router

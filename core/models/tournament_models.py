@@ -350,3 +350,18 @@ class LatestTournamentsDetailsResponse(BaseModel):
     text: TournamentDetailsResponse | None
     image: TournamentDetailsResponse | None
     burn_data: TournamentBurnData
+
+
+class TournamentHistoryEntry(BaseModel):
+    """Individual tournament entry for history response"""
+    tournament_id: str
+    tournament_type: TournamentType
+    status: TournamentStatus
+    winner_hotkey: str | None = None
+    base_winner_hotkey: str | None = None
+    created_at: datetime | None = None
+
+
+class TournamentHistoryResponse(BaseModel):
+    """Response for tournament history endpoint"""
+    tournaments: list[TournamentHistoryEntry]
