@@ -1,0 +1,53 @@
+# gpu-resource-management.mdc
+
+Track GPU resources carefully with clear status transitions and proper cleanup.
+
+### Bad
+```python
+# Implicit status changes
+task.status = "training"
+save_task()
+
+# No resource cleanup
+def allocate_gpu():
+    gpu.busy = True
+    return gpu
+```
+
+### Good
+```python
+async def assign_gpu_to_task(task_id: str, gpu_ids: list[int]):
+    async with gpu_lock:
+        # Verify GPU availability
+        if not are_gpus_available(gpu_ids):
+            raise GPUNotAvailableError()
+            
+        # Atomic status update
+        await update_gpu_status(
+            gpu_ids=gpu_ids,
+            status=GPUStatus.IN_USE,
+            task_id=task_id
+        )
+        
+        try:
+            await mark_task_training(task_id)
+        except Exception:
+            # Rollback on failure
+            await release_gpus(gpu_ids)
+            raise
+
+async def release_gpu_resources():
+    # Proper cleanup
+    await update_gpu_status(
+        gpu_ids=task.gpu_ids,
+        status=GPUStatus.AVAILABLE
+    )
+```
+
+### Explanation
+- Use atomic status updates
+- Track GPU assignments explicitly
+- Clean up resources on failure
+- Use proper locking
+- Validate GPU availability
+- Handle edge cases

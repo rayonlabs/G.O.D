@@ -1,0 +1,33 @@
+# async-io-operations.mdc
+
+Use async/await consistently for all I/O operations including file operations, network calls, and database queries to prevent blocking.
+
+### Bad
+```python
+def save_task_history():
+    with open(TASK_HISTORY_FILE, "w") as f:
+        # Blocking file I/O
+        json.dump(task_history, f)
+
+def get_data(url):
+    response = requests.get(url) # Blocking network call
+    return response.json()
+```
+
+### Good
+```python
+async def save_task_history():
+    async with aiofiles.open(TASK_HISTORY_FILE, "w") as f:
+        await f.write(json.dumps(task_history))
+
+async def get_data(url):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.json()
+```
+
+### Explanation
+- Use aiofiles for file operations
+- Use httpx for async HTTP requests
+- Always await async database operations
+- Consider async alternatives for all I/O operations

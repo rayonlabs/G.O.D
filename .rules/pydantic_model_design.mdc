@@ -1,0 +1,47 @@
+# pydantic-model-design.mdc
+
+Define Pydantic models with clear types, proper validation and complete documentation. Use inheritance and composition appropriately.
+
+### Bad
+```python
+class Config(BaseModel):
+    data: dict # Too generic
+    value: Any # Avoid Any
+    status: str | None # Undocumented optional field
+
+class Task(BaseModel):
+    id: str 
+    type: str # Should be enum
+    data: dict # Unstructured
+```
+
+### Good
+```python
+class TaskConfig(BaseModel):
+    task_id: UUID = Field(..., description="Unique task identifier")
+    task_type: TaskType # Enum
+    gpu_requirement: GPURequirement
+    model_params: ModelParams
+    
+    class Config:
+        frozen = True
+
+class TrainingTask(TaskConfig):
+    dataset_type: DatasetType = Field(
+        ..., 
+        description="Type of training dataset"
+    )
+    model_repo: str = Field(
+        ..., 
+        description="HuggingFace model repository"
+    )
+```
+
+### Explanation
+- Use descriptive field names
+- Add Field descriptions
+- Use enums for fixed choices
+- Structure nested data with sub-models
+- Add proper validation
+- Document model purpose and fields
+- Use inheritance appropriately

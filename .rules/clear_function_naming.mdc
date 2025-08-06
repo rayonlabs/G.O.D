@@ -1,0 +1,34 @@
+# clear-function-naming.mdc
+
+Function names should be clear, descriptive and unambiguous about their purpose. Avoid generic names that don't convey meaning.
+
+### Bad
+```python
+async def process_tasks(): # Too vague
+    pass
+
+async def get_data(): # Not specific enough
+    pass
+
+async def add_tournament_task_hotkey_trainings(): # Unclear compound name
+    pass
+```
+
+### Good
+```python
+async def fetch_pending_training_tasks():
+    pass
+
+async def get_gpu_availability():
+    pass
+
+async def register_trainer_task_assignment():
+    pass
+```
+
+### Explanation
+- Use verbs that clearly describe the action
+- Include relevant context in the name
+- Break up complex functions into clearly named smaller functions
+- Avoid combining too many concepts in one name
+- Consider adding type hints to further clarify purpose
