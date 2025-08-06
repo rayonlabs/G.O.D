@@ -116,12 +116,12 @@ def main():
     docker_cmd = [
         "docker", "run", "--rm",
         "--gpus", "all",
-        # Mount the dataset directory
-        "-v", f"{dataset_path.parent}:/data:ro",
+        # Mount the dataset directory to the expected location
+        "-v", f"{dataset_path.parent}:/workspace/input_data:ro",
         # Mount output directory
         "-v", f"{OUTPUT_DIR}:/output:rw",
         # Environment variables
-        "-e", f"DATASET=/data/{dataset_path.name}",
+        "-e", f"DATASET=/workspace/input_data/{dataset_path.name}",
         "-e", f"ORIGINAL_MODEL={MODEL_ID}",
         "-e", f"DATASET_TYPE={json.dumps(dataset_type)}",
         "-e", f"FILE_FORMAT=json",
