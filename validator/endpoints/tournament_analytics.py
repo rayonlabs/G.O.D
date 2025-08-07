@@ -490,30 +490,32 @@ async def get_wandb_url(
     Get the Weights & Biases URL for a specific task.
     """
     trainers = await tournament_sql.get_trainers(config.psql_db)
-    for trainer in trainers:
+    url_template = TASK_DETAILS_ENDPOINT.format(task_id=task_id)
+
+    async def query_trainer(trainer):
         trainer_ip = trainer.ip
         trainer_ip_with_port = f"{trainer_ip}:8001" if ":" not in trainer_ip else trainer_ip
-        url = f"http://{trainer_ip_with_port}{TASK_DETAILS_ENDPOINT.format(task_id=task_id)}"
-
+        url = f"http://{trainer_ip_with_port}{url_template}"
         try:
             async with httpx.AsyncClient(timeout=tourn_cst.TRAINER_HTTP_TIMEOUT) as client:
                 response = await client.get(url, params={"hotkey": hotkey})
                 if response.status_code == 404:
-                    logger.info(f"Task {task_id} not found on trainer {trainer_ip}")
-                    continue 
-
-                response.raise_for_status() 
+                    return None
+                response.raise_for_status()
                 task_details = response.json()
                 wandb_url = task_details.get("wandb_url")
-
                 if wandb_url:
                     logger.info(f"Found Weights & Biases URL for task {task_id} on trainer {trainer_ip}")
                     return wandb_url
+        except Exception as e:
+            logger.warning(f"Error querying trainer {trainer_ip}: {e}")
+        return None
 
-        except httpx.RequestError as e:
-            logger.warning(f"Trainer {trainer_ip} unreachable: {e}")
-        except httpx.HTTPStatusError as e:
-            logger.warning(f"HTTP error from trainer {trainer_ip}: {e}")
+    results = await asyncio.gather(*(query_trainer(tr) for tr in trainers))
+
+    for url in results:
+        if url:
+            return url
 
     raise HTTPException(status_code=404, detail=f"Weights & Biases URL not found for task {task_id}")
 
