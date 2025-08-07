@@ -254,6 +254,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
     """
     Get aggregate scores for all completed tasks since the given start time.
     Only includes tasks that have at least one node with score >= 1 or < 0
+    Excludes tournament tasks.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -279,6 +280,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
             WHERE t.{cst.STATUS} = 'success'
             AND t.{cst.CREATED_AT} >= $1
             AND tn.{cst.NETUID} = $2
+            AND t.{cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})
             AND EXISTS (
                 SELECT 1
                 FROM {cst.TASK_NODES_TABLE} tn2
@@ -317,6 +319,7 @@ async def get_aggregate_scores_for_leaderboard_since(start_time: datetime, psql_
     Get aggregate scores for all completed tasks since the given start time.
     Includes ALL scores (including zeros) for leaderboard and analytics purposes.
     This is separate from get_aggregate_scores_since which filters for weight calculations.
+    Excludes tournament tasks.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -342,6 +345,7 @@ async def get_aggregate_scores_for_leaderboard_since(start_time: datetime, psql_
             WHERE t.{cst.STATUS} = 'success'
             AND t.{cst.CREATED_AT} >= $1
             AND tn.{cst.NETUID} = $2
+            AND t.{cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})
             GROUP BY t.{cst.TASK_ID}
             ORDER BY t.{cst.CREATED_AT} DESC
         """
