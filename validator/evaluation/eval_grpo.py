@@ -113,8 +113,7 @@ def evaluate_grpo_model(
                     available_extra_data = extra_column_data[:batch_size] if extra_column_data else []
                     
                     if available_extra_data:
-                        extra_data = {cst.STANDARD_GRPO_EXTRA_COLUMN: available_extra_data}
-                        raw_results = original_func(completions, extra_data=extra_data)
+                        raw_results = original_func(completions, extra_data=available_extra_data)
                     else:
                         raw_results = original_func(completions)
                 else:
