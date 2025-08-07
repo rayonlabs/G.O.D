@@ -1,5 +1,6 @@
 import asyncio
 import json
+import httpx
 from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
@@ -11,6 +12,8 @@ from fastapi import Depends
 from fastapi import HTTPException
 
 import validator.core.constants as cts
+from validator.core.constants import TASK_DETAILS_ENDPOINT
+import validator.tournament.constants as tourn_cst
 from core.models.payload_models import GpuRequirementSummary
 from core.models.payload_models import TournamentGpuRequirementsResponse
 from core.models.tournament_models import ActiveTournamentInfo
@@ -55,6 +58,7 @@ GET_TOURNAMENT_GPU_REQUIREMENTS_ENDPOINT = "/v1/tournaments/gpu-requirements"
 GET_NEXT_TOURNAMENT_DATES_ENDPOINT = "/v1/tournaments/next-dates"
 GET_ACTIVE_TOURNAMENTS_ENDPOINT = "/v1/tournaments/active"
 GET_TOURNAMENT_HISTORY_ENDPOINT = "/v1/tournaments/history"
+GET_WANDB_URL_ENDPOINT = "/v1/tournaments/wandb-logs/{task_id}"
 
 
 async def get_tournament_details(
@@ -475,6 +479,43 @@ async def get_tournament_history(
     except Exception as e:
         logger.error(f"Error retrieving tournament history: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+async def get_wandb_url(
+    task_id: str,
+    hotkey: str,
+    config: Config = Depends(get_config),
+) -> str:
+    """
+    Get the Weights & Biases URL for a specific task.
+    """
+    trainers = await tournament_sql.get_trainers(config.psql_db)
+    for trainer in trainers:
+        trainer_ip = trainer.ip
+        trainer_ip_with_port = f"{trainer_ip}:8001" if ":" not in trainer_ip else trainer_ip
+        url = f"http://{trainer_ip_with_port}{TASK_DETAILS_ENDPOINT.format(task_id=task_id)}"
+
+        try:
+            async with httpx.AsyncClient(timeout=tourn_cst.TRAINER_HTTP_TIMEOUT) as client:
+                response = await client.get(url, params={"hotkey": hotkey})
+                if response.status_code == 404:
+                    logger.info(f"Task {task_id} not found on trainer {trainer_ip}")
+                    continue 
+
+                response.raise_for_status() 
+                task_details = response.json()
+                wandb_url = task_details.get("wandb_url")
+
+                if wandb_url:
+                    logger.info(f"Found Weights & Biases URL for task {task_id} on trainer {trainer_ip}")
+                    return wandb_url
+
+        except httpx.RequestError as e:
+            logger.warning(f"Trainer {trainer_ip} unreachable: {e}")
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"HTTP error from trainer {trainer_ip}: {e}")
+
+    raise HTTPException(status_code=404, detail=f"Weights & Biases URL not found for task {task_id}")
 
 
 def factory_router() -> APIRouter:
