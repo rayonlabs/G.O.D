@@ -2,7 +2,7 @@ from core.models.tournament_models import TaskPerformanceDifference, TournamentP
 from core.models.utility_models import TaskType
 from validator.core import constants as cts
 from validator.db.sql.tournament_performance import get_boss_round_winner_task_pairs, get_task_scores_as_models, get_task_scores_batch
-from validator.db.sql.tournaments import count_champion_consecutive_wins, get_tournament, get_tournament_tasks
+from validator.db.sql.tournaments import count_champion_consecutive_wins_at_tournament, get_tournament, get_tournament_tasks
 from validator.db.sql.tasks import get_task
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament.utils import get_progressive_threshold, get_task_results_for_ranking
@@ -23,7 +23,9 @@ async def calculate_boss_round_performance_differences(
         return []
     
     current_champion = tournament.base_winner_hotkey or EMISSION_BURN_HOTKEY
-    consecutive_wins = await count_champion_consecutive_wins(psql_db, tournament.tournament_type, current_champion)
+    consecutive_wins = await count_champion_consecutive_wins_at_tournament(
+        psql_db, tournament.tournament_type, current_champion, tournament_id
+    )
     threshold = get_progressive_threshold(consecutive_wins)
     
     logger.info(f"Calculating boss round performance for tournament {tournament_id}, champion {current_champion} "
