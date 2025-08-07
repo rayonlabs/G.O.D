@@ -172,7 +172,15 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
     latest_winner = await get_latest_tournament_winner_participant(psql_db, tournament_type, config)
     if latest_winner:
         logger.info(f"Using latest tournament winner as BASE: {latest_winner.hotkey}")
-        return latest_winner
+        # Return EMISSION_BURN_HOTKEY as the participant hotkey but with the winner's training info
+        # The actual champion's hotkey will be stored separately in base_winner_hotkey
+        return TournamentParticipant(
+            tournament_id="",
+            hotkey=EMISSION_BURN_HOTKEY,
+            training_repo=latest_winner.training_repo,
+            training_commit_hash=latest_winner.training_commit_hash,
+            stake_required=0,
+        )
 
     logger.info(
         f"No previous tournament winner found for type {tournament_type.value}, using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
