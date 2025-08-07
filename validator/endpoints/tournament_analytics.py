@@ -493,7 +493,7 @@ async def get_wandb_url(
     url_template = TASK_DETAILS_ENDPOINT.format(task_id=task_id)
 
     async def query_trainer(trainer):
-        trainer_ip = trainer.ip
+        trainer_ip = trainer.trainer_ip
         trainer_ip_with_port = f"{trainer_ip}:8001" if ":" not in trainer_ip else trainer_ip
         url = f"http://{trainer_ip_with_port}{url_template}"
         try:
