@@ -1,5 +1,6 @@
 import asyncio
 import json
+import httpx
 from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
@@ -11,6 +12,8 @@ from fastapi import Depends
 from fastapi import HTTPException
 
 import validator.core.constants as cts
+from validator.core.constants import TASK_DETAILS_ENDPOINT
+import validator.tournament.constants as tourn_cst
 from core.models.payload_models import GpuRequirementSummary
 from core.models.payload_models import TournamentGpuRequirementsResponse
 from core.models.tournament_models import ActiveTournamentInfo
@@ -55,6 +58,7 @@ GET_TOURNAMENT_GPU_REQUIREMENTS_ENDPOINT = "/v1/tournaments/gpu-requirements"
 GET_NEXT_TOURNAMENT_DATES_ENDPOINT = "/v1/tournaments/next-dates"
 GET_ACTIVE_TOURNAMENTS_ENDPOINT = "/v1/tournaments/active"
 GET_TOURNAMENT_HISTORY_ENDPOINT = "/v1/tournaments/history"
+GET_WANDB_URL_ENDPOINT = "/v1/tournaments/wandb-logs/{task_id}"
 
 
 async def get_tournament_details(
@@ -477,6 +481,45 @@ async def get_tournament_history(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+async def get_wandb_url(
+    task_id: str,
+    hotkey: str,
+    config: Config = Depends(get_config),
+) -> str:
+    """
+    Get the Weights & Biases URL for a specific task.
+    """
+    trainers = await tournament_sql.get_trainers(config.psql_db)
+    url_template = TASK_DETAILS_ENDPOINT.format(task_id=task_id)
+
+    async def query_trainer(trainer):
+        trainer_ip = trainer.trainer_ip
+        trainer_ip_with_port = f"{trainer_ip}:8001" if ":" not in trainer_ip else trainer_ip
+        url = f"http://{trainer_ip_with_port}{url_template}"
+        try:
+            async with httpx.AsyncClient(timeout=tourn_cst.TRAINER_HTTP_TIMEOUT) as client:
+                response = await client.get(url, params={"hotkey": hotkey})
+                if response.status_code == 404:
+                    return None
+                response.raise_for_status()
+                task_details = response.json()
+                wandb_url = task_details.get("wandb_url")
+                if wandb_url:
+                    logger.info(f"Found Weights & Biases URL for task {task_id} on trainer {trainer_ip}")
+                    return wandb_url
+        except Exception as e:
+            logger.warning(f"Error querying trainer {trainer_ip}: {e}")
+        return None
+
+    results = await asyncio.gather(*(query_trainer(tr) for tr in trainers))
+
+    for url in results:
+        if url:
+            return url
+
+    raise HTTPException(status_code=404, detail=f"Weights & Biases URL not found for task {task_id}")
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Tournament Analytics"], dependencies=[Depends(get_api_key)])
     router.add_api_route(GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT, get_latest_tournaments_details, methods=["GET"])
@@ -485,4 +528,12 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_NEXT_TOURNAMENT_DATES_ENDPOINT, get_next_tournament_dates, methods=["GET"])
     router.add_api_route(GET_ACTIVE_TOURNAMENTS_ENDPOINT, get_active_tournaments, methods=["GET"])
     router.add_api_route(GET_TOURNAMENT_HISTORY_ENDPOINT, get_tournament_history, methods=["GET"])
-    return router
+
+    public_router = APIRouter(tags=["Tournament Analytics"])
+    public_router.add_api_route(GET_WANDB_URL_ENDPOINT, get_wandb_url, methods=["GET"])
+
+    master_router = APIRouter()
+    master_router.include_router(router)
+    master_router.include_router(public_router)
+
+    return master_router
