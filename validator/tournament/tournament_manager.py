@@ -64,6 +64,7 @@ from validator.tournament.repo_uploader import upload_tournament_participant_rep
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
 from validator.tournament.utils import get_base_contestant
+from validator.tournament.utils import get_latest_tournament_winner_participant  
 from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import replace_tournament_task
 from validator.utils.call_endpoint import process_non_stream_fiber_get
@@ -418,23 +419,27 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
     tournament_id = generate_tournament_id()
 
     base_contestant = await get_base_contestant(psql_db, tournament_type, config)
-    base_winner_hotkey = base_contestant.hotkey if base_contestant else None
-
-    logger.info(f"Base winner hotkey: {base_winner_hotkey}")
+    
+    # Get the actual champion's hotkey (not EMISSION_BURN_HOTKEY)
+    latest_winner = await get_latest_tournament_winner_participant(psql_db, tournament_type, config)
+    base_winner_hotkey = latest_winner.hotkey if latest_winner else None
+    
+    logger.info(f"Base winner hotkey (actual champion): {base_winner_hotkey}")
+    logger.info(f"Base contestant hotkey (EMISSION_BURN): {base_contestant.hotkey if base_contestant else None}")
 
     tournament_data = TournamentData(
         tournament_id=tournament_id,
         tournament_type=tournament_type,
         status=TournamentStatus.PENDING,
-        base_winner_hotkey=base_winner_hotkey,
+        base_winner_hotkey=base_winner_hotkey,  # Store actual champion's hotkey
     )
 
     await create_tournament(tournament_data, psql_db)
 
-    if base_winner_hotkey:
+    if base_contestant and base_contestant.hotkey:
         base_participant = TournamentParticipant(
             tournament_id=tournament_id,
-            hotkey=base_winner_hotkey,
+            hotkey=base_contestant.hotkey,  # This will be EMISSION_BURN_HOTKEY
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
             stake_required=0,

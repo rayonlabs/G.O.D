@@ -172,7 +172,15 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
     latest_winner = await get_latest_tournament_winner_participant(psql_db, tournament_type, config)
     if latest_winner:
         logger.info(f"Using latest tournament winner as BASE: {latest_winner.hotkey}")
-        return latest_winner
+        # Return EMISSION_BURN_HOTKEY as the participant hotkey but with the winner's training info
+        # The actual champion's hotkey will be stored separately in base_winner_hotkey
+        return TournamentParticipant(
+            tournament_id="",
+            hotkey=EMISSION_BURN_HOTKEY,
+            training_repo=latest_winner.training_repo,
+            training_commit_hash=latest_winner.training_commit_hash,
+            stake_required=0,
+        )
 
     logger.info(
         f"No previous tournament winner found for type {tournament_type.value}, using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
@@ -205,7 +213,27 @@ async def get_latest_tournament_winner_participant(
 
     logger.info(f"Found latest tournament winner: {winner_hotkey}")
     winner_participant = await get_tournament_participant(latest_tournament.tournament_id, winner_hotkey, psql_db)
-    if winner_participant.hotkey == EMISSION_BURN_HOTKEY:
+    
+    # If we can't find the winner's participant record, check if they were the defending champion
+    # who entered as EMISSION_BURN_HOTKEY
+    if not winner_participant:
+        logger.warning(f"Could not find participant record for winner {winner_hotkey} in tournament {latest_tournament.tournament_id}")
+        
+        # If the winner was the base_winner (defending champion), try to get their record from EMISSION_BURN_HOTKEY
+        if winner_hotkey == latest_tournament.base_winner_hotkey:
+            logger.info(f"Winner {winner_hotkey} was the defending champion, checking EMISSION_BURN_HOTKEY participant record")
+            emission_participant = await get_tournament_participant(latest_tournament.tournament_id, EMISSION_BURN_HOTKEY, psql_db)
+            if emission_participant:
+                # Use the EMISSION_BURN_HOTKEY participant's training info but with the actual winner's hotkey
+                emission_participant.hotkey = winner_hotkey
+                return emission_participant
+        
+        # If still no participant record found, return None to use default
+        logger.warning(f"No participant record found for winner {winner_hotkey}, will use default")
+        return None
+    
+    # If the participant is EMISSION_BURN_HOTKEY but we have a real winner, use the real winner's hotkey
+    if winner_participant.hotkey == EMISSION_BURN_HOTKEY and latest_tournament.base_winner_hotkey:
         winner_participant.hotkey = latest_tournament.base_winner_hotkey
 
     return winner_participant
