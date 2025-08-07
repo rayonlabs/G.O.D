@@ -429,7 +429,7 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
     if base_winner_hotkey:
         base_participant = TournamentParticipant(
             tournament_id=tournament_id,
-            hotkey=cst.EMISSION_BURN_HOTKEY,
+            hotkey=base_winner_hotkey,
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
             stake_required=0,
