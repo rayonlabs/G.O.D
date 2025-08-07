@@ -33,9 +33,7 @@ def validate_reward_function(func_def: str, json_sample: list[dict] = None) -> t
                 extra_test_completions = [row[cst.STANDARD_GRPO_PROMPT_COLUMN] for row in valid_rows]
                 extra_data_values = [row[cst.STANDARD_GRPO_EXTRA_COLUMN] for row in valid_rows]
                 
-                test_extra_data = {cst.STANDARD_GRPO_EXTRA_COLUMN: extra_data_values}
-                
-                extra_rewards = func(extra_test_completions, extra_data=test_extra_data)
+                extra_rewards = func(extra_test_completions, extra_data=extra_data_values)
                 
                 assert isinstance(extra_rewards, list), "The rewards with extra_data should be a list."
                 assert len(extra_rewards) == len(extra_test_completions), (
