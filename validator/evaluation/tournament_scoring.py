@@ -71,6 +71,12 @@ def calculate_tournament_type_scores_from_data(
     type_weight = cts.TOURNAMENT_TEXT_WEIGHT if tournament_type == TournamentType.TEXT else cts.TOURNAMENT_IMAGE_WEIGHT
     score_dict = {}
     prev_winner_won_final = False
+    
+    # Handle the swap: if winner_hotkey is EMISSION_BURN_HOTKEY, use base_winner_hotkey
+    actual_winner_hotkey = tournament_data.winner_hotkey
+    if actual_winner_hotkey == cts.EMISSION_BURN_HOTKEY and tournament_data.base_winner_hotkey:
+        actual_winner_hotkey = tournament_data.base_winner_hotkey
+        logger.info(f"Swapping EMISSION_BURN_HOTKEY with actual defending champion: {actual_winner_hotkey}")
 
     for round_result in tournament_data.rounds:
         round_number = round_result.round_number
@@ -79,10 +85,10 @@ def calculate_tournament_type_scores_from_data(
         for task in round_result.tasks:
             winner = task.winner
 
-            if is_final_round and tournament_data.winner_hotkey and winner == tournament_data.winner_hotkey:
+            if is_final_round and actual_winner_hotkey and winner == actual_winner_hotkey:
                 prev_winner_won_final = True
 
-            if winner and winner != tournament_data.winner_hotkey:
+            if winner and winner != actual_winner_hotkey:
                 if winner not in score_dict:
                     score_dict[winner] = 0
                 score_dict[winner] += round_number * type_weight
@@ -90,7 +96,7 @@ def calculate_tournament_type_scores_from_data(
     scores = [TournamentScore(hotkey=hotkey, score=score) for hotkey, score in score_dict.items()]
 
     return TournamentTypeResult(
-        scores=scores, prev_winner_hotkey=tournament_data.winner_hotkey, prev_winner_won_final=prev_winner_won_final
+        scores=scores, prev_winner_hotkey=actual_winner_hotkey, prev_winner_won_final=prev_winner_won_final
     )
 
 

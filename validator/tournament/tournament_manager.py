@@ -320,7 +320,8 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             logger.warning(
                 f"No winners found for round {completed_round.round_id}. Setting base contestant as winner of the tournament."
             )
-            winner = cst.EMISSION_BURN_HOTKEY
+            # Use the actual defending champion's hotkey, not the placeholder
+            winner = tournament.base_winner_hotkey or cst.EMISSION_BURN_HOTKEY
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
