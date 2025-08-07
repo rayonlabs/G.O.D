@@ -145,8 +145,17 @@ async def get_tournament_performance_data(tournament_id: str, psql_db) -> list[T
         winner_tournament_score = None
         best_synthetic_score = None
 
+        # Check if we need to use EMISSION_BURN_HOTKEY as the winner's placeholder
+        winner_hotkey_for_lookup = task_pair.winner_hotkey
+        # If the winner is not EMISSION_BURN_HOTKEY but EMISSION_BURN_HOTKEY participated in the task,
+        # it means EMISSION_BURN_HOTKEY was acting as the defending champion's proxy
+        emission_burn_in_scores = any(score.hotkey == EMISSION_BURN_HOTKEY for score in tournament_scores)
+        if task_pair.winner_hotkey != EMISSION_BURN_HOTKEY and emission_burn_in_scores:
+            winner_hotkey_for_lookup = EMISSION_BURN_HOTKEY
+            logger.info(f"Using EMISSION_BURN_HOTKEY as placeholder for winner {task_pair.winner_hotkey}")
+
         for score in tournament_scores:
-            if score.hotkey == task_pair.winner_hotkey:
+            if score.hotkey == winner_hotkey_for_lookup:
                 winner_tournament_score = max(score.test_loss, score.synth_loss)
                 logger.info(f"Winner tournament score for {task_pair.winner_hotkey}: {winner_tournament_score}")
                 break

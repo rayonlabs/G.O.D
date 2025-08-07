@@ -87,8 +87,13 @@ def calculate_tournament_type_scores_from_data(
 
             if is_final_round and actual_winner_hotkey and winner == actual_winner_hotkey:
                 prev_winner_won_final = True
+            
+            # Also check if winner is EMISSION_BURN_HOTKEY (placeholder for defending champion)
+            if is_final_round and winner == cts.EMISSION_BURN_HOTKEY and tournament_data.base_winner_hotkey:
+                prev_winner_won_final = True
 
-            if winner and winner != actual_winner_hotkey:
+            # Exclude both the actual winner and EMISSION_BURN_HOTKEY (if it's the placeholder) from earning points
+            if winner and winner != actual_winner_hotkey and not (winner == cts.EMISSION_BURN_HOTKEY and tournament_data.base_winner_hotkey):
                 if winner not in score_dict:
                     score_dict[winner] = 0
                 score_dict[winner] += round_number * type_weight
