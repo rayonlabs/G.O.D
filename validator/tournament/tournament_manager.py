@@ -331,6 +331,10 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
 
         if len(winners) == 1 and completed_round.is_final_round:
             winner = winners[0]
+            # If the winner is EMISSION_BURN_HOTKEY (defending champion proxy), use the actual champion's hotkey
+            if winner == cst.EMISSION_BURN_HOTKEY and tournament.base_winner_hotkey:
+                logger.info(f"Swapping EMISSION_BURN_HOTKEY with actual defending champion: {tournament.base_winner_hotkey}")
+                winner = tournament.base_winner_hotkey
             logger.info(f"Processing final round completion for tournament {tournament.tournament_id}")
             logger.info(f"Final round winner: {winner}")
 
