@@ -528,4 +528,5 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_NEXT_TOURNAMENT_DATES_ENDPOINT, get_next_tournament_dates, methods=["GET"])
     router.add_api_route(GET_ACTIVE_TOURNAMENTS_ENDPOINT, get_active_tournaments, methods=["GET"])
     router.add_api_route(GET_TOURNAMENT_HISTORY_ENDPOINT, get_tournament_history, methods=["GET"])
+    router.add_api_route(GET_WANDB_URL_ENDPOINT, get_wandb_url, methods=["GET"])
     return router
