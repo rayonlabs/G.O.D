@@ -61,7 +61,7 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     ]
     architecture_same = True
     for attr in attrs_to_compare:
-        if hasattr(original_config, attr):
+        if getattr(original_config, attr, None) is not None:
             if not hasattr(finetuned_config, attr):
                 architecture_same = False
                 break
