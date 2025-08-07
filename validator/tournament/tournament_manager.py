@@ -320,7 +320,8 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             logger.warning(
                 f"No winners found for round {completed_round.round_id}. Setting base contestant as winner of the tournament."
             )
-            winner = cst.EMISSION_BURN_HOTKEY
+            # Use the actual defending champion's hotkey, not the placeholder
+            winner = tournament.base_winner_hotkey or cst.EMISSION_BURN_HOTKEY
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
@@ -330,6 +331,10 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
 
         if len(winners) == 1 and completed_round.is_final_round:
             winner = winners[0]
+            # If the winner is EMISSION_BURN_HOTKEY (defending champion proxy), use the actual champion's hotkey
+            if winner == cst.EMISSION_BURN_HOTKEY and tournament.base_winner_hotkey:
+                logger.info(f"Swapping EMISSION_BURN_HOTKEY with actual defending champion: {tournament.base_winner_hotkey}")
+                winner = tournament.base_winner_hotkey
             logger.info(f"Processing final round completion for tournament {tournament.tournament_id}")
             logger.info(f"Final round winner: {winner}")
 
@@ -429,7 +434,7 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
     if base_winner_hotkey:
         base_participant = TournamentParticipant(
             tournament_id=tournament_id,
-            hotkey=cst.EMISSION_BURN_HOTKEY,
+            hotkey=base_winner_hotkey,
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
             stake_required=0,
