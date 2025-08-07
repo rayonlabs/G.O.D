@@ -482,6 +482,8 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
     - Burn address
     
     The burn decreases as tournament winner performance gets closer to legacy miner performance.
+    Now calculates burn independently for each tournament type to prevent one type from
+    disproportionately affecting overall emissions.
     
     Returns:
         TournamentBurnData with all performance metrics and weight distributions
@@ -490,7 +492,8 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
     
     text_performance_diff = None
     image_performance_diff = None
-    weighted_performance_diff = 0.0
+    text_burn_contribution = 0.0
+    image_burn_contribution = 0.0
     total_weight = 0.0
 
     tournament_weights = {TournamentType.TEXT: cts.TOURNAMENT_TEXT_WEIGHT, TournamentType.IMAGE: cts.TOURNAMENT_IMAGE_WEIGHT}
@@ -533,31 +536,47 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
         elif tournament_type == TournamentType.IMAGE:
             image_performance_diff = performance_diff
 
+        # Calculate burn contribution independently for each tournament type
+        type_burn_proportion = 0.0
         if performance_diff is not None:
-            weighted_performance_diff += performance_diff * weight
+            type_burn_proportion = calculate_burn_proportion(performance_diff)
+            if tournament_type == TournamentType.TEXT:
+                text_burn_contribution = type_burn_proportion * weight
+            elif tournament_type == TournamentType.IMAGE:
+                image_burn_contribution = type_burn_proportion * weight
             total_weight += weight
         elif latest_tournament:
             if latest_tournament.winner_hotkey == cts.EMISSION_BURN_HOTKEY:
                 logger.info(
                     f"No synthetic task data available for {tournament_type} tournaments, burn account won - assuming worst performance (100% difference)"
                 )
-                weighted_performance_diff += 1.0 * weight
+                performance_diff = 1.0
+                type_burn_proportion = calculate_burn_proportion(1.0)
                 if tournament_type == TournamentType.TEXT:
                     text_performance_diff = 1.0
+                    text_burn_contribution = type_burn_proportion * weight
                 elif tournament_type == TournamentType.IMAGE:
                     image_performance_diff = 1.0
+                    image_burn_contribution = type_burn_proportion * weight
             else:
                 logger.info(
                     f"No synthetic task data available for {tournament_type} tournaments, assuming perfect performance (0% difference)"
                 )
-                weighted_performance_diff += 0.0 * weight
+                performance_diff = 0.0
                 if tournament_type == TournamentType.TEXT:
                     text_performance_diff = 0.0
+                    text_burn_contribution = 0.0
                 elif tournament_type == TournamentType.IMAGE:
                     image_performance_diff = 0.0
+                    image_burn_contribution = 0.0
             total_weight += weight
         else:
             logger.info(f"No {tournament_type} tournament data available, will burn this tournament allocation")
+            # Burn the entire allocation for this type
+            if tournament_type == TournamentType.TEXT:
+                text_burn_contribution = weight
+            elif tournament_type == TournamentType.IMAGE:
+                image_burn_contribution = weight
 
     if total_weight == 0:
         logger.info("No tournament data available, burning entire tournament allocation")
@@ -568,9 +587,31 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
         regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT)
         burn_weight = (1 - cts.BASE_REGULAR_WEIGHT - cts.BASE_TOURNAMENT_WEIGHT) + (tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
     else:
-        average_performance_diff = weighted_performance_diff / total_weight
-        burn_proportion = calculate_burn_proportion(average_performance_diff)
-        tournament_weight, regular_weight, burn_weight = calculate_weight_redistribution(average_performance_diff)
+        # Calculate total burn proportion from independent contributions
+        total_burn_proportion = text_burn_contribution + image_burn_contribution
+        
+        # Calculate weighted average for reporting (but not for burn calculation)
+        if text_performance_diff is not None and image_performance_diff is not None:
+            average_performance_diff = (text_performance_diff * cts.TOURNAMENT_TEXT_WEIGHT + 
+                                       image_performance_diff * cts.TOURNAMENT_IMAGE_WEIGHT)
+        elif text_performance_diff is not None:
+            average_performance_diff = text_performance_diff
+        elif image_performance_diff is not None:
+            average_performance_diff = image_performance_diff
+        else:
+            average_performance_diff = 0.0
+        
+        # Use the independent burn contributions to calculate weight redistribution
+        burn_proportion = total_burn_proportion
+        tournament_burn = cts.BASE_TOURNAMENT_WEIGHT * burn_proportion
+        
+        tournament_weight = cts.BASE_TOURNAMENT_WEIGHT - tournament_burn
+        regular_weight = cts.BASE_REGULAR_WEIGHT + (tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT)
+        burn_weight = (1 - cts.BASE_REGULAR_WEIGHT - cts.BASE_TOURNAMENT_WEIGHT) + (tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
+        
+        logger.info(f"Text burn contribution: {text_burn_contribution:.4f} (perf diff: {text_performance_diff})")
+        logger.info(f"Image burn contribution: {image_burn_contribution:.4f} (perf diff: {image_performance_diff})")
+        logger.info(f"Total burn proportion: {burn_proportion:.4f}")
 
     return TournamentBurnData(
         text_performance_diff=text_performance_diff,
