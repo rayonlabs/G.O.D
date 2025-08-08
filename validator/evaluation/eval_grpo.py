@@ -82,7 +82,9 @@ def evaluate_grpo_model(
 
     for i, reward_function in enumerate(evaluation_args.dataset_type.reward_functions):
         reward_func_str = reward_function.reward_func
-        is_valid, error_msg, reward_func_callable = validate_reward_function(reward_func_str)
+
+        sample_data = eval_dataset.to_list()[:10] if len(eval_dataset) > 0 else None
+        is_valid, error_msg, reward_func_callable = validate_reward_function(reward_func_str, sample_data)
         if not is_valid:
             logger.error(f"Invalid reward function:\n{reward_func_str}")
             raise ValueError(f"Invalid reward function: {error_msg}")
