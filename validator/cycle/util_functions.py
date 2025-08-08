@@ -87,11 +87,10 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawT
     return task
 
 
-async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair) -> AnyTextTypeRawTask:
+async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> AnyTextTypeRawTask:
     # Store original dataset name for processing
     original_ds_name = task.ds
-
-    test_data, synth_data, train_data = await prepare_text_task(task, keypair=keypair)
+    test_data, synth_data, train_data = await prepare_text_task(task, keypair=keypair, psql_db=psql_db)
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
     task.synthetic_data = synth_data
@@ -115,6 +114,8 @@ async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair) -> AnyT
         task.field_system = cst.STANDARD_SYSTEM_COLUMN if task.field_system else None
     elif isinstance(task, GrpoRawTask):
         task.field_prompt = cst.STANDARD_GRPO_PROMPT_COLUMN
+        if task.extra_column:
+            task.extra_column = cst.STANDARD_GRPO_EXTRA_COLUMN
 
     logger.info("Data creation is complete - now time to find some miners")
     return task
@@ -144,6 +145,7 @@ def prepare_text_task_request(task: AnyTextTypeRawTask) -> TrainRequestText:
         dataset_type = GrpoDatasetType(
             field_prompt=task.field_prompt,
             reward_functions=task.reward_functions,
+            extra_column=task.extra_column,
         )
     elif isinstance(task, ChatRawTask):
         dataset_type = ChatTemplateDatasetType(

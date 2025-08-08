@@ -135,6 +135,7 @@ class GrpoRawTask(RawTask):
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.GRPOTASK
     synthetic_data: str | None = None
+    extra_column: str | None = None
 
     @model_validator(mode="after")
     def validate_reward_functions(self) -> "GrpoRawTask":

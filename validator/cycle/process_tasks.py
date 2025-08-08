@@ -272,7 +272,7 @@ async def _prep_task(task: AnyTypeRawTask, config: Config):
             task.status = TaskStatus.PREPARING_DATA
             add_context_tag("status", task.status.value)
             await tasks_sql.update_task(task, config.psql_db)
-            task = await get_task_config(task).task_prep_function(task, config.keypair)
+            task = await get_task_config(task).task_prep_function(task, config.keypair, config.psql_db)
             logger.info(f"THE TASK HAS BEEN PREPPED {task}")
             await tasks_sql.update_task(task, config.psql_db)
         except Exception as e:

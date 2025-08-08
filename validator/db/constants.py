@@ -105,6 +105,7 @@ FIELD_REJECTED = "field_rejected"
 PROMPT_FORMAT = "prompt_format"
 CHOSEN_FORMAT = "chosen_format"
 REJECTED_FORMAT = "rejected_format"
+FIELD_EXTRA_COLUMN = "extra_column"
 
 # Chat Tasks Table Columns
 CHAT_TEMPLATE = "chat_template"

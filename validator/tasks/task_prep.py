@@ -30,9 +30,11 @@ from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
+from validator.db.sql.tasks import update_task
 from validator.evaluation.utils import get_default_dataset_config
 from validator.utils.cache_clear import delete_dataset_from_cache
 from validator.utils.logging import get_logger
+from validator.utils.reward_functions import validate_reward_function
 from validator.utils.util import save_json_to_temp_file
 from validator.utils.util import upload_file_to_minio
 
@@ -317,7 +319,14 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
 
 async def _process_and_upload_datasets(
     task: AnyTextTypeRawTask,
-    train_dataset, test_dataset, synthetic_data, columns_to_sample, should_reupload_train, should_reupload_test, ds_hf_name=None
+    train_dataset,
+    test_dataset,
+    synthetic_data,
+    columns_to_sample,
+    should_reupload_train,
+    should_reupload_test,
+    ds_hf_name=None,
+    psql_db=None,
 ):
     files_to_delete = []
     logger.info("Processing and uploading datasets to MinIO storage")
@@ -328,6 +337,9 @@ async def _process_and_upload_datasets(
     try:
         if should_reupload_train:
             train_data_json = change_to_json_format(train_dataset, columns_to_sample, task)
+            
+            await _validate_and_filter_grpo_reward_functions(task, train_data_json, psql_db)
+            
             train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
             files_to_delete.append(train_json_path)
             await _check_file_size(train_json_size, "train_data")
@@ -381,6 +393,43 @@ async def _process_and_upload_datasets(
     )
 
 
+async def _validate_and_filter_grpo_reward_functions(task: GrpoRawTask, json_data: list[dict], psql_db) -> bool:
+    """
+    Validate GRPO reward functions with real dataset sample and update database if needed.
+    Returns True if any functions were filtered out.
+    """
+    if not isinstance(task, GrpoRawTask) or not task.reward_functions:
+        return False
+    
+    sample_size = min(5, len(json_data))
+    json_sample = json_data[:sample_size]
+    
+    valid_reward_functions = []
+    for rf in task.reward_functions:
+        is_valid, error_msg, func = validate_reward_function(rf.reward_func, json_sample)
+        if is_valid:
+            valid_reward_functions.append(rf)
+        else:
+            logger.warning(f"Removing invalid reward function: {error_msg}")
+    
+    if not valid_reward_functions:
+        raise ValueError("No valid reward functions remain after dataset validation")
+    
+    # Update database if any functions were filtered out
+    if len(valid_reward_functions) != len(task.reward_functions):
+        logger.info(f"Filtering reward functions: {len(task.reward_functions)} -> {len(valid_reward_functions)}")
+        
+        # Update task object
+        task.reward_functions = valid_reward_functions
+        
+        # Update database with filtered reward functions
+        await update_task(task, psql_db)
+        
+        return True
+    
+    return False
+
+
 def extract_grpo_extra_columns(task: GrpoRawTask) -> list[str]:
     """
     Extract all unique arguments from reward functions excluding field_prompt.
@@ -413,7 +462,9 @@ def pick_columns_to_sample(task: AnyTextTypeRawTask, dataset: Dataset = None) ->
         if task.field_system:
             columns_to_sample.append(cst.STANDARD_SYSTEM_COLUMN)
     elif isinstance(task, GrpoRawTask):
-        columns_to_sample = [cst.STANDARD_GRPO_PROMPT_COLUMN] + extract_grpo_extra_columns(task)
+        columns_to_sample = [cst.STANDARD_GRPO_PROMPT_COLUMN]
+        if task.extra_column:
+            columns_to_sample.append(cst.STANDARD_GRPO_EXTRA_COLUMN)
     elif isinstance(task, ChatRawTask):
         columns_to_sample = [task.chat_column if task.chat_column else cst.STANDARD_CHAT_MESSAGES_COLUMN]
     else:
@@ -615,6 +666,9 @@ def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Datase
     else:
         raise ValueError(f"Prompt column {task.field_prompt} not found in dataset")
 
+    if task.extra_column and task.extra_column in dataset.column_names:
+        column_mapping[task.extra_column] = cst.STANDARD_GRPO_EXTRA_COLUMN
+
     for old_name, new_name in column_mapping.items():
         if old_name != new_name:
             dataset = dataset.rename_column(old_name, new_name)
@@ -622,7 +676,7 @@ def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Datase
     return dataset
 
 
-async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple[str, str, str]:
+async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
 
@@ -812,6 +866,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair) -> tuple
         should_reupload_train,
         should_reupload_test,
         train_dataset_name if task.file_format == FileFormat.HF else None,
+        psql_db,
     )
 
 

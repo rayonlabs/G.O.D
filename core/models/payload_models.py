@@ -260,6 +260,7 @@ class NewTaskRequestDPO(NewTaskRequest):
 
 class NewTaskRequestGrpo(NewTaskRequest):
     field_prompt: str = Field(..., description="The column name for the prompt", examples=["prompt"])
+    extra_column: str | None = Field(None, description="The column name for the extra data", examples=["extra_data"])
 
     ds_repo: str = Field(..., description="The repository for the dataset", examples=["trl-lib/tldr"])
     file_format: FileFormat = Field(
