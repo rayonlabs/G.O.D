@@ -11,10 +11,12 @@ RUN pip uninstall -y torch torchvision torchaudio && \
     pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cu118
 
 # Reinstall textstat and its dependencies after torch upgrade
-# Install pyphen first as it's a dependency of textstat that might be missing
-RUN pip install --no-cache-dir pyphen==0.14.0 && \
-    pip install --no-cache-dir textstat==0.7.7 && \
-    python -c "import textstat; print(f'textstat {textstat.__version__} installed successfully')"
+# Uninstall any existing version first, then install the correct version
+# Note: textstat <0.7.8 has issues with words not in CMU dictionary (e.g., "Gradients.io" -> KeyError: 'gradientsio')
+# Using version 0.7.8 which handles unknown words gracefully
+RUN pip uninstall -y textstat pyphen && \
+    pip install --no-cache-dir --force-reinstall textstat==0.7.8 && \
+    python -c "import textstat; print(f'textstat version: {textstat.__version__}')"
 
 COPY . .
 
