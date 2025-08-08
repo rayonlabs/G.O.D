@@ -90,6 +90,19 @@ class AsyncMinioClient:
     def get_public_url(self, bucket_name, object_name):
         return f"https://{self.endpoint}/{bucket_name}/{object_name}"
 
+    async def get_new_presigned_url(self, presigned_url: str) -> str:
+        try:
+            bucket_name, object_name = self.parse_s3_url(presigned_url)
+
+            new_presigned_url = await self.get_presigned_url(bucket_name, object_name)
+
+            logger.info(f"Generated new presigned URL for object {object_name} in bucket {bucket_name}")
+            return new_presigned_url
+
+        except Exception as e:
+            logger.warning(f"Failed to generate new presigned URL: {e}")
+            return None
+
     def parse_s3_url(self, url: str) -> tuple[str, str]:
         """Extract bucket name and object name from S3 URL."""
         parsed_url = urlparse(url)

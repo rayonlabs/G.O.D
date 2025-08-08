@@ -10,7 +10,6 @@ import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
-import validator.db.sql.tournaments as tournaments_sql
 from core.constants import IS_PROD_ENV
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
@@ -359,7 +358,9 @@ async def _move_to_preevaluation_status(task, config):
 
 
 async def _move_any_evaluating_tasks_to_pending_evaluation(config: Config):
-    stopped_mid_evaluation = await tasks_sql.get_tasks_with_status(TaskStatus.EVALUATING, psql_db=config.psql_db)
+    stopped_mid_evaluation = await tasks_sql.get_tasks_with_status(
+        TaskStatus.EVALUATING, psql_db=config.psql_db, benchmark_filter="include"
+    )
     logger.info(f"WE ARE MOVING {len(stopped_mid_evaluation)} TASKS TO PREEVALUATION")
     await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in stopped_mid_evaluation])
 
@@ -408,9 +409,15 @@ async def cleanup_model_cache_loop(psql_db: PSQLDB):
     while True:
         try:
             logger.info("Cleaning up model cache")
-            training_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.TRAINING, psql_db=psql_db)
-            evaluating_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.EVALUATING, psql_db=psql_db)
-            preevaluation_tasks = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=psql_db)
+            training_tasks = await tasks_sql.get_tasks_with_status(
+                TaskStatus.TRAINING, psql_db=psql_db, benchmark_filter="include"
+            )
+            evaluating_tasks = await tasks_sql.get_tasks_with_status(
+                TaskStatus.EVALUATING, psql_db=psql_db, benchmark_filter="include"
+            )
+            preevaluation_tasks = await tasks_sql.get_tasks_with_status(
+                TaskStatus.PREEVALUATION, psql_db=psql_db, benchmark_filter="include"
+            )
             protected_models = set()
             for task in evaluating_tasks + preevaluation_tasks + training_tasks:
                 if task.model_id:
@@ -476,7 +483,9 @@ async def evaluate_tasks_loop(config: Config):
 
     while True:
         if len(processing_task_ids) < 2 * len(cst.GPU_IDS):
-            tasks_to_evaluate = await tasks_sql.get_tasks_with_status(TaskStatus.PREEVALUATION, psql_db=config.psql_db)
+            tasks_to_evaluate = await tasks_sql.get_tasks_with_status(
+                TaskStatus.PREEVALUATION, psql_db=config.psql_db, tournament_filter="all", benchmark_filter="include"
+            )
             if tasks_to_evaluate:
                 logger.info(f"Found {len(tasks_to_evaluate)} new tasks awaiting evaluation, adding to queue")
                 for task in tasks_to_evaluate:

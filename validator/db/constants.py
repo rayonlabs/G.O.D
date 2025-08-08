@@ -30,7 +30,18 @@ TOURNAMENT_GROUPS_TABLE = "tournament_groups"
 TOURNAMENT_GROUP_MEMBERS_TABLE = "tournament_group_members"
 TOURNAMENT_PAIRS_TABLE = "tournament_pairs"
 TOURNAMENT_TASKS_TABLE = "tournament_tasks"
+BENCHMARK_ROOT_TASKS_TABLE = "benchmark_root_tasks"
+BENCHMARK_TASK_COPIES_TABLE = "benchmark_task_copies"
 TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE = "tournament_task_hotkey_trainings"
+
+# Tournament Task Hotkey Trainings Table Columns
+PRIORITY = "priority"
+
+# Benchmark Task Copies Table Columns
+COPY_TASK_ID = "copy_task_id"
+ROOT_TASK_ID = "root_task_id"
+PARTICIPANT_HOTKEY = "participant_hotkey"
+TOURNAMENT_ID = "tournament_id"
 
 # Node Table Columns
 NODE_ID = "node_id"
