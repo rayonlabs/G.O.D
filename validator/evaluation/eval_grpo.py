@@ -87,6 +87,7 @@ def evaluate_grpo_model(
         is_valid, error_msg, reward_func_callable = validate_reward_function(reward_func_str)
         if not is_valid:
             logger.error(f"Invalid reward function:\n{reward_func_str}")
+            logger.error(f"Validation error message: {error_msg}")
             raise ValueError(f"Invalid reward function: {error_msg}")
 
         reward_weight = reward_weights_list[i]

@@ -10,8 +10,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip uninstall -y torch torchvision torchaudio && \
     pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cu118
 
-# Reinstall textstat after torch upgrade in case it was affected
-RUN pip install --no-cache-dir textstat==0.7.7
+RUN pip uninstall -y textstat pyphen && \
+    pip install --no-cache-dir --force-reinstall textstat==0.7.8
+
 
 COPY . .
 
