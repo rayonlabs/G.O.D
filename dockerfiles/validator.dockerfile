@@ -13,6 +13,7 @@ RUN pip uninstall -y torch torchvision torchaudio && \
 RUN pip uninstall -y textstat pyphen && \
     pip install --no-cache-dir --force-reinstall textstat==0.7.8
 
+
 COPY . .
 
 ENV JOB_ID=""
