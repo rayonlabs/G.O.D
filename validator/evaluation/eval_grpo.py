@@ -84,9 +84,17 @@ def evaluate_grpo_model(
 
     for i, reward_function in enumerate(evaluation_args.dataset_type.reward_functions):
         reward_func_str = reward_function.reward_func
+        # Debug: Check if textstat is available
+        try:
+            import textstat
+            logger.info(f"textstat is available, version: {textstat.__version__}")
+        except ImportError as e:
+            logger.error(f"textstat is NOT available: {e}")
+        
         is_valid, error_msg, reward_func_callable = validate_reward_function(reward_func_str)
         if not is_valid:
             logger.error(f"Invalid reward function:\n{reward_func_str}")
+            logger.error(f"Validation error message: {error_msg}")
             raise ValueError(f"Invalid reward function: {error_msg}")
 
         reward_weight = reward_weights_list[i]
