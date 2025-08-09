@@ -108,18 +108,16 @@ def evaluate_grpo_model(
     wrapped_reward_funcs = []
 
     has_extra_column = evaluation_args.dataset_type.extra_column and cst.STANDARD_GRPO_EXTRA_COLUMN in eval_dataset.column_names
-    extra_column_data = eval_dataset[cst.STANDARD_GRPO_EXTRA_COLUMN] if has_extra_column else None
 
     for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
         def create_wrapper(original_func, func_name, weight):
             supports_extra = supports_extra_data(original_func)
             def wrapper(completions, **kwargs):
                 if supports_extra and has_extra_column:
-                    batch_size = len(completions)
-                    available_extra_data = extra_column_data[:batch_size] if extra_column_data else []
+                    extra_data_from_batch = kwargs.get(cst.STANDARD_GRPO_EXTRA_COLUMN, None)
                     
-                    if available_extra_data:
-                        raw_results = original_func(completions, extra_data=available_extra_data)
+                    if extra_data_from_batch is not None:
+                        raw_results = original_func(completions, extra_data=extra_data_from_batch)
                     else:
                         raw_results = original_func(completions)
                 else:

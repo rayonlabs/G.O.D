@@ -104,9 +104,12 @@ async def insert_tournament_groups_with_members(round_id: str, round_structure: 
 
 
 async def insert_tournament_pairs(round_id: str, hotkey_pairs: list[tuple[str, str]], psql_db: PSQLDB) -> list[str]:
+    logger.info(f"[INSERT_PAIRS] Starting insert for round {round_id} with {len(hotkey_pairs)} pairs")
     pair_ids = []
     async with await psql_db.connection() as connection:
+        logger.info(f"[INSERT_PAIRS] Got database connection")
         async with connection.transaction():
+            logger.info(f"[INSERT_PAIRS] Started transaction")
             query = f"""
                 INSERT INTO {cst.TOURNAMENT_PAIRS_TABLE}
                 ({cst.PAIR_ID}, {cst.ROUND_ID}, {cst.HOTKEY1}, {cst.HOTKEY2}, {cst.CREATED_AT})
@@ -115,10 +118,14 @@ async def insert_tournament_pairs(round_id: str, hotkey_pairs: list[tuple[str, s
             """
             for i, (hotkey1, hotkey2) in enumerate(hotkey_pairs):
                 pair_id = f"{round_id}_pair_{i + 1:03d}"
+                logger.info(f"[INSERT_PAIRS] Processing pair {i+1}/{len(hotkey_pairs)}: {hotkey1[:8] if hotkey1 else 'None'}... vs {hotkey2[:8] if hotkey2 else 'None'}...")
+                logger.info(f"[INSERT_PAIRS] Executing pair insert for {pair_id}")
                 await connection.execute(query, pair_id, round_id, hotkey1, hotkey2)
+                logger.info(f"[INSERT_PAIRS] Pair {pair_id} inserted successfully")
                 pair_ids.append(pair_id)
 
-            logger.info(f"Created {len(pair_ids)} pairs for round {round_id}")
+            logger.info(f"[INSERT_PAIRS] Transaction complete. Created {len(pair_ids)} pairs for round {round_id}")
+    logger.info(f"[INSERT_PAIRS] Returning pair_ids: {pair_ids}")
     return pair_ids
 
 
