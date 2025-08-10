@@ -76,7 +76,7 @@ async def get_total_image_dataset_size(task: ImageRawTask) -> int:
     return len(task.image_text_pairs)
 
 
-async def run_image_task_prep(task: ImageRawTask, keypair: Keypair) -> ImageRawTask:
+async def run_image_task_prep(task: ImageRawTask, keypair: Keypair, psql_db=None) -> ImageRawTask:
     test_url, train_url = await prepare_image_task(task.image_text_pairs)
     task.training_data = train_url
     task.test_data = test_url
