@@ -36,6 +36,7 @@ from validator.db.sql.tournaments import get_tournament_participant
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
+from validator.tournament import constants as t_cst
 from validator.tournament.task_creator import create_new_task_of_same_type
 from validator.utils.logging import get_logger
 

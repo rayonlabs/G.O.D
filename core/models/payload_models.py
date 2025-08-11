@@ -11,12 +11,8 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
-
-from core.models.utility_models import DpoDatasetType
-from core.models.utility_models import TextDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import JobStatus
@@ -487,6 +483,33 @@ class TournamentGpuRequirementsResponse(BaseModel):
     gpu_requirements: list[GpuRequirementSummary]
     total_tasks: int
     total_hours: float
+
+
+class BenchmarkResult(BaseModel):
+    """Individual benchmark result for a participant"""
+
+    copy_task_id: str
+    participant_hotkey: str
+    tournament_id: str | None
+    quality_score: float
+    test_loss: float | None
+    synth_loss: float | None
+    repo: str | None
+    completed_at: datetime | None
+    created_at: datetime
+    model_id: str
+    dataset: str
+    task_type: str
+
+
+class BenchmarkRootTaskResults(BaseModel):
+    """Results for a specific benchmark root task"""
+
+    root_task_id: str
+    model_id: str
+    dataset: str
+    task_type: str
+    results: list[BenchmarkResult]
 
 
 class RewardFunctionInfo(BaseModel):

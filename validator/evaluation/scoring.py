@@ -37,6 +37,7 @@ from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
+from validator.db.sql.tournaments import is_benchmark_task
 from validator.db.sql.tournaments import is_task_in_tournament
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
@@ -710,10 +711,8 @@ async def handle_duplicate_submissions(task_results: list[MinerResultsText | Min
         if len(submissions) > 1:
             logger.warning(f"Found {len(submissions)} submissions with identical losses {losses}")
 
-
             submissions_with_hashes = []
             submissions_without_hashes = []
-
 
             for hotkey, repo in submissions:
                 result = next(r for r in task_results if r.hotkey == hotkey)
@@ -804,6 +803,7 @@ async def process_miners_pool(
     assert task.task_id is not None, "We should have a task id when processing miners"
 
     is_tournament_task = await is_task_in_tournament(str(task.task_id), config.psql_db)
+    is_benchmark = await is_benchmark_task(str(task.task_id), config.psql_db)
     miner_repos: dict[str, str] = {}
     failed_results = []
 
@@ -811,7 +811,7 @@ async def process_miners_pool(
         with LogContext(miner_hotkey=miner.hotkey):
             expected_name = await get_expected_repo_name(task.task_id, miner.hotkey, config.psql_db)
 
-            if is_tournament_task and expected_name:
+            if (is_tournament_task or is_benchmark) and expected_name:
                 repo = f"{cts.RAYONLABS_HF_USERNAME}/{expected_name}"
                 logger.info(f"Tournament task: constructed repo {repo} for miner {miner.hotkey}")
                 miner_repos[miner.hotkey] = repo

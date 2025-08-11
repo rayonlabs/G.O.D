@@ -1,4 +1,4 @@
-import hashlib
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -12,6 +12,8 @@ from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.models import AnyTypeRawTask
 from validator.core.models import AnyTypeTask
+from validator.core.models import ChatRawTask
+from validator.core.models import ChatTask
 from validator.core.models import DetailedNetworkStats
 from validator.core.models import DpoRawTask
 from validator.core.models import DpoTask
@@ -21,14 +23,13 @@ from validator.core.models import ImageRawTask
 from validator.core.models import ImageTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import InstructTextTask
-from validator.core.models import ChatRawTask
-from validator.core.models import ChatTask
 from validator.core.models import NetworkStats
 from validator.core.models import RawTask
 from validator.core.models import RewardFunction
 from validator.core.models import Task
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
+from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
@@ -137,7 +138,7 @@ async def _insert_chat_task(connection: Connection, task: ChatRawTask, task_reco
         task.chat_content_field,
         task.chat_user_reference,
         task.chat_assistant_reference,
-        task.file_format
+        task.file_format,
     )
 
 
@@ -245,7 +246,11 @@ async def get_tasks_with_status(
     psql_db: PSQLDB,
     include_not_ready_tasks: bool = False,
     tournament_filter: Literal["all", "only", "exclude"] = "all",
+    benchmark_filter: Literal["include", "exclude", "only"] = "exclude",
 ) -> list[AnyTypeRawTask]:
+    if (benchmark_filter == "include" or benchmark_filter == "only") and tournament_filter == "only":
+        raise ValueError(f"Cannot include benchmark tasks and only tournament tasks: {benchmark_filter} and {tournament_filter}")
+
     delay_timestamp_clause = (
         "" if include_not_ready_tasks else f"AND ({cst.NEXT_DELAY_AT} IS NULL OR {cst.NEXT_DELAY_AT} <= NOW())"
     )
@@ -256,6 +261,25 @@ async def get_tasks_with_status(
     elif tournament_filter == "all":
         tournament_tasks_clause = ""
 
+    if benchmark_filter == "include":
+        benchmark_tasks_clause = ""
+    elif benchmark_filter == "only":
+        benchmark_tasks_clause = f"""
+            AND {cst.TASK_ID} IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
+        """
+    else:
+        benchmark_tasks_clause = f"""
+            AND {cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
+        """
+
     async with await psql_db.connection() as connection:
         connection: Connection
         base_query = f"""
@@ -263,6 +287,7 @@ async def get_tasks_with_status(
             WHERE {cst.STATUS} = $1
             {delay_timestamp_clause}
             {tournament_tasks_clause}
+            {benchmark_tasks_clause}
         """
         base_rows = await connection.fetch(base_query, status.value)
 
@@ -536,6 +561,16 @@ async def get_current_task_stats(psql_db: PSQLDB, include_tournament_tasks=False
             if include_tournament_tasks
             else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
         )
+
+        # Always exclude benchmark tasks from stats
+        benchmark_tasks_clause = f"""
+            AND {cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
+        """
+
         query = f"""
             SELECT
                 COUNT(*) FILTER (WHERE {cst.STATUS} = $1) as number_of_jobs_training,
@@ -545,6 +580,7 @@ async def get_current_task_stats(psql_db: PSQLDB, include_tournament_tasks=False
                 MIN(termination_at) FILTER (WHERE {cst.STATUS} = $1) as next_training_end
             FROM {cst.TASKS_TABLE}
             {tournament_tasks_clause}
+            {benchmark_tasks_clause}
         """
         row = await connection.fetchrow(
             query,
@@ -569,6 +605,16 @@ async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=Fals
         if include_tournament_tasks
         else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
+
+    # Always exclude benchmark tasks from stats
+    benchmark_tasks_clause = f"""
+        AND {cst.TASK_ID} NOT IN (
+            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+            UNION
+            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+        )
+    """
+
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT
@@ -579,6 +625,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=Fals
                 MIN(termination_at) FILTER (WHERE {cst.STATUS} = $1) as next_training_end
             FROM {cst.TASKS_TABLE}
             {tournament_tasks_clause}
+            {benchmark_tasks_clause}
         """
         row = await connection.fetchrow(
             query,
@@ -641,6 +688,16 @@ async def get_tasks_exceeding_termination_time(psql_db: PSQLDB, include_tourname
         if include_tournament_tasks
         else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
+
+    # Always exclude benchmark tasks
+    benchmark_tasks_clause = f"""
+        AND {cst.TASK_ID} NOT IN (
+            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+            UNION
+            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+        )
+    """
+
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -653,6 +710,7 @@ async def get_tasks_exceeding_termination_time(psql_db: PSQLDB, include_tourname
                 AND tn.netuid = $3
             )
             {tournament_tasks_clause}
+            {benchmark_tasks_clause}
             ORDER BY termination_at ASC
         """
         rows = await connection.fetch(query, TaskStatus.TRAINING.value, TaskStatus.PREEVALUATION.value, NETUID)
@@ -930,6 +988,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
         elif task_type == TaskType.CHATTASK.value:
             return ChatTask(**full_task_data)
 
+
 async def get_tasks_by_ids(task_ids: list[UUID], psql_db: PSQLDB, connection: Connection | None = None) -> list[AnyTypeTask]:
     """Get multiple tasks by their IDs efficiently in batch.
 
@@ -946,6 +1005,7 @@ async def get_tasks_by_ids(task_ids: list[UUID], psql_db: PSQLDB, connection: Co
 
     async def _get_tasks_by_ids_inner(conn: Connection) -> list[AnyTypeTask]:
         # Get base task data for all IDs
+
         base_query = f"""
             SELECT * FROM {cst.TASKS_TABLE}
             WHERE {cst.TASK_ID} = ANY($1)
@@ -994,11 +1054,7 @@ async def get_tasks_by_ids(task_ids: list[UUID], psql_db: PSQLDB, connection: Co
 
 
 async def _load_tasks_by_type(
-    conn: Connection,
-    task_type: str,
-    type_task_ids: list[UUID],
-    type_rows: list,
-    psql_db: PSQLDB
+    conn: Connection, task_type: str, type_task_ids: list[UUID], type_rows: list, psql_db: PSQLDB
 ) -> list[AnyTypeTask]:
     """Load tasks of a specific type with their type-specific data"""
     specific_query = _get_specific_query_for_task_type(task_type)
@@ -1061,11 +1117,7 @@ def _get_specific_query_for_task_type(task_type: str) -> str | None:
 
 
 async def _create_task_from_data(
-    task_type: str,
-    task_data: dict,
-    task_id: UUID,
-    psql_db: PSQLDB,
-    conn: Connection
+    task_type: str, task_data: dict, task_id: UUID, psql_db: PSQLDB, conn: Connection
 ) -> AnyTypeTask | None:
     """Create a task object from the given data based on task type"""
     full_task_data = dict(task_data)
@@ -1090,6 +1142,16 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0, include_
         if include_tournament_tasks
         else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
+
+    # Always exclude benchmark tasks from regular task queries
+    benchmark_tasks_clause = f"""
+        AND {cst.TASK_ID} NOT IN (
+            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+            UNION
+            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+        )
+    """
+
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -1110,6 +1172,7 @@ async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0, include_
             FROM {cst.TASKS_TABLE} tasks
             LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
             {tournament_tasks_clause}
+            {benchmark_tasks_clause}
             ORDER BY tasks.{cst.CREATED_AT} DESC
             LIMIT $1 OFFSET $2
         """
@@ -1145,6 +1208,11 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
                 ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
                AND victorious_repo.rn = 1
             WHERE tasks.{cst.ACCOUNT_ID} = $1
+            AND tasks.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             ORDER BY tasks.{cst.CREATED_AT} DESC
             LIMIT $2 OFFSET $3
         """
@@ -1258,6 +1326,15 @@ async def get_completed_organic_tasks(
                 param_count += 1
                 where_clauses.append(f"tasks.result_model_name_lower LIKE ${param_count}")
                 params.append(f"%{term}%")
+
+        # Always exclude benchmark tasks from organic task queries
+        where_clauses.append(f"""
+            tasks.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
+        """)
 
         where_clause = " AND ".join(where_clauses)
 
@@ -1501,6 +1578,16 @@ async def get_successful_matching_tasks(
         if include_tournament_tasks
         else f"AND t.{cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
     )
+
+    # Always exclude benchmark tasks
+    benchmark_tasks_clause = f"""
+        AND t.{cst.TASK_ID} NOT IN (
+            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+            UNION
+            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+        )
+    """
+
     async with await psql_db.connection() as connection:
         connection: Connection
         query = f"""
@@ -1534,6 +1621,7 @@ async def get_successful_matching_tasks(
             AND t.{cst.TASK_TYPE} = $7
             AND t.{cst.CREATED_AT} >= NOW() - INTERVAL '7 days'
             {tournament_tasks_clause}
+            {benchmark_tasks_clause}
             ORDER BY t.{cst.CREATED_AT} DESC
             LIMIT 100
         """
@@ -1555,3 +1643,52 @@ async def get_successful_matching_tasks(
             task = InstructTextTask(**task_data)
             tasks.append(task)
         return tasks
+
+
+async def copy_task_for_benchmark(
+    original_task: AnyTypeRawTask, psql_db: PSQLDB, new_status: TaskStatus = TaskStatus.PREPARING_DATA
+) -> AnyTypeRawTask:
+    """
+    Create a copy of a task for benchmarking purposes.
+
+    This function creates a deep copy of a task with a new task_id but identical content.
+    Synthetic data is set to the test data.
+    New status is set to the provided status (default is LOOKING_FOR_NODES)
+    Presigned URLs are regenerated to ensure they remain valid.
+
+    Args:
+        original_task: The task to copy
+        psql_db: Database connection
+
+    Returns:
+        The copied task with a new task_id
+    """
+    try:
+        copied_task = original_task.model_copy(deep=True)
+        copied_task.task_id = None
+        copied_task.status = new_status
+        copied_task.created_at = datetime.now()
+        copied_task.updated_at = datetime.now()
+        copied_task.started_at = None
+        copied_task.termination_at = None
+        copied_task.completed_at = None
+
+        if copied_task.test_data:
+            logger.info("Regenerating presigned URL for test_data")
+            copied_task.test_data = await async_minio_client.get_new_presigned_url(copied_task.test_data)
+            if hasattr(copied_task, "synthetic_data") and copied_task.synthetic_data:
+                logger.info("Setting the synthetic data to the test data")
+                copied_task.synthetic_data = copied_task.test_data
+
+        if copied_task.training_data:
+            logger.info("Regenerating presigned URL for training_data")
+            copied_task.training_data = await async_minio_client.get_new_presigned_url(copied_task.training_data)
+
+        copied_task = await add_task(copied_task, psql_db)
+
+        logger.info(f"Created benchmark task copy {copied_task.task_id} from original {original_task.task_id}")
+        return copied_task
+
+    except Exception as e:
+        logger.error(f"Error copying task {original_task.task_id}: {str(e)}", exc_info=True)
+        raise
