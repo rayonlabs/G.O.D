@@ -1,7 +1,7 @@
+import asyncio
 import math
 import os
 import re
-import requests
 from datetime import datetime
 
 import numpy as np
@@ -14,17 +14,10 @@ from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
 from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
-from core.models.utility_models import TextDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
-from core.models.utility_models import MinerSubmission
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import MinerSubmission
-
-from validator.utils.hash_verification import verify_model_hash
-
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.models.utility_models import TextDatasetType
@@ -699,11 +692,11 @@ def get_hf_upload_timestamp(repo_url: str) -> datetime | None:
     try:
         repo_path = repo_url.replace("https://huggingface.co/", "").split("/tree/")[0]
         api = HfApi()
-        
+
         model_info = api.model_info(repo_path, timeout=5.0)
         if model_info and model_info.lastModified:
             return model_info.lastModified
-            
+
     except Exception as e:
         logger.error(f"Failed to get upload timestamp for {repo_url}: {e}")
     return None
@@ -843,7 +836,17 @@ async def process_miners_pool(
 
                         # Hash verification
                         if submission.model_hash is not None:
-                            if verify_model_hash(submission.repo, submission.model_hash):
+                            loop = asyncio.get_event_loop()
+                            hash_result = await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    None,
+                                    verify_model_hash,
+                                    submission.repo,
+                                    submission.model_hash
+                                ),
+                                timeout=6000
+                            )
+                            if hash_result:
                                 logger.info(f"Hash verification passed for miner {miner.hotkey}")
                             else:
                                 logger.warning(f"Hash verification failed for miner {miner.hotkey}. Marking as failed.")
