@@ -76,10 +76,12 @@ logger = get_logger(__name__)
 
 
 def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
+    logger.info(f"[ORGANISE] Starting with {len(nodes)} nodes, MAX_KNOCKOUT={t_cst.MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND}")
     nodes_copy = nodes.copy()
     random.shuffle(nodes_copy)
 
     if len(nodes_copy) <= t_cst.MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND:
+        logger.info(f"[ORGANISE] {len(nodes_copy)} <= {t_cst.MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND}, creating KNOCKOUT round")
         hotkeys = [node.hotkey for node in nodes_copy]
 
         if len(hotkeys) % 2 == 1:
@@ -93,8 +95,10 @@ def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
         for i in range(0, len(hotkeys), 2):
             pairs.append((hotkeys[i], hotkeys[i + 1]))
         random.shuffle(pairs)
+        logger.info(f"[ORGANISE] Returning KnockoutRound with {len(pairs)} pairs")
         return KnockoutRound(pairs=pairs)
     else:
+        logger.info(f"[ORGANISE] {len(nodes_copy)} > {t_cst.MAX_NUMBER_OF_MINERS_FOR_KNOCKOUT_ROUND}, creating GROUP round")
         num_groups = math.ceil(len(nodes_copy) / t_cst.EXPECTED_GROUP_SIZE)
         if len(nodes_copy) / num_groups < t_cst.MIN_GROUP_SIZE:
             num_groups = math.ceil(len(nodes_copy) / t_cst.EXPECTED_GROUP_SIZE - 1)
@@ -113,6 +117,9 @@ def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
             idx += group_sizes[g]
 
         random.shuffle(groups)
+        logger.info(f"[ORGANISE] Returning GroupRound with {len(groups)} groups")
+        for i, group in enumerate(groups):
+            logger.info(f"[ORGANISE]   Group {i+1}: {len(group.member_ids)} members")
         return GroupRound(groups=groups)
 
 
@@ -121,9 +128,23 @@ async def _create_first_round(
 ):
     round_id = generate_round_id(tournament_id, 1)
     with LogContext(round_id=round_id):
+        logger.info(f"[FIRST_ROUND] Starting _create_first_round with {len(nodes)} nodes")
+        logger.info(f"[FIRST_ROUND] Node hotkeys: {[node.hotkey[:8] for node in nodes]}")
+        
         round_structure = organise_tournament_round(nodes, config)
+        logger.info(f"[FIRST_ROUND] organise_tournament_round returned: {type(round_structure).__name__}")
+
+        if isinstance(round_structure, GroupRound):
+            logger.info(f"[FIRST_ROUND] GroupRound with {len(round_structure.groups)} groups")
+            for i, group in enumerate(round_structure.groups):
+                logger.info(f"[FIRST_ROUND]   Group {i+1}: {len(group.member_ids)} members - {group.member_ids[:3]}...")
+        elif isinstance(round_structure, KnockoutRound):
+            logger.info(f"[FIRST_ROUND] KnockoutRound with {len(round_structure.pairs)} pairs")
+            for i, pair in enumerate(round_structure.pairs[:3]):
+                logger.info(f"[FIRST_ROUND]   Pair {i+1}: {pair[0][:8]} vs {pair[1][:8]}")
 
         round_type = RoundType.KNOCKOUT if isinstance(round_structure, KnockoutRound) else RoundType.GROUP
+        logger.info(f"[FIRST_ROUND] Round type determined as: {round_type}")
 
         round_data = TournamentRoundData(
             round_id=round_id,
@@ -133,15 +154,30 @@ async def _create_first_round(
             is_final_round=False,
             status=RoundStatus.PENDING,
         )
+        logger.info(f"[FIRST_ROUND] Created TournamentRoundData object")
 
+        logger.info(f"[FIRST_ROUND] About to insert tournament round...")
         await insert_tournament_round(round_data, psql_db)
+        logger.info(f"[FIRST_ROUND] Successfully inserted tournament round")
 
         if isinstance(round_structure, GroupRound):
-            await insert_tournament_groups_with_members(round_id, round_structure, psql_db)
+            logger.info(f"[FIRST_ROUND] About to insert {len(round_structure.groups)} groups with members...")
+            try:
+                result = await insert_tournament_groups_with_members(round_id, round_structure, psql_db)
+                logger.info(f"[FIRST_ROUND] Successfully inserted groups, returned: {result}")
+            except Exception as e:
+                logger.error(f"[FIRST_ROUND] FAILED to insert groups: {e}", exc_info=True)
+                raise
         else:
-            await insert_tournament_pairs(round_id, round_structure.pairs, psql_db)
+            logger.info(f"[FIRST_ROUND] About to insert {len(round_structure.pairs)} pairs...")
+            try:
+                result = await insert_tournament_pairs(round_id, round_structure.pairs, psql_db)
+                logger.info(f"[FIRST_ROUND] Successfully inserted pairs, returned: {result}")
+            except Exception as e:
+                logger.error(f"[FIRST_ROUND] FAILED to insert pairs: {e}", exc_info=True)
+                raise
 
-        logger.info(f"Created first round {round_id}")
+        logger.info(f"[FIRST_ROUND] Created first round {round_id} successfully")
 
 
 async def _create_tournament_tasks(
@@ -594,10 +630,14 @@ async def create_first_round_for_active_tournament(tournament_id: str, config: C
         return False
 
     logger.info(f"Creating first round for tournament {tournament_id} with {len(participant_nodes)} participants")
+    logger.info(f"Participant hotkeys: {[node.hotkey[:8] for node in participant_nodes]}")
 
-    await _create_first_round(tournament_id, tournament.tournament_type, participant_nodes, psql_db, config)
-
-    logger.info(f"Successfully created first round for tournament {tournament_id}")
+    try:
+        await _create_first_round(tournament_id, tournament.tournament_type, participant_nodes, psql_db, config)
+        logger.info(f"Successfully created first round for tournament {tournament_id}")
+    except Exception as e:
+        logger.error(f"Failed to create first round for tournament {tournament_id}: {e}", exc_info=True)
+        raise
     return True
 
 
