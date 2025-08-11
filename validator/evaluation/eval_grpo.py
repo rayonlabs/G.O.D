@@ -2,6 +2,7 @@ import os
 import subprocess
 import time
 
+
 # Allow torch.load for transformers 4.46+ security check
 os.environ['TRANSFORMERS_ALLOW_TORCH_LOAD'] = 'true'
 
@@ -113,22 +114,22 @@ def evaluate_grpo_model(
     for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
         def create_wrapper(original_func, func_name, weight):
             supports_extra = supports_extra_data(original_func)
-            def wrapper(completions, **kwargs):
-                if supports_extra and has_extra_column:
-                    batch_size = len(completions)
-                    available_extra_data = extra_column_data[:batch_size] if extra_column_data else []
-                    
-                    if available_extra_data:
-                        raw_results = original_func(completions, extra_data=available_extra_data)
-                    else:
-                        raw_results = original_func(completions)
-                else:
+
+            if supports_extra and has_extra_column:
+                def wrapper(completions, extra_data, **kwargs):
+                    raw_results = original_func(completions, extra_data=extra_data)
+                    raw_rewards[func_name].extend(raw_results)
+                    weighted_results = [r * weight for r in raw_results]
+                    captured_rewards[func_name].extend(weighted_results)
+                    return weighted_results
+            else:
+                def wrapper(completions, **kwargs):
                     raw_results = original_func(completions)
-                    
-                raw_rewards[func_name].extend(raw_results)
-                weighted_results = [r * weight for r in raw_results]
-                captured_rewards[func_name].extend(weighted_results)
-                return weighted_results
+                    raw_rewards[func_name].extend(raw_results)
+                    weighted_results = [r * weight for r in raw_results]
+                    captured_rewards[func_name].extend(weighted_results)
+                    return weighted_results
+
             return wrapper
 
         wrapped_reward_funcs.append(create_wrapper(original_func, func_name, weight))
@@ -276,7 +277,7 @@ def main():
                     elapsed = time.monotonic() - start_time
                     logger.info(f"Subprocess completed for {repo} in {elapsed:.2f} seconds")
                     break
-                except subprocess.TimeoutExpired as e:
+                except subprocess.TimeoutExpired:
                     retry_count += 1
                     logger.warning(f"Subprocess timed out for {repo} (attempt {retry_count}/{max_retries})")
                     if retry_count == max_retries:
