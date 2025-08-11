@@ -836,20 +836,29 @@ async def process_miners_pool(
 
                         # Hash verification
                         if submission.model_hash is not None:
-                            loop = asyncio.get_event_loop()
-                            hash_result = await asyncio.wait_for(
-                                loop.run_in_executor(
-                                    None,
-                                    verify_model_hash,
-                                    submission.repo,
-                                    submission.model_hash
-                                ),
-                                timeout=6000
-                            )
-                            if hash_result:
-                                logger.info(f"Hash verification passed for miner {miner.hotkey}")
-                            else:
-                                logger.warning(f"Hash verification failed for miner {miner.hotkey}. Marking as failed.")
+                            try:
+                                loop = asyncio.get_event_loop()
+                                hash_result = await asyncio.wait_for(
+                                    loop.run_in_executor(
+                                        None,
+                                        verify_model_hash,
+                                        submission.repo,
+                                        submission.model_hash
+                                    ),
+                                    timeout=6000
+                                )
+                                if hash_result:
+                                    logger.info(f"Hash verification passed for miner {miner.hotkey}")
+                                else:
+                                    logger.warning(f"Hash verification failed for miner {miner.hotkey}. Marking as failed.")
+                                    failed_results.append(
+                                        _create_failed_miner_result(
+                                            miner.hotkey, score_reason="Hash verification failed", task_type=task.task_type
+                                        )
+                                    )
+                                    continue
+                            except Exception as e:
+                                logger.warning(f"Hash verification error for miner {miner.hotkey}: {e}. Marking as failed.")
                                 failed_results.append(
                                     _create_failed_miner_result(
                                         miner.hotkey, score_reason="Hash verification failed", task_type=task.task_type
