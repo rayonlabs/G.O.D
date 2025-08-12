@@ -330,7 +330,8 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             await eliminate_tournament_participants(tournament.tournament_id, completed_round.round_id, all_eliminated, psql_db)
             if winners_with_insufficient_stake:
                 logger.info(
-                    f"Eliminated {len(winners_with_insufficient_stake)} winners for insufficient stake: {winners_with_insufficient_stake}"
+                    f"Eliminated {len(winners_with_insufficient_stake)} winners for insufficient stake: "
+                    f"{winners_with_insufficient_stake}"
                 )
 
         # Update winners list to remove those with insufficient stake
@@ -393,7 +394,8 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                         break
 
                     logger.info(
-                        f"Synced task {synced_task_id} status: {task.status}, comparing with SUCCESS={TaskStatus.SUCCESS.value}, FAILURE={TaskStatus.FAILURE.value}"
+                        f"Synced task {synced_task_id} status: {task.status}, comparing with "
+                        f"SUCCESS={TaskStatus.SUCCESS.value}, FAILURE={TaskStatus.FAILURE.value}"
                     )
 
                     if task.status == TaskStatus.SUCCESS.value or task.status == TaskStatus.FAILURE.value:
@@ -518,7 +520,8 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         for i in range(0, len(eligible_nodes), batch_size):
             batch = eligible_nodes[i : i + batch_size]
             logger.info(
-                f"Processing batch {i // batch_size + 1}/{(len(eligible_nodes) + batch_size - 1) // batch_size} with {len(batch)} nodes"
+                f"Processing batch {i // batch_size + 1}/{(len(eligible_nodes) + batch_size - 1) // batch_size} "
+                f"with {len(batch)} nodes"
             )
 
             batch_results = await asyncio.gather(
@@ -573,12 +576,14 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
         if miners_that_accept_and_give_repos >= cst.MIN_MINERS_FOR_TOURN:
             logger.info(
-                f"Tournament {tournament_id} has sufficient miners ({miners_that_accept_and_give_repos} >= {cst.MIN_MINERS_FOR_TOURN})"
+                f"Tournament {tournament_id} has sufficient miners "
+                f"({miners_that_accept_and_give_repos} >= {cst.MIN_MINERS_FOR_TOURN})"
             )
             return miners_that_accept_and_give_repos
 
         logger.warning(
-            f"Tournament {tournament_id} only has {miners_that_accept_and_give_repos} miners that accept and give repos, need at least {cst.MIN_MINERS_FOR_TOURN}. Waiting 30 minutes and retrying..."
+            f"Tournament {tournament_id} only has {miners_that_accept_and_give_repos} miners that accept and give repos, "
+            f"need at least {cst.MIN_MINERS_FOR_TOURN}. Waiting 30 minutes and retrying..."
         )
         await asyncio.sleep(30 * 60)
 
@@ -808,14 +813,16 @@ async def process_active_tournaments(config: Config):
                             if await check_if_round_is_completed(current_round, config):
                                 await update_round_status(current_round.round_id, RoundStatus.COMPLETED, config.psql_db)
                                 logger.info(
-                                    f"Tournament {tournament.tournament_id} round {current_round.round_id} is completed, advancing..."
+                                    f"Tournament {tournament.tournament_id} round {current_round.round_id} is completed, "
+                                    f"advancing..."
                                 )
                                 await advance_tournament(tournament, current_round, config, config.psql_db)
                         elif current_round.status == RoundStatus.COMPLETED:
                             # If the round is already completed but tournament is still active,
                             # we need to advance the tournament
                             logger.info(
-                                f"Tournament {tournament.tournament_id} round {current_round.round_id} is already completed, checking if tournament should advance..."
+                                f"Tournament {tournament.tournament_id} round {current_round.round_id} is already completed, "
+                                f"checking if tournament should advance..."
                             )
                             await advance_tournament(tournament, current_round, config, config.psql_db)
         except Exception as e:
@@ -988,7 +995,8 @@ async def check_and_start_tournament(tournament_type: TournamentType, psql_db: P
             completed_at = await get_tournament_completion_time(latest_tournament.tournament_id, psql_db)
             if await should_start_new_tournament_after_interval(completed_at or created_at):
                 logger.info(
-                    f"Starting new {tournament_type.value} tournament after {cst.TOURNAMENT_INTERVAL_HOURS} hours since {latest_tournament.tournament_id} completed"
+                    f"Starting new {tournament_type.value} tournament after {cst.TOURNAMENT_INTERVAL_HOURS} hours "
+                    f"since {latest_tournament.tournament_id} completed"
                 )
 
                 # Create new tournament of the same type

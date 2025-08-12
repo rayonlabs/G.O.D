@@ -35,10 +35,28 @@ TEXT_TASKS_PER_GROUP = 3
 IMAGE_TASKS_PER_GROUP = 3
 TOURNAMENT_GROUP_TARGET_NUM_TASKS = 3
 
+# Final round task counts
+FINAL_ROUND_IMAGE_TASKS = 3
+FINAL_ROUND_TEXT_TASKS = 3
+
+# Knockout round task counts
+KNOCKOUT_PAIR_TASKS = 1
+
+# Model size constants (in billions)
+BIG_MODEL_MIN_SIZE_B = 12.0
+BIG_MODEL_MAX_SIZE_B = 71.0
+DEFAULT_MODEL_MIN_SIZE_B = 1
+DEFAULT_MODEL_MAX_SIZE_B = 10
+MODEL_SIZE_RANGE_MULTIPLIER_MIN = 0.8
+MODEL_SIZE_RANGE_MULTIPLIER_MAX = 1.2
+
+# Model parameter conversion
+MODEL_PARAMS_TO_BILLIONS = 1e9
+
 # Progressive championship threshold constants
-FIRST_DEFENSE_THRESHOLD = 0.10    # 10% advantage needed on first defense after becoming champion
+FIRST_DEFENSE_THRESHOLD = 0.10  # 10% advantage needed on first defense after becoming champion
 SECOND_DEFENSE_THRESHOLD = 0.075  # 7.5% advantage needed on second defense
-STEADY_STATE_THRESHOLD = 0.05     # 5% advantage needed from third defense onwards
+STEADY_STATE_THRESHOLD = 0.05  # 5% advantage needed from third defense onwards
 
 # Obfuscation detection constants
 OBFUSCATION_DETECTION_PATH = "./validator/obfuscation_detection/anti_obfuscation"
