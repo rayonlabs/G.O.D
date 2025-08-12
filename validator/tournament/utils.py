@@ -173,15 +173,34 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
     latest_winner = await get_latest_tournament_winner_participant(psql_db, tournament_type, config)
     if latest_winner:
         logger.info(f"Using latest tournament winner as BASE: {latest_winner.hotkey}")
-        # Return EMISSION_BURN_HOTKEY as the participant hotkey but with the winner's training info
-        # The actual champion's hotkey will be stored separately in base_winner_hotkey
-        return TournamentParticipant(
-            tournament_id="",
-            hotkey=EMISSION_BURN_HOTKEY,
-            training_repo=latest_winner.training_repo,
-            training_commit_hash=latest_winner.training_commit_hash,
-            stake_required=0,
-        )
+        
+        # Get the latest completed tournament to find the uploaded repo
+        latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
+        if latest_tournament and latest_tournament.tournament_id:
+            # Use the gradients-opensource uploaded repository instead of the original training_repo
+            uploaded_repo_name = f"god-{tournament_type.value}-{latest_tournament.tournament_id}-{t_cst.WINNER_REPO_POSITION_PREFIX}-1".replace("_", "-")
+            uploaded_repo_url = f"https://github.com/{t_cst.WINNER_REPO_GITHUB_ORG}/{uploaded_repo_name}"
+            logger.info(f"Using uploaded winner repository: {uploaded_repo_url}")
+            
+            # Return EMISSION_BURN_HOTKEY as the participant hotkey but with the uploaded winner's repo
+            # The actual champion's hotkey will be stored separately in base_winner_hotkey
+            return TournamentParticipant(
+                tournament_id="",
+                hotkey=EMISSION_BURN_HOTKEY,
+                training_repo=uploaded_repo_url,
+                training_commit_hash="",
+                stake_required=0,
+            )
+        else:
+            logger.warning("Could not determine tournament ID for uploaded repo, falling back to original training_repo")
+            # Fallback to original training_repo if we can't determine the uploaded repo
+            return TournamentParticipant(
+                tournament_id="",
+                hotkey=EMISSION_BURN_HOTKEY,
+                training_repo=latest_winner.training_repo,
+                training_commit_hash=latest_winner.training_commit_hash,
+                stake_required=0,
+            )
 
     logger.info(
         f"No previous tournament winner found for type {tournament_type.value}, using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
