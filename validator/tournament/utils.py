@@ -3,6 +3,7 @@
 
 from collections import Counter
 
+import aiohttp
 import numpy as np
 
 from core.models.tournament_models import RoundType
@@ -167,6 +168,26 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
     return miner_results
 
 
+async def get_latest_commit_hash_from_github(repo_url: str) -> str:
+    """Fetch the latest commit hash from a GitHub repository."""
+    # Extract owner/repo from URL: https://github.com/owner/repo
+    repo_path = repo_url.split("github.com/")[1].replace(".git", "")
+    api_url = f"https://api.github.com/repos/{repo_path}/commits/main"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("sha", "")
+                else:
+                    logger.error(f"Failed to fetch commit hash from {repo_url}: HTTP {response.status}")
+                    return ""
+    except Exception as e:
+        logger.error(f"Error fetching commit hash from {repo_url}: {e}")
+        return ""
+
+
 async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, config: Config) -> TournamentParticipant | None:
     """Get a BASE contestant as the last tournament winner."""
 
@@ -182,13 +203,18 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
             uploaded_repo_url = f"https://github.com/{t_cst.WINNER_REPO_GITHUB_ORG}/{uploaded_repo_name}"
             logger.info(f"Using uploaded winner repository: {uploaded_repo_url}")
             
+            # Fetch the latest commit hash from the uploaded repository
+            commit_hash = await get_latest_commit_hash_from_github(uploaded_repo_url)
+            if not commit_hash:
+                logger.warning(f"Could not fetch commit hash for {uploaded_repo_url}, using empty string")
+            
             # Return EMISSION_BURN_HOTKEY as the participant hotkey but with the uploaded winner's repo
             # The actual champion's hotkey will be stored separately in base_winner_hotkey
             return TournamentParticipant(
                 tournament_id="",
                 hotkey=EMISSION_BURN_HOTKEY,
                 training_repo=uploaded_repo_url,
-                training_commit_hash="",
+                training_commit_hash=commit_hash,
                 stake_required=0,
             )
         else:
