@@ -42,3 +42,7 @@ STEADY_STATE_THRESHOLD = 0.05     # 5% advantage needed from third defense onwar
 
 # Obfuscation detection constants
 OBFUSCATION_DETECTION_PATH = "./validator/obfuscation_detection/anti_obfuscation"
+
+# GitHub repository constants
+WINNER_REPO_GITHUB_ORG = "gradients-opensource"
+WINNER_REPO_POSITION_PREFIX = "position"
