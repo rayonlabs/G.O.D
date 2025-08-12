@@ -23,6 +23,7 @@ from validator.db.database import PSQLDB
 async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> dict[str, dict]:
     """
     Get both daily participation status and average scores for nodes.
+    Excludes benchmark tasks from daily status calculations.
     """
     if not hotkeys:
         return {}
@@ -39,6 +40,11 @@ async def get_nodes_daily_status(hotkeys: list[str], psql_db: PSQLDB) -> dict[st
             WHERE tn.{cst.HOTKEY} = ANY($1)
             AND tn.{cst.NETUID} = $2
             AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             AND t.{cst.CREATED_AT} >= CURRENT_DATE  -- Only tasks from today
             GROUP BY tn.{cst.HOTKEY}
         """
@@ -232,6 +238,7 @@ async def get_all_scores_and_losses_for_task(task_id: UUID, psql_db: PSQLDB) -> 
 async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> list[dict]:
     """
     Get all quality scores for a specific hotkey across all completed tasks.
+    Excludes benchmark tasks from score calculations.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -245,6 +252,11 @@ async def get_all_scores_for_hotkey(hotkey: str, psql_db: PSQLDB) -> list[dict]:
             AND tn.{cst.NETUID} = $2
             AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
             AND t.{cst.STATUS} = $3
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
         """
         rows = await connection.fetch(query, hotkey, NETUID, TaskStatus.SUCCESS.value)
         return [dict(row) for row in rows]
@@ -255,6 +267,7 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
     Get aggregate scores for all completed tasks since the given start time.
     Only includes tasks that have at least one node with score >= 1 or < 0
     Excludes tournament tasks.
+    Excludes benchmark tasks from weight setting calculations.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -281,6 +294,11 @@ async def get_aggregate_scores_since(start_time: datetime, psql_db: PSQLDB) -> l
             AND t.{cst.CREATED_AT} >= $1
             AND tn.{cst.NETUID} = $2
             AND t.{cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             AND EXISTS (
                 SELECT 1
                 FROM {cst.TASK_NODES_TABLE} tn2
@@ -320,6 +338,7 @@ async def get_aggregate_scores_for_leaderboard_since(start_time: datetime, psql_
     Includes ALL scores (including zeros) for leaderboard and analytics purposes.
     This is separate from get_aggregate_scores_since which filters for weight calculations.
     Excludes tournament tasks.
+    Excludes benchmark tasks from S3 results and auditing.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -346,6 +365,11 @@ async def get_aggregate_scores_for_leaderboard_since(start_time: datetime, psql_
             AND t.{cst.CREATED_AT} >= $1
             AND tn.{cst.NETUID} = $2
             AND t.{cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             GROUP BY t.{cst.TASK_ID}
             ORDER BY t.{cst.CREATED_AT} DESC
         """
@@ -371,12 +395,11 @@ async def get_aggregate_scores_for_leaderboard_since(start_time: datetime, psql_
         return results
 
 
-
 async def get_organic_proportion_since(start_time: datetime, psql_db: PSQLDB, task_type: str | None = None) -> float:
-
     """
     Get the proportion of organic tasks since the given start time.
     Optionally filter by task_type.
+    Excludes benchmark tasks from auditing calculations.
     """
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -390,6 +413,11 @@ async def get_organic_proportion_since(start_time: datetime, psql_db: PSQLDB, ta
             FROM {cst.TASKS_TABLE} t
             WHERE t.{cst.CREATED_AT} >= $1
             AND t.{cst.NETUID} = $2
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             {"AND t.task_type = $3" if task_type else ""}
         """
         params = [start_time, NETUID]
@@ -422,6 +450,11 @@ async def get_node_quality_metrics(hotkey: str, interval: str, psql_db: PSQLDB) 
             WHERE tn.{cst.HOTKEY} = $1
             AND tn.{cst.NETUID} = $2
             AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             AND t.{cst.CREATED_AT} >= CASE
                 WHEN $3 = 'all' THEN '1970-01-01'::TIMESTAMP
                 ELSE NOW() - $3::INTERVAL
@@ -454,6 +487,11 @@ async def get_node_workload_metrics(hotkey: str, interval: str, psql_db: PSQLDB)
                         ELSE 1.0
                     END as params_billions
                 FROM {cst.TASKS_TABLE} t
+                WHERE t.{cst.TASK_ID} NOT IN (
+                    SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                    UNION
+                    SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+                )
             )
             SELECT
                 COALESCE(SUM(t.{cst.HOURS_TO_COMPLETE}), 0)::INTEGER as competition_hours,
@@ -464,6 +502,11 @@ async def get_node_workload_metrics(hotkey: str, interval: str, psql_db: PSQLDB)
             WHERE tn.{cst.HOTKEY} = $1
             AND tn.{cst.QUALITY_SCORE} IS NOT NULL
             AND tn.{cst.NETUID} = $2
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             AND t.{cst.CREATED_AT} >= CASE
                 WHEN $3 = 'all' THEN '1970-01-01'::TIMESTAMP
                 ELSE NOW() - $3::INTERVAL
@@ -490,6 +533,11 @@ async def get_node_model_metrics(hotkey: str, interval: str, psql_db: PSQLDB) ->
                 ELSE NOW() - $3::INTERVAL
             END
             AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             GROUP BY t.{cst.MODEL_ID}
             ORDER BY model_count DESC
             LIMIT 1
@@ -507,6 +555,11 @@ async def get_node_model_metrics(hotkey: str, interval: str, psql_db: PSQLDB) ->
         JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
         WHERE tn.{cst.HOTKEY} = $1
         AND tn.{cst.NETUID} = $2
+        AND t.{cst.TASK_ID} NOT IN (
+            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+            UNION
+            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+        )
         AND t.{cst.CREATED_AT} >= CASE
             WHEN $3 = 'all' THEN '1970-01-01'::TIMESTAMP
             ELSE NOW() - $3::INTERVAL
@@ -558,6 +611,11 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
             WHERE tn.{cst.HOTKEY} = ANY($1)
             AND tn.{cst.NETUID} = $2
             AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             AND t.{cst.CREATED_AT} >= CASE
                 WHEN p.interval = 'all' THEN '1970-01-01'::TIMESTAMP
                 ELSE NOW() - p.interval::INTERVAL
@@ -610,6 +668,11 @@ async def get_all_node_stats_batched(hotkeys: list[str], psql_db: PSQLDB) -> dic
             WHERE tn.{cst.HOTKEY} = ANY($1)
             AND tn.{cst.NETUID} = $2
             AND tn.{cst.QUALITY_SCORE} IS NOT NULL
+            AND t.{cst.TASK_ID} NOT IN (
+                SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
+                UNION
+                SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            )
             AND t.{cst.CREATED_AT} >= CASE
                 WHEN p.interval = 'all' THEN '1970-01-01'::TIMESTAMP
                 ELSE NOW() - p.interval::INTERVAL
