@@ -1147,18 +1147,22 @@ async def get_benchmark_root_tasks(task_type: TaskType, psql_db: PSQLDB) -> list
         return [row[cst.TASK_ID] for row in results]
 
 
-async def add_benchmark_task_copy(copy_task_id: str, root_task_id: str, participant_hotkey: str, psql_db: PSQLDB):
+async def add_benchmark_task_copy(
+    copy_task_id: str, root_task_id: str, participant_hotkey: str, tournament_id: str, psql_db: PSQLDB
+):
     """Add a benchmark task copy for a specific participant."""
     async with await psql_db.connection() as connection:
         async with connection.transaction():
             query = f"""
                 INSERT INTO {cst.BENCHMARK_TASK_COPIES_TABLE}
-                ({cst.COPY_TASK_ID}, {cst.ROOT_TASK_ID}, {cst.PARTICIPANT_HOTKEY}, {cst.CREATED_AT})
-                VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+                ({cst.COPY_TASK_ID}, {cst.ROOT_TASK_ID}, {cst.PARTICIPANT_HOTKEY}, {cst.TOURNAMENT_ID}, {cst.CREATED_AT})
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
                 ON CONFLICT ({cst.ROOT_TASK_ID}, {cst.PARTICIPANT_HOTKEY}) DO NOTHING
             """
-            await connection.execute(query, copy_task_id, root_task_id, participant_hotkey)
-            logger.info(f"Added benchmark task copy {copy_task_id} for participant {participant_hotkey}")
+            await connection.execute(query, copy_task_id, root_task_id, participant_hotkey, tournament_id)
+            logger.info(
+                f"Added benchmark task copy {copy_task_id} for participant {participant_hotkey} from tournament {tournament_id}"
+            )
 
 
 async def is_benchmark_task(task_id: str, psql_db: PSQLDB) -> bool:
