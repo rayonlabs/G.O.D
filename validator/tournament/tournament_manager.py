@@ -65,7 +65,7 @@ from validator.tournament.repo_uploader import upload_tournament_participant_rep
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
 from validator.tournament.utils import get_base_contestant
-from validator.tournament.utils import get_latest_tournament_winner_participant  
+from validator.tournament.utils import get_latest_tournament_winner_participant
 from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import replace_tournament_task
 from validator.utils.call_endpoint import process_non_stream_fiber_get
@@ -169,7 +169,14 @@ async def assign_nodes_to_tournament_tasks(
             group_tasks = [task for task in group_tasks if task.group_id == group_id]
 
             for task in group_tasks:
+                already_assigned_nodes = await task_sql.get_nodes_assigned_to_task(task.task_id, psql_db)
+                already_assigned_hotkeys = {node.hotkey for node in already_assigned_nodes}
+
                 for hotkey in group.member_ids:
+                    if hotkey in already_assigned_hotkeys:
+                        logger.info(f"Node {hotkey} already assigned to task {task.task_id}")
+                        continue
+
                     node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
                         await task_sql.assign_node_to_task(task.task_id, node, psql_db)
@@ -194,6 +201,10 @@ async def assign_nodes_to_tournament_tasks(
 
             for pair_task in pair_tasks:
                 logger.info(f"Assigning nodes to task {pair_task.task_id}")
+
+                already_assigned_nodes = await task_sql.get_nodes_assigned_to_task(pair_task.task_id, psql_db)
+                already_assigned_hotkeys = {node.hotkey for node in already_assigned_nodes}
+
                 participants_to_assign = list(pair)
 
                 # For final rounds, also assign the boss contestant
@@ -204,6 +215,10 @@ async def assign_nodes_to_tournament_tasks(
                     )
 
                 for hotkey in participants_to_assign:
+                    if hotkey in already_assigned_hotkeys:
+                        logger.info(f"Node {hotkey} already assigned to task {pair_task.task_id}")
+                        continue
+
                     node = await get_node_by_hotkey(hotkey, psql_db)
                     if node:
                         await task_sql.assign_node_to_task(pair_task.task_id, node, psql_db)
@@ -442,11 +457,11 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
     tournament_id = generate_tournament_id()
 
     base_contestant = await get_base_contestant(psql_db, tournament_type, config)
-    
+
     # Get the actual champion's hotkey (not EMISSION_BURN_HOTKEY)
     latest_winner = await get_latest_tournament_winner_participant(psql_db, tournament_type, config)
     base_winner_hotkey = latest_winner.hotkey if latest_winner else None
-    
+
     logger.info(f"Base winner hotkey (actual champion): {base_winner_hotkey}")
     logger.info(f"Base contestant hotkey (EMISSION_BURN): {base_contestant.hotkey if base_contestant else None}")
 
@@ -658,6 +673,41 @@ async def process_pending_tournaments(config: Config) -> list[str]:
             await asyncio.sleep(t_cst.TOURNAMENT_PENDING_CYCLE_INTERVAL)
 
 
+async def check_if_all_tasks_have_nodes_assigned(round_id: str, config: Config) -> bool:
+    """
+    True if all tasks have nodes assigned, False otherwise
+    """
+    logger.info(f"Checking if all tasks in round {round_id} have nodes assigned...")
+
+    round_tasks = await get_tournament_tasks(round_id, config.psql_db)
+
+    if not round_tasks:
+        logger.warning(f"No tasks found for round {round_id}")
+        return False
+
+    logger.info(f"Found {len(round_tasks)} tasks for round {round_id}")
+
+    tasks_without_nodes = []
+    tasks_with_nodes = []
+
+    for task in round_tasks:
+        assigned_nodes = await task_sql.get_nodes_assigned_to_task(task.task_id, config.psql_db)
+        if assigned_nodes:
+            tasks_with_nodes.append(task.task_id)
+            logger.info(f"Task {task.task_id} has {len(assigned_nodes)} nodes assigned")
+        else:
+            tasks_without_nodes.append(task.task_id)
+            logger.warning(f"Task {task.task_id} has no nodes assigned")
+
+    if tasks_without_nodes:
+        logger.warning(f"Round {round_id} has {len(tasks_without_nodes)} tasks without nodes: {tasks_without_nodes}")
+        logger.warning(f"Round {round_id} has {len(tasks_with_nodes)} tasks with nodes: {tasks_with_nodes}")
+        return False
+
+    logger.info(f"All {len(round_tasks)} tasks in round {round_id} have nodes assigned")
+    return True
+
+
 async def process_pending_rounds(config: Config):
     """
     Process all pending rounds by creating tasks and assigning nodes to them.
@@ -716,10 +766,15 @@ async def process_pending_rounds(config: Config):
                         )
                         logger.info("Finished assigning nodes to tournament tasks")
 
-                        logger.info(f"Setting round {round_data.round_id} to ACTIVE status")
-                        await update_round_status(round_data.round_id, RoundStatus.ACTIVE, config.psql_db)
-
-                        logger.info(f"Successfully processed pending round {round_data.round_id} with {len(tasks)} tasks")
+                        if await check_if_all_tasks_have_nodes_assigned(round_data.round_id, config):
+                            logger.info(f"Setting round {round_data.round_id} to ACTIVE status")
+                            await update_round_status(round_data.round_id, RoundStatus.ACTIVE, config.psql_db)
+                            logger.info(f"Successfully processed pending round {round_data.round_id} with {len(tasks)} tasks")
+                        else:
+                            logger.warning(
+                                f"Round {round_data.round_id} has tasks without nodes assigned. Keeping round as PENDING."
+                            )
+                            logger.info(f"Round {round_data.round_id} will be processed again in the next cycle")
 
                     except Exception as e:
                         logger.error(f"Error processing pending round {round_data.round_id}: {e}")
@@ -838,11 +893,15 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                             continue
                         else:
                             logger.info(
-                                f"Synced task {synced_task_id} failed with status {synced_task_obj.status}. Original task also failed. Replacing..."
+                                f"Synced task {synced_task_id} failed with status {synced_task_obj.status}. "
+                                f"Original task also failed. Replacing..."
                             )
 
                         try:
-                            logger.info(f"Attempting to replace task {task.task_id} - tournament: {round_data.tournament_id}, round: {round_data.round_id}")
+                            logger.info(
+                                f"Attempting to replace task {task.task_id} - tournament: {round_data.tournament_id}, "
+                                f"round: {round_data.round_id}, group_id: {task.group_id}, pair_id: {task.pair_id}"
+                            )
                             new_task_id = await replace_tournament_task(
                                 original_task_id=task.task_id,
                                 tournament_id=round_data.tournament_id,
@@ -855,7 +914,10 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                             waiting_for_synced_tasks = True
                         except Exception as e:
                             logger.error(f"Failed to replace task {task.task_id}: {str(e)}", exc_info=True)
-                            logger.error(f"Task replacement failure details - task_id: {task.task_id}, group_id: {task.group_id}, pair_id: {task.pair_id}")
+                            logger.error(
+                                f"Task replacement failure details - task_id: {task.task_id}, group_id: {task.group_id}, "
+                                f"pair_id: {task.pair_id}"
+                            )
                             # Still set waiting flag to prevent false completion
                             waiting_for_synced_tasks = True
                     else:
