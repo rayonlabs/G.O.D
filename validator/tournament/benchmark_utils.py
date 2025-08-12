@@ -71,6 +71,7 @@ async def create_benchmark_training_pairs_for_participant(
                 copy_task_id=copied_task.task_id,
                 root_task_id=root_task_id,
                 participant_hotkey=participant.hotkey,
+                tournament_id=participant.tournament_id,
                 psql_db=config.psql_db,
             )
 
