@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import tempfile
 
@@ -179,3 +180,15 @@ def hide_sensitive_data_till_finished(task: AnyTypeTask) -> AnyTypeTask:
         task.training_data = None
         task.ds = "Hidden"
     return task
+
+
+def normalise_float(float: float | None) -> float | None:
+    if float is None:
+        return 0.0
+
+    if math.isnan(float):
+        return None
+
+    if math.isinf(float):
+        float = 1e100 if float > 0 else -1e100
+    return float

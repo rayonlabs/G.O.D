@@ -28,6 +28,7 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winners
 from validator.utils.logging import get_logger
+from validator.utils.util import normalise_float
 
 
 logger = get_logger(__name__)
@@ -1066,10 +1067,10 @@ async def count_champion_consecutive_wins_at_tournament(
             WHERE {cst.TOURNAMENT_ID} = $1
         """
         target_result = await connection.fetchval(target_query, tournament_id)
-        
+
         if not target_result:
             return 0
-        
+
         # Get all completed tournaments of the same type that finished before this tournament started
         query = f"""
             SELECT {cst.WINNER_HOTKEY}, {cst.CREATED_AT}
@@ -1080,10 +1081,10 @@ async def count_champion_consecutive_wins_at_tournament(
             ORDER BY {cst.CREATED_AT} DESC
         """
         results = await connection.fetch(query, tournament_type.value, target_result)
-        
+
         if not results:
             return 0
-            
+
         consecutive_wins = 0
         for row in results:
             if row[cst.WINNER_HOTKEY] == champion_hotkey:
@@ -1091,7 +1092,7 @@ async def count_champion_consecutive_wins_at_tournament(
             else:
                 # Stop counting when we hit a tournament won by someone else
                 break
-                
+
         return consecutive_wins
 
 
@@ -1167,7 +1168,10 @@ async def is_benchmark_task(task_id: str, psql_db: PSQLDB) -> bool:
             SELECT 1
             FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
             WHERE {cst.TASK_ID} = $1
-            OR {cst.TASK_ID} IN (SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE} WHERE {cst.ROOT_TASK_ID} = $1)
+            UNION
+            SELECT 1
+            FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            WHERE {cst.COPY_TASK_ID} = $1
         """
         result = await connection.fetchrow(query, task_id)
         return result is not None
@@ -1223,9 +1227,9 @@ async def get_all_benchmark_results(psql_db: PSQLDB) -> list[dict]:
                     "copy_task_id": str(row[cst.COPY_TASK_ID]),
                     "participant_hotkey": row[cst.PARTICIPANT_HOTKEY],
                     "tournament_id": row[cst.TOURNAMENT_ID],
-                    "quality_score": row["quality_score"],
-                    "test_loss": row[cst.TEST_LOSS],
-                    "synth_loss": row[cst.SYNTH_LOSS],
+                    "quality_score": normalise_float(row["quality_score"]),
+                    "test_loss": normalise_float(row[cst.TEST_LOSS]),
+                    "synth_loss": normalise_float(row[cst.SYNTH_LOSS]),
                     "repo": row[cst.REPO],
                     "completed_at": row[cst.COMPLETED_AT],
                     "created_at": row[cst.CREATED_AT],

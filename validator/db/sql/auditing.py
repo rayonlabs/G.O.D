@@ -1,5 +1,4 @@
 import json
-import math
 
 from asyncpg import Connection
 from fastapi import Depends
@@ -27,18 +26,7 @@ from validator.core.models import InstructTextTaskWithHotkeyDetails
 from validator.db import constants as cst
 from validator.db.sql import tasks as tasks_sql
 from validator.utils.util import hide_sensitive_data_till_finished
-
-
-def normalise_float(float: float | None) -> float | None:
-    if float is None:
-        return 0.0
-
-    if math.isnan(float):
-        return None
-
-    if math.isinf(float):
-        float = 1e100 if float > 0 else -1e100
-    return float
+from validator.utils.util import normalise_float
 
 
 async def get_recent_tasks(
