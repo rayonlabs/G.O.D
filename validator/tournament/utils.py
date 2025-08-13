@@ -21,7 +21,6 @@ from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
-from validator.tournament import constants as t_cst
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
@@ -49,7 +48,7 @@ def get_progressive_threshold(consecutive_wins: int) -> float:
     """
     Calculate the progressive threshold based on consecutive wins.
     - 1st defense after becoming champion (1 win): 10% advantage needed
-    - 2nd defense (2 wins): 7.5% advantage needed  
+    - 2nd defense (2 wins): 7.5% advantage needed
     - 3rd+ defense (3+ wins): 5% advantage needed
     """
     if consecutive_wins <= 1:
@@ -68,12 +67,12 @@ async def replace_tournament_task(
 ) -> str:
     logger.info(f"Starting task replacement for task {original_task_id}")
     logger.info(f"Tournament: {tournament_id}, Round: {round_id}, Group: {group_id}, Pair: {pair_id}")
-    
+
     original_task_obj = await task_sql.get_task(original_task_id, config.psql_db)
     if not original_task_obj:
         logger.error(f"Could not find original task {original_task_id}")
         raise ValueError(f"Original task {original_task_id} not found")
-    
+
     logger.info(f"Found original task - Type: {original_task_obj.task_type}, Status: {original_task_obj.status}")
     logger.info(f"Original task model params: {original_task_obj.model_params_count}")
 
@@ -91,7 +90,7 @@ async def replace_tournament_task(
         group_id=group_id,
         pair_id=pair_id,
     )
-    
+
     try:
         await add_tournament_tasks([new_tournament_task], config.psql_db)
         logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
@@ -168,12 +167,12 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
     return miner_results
 
 
-async def get_latest_commit_hash_from_github(repo_url: str) -> str:
+async def get_latest_commit_hash_from_github(repo_url: str) -> str | None:
     """Fetch the latest commit hash from a GitHub repository."""
     # Extract owner/repo from URL: https://github.com/owner/repo
     repo_path = repo_url.split("github.com/")[1].replace(".git", "")
     api_url = f"https://api.github.com/repos/{repo_path}/commits/main"
-    
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(api_url) as response:
@@ -182,10 +181,10 @@ async def get_latest_commit_hash_from_github(repo_url: str) -> str:
                     return data.get("sha", "")
                 else:
                     logger.error(f"Failed to fetch commit hash from {repo_url}: HTTP {response.status}")
-                    return ""
+                    return None
     except Exception as e:
         logger.error(f"Error fetching commit hash from {repo_url}: {e}")
-        return ""
+        return None
 
 
 async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, config: Config) -> TournamentParticipant | None:
@@ -194,26 +193,17 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
     latest_winner = await get_latest_tournament_winner_participant(psql_db, tournament_type, config)
     if latest_winner:
         logger.info(f"Using latest tournament winner as BASE: {latest_winner.hotkey}")
-        
-        # Get the latest completed tournament to find the uploaded repo
-        latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
-        if latest_tournament and latest_tournament.tournament_id:
-            # Use the gradients-opensource uploaded repository instead of the original training_repo
-            uploaded_repo_name = f"god-{tournament_type.value}-{latest_tournament.tournament_id}-{t_cst.WINNER_REPO_POSITION_PREFIX}-1".replace("_", "-")
-            uploaded_repo_url = f"https://github.com/{t_cst.WINNER_REPO_GITHUB_ORG}/{uploaded_repo_name}"
-            logger.info(f"Using uploaded winner repository: {uploaded_repo_url}")
-            
-            # Fetch the latest commit hash from the uploaded repository
-            commit_hash = await get_latest_commit_hash_from_github(uploaded_repo_url)
+
+        if latest_winner.backup_repo:
+            logger.info(f"Previous winner has backup repo: {latest_winner.backup_repo}")
+            commit_hash = await get_latest_commit_hash_from_github(latest_winner.backup_repo)
             if not commit_hash:
-                logger.warning(f"Could not fetch commit hash for {uploaded_repo_url}, using empty string")
-            
-            # Return EMISSION_BURN_HOTKEY as the participant hotkey but with the uploaded winner's repo
-            # The actual champion's hotkey will be stored separately in base_winner_hotkey
+                logger.warning(f"Could not fetch commit hash for {latest_winner.backup_repo}, setting to None")
+
             return TournamentParticipant(
                 tournament_id="",
                 hotkey=EMISSION_BURN_HOTKEY,
-                training_repo=uploaded_repo_url,
+                training_repo=latest_winner.backup_repo,
                 training_commit_hash=commit_hash,
                 stake_required=0,
             )
@@ -259,25 +249,29 @@ async def get_latest_tournament_winner_participant(
 
     logger.info(f"Found latest tournament winner: {winner_hotkey}")
     winner_participant = await get_tournament_participant(latest_tournament.tournament_id, winner_hotkey, psql_db)
-    
+
     # If we can't find the winner's participant record, check if they were the defending champion
     # who entered as EMISSION_BURN_HOTKEY
     if not winner_participant:
-        logger.warning(f"Could not find participant record for winner {winner_hotkey} in tournament {latest_tournament.tournament_id}")
-        
+        logger.warning(
+            f"Could not find participant record for winner {winner_hotkey} in tournament {latest_tournament.tournament_id}"
+        )
+
         # If the winner was the base_winner (defending champion), try to get their record from EMISSION_BURN_HOTKEY
         if winner_hotkey == latest_tournament.base_winner_hotkey:
             logger.info(f"Winner {winner_hotkey} was the defending champion, checking EMISSION_BURN_HOTKEY participant record")
-            emission_participant = await get_tournament_participant(latest_tournament.tournament_id, EMISSION_BURN_HOTKEY, psql_db)
+            emission_participant = await get_tournament_participant(
+                latest_tournament.tournament_id, EMISSION_BURN_HOTKEY, psql_db
+            )
             if emission_participant:
                 # Use the EMISSION_BURN_HOTKEY participant's training info but with the actual winner's hotkey
                 emission_participant.hotkey = winner_hotkey
                 return emission_participant
-        
+
         # If still no participant record found, return None to use default
         logger.warning(f"No participant record found for winner {winner_hotkey}, will use default")
         return None
-    
+
     # If the participant is EMISSION_BURN_HOTKEY but we have a real winner, use the real winner's hotkey
     if winner_participant.hotkey == EMISSION_BURN_HOTKEY and latest_tournament.base_winner_hotkey:
         winner_participant.hotkey = latest_tournament.base_winner_hotkey
@@ -423,10 +417,12 @@ async def get_knockout_winners(
         # Get the current champion (base_winner_hotkey) and count their consecutive wins
         current_champion = tournament.base_winner_hotkey or boss_hotkey
         consecutive_wins = await count_champion_consecutive_wins(psql_db, tournament.tournament_type, current_champion)
-        
+
         # Calculate the progressive threshold
         threshold_percentage = get_progressive_threshold(consecutive_wins)
-        logger.info(f"Champion {current_champion} has {consecutive_wins} consecutive wins, using {threshold_percentage*100:.1f}% threshold")
+        logger.info(
+            f"Champion {current_champion} has {consecutive_wins} consecutive wins, using {threshold_percentage * 100:.1f}% threshold"
+        )
 
         for task in round_tasks:
             logger.info(f"Processing boss round task {task.task_id}")
@@ -459,10 +455,10 @@ async def get_knockout_winners(
                 training_statuses = await get_training_status_for_task_and_hotkeys(
                     task.task_id, [boss_hotkey, opponent_hotkey], psql_db
                 )
-                
+
                 boss_training_success = training_statuses.get(boss_hotkey) == TrainingStatus.SUCCESS
                 opponent_training_success = training_statuses.get(opponent_hotkey) == TrainingStatus.SUCCESS
-                
+
                 if opponent_training_success and not boss_training_success:
                     logger.info(f"Boss training failed, opponent succeeded - opponent wins task {task.task_id}")
                     task_winners.append(opponent_hotkey)
@@ -477,7 +473,7 @@ async def get_knockout_winners(
                     # Check who has valid evaluation results and award to them
                     boss_has_valid_eval = boss_loss is not None
                     opponent_has_valid_eval = opponent_loss is not None
-                    
+
                     if opponent_has_valid_eval and not boss_has_valid_eval:
                         logger.info(f"Boss evaluation failed, opponent succeeded - opponent wins task {task.task_id}")
                         task_winners.append(opponent_hotkey)
@@ -485,23 +481,29 @@ async def get_knockout_winners(
                         logger.info(f"Opponent evaluation failed, boss succeeded - boss wins task {task.task_id}")
                         task_winners.append(boss_hotkey)
                     else:
-                        logger.warning(f"Both evaluation failed or both succeeded but missing results - skipping task {task.task_id}")
+                        logger.warning(
+                            f"Both evaluation failed or both succeeded but missing results - skipping task {task.task_id}"
+                        )
                 continue
 
             logger.info(f"Boss round task {task.task_id}: Boss loss: {boss_loss:.6f}, Opponent loss: {opponent_loss:.6f}")
 
             # Apply progressive threshold system
             boss_multiplier = 1 + threshold_percentage  # For higher-is-better tasks
-            boss_divisor = 1 - threshold_percentage     # For lower-is-better tasks
+            boss_divisor = 1 - threshold_percentage  # For lower-is-better tasks
 
             if task_object.task_type == TaskType.GRPOTASK:
                 # For GRPO tasks, higher scores are better
                 if boss_loss * boss_multiplier > opponent_loss:
                     task_winners.append(boss_hotkey)
-                    logger.info(f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * {boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}")
+                    logger.info(
+                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * {boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
+                    )
                 else:
                     task_winners.append(opponent_hotkey)
-                    logger.info(f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= {boss_loss * boss_multiplier:.6f}")
+                    logger.info(
+                        f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= {boss_loss * boss_multiplier:.6f}"
+                    )
             else:
                 # For other tasks, lower scores are better
                 if boss_loss * boss_divisor < opponent_loss:
@@ -524,7 +526,7 @@ async def get_knockout_winners(
         else:
             boss_round_winner = Counter(task_winners).most_common(1)[0][0]
             logger.info(f"Boss round winner: {boss_round_winner}")
-        
+
         winners = [boss_round_winner]
 
     return winners

@@ -329,6 +329,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 continue
 
             logger.info(f"Validating obfuscation for repository: {training_repo}")
+            # TODO: why not check commit hash?
             is_not_obfuscated = await validate_repo_obfuscation(training_repo)
 
             if not is_not_obfuscated:
