@@ -946,9 +946,30 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                     await _copy_task_to_general(task.task_id, config.psql_db)
                     waiting_for_synced_tasks = True
                 elif task_obj and task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
-                    logger.info(f"Task {task.task_id} failed during preparation, copying to main cycle to check.")
-                    await _copy_task_to_general(task.task_id, config.psql_db)
-                    waiting_for_synced_tasks = True
+                    logger.info(f"Task {task.task_id} failed during preparation, creating replacement immediately.")
+                    
+                    # Create replacement task immediately
+                    try:
+                        logger.info(
+                            f"Creating immediate replacement for prep_task_failure: task {task.task_id} - "
+                            f"tournament: {round_data.tournament_id}, round: {round_data.round_id}, "
+                            f"group_id: {task.group_id}, pair_id: {task.pair_id}"
+                        )
+                        new_task_id = await replace_tournament_task(
+                            original_task_id=task.task_id,
+                            tournament_id=round_data.tournament_id,
+                            round_id=round_data.round_id,
+                            group_id=task.group_id,
+                            pair_id=task.pair_id,
+                            config=config,
+                        )
+                        logger.info(f"Successfully created immediate replacement {new_task_id} for prep_task_failure {task.task_id}")
+                        waiting_for_synced_tasks = True
+                    except Exception as e:
+                        logger.error(f"Failed to create immediate replacement for prep_task_failure {task.task_id}: {str(e)}", exc_info=True)
+                        # Fall back to copying to general cycle if replacement fails
+                        await _copy_task_to_general(task.task_id, config.psql_db)
+                        waiting_for_synced_tasks = True
 
     if waiting_for_synced_tasks:
         logger.info(f"Waiting for synced tasks to complete in round {round_data.round_id}")
