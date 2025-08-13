@@ -765,9 +765,10 @@ async def get_tournament_training_repo_and_commit(hotkey: str, psql_db: PSQLDB) 
             if result[cst.BACKUP_REPO]:
                 logger.info(f"Using backup repo for hotkey {hotkey}: {result[cst.BACKUP_REPO]}")
                 repo = result[cst.BACKUP_REPO]
+                return repo, None
             else:
                 repo = result[cst.TRAINING_REPO]
-            return repo, result[cst.TRAINING_COMMIT_HASH]
+                return repo, result[cst.TRAINING_COMMIT_HASH]
         return None, None
 
 
