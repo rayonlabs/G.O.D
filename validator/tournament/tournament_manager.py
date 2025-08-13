@@ -364,6 +364,15 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             if len(snyced_task_ids) == 0:
                 logger.info("No synced tasks found, initiating sync to general tasks")
                 await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
+            elif len(snyced_task_ids) < len(round_tasks):
+                # Some but not all tasks synced - sync the missing ones
+                logger.info(f"Only {len(snyced_task_ids)} of {len(round_tasks)} tasks synced, syncing missing tasks...")
+                for task in round_tasks:
+                    synced_id = await get_synced_task_id(task.task_id, psql_db)
+                    if not synced_id:
+                        logger.info(f"Syncing missing task {task.task_id} to general")
+                        await _copy_task_to_general(task.task_id, psql_db)
+                return  # Wait for next cycle to check completion
             elif len(snyced_task_ids) >= len(round_tasks):
                 logger.info(f"All {len(round_tasks)} tasks have been synced, checking their status...")
 
