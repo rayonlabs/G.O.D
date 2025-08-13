@@ -11,7 +11,7 @@ from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
 from validator.core.models import RawTask
-from validator.db.sql import task_sql
+from validator.db.sql import tasks as task_sql
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.tasks.synthetic_scheduler import _get_dpo_datasets
