@@ -384,9 +384,9 @@ async def process_pending_tasks(config: Config) -> None:
     await _move_any_prep_data_to_pending(config)
     while True:
         try:
-            await _processing_pending_tasks(config)
             await _handle_delayed_tasks(config)
             await _find_miners_for_task(config)
+            await _processing_pending_tasks(config)
             await _process_ready_to_train_tasks(config)
         except Exception as e:
             logger.info(f"There was a problem in processing: {e}")
