@@ -23,10 +23,12 @@ VALIDATOR_DOCKER_IMAGE_DIFFUSION = "diagonalge/tuning_validator_diffusion:latest
 
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 
+HF_CACHE_CONTAINER_VOLUME = "huggingface_cache"
+CONTAINER_CACHE_DIR_HUB = "/root/.cache/huggingface/hub"
+
 CONFIG_DIR = "core/config/"
 OUTPUT_DIR = "core/outputs/"
 CACHE_DIR = "~/.cache/huggingface"
-CACHE_DIR_HUB = os.path.expanduser("~/.cache/huggingface/hub")
 DIFFUSION_DATASET_DIR = "core/dataset/images"
 CONTAINER_FLUX_PATH = "/app/flux/unet"
 
