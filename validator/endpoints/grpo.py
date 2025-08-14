@@ -23,7 +23,7 @@ REWARD_FUNCTIONS_ENDPOINT = "/v1/grpo/reward_functions"
 
 def extract_function_name(code: str) -> str:
     """Extract function name from the reward function code."""
-    match = re.search(r'def\s+(\w+)\s*\(', code)
+    match = re.search(r"def\s+(\w+)\s*\(", code)
     return match.group(1) if match else "unknown_function"
 
 
@@ -44,23 +44,21 @@ async def get_reward_functions(
     config: Config = Depends(get_config),
 ) -> RewardFunctionsResponse:
     """Get all GRPO reward functions from the database.
-    
+
     Returns a dictionary mapping function names to their details including
     description and code.
     """
     reward_functions = await grpo_sql.get_all_reward_functions(config.psql_db)
-    
+
     result = {}
     for rf in reward_functions:
         func_name = extract_function_name(rf.reward_func)
         description = extract_docstring(rf.reward_func)
-        
+
         result[func_name] = RewardFunctionInfo(
-            name=func_name,
-            description=description,
-            code=rf.reward_func
+            reward_id=rf.reward_id, name=func_name, description=description, code=rf.reward_func
         )
-    
+
     return RewardFunctionsResponse(reward_functions=result)
 
 
@@ -69,10 +67,10 @@ async def add_reward_function(
     config: Config = Depends(get_config),
 ) -> dict[str, UUID]:
     """Add a new GRPO reward function to the database.
-    
+
     Args:
         request: Contains name, description, code, and optional reward_weight
-        
+
     Returns:
         Dictionary with the created reward function ID
     """
@@ -82,12 +80,12 @@ async def add_reward_function(
             name=request.name,
             description=request.description,
             code=request.code,
-            reward_weight=request.reward_weight
+            reward_weight=request.reward_weight,
         )
-        
+
         logger.info(f"Successfully added reward function '{request.name}' with ID {reward_id}")
         return {"reward_id": reward_id}
-        
+
     except Exception as e:
         logger.error(f"Failed to add reward function: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to add reward function: {str(e)}")
