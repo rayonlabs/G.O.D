@@ -8,12 +8,10 @@ HF_UPLOAD_DOCKER_IMAGE = "diagonalge/hf-uploader:latest"
 TRAINER_DOWNLOADER_DOCKER_IMAGE = "diagonalge/trainer-downloader:latest"
 CACHE_CLEANER_DOCKER_IMAGE = "diagonalge/cache-cleaner:latest"
 IMAGE_TASKS_HF_SUBFOLDER_PATH = "checkpoints"
-DEFAULT_TRAINING_CONTAINER_MEM_LIMIT = "24g"
-DEFAULT_TRAINING_CONTAINER_NANO_CPUS = 8
 
 # Dynamic resource allocation based on GPU count
 # For 8xH100 with 1440GB RAM and 252 CPUs
-MEMORY_PER_GPU_GB = 135  # 75% of 1440GB / 8 GPUs
+MEMORY_PER_GPU_GB = 110  # ~61% of 1440GB / 8 GPUs
 CPUS_PER_GPU = 24  # Conservative allocation leaving headroom
 
 CACHE_CLEANUP_CUTOFF_HOURS = 12
