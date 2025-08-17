@@ -4,25 +4,28 @@
 - **Validator Server**: Hosts the observability stack (Grafana, Loki, Prometheus)
 - **Trainer Nodes**: Ship logs to the validator's Loki instance
 
-## Required Environment Variables
+## Configuration
 
 ### On Validator (.vali.env)
-Add these to your existing `.vali.env`:
+No configuration required! The system auto-detects the server's IP and uses secure defaults.
+
+Optional overrides you can add to `.vali.env`:
 ```bash
-# Training Logs Observability
-OBSERVABILITY_DOMAIN=your-validator-domain.com
-GRAFANA_TRAINING_PASSWORD=secure-password-here
-LOKI_PASSWORD=loki-password-here
-GRAFANA_ANONYMOUS_ENABLED=true  # Optional: allow public viewing
+# All optional - only set if you want to override defaults
+OBSERVABILITY_DOMAIN=custom-domain.com  # Auto-detected if not set
+GRAFANA_TRAINING_PASSWORD=custom-password  # Default: changeme123
+LOKI_PASSWORD=custom-loki-password  # Default: trainerlogs123
+GRAFANA_ANONYMOUS_ENABLED=false  # Default: true (allow public viewing)
 ```
 
 ### On Trainer Nodes (.trainer.env)
-Add these to your existing `.trainer.env`:
+Add your validator's IP to your existing `.trainer.env`:
 ```bash
-# Log Shipping to Validator
-LOKI_ENDPOINT=https://your-validator-domain.com:3101
-LOKI_PASSWORD=loki-password-here  # Same as in .vali.env
+# Required
+VALIDATOR_IP=45.79.123.456  # Your validator's IP address
 ```
+
+That's it! The system auto-generates everything else.
 
 ## Deployment
 
