@@ -5,30 +5,28 @@ global:
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['prometheus-training:9090']
 
   - job_name: 'loki-training'
     static_configs:
       - targets: ['loki-training:3100']
 
-  - job_name: 'docker-training'
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        filters:
-          - name: name
-            values:
-              - "image-trainer-*"
-              - "text-trainer-*"
-              - "downloader-*"
-              - "hf-upload-*"
-    relabel_configs:
-      - source_labels: [__meta_docker_container_name]
-        target_label: container_name
-      - source_labels: [__meta_docker_container_id]
-        target_label: container_id
-      - source_labels: [__meta_docker_container_image]
-        target_label: image
-      - source_labels: [__meta_docker_container_label_task_id]
-        target_label: task_id
-      - source_labels: [__meta_docker_container_label_hotkey]
-        target_label: hotkey
+  - job_name: 'grafana-training'
+    static_configs:
+      - targets: ['grafana-training:3000']
+
+  # Scrape Vector metrics from trainer servers
+  - job_name: 'vector-trainers'
+    static_configs:
+      - targets: ${VECTOR_TARGETS:-[]}
+        labels:
+          service: 'vector'
+    scrape_interval: 30s
+
+  # Scrape node exporters from trainer servers  
+  - job_name: 'node-trainers'
+    static_configs:
+      - targets: ${NODE_EXPORTER_TARGETS:-[]}
+        labels:
+          service: 'node-exporter'
+    scrape_interval: 30s

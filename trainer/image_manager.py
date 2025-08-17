@@ -155,7 +155,7 @@ async def run_trainer_container_image(
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
-            network_mode="none",
+            network_mode="bridge",  # Changed from "none" to allow log shipping
             environment={"TRANSFORMERS_CACHE": cst.HUGGINGFACE_CACHE_PATH},
             detach=True,
         )
@@ -240,7 +240,7 @@ async def run_trainer_container_text(
             security_opt=["no-new-privileges"],
             cap_drop=["ALL"],
             detach=True,
-            network_mode="none",
+            network_mode="bridge",  # Changed from "none" to allow log shipping
             environment=environment,
         )
 

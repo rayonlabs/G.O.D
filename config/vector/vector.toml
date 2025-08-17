@@ -1,0 +1,104 @@
+# Vector configuration for shipping training logs to remote Loki
+
+[api]
+enabled = true
+address = "0.0.0.0:8686"
+
+# Sources - collect logs from Docker containers
+[sources.docker_logs]
+type = "docker_logs"
+docker_host = "unix:///var/run/docker.sock"
+include_containers = ["image-trainer-*", "text-trainer-*", "downloader-*", "hf-upload-*"]
+include_labels = ["task_id", "hotkey", "model", "trainer_type", "expected_repo"]
+
+# Transforms - parse and enrich logs
+[transforms.parse_logs]
+type = "remap"
+inputs = ["docker_logs"]
+source = '''
+# Parse log level if present
+if match!(.message, r'^(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]\d{3})\s+(?P<level>\w+)\s+(?P<content>.*)$') {
+  .level = string!(.level) ?? "INFO"
+  .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S,%3f") ?? now()
+  .message = string!(.content) ?? .message
+} else if match!(.message, r'(?i)(\[|^)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)(\]|:|\s)') {
+  .level = upcase(string!(capture!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)').0)) ?? "INFO"
+} else {
+  .level = "INFO"
+}
+
+# Add metadata
+.trainer_server = get_hostname!()
+.environment = get_env_var!("ENVIRONMENT") ?? "production"
+
+# Extract task_id from container labels
+.task_id = .label_task_id ?? "unknown"
+.hotkey = .label_hotkey ?? "unknown"
+.model = .label_model ?? "unknown"
+.trainer_type = .label_trainer_type ?? "unknown"
+
+# Clean up fields
+del(.label_task_id)
+del(.label_hotkey)
+del(.label_model)
+del(.label_trainer_type)
+del(.label_expected_repo)
+'''
+
+[transforms.filter_noise]
+type = "filter"
+inputs = ["parse_logs"]
+condition = '''
+!contains(string!(.message), "Downloading shards") &&
+!contains(string!(.message), "Loading checkpoint shards") &&
+!contains(string!(.message), "heartbeat")
+'''
+
+[transforms.batch_logs]
+type = "reduce"
+inputs = ["filter_noise"]
+group_by = ["task_id", "container_name", "level"]
+merge_strategies.message = "concat_newline"
+merge_strategies.count = "sum"
+flush_period_ms = 5000
+
+# Sinks - send to remote Loki
+[sinks.loki]
+type = "loki"
+inputs = ["batch_logs"]
+endpoint = "${LOKI_ENDPOINT}/loki/api/v1/push"
+auth.strategy = "basic"
+auth.user = "${LOKI_USERNAME}"
+auth.password = "${LOKI_PASSWORD}"
+encoding.codec = "json"
+batch.timeout_secs = 10
+batch.max_bytes = 1048576  # 1MB
+request.timeout_secs = 30
+request.retry_attempts = 3
+request.retry_initial_backoff_secs = 1
+tls.verify_certificate = false  # Set to true in production with valid certs
+
+# Labels for Loki
+labels.job = "training-logs"
+labels.task_id = "{{ task_id }}"
+labels.hotkey = "{{ hotkey }}"
+labels.container_name = "{{ container_name }}"
+labels.container_id = "{{ container_id }}"
+labels.trainer_type = "{{ trainer_type }}"
+labels.model = "{{ model }}"
+labels.level = "{{ level }}"
+labels.server = "{{ trainer_server }}"
+
+# Healthcheck sink
+[sinks.prometheus]
+type = "prometheus_exporter"
+inputs = ["filter_noise"]
+address = "0.0.0.0:9090"
+default_namespace = "vector"
+
+# Error handling
+[sinks.error_logs]
+type = "file"
+inputs = ["loki.dropped"]
+path = "/var/log/vector/errors.log"
+encoding.codec = "json"
