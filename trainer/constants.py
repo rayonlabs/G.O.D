@@ -13,7 +13,7 @@ DEFAULT_TRAINING_CONTAINER_NANO_CPUS = 8
 
 # Dynamic resource allocation based on GPU count
 # For 8xH100 with 1440GB RAM and 252 CPUs
-MEMORY_PER_GPU_GB = 135  # 75% of 1440GB / 8 GPUs
+MEMORY_PER_GPU_GB = 90  # 50% of 1440GB / 8 GPUs
 CPUS_PER_GPU = 24  # Conservative allocation leaving headroom
 
 CACHE_CLEANUP_CUTOFF_HOURS = 12
