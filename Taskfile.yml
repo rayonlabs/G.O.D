@@ -155,8 +155,13 @@ tasks:
         # Auto-create basic auth file with password from .vali.env
         if [ ! -f config/nginx/.htpasswd ] || [ "$LOKI_PASSWORD_UPDATED" = "true" ]; then
           export $(cat .vali.env | grep -v '^#' | xargs)
-          # Generate htpasswd entry for the Loki password
-          htpasswd -b -B -c config/nginx/.htpasswd ${LOKI_USERNAME:-trainer} ${LOKI_PASSWORD} 2>/dev/null
+          # Check if htpasswd is available, if not use Docker
+          if command -v htpasswd >/dev/null 2>&1; then
+            htpasswd -b -B -c config/nginx/.htpasswd ${LOKI_USERNAME:-trainer} ${LOKI_PASSWORD} 2>/dev/null
+          else
+            # Use Docker to generate htpasswd file
+            docker run --rm -v $(pwd)/config/nginx:/work httpd:alpine htpasswd -b -B -c /work/.htpasswd ${LOKI_USERNAME:-trainer} ${LOKI_PASSWORD}
+          fi
         fi
       - docker-compose -f docker-compose.observability-server.yml --env-file .env.observability up -d
       - |
