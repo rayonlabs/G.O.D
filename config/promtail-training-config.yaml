@@ -1,0 +1,84 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki-training:3100/loki/api/v1/push
+
+scrape_configs:
+  # Docker container logs for training
+  - job_name: docker-training-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 30s
+        filters:
+          - name: name
+            values: 
+              - "image-trainer-*"
+              - "text-trainer-*"
+              - "downloader-*"
+              - "hf-upload-*"
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        target_label: 'container_name'
+      - source_labels: ['__meta_docker_container_id']
+        target_label: 'container_id'
+      - source_labels: ['__meta_docker_container_image']
+        target_label: 'image'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+      - source_labels: ['__meta_docker_container_label_task_id']
+        target_label: 'task_id'
+      - source_labels: ['__meta_docker_container_label_hotkey']
+        target_label: 'hotkey'
+      - source_labels: ['__meta_docker_container_label_model']
+        target_label: 'model'
+    pipeline_stages:
+      - docker: {}
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+      - regex:
+          expression: '(?P<level>INFO|ERROR|WARNING|DEBUG|CRITICAL)'
+      - labels:
+          level:
+      - match:
+          selector: '{container_name=~"image-trainer-.*"}'
+          stages:
+            - regex:
+                expression: 'task_id=(?P<task_id>[a-zA-Z0-9-]+)'
+            - labels:
+                task_id:
+      - match:
+          selector: '{container_name=~"text-trainer-.*"}'
+          stages:
+            - regex:
+                expression: 'task_id=(?P<task_id>[a-zA-Z0-9-]+)'
+            - labels:
+                task_id:
+
+  # Training task logs from file
+  - job_name: training-file-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: training-logs
+          __path__: /trainer/logs/**/*.log
+    pipeline_stages:
+      - multiline:
+          firstline: '^\d{4}-\d{2}-\d{2}'
+          max_wait_time: 3s
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - (?P<logger>[^ ]+) - (?P<level>[^ ]+) - (?P<message>.*)'
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05,000'
+      - labels:
+          level:
+          logger:
+      - output:
+          source: message

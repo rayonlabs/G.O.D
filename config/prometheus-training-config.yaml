@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'loki-training'
+    static_configs:
+      - targets: ['loki-training:3100']
+
+  - job_name: 'docker-training'
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        filters:
+          - name: name
+            values:
+              - "image-trainer-*"
+              - "text-trainer-*"
+              - "downloader-*"
+              - "hf-upload-*"
+    relabel_configs:
+      - source_labels: [__meta_docker_container_name]
+        target_label: container_name
+      - source_labels: [__meta_docker_container_id]
+        target_label: container_id
+      - source_labels: [__meta_docker_container_image]
+        target_label: image
+      - source_labels: [__meta_docker_container_label_task_id]
+        target_label: task_id
+      - source_labels: [__meta_docker_container_label_hotkey]
+        target_label: hotkey

@@ -1,0 +1,24 @@
+apiVersion: 1
+
+datasources:
+  - name: Loki Training
+    type: loki
+    access: proxy
+    url: http://loki-training:3100
+    basicAuth: false
+    isDefault: true
+    editable: true
+    jsonData:
+      timeout: 60
+      maxLines: 5000
+
+  - name: Prometheus Training
+    type: prometheus
+    access: proxy
+    url: http://prometheus-training:9090
+    basicAuth: false
+    isDefault: false
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s
