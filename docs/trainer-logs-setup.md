@@ -31,11 +31,6 @@ That's it! The system auto-generates everything else.
 
 ### Step 1: Deploy on Validator
 ```bash
-# On your validator server
-cd G.O.D
-git pull
-
-# Deploy observability stack
 task deploy-observability-server
 ```
 
@@ -48,11 +43,6 @@ This will:
 
 ### Step 2: Deploy on Each Trainer
 ```bash
-# On each trainer node
-cd G.O.D
-git pull
-
-# Deploy log shipping
 task deploy-trainer-logs
 ```
 
