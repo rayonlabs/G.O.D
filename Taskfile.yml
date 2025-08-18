@@ -247,8 +247,8 @@ tasks:
       - echo "Creating test training container..."
       - |
         docker run \
-          --name test-trainer-122132222123 \
-          --label task_id=test-122122231223 \
+          --name test-trainer-1221322123 \
+          --label task_id=test-1221231223 \
           --label hotkey=test-hotkey \
           --label model=test-model \
           --label trainer_type=test \

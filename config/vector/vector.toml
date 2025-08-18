@@ -12,7 +12,7 @@ type = "docker_logs"
 docker_host = "unix:///var/run/docker.sock"
 # Wildcards aren't supported here; filter via transform below.
 # include_containers = ["image-trainer-*", "text-trainer-*", "downloader-*", "hf-upload-*"]
-include_labels = ["task_id", "hotkey", "model", "trainer_type", "expected_repo"]
+include_labels = ["task_id", "hotkey", "model", "task_type", "expected_repo"]
 
 # Vector's own metrics
 [sources.internal_metrics]
@@ -22,77 +22,109 @@ type = "internal_metrics"
 # Transforms
 # -------------------------
 [transforms.parse_logs]
-type = "remap"
+type   = "remap"
 inputs = ["docker_logs"]
-source = '''
-# Default level
+source = """
+# --- Normalize message so Grafana shows clean text ---
+m = ""
+if exists(.message) && .message != null {
+  m, err = to_string(.message)
+} else if exists(.log) && .log != null {
+  m, err = to_string(.log)
+} else if exists(.stream) && .stream != null {
+  m, err = to_string(.stream)
+} else {
+  m = to_string!(.)
+}
+.message = m
+
+# --- Default level ---
 .level = "INFO"
 
-# Try to parse: "<timestamp> <level> <content>"
-re = r'^(?P<ts>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]\d{3})\s+(?P<lvl>\w+)\s+(?P<content>.*)$'
+# --- Parse '<ts> <level> <content>' if present ---
+re = r'^(?P<ts>\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}[.,]\\d{3})\\s+(?P<lvl>\\w+)\\s+(?P<content>.*)$'
 if match!(.message, re) {
   caps = parse_regex!(.message, re)
   .message = to_string(caps.content)
-  .level = upcase(to_string(caps.lvl))
+  .level   = upcase(to_string(caps.lvl))
 
-  ts = to_string(caps.ts)
+  ts  = to_string(caps.ts)
   fmt = "%Y-%m-%d %H:%M:%S,%3f"
   if contains(ts, "T") { fmt = "%Y-%m-%dT%H:%M:%S,%3f" }
   if contains(ts, ".") { fmt = replace(fmt, ",%3f", ".%3f") }
   .timestamp = parse_timestamp(ts, fmt) ?? now()
 } else if match!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)') {
-  caps2 = parse_regex!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)')
-  # whole match is at index 0 (integer index)
+  caps2  = parse_regex!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)')
   .level = upcase(to_string(caps2[0]))
 }
 
-# Metadata
+# --- Metadata ---
 .trainer_server = get_hostname!()
-.environment = get_env_var("ENVIRONMENT") ?? "production"
+.environment    = get_env_var("ENVIRONMENT") ?? "production"
 
-# Labels from container labels (explicit null-safe fallback)
-if exists(.label_task_id) && .label_task_id != null { .task_id = .label_task_id } else { .task_id = "unknown" }
-if exists(.label_hotkey) && .label_hotkey != null { .hotkey = .label_hotkey } else { .hotkey = "unknown" }
-if exists(.label_model) && .label_model != null { .model = .label_model } else { .model = "unknown" }
-if exists(.label_trainer_type) && .label_trainer_type != null { .trainer_type = .label_trainer_type } else { .trainer_type = "unknown" }
+# --- Robust Docker label mapping (handles .label_*, .labels.*, .docker.container_labels.*) ---
+task_id_   = null
+hotkey_    = null
+model_     = null
+task_type_ = null         
 
-# Counter for reduce aggregation
+
+# task id
+if exists(.label_task_id) && .label_task_id != null { task_id_ = .label_task_id }
+if exists(.labels) && exists(.labels.task_id) && .labels.task_id != null { task_id_ = .labels.task_id }
+if exists(.docker) && exists(.docker.container_labels) && exists(.docker.container_labels.task_id) && .docker.container_labels.task_id != null {
+  task_id_ = .docker.container_labels.task_id
+}
+.task_id = to_string(task_id_) ?? "unknown"
+
+
+# hotkey
+if exists(.label_hotkey) && .label_hotkey != null { hotkey_ = .label_hotkey }
+if exists(.labels) && exists(.labels.hotkey) && .labels.hotkey != null { hotkey_ = .labels.hotkey }
+if exists(.docker) && exists(.docker.container_labels) && exists(.docker.container_labels.hotkey) && .docker.container_labels.hotkey != null { hotkey_ = .docker.container_labels.hotkey }
+.hotkey = to_string(hotkey_) ?? "unknown"
+
+# model
+if exists(.label_model) && .label_model != null { model_ = .label_model }
+if exists(.labels) && exists(.labels.model) && .labels.model != null { model_ = .labels.model }
+if exists(.docker) && exists(.docker.container_labels) && exists(.docker.container_labels.model) && .docker.container_labels.model != null { model_ = .docker.container_labels.model }
+.model = to_string(model_) ?? "unknown"
+
+# task_type
+if exists(.label_task_type) && .label_task_type != null { task_type_ = .label_task_type }
+if exists(.labels) && exists(.labels.task_type) && .labels.task_type != null { task_type_ = .labels.task_type }
+if exists(.docker) && exists(.docker.container_labels) && exists(.docker.container_labels.task_type) && .docker.container_labels.task_type != null { task_type_ = .docker.container_labels.task_type }
+.task_type = to_string(task_type_) ?? "unknown"
+
+
+# --- Counter for reduce aggregation (you use this later) ---
 .count = 1
 
-# Cleanup
+# --- Cleanup (safe) ---
 del(.label_task_id)
 del(.label_hotkey)
 del(.label_model)
 del(.label_trainer_type)
+del(.label_task_type)
 del(.label_expected_repo)
-'''
+"""
 
-# Keep only trainer containers by name prefix
-[transforms.keep_trainers]
-type = "filter"
-inputs = ["parse_logs"]
-condition = '''
-match!(.container_name, r'^(image-trainer-|text-trainer-|downloader-|hf-upload-)')
-'''
-
-# Filter noisy lines (make contains() infallible)
 [transforms.filter_noise]
 type = "filter"
-inputs = ["keep_trainers"]
-condition = '''
-m = to_string(.message) ?? "";
+inputs = ["parse_logs"]
+condition = """
+m, err = to_string(.message)
 !contains(m, "Downloading shards") &&
 !contains(m, "Loading checkpoint shards") &&
 !contains(m, "heartbeat")
-'''
+"""
 
-# Batch similar lines
 [transforms.batch_logs]
 type = "reduce"
 inputs = ["filter_noise"]
 group_by = ["task_id", "container_name", "level"]
 merge_strategies.message = "concat_newline"
-merge_strategies.count = "sum"
+merge_strategies.count   = "sum"
 flush_period_ms = 5000
 
 # -------------------------
@@ -105,7 +137,7 @@ endpoint = "${LOKI_ENDPOINT}"
 auth.strategy = "basic"
 auth.user = "${LOKI_USERNAME}"
 auth.password = "${LOKI_PASSWORD}"
-encoding.codec = "json"
+encoding.codec = "text"
 batch.timeout_secs = 10
 batch.max_bytes = 1048576
 request.timeout_secs = 30
