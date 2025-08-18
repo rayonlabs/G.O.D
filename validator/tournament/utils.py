@@ -591,6 +591,15 @@ async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLD
     round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
 
     if completed_round.round_type == RoundType.KNOCKOUT:
-        return await get_knockout_winners(completed_round, round_tasks, psql_db, config)
+        winners = await get_knockout_winners(completed_round, round_tasks, psql_db, config)
     else:
-        return await get_group_winners(completed_round, round_tasks, psql_db)
+        winners = await get_group_winners(completed_round, round_tasks, psql_db)
+    
+    # Ensure unique winners by converting to set and back to list
+    unique_winners = list(set(winners))
+    if len(winners) != len(unique_winners):
+        logger.info(f"Removed {len(winners) - len(unique_winners)} duplicate winners from round {completed_round.round_id}")
+        logger.info(f"Original winners: {winners}")
+        logger.info(f"Unique winners: {unique_winners}")
+    
+    return unique_winners
