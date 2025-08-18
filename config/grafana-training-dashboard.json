@@ -127,7 +127,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "count(count by(task_id) ({job=\"docker-training-containers\"}))",
+          "expr": "count by (task_id) (count_over_time({job=\"docker-training-containers\"}[5m]))",
           "refId": "A"
         }
       ],
