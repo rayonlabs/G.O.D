@@ -4,40 +4,62 @@
 enabled = true
 address = "0.0.0.0:8686"
 
-# Sources - collect logs from Docker containers
+# -------------------------
+# Sources
+# -------------------------
 [sources.docker_logs]
 type = "docker_logs"
 docker_host = "unix:///var/run/docker.sock"
-include_containers = ["image-trainer-*", "text-trainer-*", "downloader-*", "hf-upload-*"]
+# Wildcards aren't supported here; filter via transform below.
+# include_containers = ["image-trainer-*", "text-trainer-*", "downloader-*", "hf-upload-*"]
 include_labels = ["task_id", "hotkey", "model", "trainer_type", "expected_repo"]
 
-# Transforms - parse and enrich logs
+# Vector's own metrics
+[sources.internal_metrics]
+type = "internal_metrics"
+
+# -------------------------
+# Transforms
+# -------------------------
 [transforms.parse_logs]
 type = "remap"
 inputs = ["docker_logs"]
 source = '''
-# Parse log level if present
-if match!(.message, r'^(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]\d{3})\s+(?P<level>\w+)\s+(?P<content>.*)$') {
-  .level = string!(.level) ?? "INFO"
-  .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S,%3f") ?? now()
-  .message = string!(.content) ?? .message
-} else if match!(.message, r'(?i)(\[|^)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)(\]|:|\s)') {
-  .level = upcase(string!(capture!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)').0)) ?? "INFO"
-} else {
-  .level = "INFO"
+# Default level
+.level = "INFO"
+
+# Try to parse: "<timestamp> <level> <content>"
+re = r'^(?P<ts>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]\d{3})\s+(?P<lvl>\w+)\s+(?P<content>.*)$'
+if match!(.message, re) {
+  caps = parse_regex!(.message, re)
+  .message = to_string(caps.content)
+  .level = upcase(to_string(caps.lvl))
+
+  ts = to_string(caps.ts)
+  fmt = "%Y-%m-%d %H:%M:%S,%3f"
+  if contains(ts, "T") { fmt = "%Y-%m-%dT%H:%M:%S,%3f" }
+  if contains(ts, ".") { fmt = replace(fmt, ",%3f", ".%3f") }
+  .timestamp = parse_timestamp(ts, fmt) ?? now()
+} else if match!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)') {
+  caps2 = parse_regex!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)')
+  # whole match is at index 0 (integer index)
+  .level = upcase(to_string(caps2[0]))
 }
 
-# Add metadata
+# Metadata
 .trainer_server = get_hostname!()
-.environment = get_env_var!("ENVIRONMENT") ?? "production"
+.environment = get_env_var("ENVIRONMENT") ?? "production"
 
-# Extract task_id from container labels
-.task_id = .label_task_id ?? "unknown"
-.hotkey = .label_hotkey ?? "unknown"
-.model = .label_model ?? "unknown"
-.trainer_type = .label_trainer_type ?? "unknown"
+# Labels from container labels (explicit null-safe fallback)
+if exists(.label_task_id) && .label_task_id != null { .task_id = .label_task_id } else { .task_id = "unknown" }
+if exists(.label_hotkey) && .label_hotkey != null { .hotkey = .label_hotkey } else { .hotkey = "unknown" }
+if exists(.label_model) && .label_model != null { .model = .label_model } else { .model = "unknown" }
+if exists(.label_trainer_type) && .label_trainer_type != null { .trainer_type = .label_trainer_type } else { .trainer_type = "unknown" }
 
-# Clean up fields
+# Counter for reduce aggregation
+.count = 1
+
+# Cleanup
 del(.label_task_id)
 del(.label_hotkey)
 del(.label_model)
@@ -45,15 +67,26 @@ del(.label_trainer_type)
 del(.label_expected_repo)
 '''
 
-[transforms.filter_noise]
+# Keep only trainer containers by name prefix
+[transforms.keep_trainers]
 type = "filter"
 inputs = ["parse_logs"]
 condition = '''
-!contains(string!(.message), "Downloading shards") &&
-!contains(string!(.message), "Loading checkpoint shards") &&
-!contains(string!(.message), "heartbeat")
+match!(.container_name, r'^(image-trainer-|text-trainer-|downloader-|hf-upload-)')
 '''
 
+# Filter noisy lines (make contains() infallible)
+[transforms.filter_noise]
+type = "filter"
+inputs = ["keep_trainers"]
+condition = '''
+m = to_string(.message) ?? "";
+!contains(m, "Downloading shards") &&
+!contains(m, "Loading checkpoint shards") &&
+!contains(m, "heartbeat")
+'''
+
+# Batch similar lines
 [transforms.batch_logs]
 type = "reduce"
 inputs = ["filter_noise"]
@@ -62,43 +95,36 @@ merge_strategies.message = "concat_newline"
 merge_strategies.count = "sum"
 flush_period_ms = 5000
 
-# Sinks - send to remote Loki
+# -------------------------
+# Sinks
+# -------------------------
 [sinks.loki]
 type = "loki"
-inputs = ["batch_logs"]
-endpoint = "${LOKI_ENDPOINT}/loki/api/v1/push"
+inputs = ["docker_logs"]
+endpoint = "${LOKI_ENDPOINT}"
 auth.strategy = "basic"
 auth.user = "${LOKI_USERNAME}"
 auth.password = "${LOKI_PASSWORD}"
 encoding.codec = "json"
 batch.timeout_secs = 10
-batch.max_bytes = 1048576  # 1MB
+batch.max_bytes = 1048576
 request.timeout_secs = 30
 request.retry_attempts = 3
 request.retry_initial_backoff_secs = 1
-tls.verify_certificate = false  # Set to true in production with valid certs
+tls.verify_certificate = false
 
-# Labels for Loki
-labels.job = "training-logs"
+# Loki stream labels
+labels.job = "docker-training-containers"
 labels.task_id = "{{ task_id }}"
 labels.hotkey = "{{ hotkey }}"
 labels.container_name = "{{ container_name }}"
 labels.container_id = "{{ container_id }}"
 labels.trainer_type = "{{ trainer_type }}"
 labels.model = "{{ model }}"
-labels.level = "{{ level }}"
-labels.server = "{{ trainer_server }}"
 
-# Healthcheck sink
+# Prometheus exporter (Vector internal metrics)
 [sinks.prometheus]
 type = "prometheus_exporter"
-inputs = ["filter_noise"]
+inputs = ["internal_metrics"]
 address = "0.0.0.0:9090"
 default_namespace = "vector"
-
-# Error handling
-[sinks.error_logs]
-type = "file"
-inputs = ["loki.dropped"]
-path = "/var/log/vector/errors.log"
-encoding.codec = "json"

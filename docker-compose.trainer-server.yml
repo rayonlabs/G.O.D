@@ -6,17 +6,21 @@ services:
   vector-log-shipper:
     container_name: god-vector-log-shipper
     image: timberio/vector:latest-alpine
+    command: ["--config", "/etc/vector/vector.toml"]
     restart: always
     environment:
-      LOKI_ENDPOINT: ${LOKI_ENDPOINT:-https://observability-server:3101}
+      LOKI_ENDPOINT: ${LOKI_ENDPOINT:-https://94.156.8.230:3101}
       LOKI_USERNAME: ${LOKI_USERNAME:-trainer}
-      LOKI_PASSWORD: ${LOKI_PASSWORD:-changeme}
+      LOKI_PASSWORD: ${LOKI_PASSWORD:-trainerlogs123}
       VECTOR_LOG: ${VECTOR_LOG_LEVEL:-info}
     volumes:
       - ./config/vector/vector.toml:/etc/vector/vector.toml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - vector-data:/var/lib/vector
+    ports:
+      - "8686:8686"   # Vector API
+      - "9090:9090"   # Prometheus metrics exporter
     deploy:
       resources:
         limits:
