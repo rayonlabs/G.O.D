@@ -26,6 +26,25 @@
         "type": "loki",
         "uid": "${datasource}"
       },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 10,
+      "options": {
+        "content": "**Debug Info:**\n- Task ID: `${task_id}`\n- Hotkey: `${hotkey}`\n- Model: `${model}`\n- Task Type: `${task_type}`\n- Search: `${search}`",
+        "mode": "markdown"
+      },
+      "title": "Filter Debug",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
