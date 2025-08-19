@@ -90,7 +90,7 @@ if exists(.label) && exists(.label.task_type) && .label.task_type != null { task
 
 # expected_repo
 if exists(.label) && exists(.label.expected_repo) && .label.expected_repo != null { 
-  .expected_repo = to_string(.label.expected_repo)
+  .expected_repo = to_string!(.label.expected_repo)
 } else {
   .expected_repo = "unknown"
 }
