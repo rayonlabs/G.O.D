@@ -10,7 +10,8 @@ address = "0.0.0.0:8686"
 [sources.docker_logs]
 type = "docker_logs"
 docker_host = "unix:///var/run/docker.sock"
-# Collect ALL container logs - labels will still be extracted if present
+# Collect ALL container logs and include their labels
+include_labels = ["task_id", "hotkey", "model", "task_type", "expected_repo"]
 
 # Vector's own metrics
 [sources.internal_metrics]
