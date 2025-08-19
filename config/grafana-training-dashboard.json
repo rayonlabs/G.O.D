@@ -53,12 +53,18 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "values": []
         },
         "pieType": "donut",
         "tooltip": {
           "mode": "single",
           "sort": "none"
+        },
+        "displayLabels": ["name"],
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
         }
       },
       "targets": [
@@ -68,7 +74,9 @@
             "uid": "${datasource}"
           },
           "expr": "count by(task_type) (sum by(task_id, task_type) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[10m])) > 0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{task_type}}"
         }
       ],
       "title": "Task Types Activity",
