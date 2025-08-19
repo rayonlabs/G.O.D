@@ -40,7 +40,20 @@
           },
           "mappings": []
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byType",
+              "options": "number"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.task_type}"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -54,7 +67,8 @@
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true,
-          "values": []
+          "values": [],
+          "calcs": []
         },
         "pieType": "donut",
         "tooltip": {
@@ -64,7 +78,8 @@
         "displayLabels": ["name"],
         "reduceOptions": {
           "values": false,
-          "calcs": ["lastNotNull"]
+          "calcs": ["lastNotNull"],
+          "fields": ""
         }
       },
       "targets": [
