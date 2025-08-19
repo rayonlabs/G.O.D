@@ -72,31 +72,28 @@ task_type_ = null
 
 
 # task id
-if exists(.label_task_id) && .label_task_id != null { task_id_ = .label_task_id }
-if exists(.labels) && exists(.labels.task_id) && .labels.task_id != null { task_id_ = .labels.task_id }
-if exists(.docker) && exists(.docker.container_labels) && exists(.docker.container_labels.task_id) && .docker.container_labels.task_id != null {
-  task_id_ = .docker.container_labels.task_id
-}
+if exists(.label) && exists(.label.task_id) && .label.task_id != null { task_id_ = .label.task_id }
 .task_id = to_string(task_id_) ?? "unknown"
 
 
 # hotkey
-if exists(.label_hotkey) && .label_hotkey != null { hotkey_ = .label_hotkey }
-if exists(.labels) && exists(.labels.hotkey) && .labels.hotkey != null { hotkey_ = .labels.hotkey }
-if exists(.docker) && exists(.docker.container_labels) && exists(.docker.container_labels.hotkey) && .docker.container_labels.hotkey != null { hotkey_ = .docker.container_labels.hotkey }
+if exists(.label) && exists(.label.hotkey) && .label.hotkey != null { hotkey_ = .label.hotkey }
 .hotkey = to_string(hotkey_) ?? "unknown"
 
 # model
-if exists(.label_model) && .label_model != null { model_ = .label_model }
-if exists(.labels) && exists(.labels.model) && .labels.model != null { model_ = .labels.model }
-if exists(.docker) && exists(.docker.container_labels) && exists(.docker.container_labels.model) && .docker.container_labels.model != null { model_ = .docker.container_labels.model }
+if exists(.label) && exists(.label.model) && .label.model != null { model_ = .label.model }
 .model = to_string(model_) ?? "unknown"
 
 # task_type
-if exists(.label_task_type) && .label_task_type != null { task_type_ = .label_task_type }
-if exists(.labels) && exists(.labels.task_type) && .labels.task_type != null { task_type_ = .labels.task_type }
-if exists(.docker) && exists(.docker.container_labels) && exists(.docker.container_labels.task_type) && .docker.container_labels.task_type != null { task_type_ = .docker.container_labels.task_type }
+if exists(.label) && exists(.label.task_type) && .label.task_type != null { task_type_ = .label.task_type }
 .task_type = to_string(task_type_) ?? "unknown"
+
+# expected_repo
+if exists(.label) && exists(.label.expected_repo) && .label.expected_repo != null { 
+  .expected_repo = to_string(.label.expected_repo)
+} else {
+  .expected_repo = "unknown"
+}
 
 
 # --- Counter for reduce aggregation (you use this later) ---
