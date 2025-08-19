@@ -10,9 +10,7 @@ address = "0.0.0.0:8686"
 [sources.docker_logs]
 type = "docker_logs"
 docker_host = "unix:///var/run/docker.sock"
-# Wildcards aren't supported here; filter via transform below.
-# include_containers = ["image-trainer-*", "text-trainer-*", "downloader-*", "hf-upload-*"]
-include_labels = ["task_id", "hotkey", "model", "task_type", "expected_repo"]
+# Collect ALL container logs - labels will still be extracted if present
 
 # Vector's own metrics
 [sources.internal_metrics]
@@ -132,7 +130,7 @@ flush_period_ms = 5000
 # -------------------------
 [sinks.loki]
 type = "loki"
-inputs = ["batch_logs"]
+inputs = ["parse_logs"]  # Skip filter_noise and batch_logs for now
 endpoint = "${LOKI_ENDPOINT}"
 auth.strategy = "basic"
 auth.user = "${LOKI_USERNAME}"
