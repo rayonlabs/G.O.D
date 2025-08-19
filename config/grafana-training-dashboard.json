@@ -67,7 +67,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum by(container_name) (rate({job=\"docker-training-containers\"}[$__interval]))",
+          "expr": "sum by(container_name) (rate({job=\"docker-training-containers\", task_id=~\"${task_id:regex}\", hotkey=~\"${hotkey:regex}\", model=~\"${model:regex}\", task_type=~\"${task_type:regex}\"}[$__interval]))",
           "refId": "A"
         }
       ],
@@ -127,7 +127,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "count by (task_id) (count_over_time({job=\"docker-training-containers\"}[5m]))",
+          "expr": "count by (task_id) (count_over_time({job=\"docker-training-containers\", task_id=~\"${task_id:regex}\", hotkey=~\"${hotkey:regex}\", model=~\"${model:regex}\", task_type=~\"${task_type:regex}\"}[5m]))",
           "refId": "A"
         }
       ],
@@ -162,7 +162,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "{job=\"docker-training-containers\"} |~ \"$search\"",
+          "expr": "{job=\"docker-training-containers\", task_id=~\"${task_id:regex}\", hotkey=~\"${hotkey:regex}\", model=~\"${model:regex}\", task_type=~\"${task_type:regex}\"} |~ \"$search\"",
           "refId": "A"
         }
       ],
@@ -289,7 +289,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "{job=\"docker-training-containers\"} |~ \"(?i)error\"",
+          "expr": "{job=\"docker-training-containers\", task_id=~\"${task_id:regex}\", hotkey=~\"${hotkey:regex}\", model=~\"${model:regex}\", task_type=~\"${task_type:regex}\"} |~ \"(?i)error\"",
           "refId": "A"
         }
       ],
