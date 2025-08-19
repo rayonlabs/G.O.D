@@ -545,7 +545,8 @@ async def get_group_winners(
             group_tasks[task.group_id].append(task.task_id)
 
     logger.info(f"Processing {len(group_tasks)} groups in round {completed_round.round_id}")
-    all_winners = []
+    all_winners_set = set()
+    
     for group_id, task_ids in group_tasks.items():
         participants = await get_tournament_group_members(group_id, psql_db)
         participant_hotkeys = [p.hotkey for p in participants]
@@ -567,7 +568,7 @@ async def get_group_winners(
         sorted_participants = sorted(hotkey_win_counts.items(), key=lambda x: x[1], reverse=True)
 
         if len(sorted_participants) == 1:
-            all_winners.append(sorted_participants[0][0])
+            all_winners_set.add(sorted_participants[0][0])
             logger.info(f"Group {group_id}: Single winner {sorted_participants[0][0]} with {sorted_participants[0][1]} wins")
         else:
             max_wins = sorted_participants[0][1]
@@ -580,9 +581,11 @@ async def get_group_winners(
                 group_winners = tied_for_first
                 logger.info(f"Group {group_id}: {len(tied_for_first)} tied for first with {max_wins} wins each: {group_winners}")
 
-            all_winners.extend(group_winners)
-
-    logger.info(f"Total group stage winners: {len(all_winners)} - {all_winners}")
+            for winner in group_winners:
+                all_winners_set.add(winner)
+    
+    all_winners = list(all_winners_set)
+    logger.info(f"Total group stage winners (unique): {len(all_winners)} - {all_winners}")
     return all_winners
 
 
@@ -591,6 +594,15 @@ async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLD
     round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
 
     if completed_round.round_type == RoundType.KNOCKOUT:
-        return await get_knockout_winners(completed_round, round_tasks, psql_db, config)
+        winners = await get_knockout_winners(completed_round, round_tasks, psql_db, config)
     else:
-        return await get_group_winners(completed_round, round_tasks, psql_db)
+        winners = await get_group_winners(completed_round, round_tasks, psql_db)
+    
+    # Ensure unique winners by converting to set and back to list
+    unique_winners = list(set(winners))
+    if len(winners) != len(unique_winners):
+        logger.info(f"Removed {len(winners) - len(unique_winners)} duplicate winners from round {completed_round.round_id}")
+        logger.info(f"Original winners: {winners}")
+        logger.info(f"Unique winners: {unique_winners}")
+    
+    return unique_winners
