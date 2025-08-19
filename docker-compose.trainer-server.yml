@@ -9,7 +9,7 @@ services:
     command: ["--config", "/etc/vector/vector.toml"]
     restart: always
     environment:
-      LOKI_ENDPOINT: ${LOKI_ENDPOINT:-https://94.156.8.230:3101}
+      LOKI_ENDPOINT: ${LOKI_ENDPOINT:-http://94.156.8.230:3101}
       LOKI_USERNAME: ${LOKI_USERNAME:-trainer}
       LOKI_PASSWORD: ${LOKI_PASSWORD:-trainerlogs123}
       VECTOR_LOG: ${VECTOR_LOG_LEVEL:-info}
