@@ -43,8 +43,8 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byType",
-              "options": "number"
+              "id": "byName",
+              "options": "Value #A"
             },
             "properties": [
               {
