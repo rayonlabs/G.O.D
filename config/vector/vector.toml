@@ -11,7 +11,7 @@ address = "0.0.0.0:8686"
 type = "docker_logs"
 docker_host = "unix:///var/run/docker.sock"
 # Collect ALL container logs and include their labels
-include_labels = ["task_id", "hotkey", "model", "task_type", "expected_repo"]
+include_labels = ["task_id", "hotkey", "model", "task_type"]
 
 # Vector's own metrics
 [sources.internal_metrics]
@@ -85,12 +85,6 @@ if exists(.label) && exists(.label.model) && .label.model != null { model_ = .la
 if exists(.label) && exists(.label.task_type) && .label.task_type != null { task_type_ = .label.task_type }
 .task_type = to_string(task_type_) ?? "unknown"
 
-# expected_repo
-if exists(.label) && exists(.label.expected_repo) && .label.expected_repo != null { 
-  .expected_repo = to_string!(.label.expected_repo)
-} else {
-  .expected_repo = "unknown"
-}
 
 
 # --- Counter for reduce aggregation (you use this later) ---
@@ -149,7 +143,6 @@ labels.container_name = "{{ container_name }}"
 labels.container_id = "{{ container_id }}"
 labels.task_type = "{{ task_type }}"
 labels.model = "{{ model }}"
-labels.expected_repo = "{{ expected_repo }}"
 
 # Prometheus exporter (Vector internal metrics)
 [sinks.prometheus]

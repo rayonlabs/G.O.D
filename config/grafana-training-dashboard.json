@@ -81,8 +81,9 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
+          "custom": {
+            "align": "left",
+            "displayMode": "auto"
           },
           "mappings": [],
           "thresholds": {
@@ -93,10 +94,38 @@
                 "value": null
               }
             ]
-          },
-          "unit": "short"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "task_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Task ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Log Count"
+              },
+              {
+                "id": "custom.align",
+                "value": "right"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -117,10 +146,12 @@
             "uid": "${datasource}"
           },
           "expr": "sum by (task_id) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[10m]))",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{task_id}}"
         }
       ],
-      "title": "Active Training Tasks (Last 10 Minutes)",
+      "title": "Active Training Tasks",
       "type": "table"
     },
     {
