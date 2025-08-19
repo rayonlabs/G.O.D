@@ -13,7 +13,7 @@ docker run -d \
   --label hotkey=5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY \
   --label model=flux-dev \
   --label task_type=image \
-  --label trainer_type=image-trainer \
+  --label expected_repo=test-image-repo \
   --rm \
   alpine:latest \
   sh -c "for i in {1..20}; do echo '2025-01-19 12:00:0'\$i' INFO [IMAGE] Training step '\$i'/20 - loss: 0.'\$i; sleep 1; done"
@@ -26,7 +26,7 @@ docker run -d \
   --label hotkey=5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty \
   --label model=llama-3.1-8b \
   --label task_type=text \
-  --label trainer_type=text-trainer \
+  --label expected_repo=test-text-repo \
   --rm \
   alpine:latest \
   sh -c "for i in {1..20}; do echo '2025-01-19 12:00:0'\$i' INFO [TEXT] Training epoch '\$i'/20 - perplexity: '\$((100-i)); sleep 1; done"
@@ -39,7 +39,7 @@ docker run -d \
   --label hotkey=5GNJqTPyTXQr1QKjPLWVKPg9NTSjPW5GHsHgtGc9rDKNr7gn \
   --label model=mistral-7b \
   --label task_type=dpo \
-  --label trainer_type=dpo-trainer \
+  --label expected_repo=test-dpo-repo \
   --rm \
   alpine:latest \
   sh -c "for i in {1..20}; do echo '2025-01-19 12:00:0'\$i' INFO [DPO] Preference learning step '\$i'/20 - reward: 0.'\$i; sleep 1; done"
