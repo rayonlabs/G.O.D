@@ -242,18 +242,7 @@ tasks:
       - curl -s http://localhost:8686/health 2>/dev/null && echo "Vector is healthy" || echo "Vector not accessible"
 
   test-trainer-logs:
-    desc: "Test log shipping by creating a test container with labels"
+    desc: "Test log shipping by creating test containers with different labels"
     cmds:
-      - echo "Creating test training container..."
-      - |
-        docker run \
-          --name test-trainer-1221322123 \
-          --label task_id=test-1221231223 \
-          --label hotkey=test-hotkey \
-          --label model=test-model \
-          --label trainer_type=test \
-          --label expected_repo=test-repo \
-          alpine:latest \
-          sh -c "for i in {1..10}; do echo 'INFO: Test log message '$$i; sleep 2; done"
-      - echo "Test container created. Check Grafana for logs."
+      - ./scripts/test-trainer-logs.sh
 
