@@ -67,7 +67,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum by(container_name) (rate({job=\"docker-training-containers\", task_id=~\"${task_id:pipe}\", hotkey=~\"${hotkey:pipe}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[$__interval]))",
+          "expr": "sum by(container_name) (rate({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[$__interval]))",
           "refId": "A"
         }
       ],
@@ -127,7 +127,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "count by (task_id) (count_over_time({job=\"docker-training-containers\", task_id=~\"${task_id:pipe}\", hotkey=~\"${hotkey:pipe}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[5m]))",
+          "expr": "count by (task_id) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[5m]))",
           "refId": "A"
         }
       ],
@@ -162,7 +162,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "{job=\"docker-training-containers\", task_id=~\"${task_id:pipe}\", hotkey=~\"${hotkey:pipe}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"} |~ \"${search}\"",
+          "expr": "{job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"} |~ \"${search}\"",
           "refId": "A"
         }
       ],
@@ -289,7 +289,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "{job=\"docker-training-containers\", task_id=~\"${task_id:pipe}\", hotkey=~\"${hotkey:pipe}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"} |~ \"(?i)error\"",
+          "expr": "{job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"} |~ \"(?i)error\"",
           "refId": "A"
         }
       ],
@@ -368,51 +368,31 @@
       },
       {
         "current": {
-          "selected": true,
-          "text": ["All"],
-          "value": ["$__all"]
+          "selected": false,
+          "text": "",
+          "value": ""
         },
-        "datasource": {
-          "type": "loki",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(task_id)",
         "hide": 0,
-        "includeAll": true,
-        "label": "Task ID",
-        "multi": true,
-        "name": "task_id",
+        "label": "Task ID Search",
+        "name": "task_id_search",
         "options": [],
-        "query": "label_values(task_id)",
-        "refresh": 1,
-        "regex": "",
+        "query": "",
         "skipUrlSync": false,
-        "sort": 1,
-        "type": "query"
+        "type": "textbox"
       },
       {
         "current": {
-          "selected": true,
-          "text": ["All"],
-          "value": ["$__all"]
+          "selected": false,
+          "text": "",
+          "value": ""
         },
-        "datasource": {
-          "type": "loki",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(hotkey)",
         "hide": 0,
-        "includeAll": true,
-        "label": "Hotkey",
-        "multi": true,
-        "name": "hotkey",
+        "label": "Hotkey Search",
+        "name": "hotkey_search",
         "options": [],
-        "query": "label_values(hotkey)",
-        "refresh": 1,
-        "regex": "",
+        "query": "",
         "skipUrlSync": false,
-        "sort": 1,
-        "type": "query"
+        "type": "textbox"
       },
       {
         "current": {
