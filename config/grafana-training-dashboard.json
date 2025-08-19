@@ -26,25 +26,6 @@
         "type": "loki",
         "uid": "${datasource}"
       },
-      "gridPos": {
-        "h": 3,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 10,
-      "options": {
-        "content": "**Debug Info:**\n- Task ID: `${task_id}`\n- Hotkey: `${hotkey}`\n- Model: `${model}`\n- Task Type: `${task_type}`\n- Search: `${search}`",
-        "mode": "markdown"
-      },
-      "title": "Filter Debug",
-      "type": "text"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "${datasource}"
-      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -86,7 +67,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum by(container_name) (rate({job=\"docker-training-containers\"}[$__interval]))",
+          "expr": "sum by(container_name) (rate({job=\"docker-training-containers\", task_id=~\"${task_id:pipe}\", hotkey=~\"${hotkey:pipe}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[$__interval]))",
           "refId": "A"
         }
       ],
@@ -146,7 +127,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "count by (task_id) (count_over_time({job=\"docker-training-containers\"}[5m]))",
+          "expr": "count by (task_id) (count_over_time({job=\"docker-training-containers\", task_id=~\"${task_id:pipe}\", hotkey=~\"${hotkey:pipe}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[5m]))",
           "refId": "A"
         }
       ],
@@ -181,7 +162,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "{job=\"docker-training-containers\"} |~ \"${search}\"",
+          "expr": "{job=\"docker-training-containers\", task_id=~\"${task_id:pipe}\", hotkey=~\"${hotkey:pipe}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"} |~ \"${search}\"",
           "refId": "A"
         }
       ],
@@ -308,7 +289,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "{job=\"docker-training-containers\"} |~ \"(?i)error\"",
+          "expr": "{job=\"docker-training-containers\", task_id=~\"${task_id:pipe}\", hotkey=~\"${hotkey:pipe}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"} |~ \"(?i)error\"",
           "refId": "A"
         }
       ],
