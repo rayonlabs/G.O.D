@@ -122,7 +122,7 @@ m, err = to_string(.message)
 [transforms.batch_logs]
 type = "reduce"
 inputs = ["filter_noise"]
-group_by = ["task_id", "container_name", "level"]
+group_by = ["task_id", "container_name", "container_id", "task_type", "model", "hotkey"]
 merge_strategies.message = "concat_newline"
 merge_strategies.count   = "sum"
 flush_period_ms = 5000
@@ -151,7 +151,7 @@ labels.task_id = "{{ task_id }}"
 labels.hotkey = "{{ hotkey }}"
 labels.container_name = "{{ container_name }}"
 labels.container_id = "{{ container_id }}"
-labels.trainer_type = "{{ trainer_type }}"
+labels.task_type = "{{ task_type }}"
 labels.model = "{{ model }}"
 
 # Prometheus exporter (Vector internal metrics)
