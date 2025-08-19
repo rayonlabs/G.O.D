@@ -77,20 +77,11 @@
           },
           "expr": "sum by(task_type) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[10m]))",
           "refId": "A",
-          "instant": true,
+          "instant": false,
           "legendFormat": "{{task_type}}"
         }
       ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "renameByName": {
-              "Value #A": "Count"
-            }
-          }
-        }
-      ],
+      "transformations": [],
       "title": "Task Types Activity",
       "type": "piechart"
     },
