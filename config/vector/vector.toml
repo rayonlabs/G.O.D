@@ -24,9 +24,6 @@ type = "internal_metrics"
 type   = "remap"
 inputs = ["docker_logs"]
 source = """
-# Debug: Log the raw event to see structure
-log("DEBUG RAW EVENT: " + encode_json(.))
-
 # --- Normalize message so Grafana shows clean text ---
 m = ""
 if exists(.message) && .message != null {
@@ -152,6 +149,7 @@ labels.container_name = "{{ container_name }}"
 labels.container_id = "{{ container_id }}"
 labels.task_type = "{{ task_type }}"
 labels.model = "{{ model }}"
+labels.expected_repo = "{{ expected_repo }}"
 
 # Prometheus exporter (Vector internal metrics)
 [sinks.prometheus]

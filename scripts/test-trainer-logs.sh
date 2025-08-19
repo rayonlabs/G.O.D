@@ -16,7 +16,7 @@ docker run -d \
   --label expected_repo=test-image-repo \
   --rm \
   alpine:latest \
-  sh -c "for i in {1..20}; do echo '2025-01-19 12:00:0'\$i' INFO [IMAGE] Training step '\$i'/20 - loss: 0.'\$i; sleep 1; done"
+  sh -c "for i in \$(seq 1 180); do echo \"\$(date '+%Y-%m-%d %H:%M:%S') INFO [IMAGE] Training step \$i/180 - loss: 0.\$((RANDOM % 999))\"; sleep 5; done"
 
 # Test 2: Text training task
 echo "Starting text trainer test container..."
@@ -29,7 +29,7 @@ docker run -d \
   --label expected_repo=test-text-repo \
   --rm \
   alpine:latest \
-  sh -c "for i in {1..20}; do echo '2025-01-19 12:00:0'\$i' INFO [TEXT] Training epoch '\$i'/20 - perplexity: '\$((100-i)); sleep 1; done"
+  sh -c "for i in \$(seq 1 180); do echo \"\$(date '+%Y-%m-%d %H:%M:%S') INFO [TEXT] Training epoch \$i/180 - perplexity: \$((1000 - i*5))\"; sleep 5; done"
 
 # Test 3: DPO training task
 echo "Starting DPO trainer test container..."
@@ -42,7 +42,7 @@ docker run -d \
   --label expected_repo=test-dpo-repo \
   --rm \
   alpine:latest \
-  sh -c "for i in {1..20}; do echo '2025-01-19 12:00:0'\$i' INFO [DPO] Preference learning step '\$i'/20 - reward: 0.'\$i; sleep 1; done"
+  sh -c "for i in \$(seq 1 180); do echo \"\$(date '+%Y-%m-%d %H:%M:%S') INFO [DPO] Preference learning step \$i/180 - reward: 0.\$((RANDOM % 999))\"; sleep 5; done"
 
 echo "========================================="
 echo "Test containers created! Check Grafana for logs."
