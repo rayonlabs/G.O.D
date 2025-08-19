@@ -132,7 +132,7 @@ flush_period_ms = 5000
 # -------------------------
 [sinks.loki]
 type = "loki"
-inputs = ["docker_logs"]
+inputs = ["batch_logs"]
 endpoint = "${LOKI_ENDPOINT}"
 auth.strategy = "basic"
 auth.user = "${LOKI_USERNAME}"
