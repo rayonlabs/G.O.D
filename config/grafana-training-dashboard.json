@@ -67,11 +67,11 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum by(container_name) (rate({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[$__interval]))",
+          "expr": "count by(task_type) (group({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}))",
           "refId": "A"
         }
       ],
-      "title": "Training Container Activity",
+      "title": "Task Types Activity",
       "type": "piechart"
     },
     {
@@ -106,19 +106,8 @@
       },
       "id": 2,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "text": {},
-        "textMode": "auto"
+        "showHeader": true,
+        "cellHeight": "sm"
       },
       "pluginVersion": "10.0.0",
       "targets": [
@@ -127,12 +116,12 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "count by (task_id) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[5m]))",
+          "expr": "sum by (task_id) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[10m]))",
           "refId": "A"
         }
       ],
-      "title": "Active Training Tasks",
-      "type": "stat"
+      "title": "Active Training Tasks (Last 10 Minutes)",
+      "type": "table"
     },
     {
       "datasource": {
@@ -340,31 +329,6 @@
         "query": "",
         "skipUrlSync": false,
         "type": "textbox"
-      },
-      {
-        "allValue": "",
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "loki",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(task_id)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Task ID",
-        "multi": false,
-        "name": "task_id",
-        "options": [],
-        "query": "label_values(task_id)",
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
       },
       {
         "current": {
