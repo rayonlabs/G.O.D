@@ -1,0 +1,152 @@
+# Vector configuration for shipping training logs to remote Loki
+
+[api]
+enabled = true
+address = "0.0.0.0:8686"
+
+# -------------------------
+# Sources
+# -------------------------
+[sources.docker_logs]
+type = "docker_logs"
+docker_host = "unix:///var/run/docker.sock"
+# Collect ALL container logs and include their labels
+include_labels = ["task_id", "hotkey", "model", "task_type"]
+
+# Vector's own metrics
+[sources.internal_metrics]
+type = "internal_metrics"
+
+# -------------------------
+# Transforms
+# -------------------------
+[transforms.parse_logs]
+type   = "remap"
+inputs = ["docker_logs"]
+source = """
+# --- Normalize message so Grafana shows clean text ---
+m = ""
+if exists(.message) && .message != null {
+  m, err = to_string(.message)
+} else if exists(.log) && .log != null {
+  m, err = to_string(.log)
+} else if exists(.stream) && .stream != null {
+  m, err = to_string(.stream)
+} else {
+  m = to_string!(.)
+}
+.message = m
+
+# --- Default level ---
+.level = "INFO"
+
+# --- Parse '<ts> <level> <content>' if present ---
+re = r'^(?P<ts>\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}[.,]\\d{3})\\s+(?P<lvl>\\w+)\\s+(?P<content>.*)$'
+if match!(.message, re) {
+  caps = parse_regex!(.message, re)
+  .message = to_string(caps.content)
+  .level   = upcase(to_string(caps.lvl))
+
+  ts  = to_string(caps.ts)
+  fmt = "%Y-%m-%d %H:%M:%S,%3f"
+  if contains(ts, "T") { fmt = "%Y-%m-%dT%H:%M:%S,%3f" }
+  if contains(ts, ".") { fmt = replace(fmt, ",%3f", ".%3f") }
+  .timestamp = parse_timestamp(ts, fmt) ?? now()
+} else if match!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)') {
+  caps2  = parse_regex!(.message, r'(?i)(ERROR|WARN|WARNING|INFO|DEBUG|CRITICAL)')
+  .level = upcase(to_string(caps2[0]))
+}
+
+# --- Metadata ---
+.trainer_server = get_hostname!()
+.environment    = get_env_var("ENVIRONMENT") ?? "production"
+
+# --- Robust Docker label mapping (handles .label_*, .labels.*, .docker.container_labels.*) ---
+task_id_   = null
+hotkey_    = null
+model_     = null
+task_type_ = null         
+
+
+# task id
+if exists(.label) && exists(.label.task_id) && .label.task_id != null { task_id_ = .label.task_id }
+.task_id = to_string(task_id_) ?? "unknown"
+
+
+# hotkey
+if exists(.label) && exists(.label.hotkey) && .label.hotkey != null { hotkey_ = .label.hotkey }
+.hotkey = to_string(hotkey_) ?? "unknown"
+
+# model
+if exists(.label) && exists(.label.model) && .label.model != null { model_ = .label.model }
+.model = to_string(model_) ?? "unknown"
+
+# task_type
+if exists(.label) && exists(.label.task_type) && .label.task_type != null { task_type_ = .label.task_type }
+.task_type = to_string(task_type_) ?? "unknown"
+
+
+
+# --- Counter for reduce aggregation (you use this later) ---
+.count = 1
+
+# --- Cleanup (safe) ---
+del(.label_task_id)
+del(.label_hotkey)
+del(.label_model)
+del(.label_trainer_type)
+del(.label_task_type)
+del(.label_expected_repo)
+"""
+
+[transforms.filter_noise]
+type = "filter"
+inputs = ["parse_logs"]
+condition = """
+m, err = to_string(.message)
+!contains(m, "Downloading shards") &&
+!contains(m, "Loading checkpoint shards") &&
+!contains(m, "heartbeat")
+"""
+
+[transforms.batch_logs]
+type = "reduce"
+inputs = ["filter_noise"]
+group_by = ["task_id", "container_name", "container_id", "task_type", "model", "hotkey"]
+merge_strategies.message = "concat_newline"
+merge_strategies.count   = "sum"
+flush_period_ms = 5000
+
+# -------------------------
+# Sinks
+# -------------------------
+[sinks.loki]
+type = "loki"
+inputs = ["parse_logs"]  # Skip filter_noise and batch_logs for now
+endpoint = "${LOKI_ENDPOINT}"
+auth.strategy = "basic"
+auth.user = "${LOKI_USERNAME}"
+auth.password = "${LOKI_PASSWORD}"
+encoding.codec = "text"
+batch.timeout_secs = 10
+batch.max_bytes = 1048576
+request.timeout_secs = 30
+request.retry_attempts = 3
+request.retry_initial_backoff_secs = 1
+tls.verify_certificate = false
+
+# Loki stream labels
+labels.job = "docker-training-containers"
+labels.task_id = "{{ task_id }}"
+labels.hotkey = "{{ hotkey }}"
+labels.container_name = "{{ container_name }}"
+labels.container_id = "{{ container_id }}"
+labels.task_type = "{{ task_type }}"
+labels.model = "{{ model }}"
+
+# Prometheus exporter (Vector internal metrics)
+[sinks.prometheus]
+type = "prometheus_exporter"
+inputs = ["internal_metrics"]
+address = "0.0.0.0:9090"
+default_namespace = "vector"

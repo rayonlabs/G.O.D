@@ -104,3 +104,145 @@ tasks:
         export $(cat .vali.env | grep -v '^#' | xargs)
         docker run --rm --network=host -v $(pwd):/backup postgres:17 bash -c "pg_restore --dbname=\"${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}}\" --clean --if-exists -x -O /backup/god-db-backup.dump || echo 'Restore completed with some errors, which may be safely ignored'"
 
+  deploy-observability-server:
+    desc: "Deploy observability server for training logs on validator (uses .vali.env)"
+    cmds:
+      - echo "Deploying observability server for training logs..."
+      - |
+        # Load from .vali.env (this runs on the validator)
+        if [ ! -f .vali.env ]; then
+          echo "ERROR: .vali.env file not found!"
+          echo "Please add the following variables to .vali.env:"
+          echo "  OBSERVABILITY_DOMAIN=your-domain.com"
+          echo "  GRAFANA_TRAINING_PASSWORD=your-password"
+          echo "  LOKI_PASSWORD=your-loki-password"
+          exit 1
+        fi
+        
+        # Load variables from .vali.env
+        export $(cat .vali.env | grep -v '^#' | xargs)
+        
+        # Auto-detect OBSERVABILITY_DOMAIN if not set
+        if [ -z "$OBSERVABILITY_DOMAIN" ]; then
+          # Try to get public IP
+          OBSERVABILITY_DOMAIN=$(curl -s ifconfig.me || curl -s icanhazip.com || hostname -I | awk '{print $1}')
+          echo "Auto-detected OBSERVABILITY_DOMAIN: $OBSERVABILITY_DOMAIN"
+        fi
+        
+        # Use default passwords if not set
+        GRAFANA_TRAINING_PASSWORD=${GRAFANA_TRAINING_PASSWORD:-changeme123}
+        LOKI_PASSWORD=${LOKI_PASSWORD:-trainerlogs123}
+        
+        # Create observability env from .vali.env variables
+        cat > .env.observability << EOF
+        OBSERVABILITY_DOMAIN=${OBSERVABILITY_DOMAIN}
+        GRAFANA_TRAINING_USERNAME=${GRAFANA_TRAINING_USERNAME:-admin}
+        GRAFANA_TRAINING_PASSWORD=${GRAFANA_TRAINING_PASSWORD}
+        GRAFANA_ANONYMOUS_ENABLED=${GRAFANA_ANONYMOUS_ENABLED:-true}
+        LOKI_AUTH_ENABLED=false
+        LOKI_USERNAME=${LOKI_USERNAME:-trainer}
+        LOKI_PASSWORD=${LOKI_PASSWORD}
+        EOF
+      - |
+        # Auto-create SSL certs if missing
+        mkdir -p config/nginx/ssl config/nginx
+        if [ ! -f config/nginx/ssl/cert.pem ]; then
+          export $(cat .vali.env | grep -v '^#' | xargs)
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout config/nginx/ssl/key.pem \
+            -out config/nginx/ssl/cert.pem \
+            -subj "/C=US/ST=State/L=City/O=Training/CN=${OBSERVABILITY_DOMAIN}" 2>/dev/null
+        fi
+      - |
+        # Auto-create basic auth file with password from .vali.env
+        if [ ! -f config/nginx/.htpasswd ] || [ "$LOKI_PASSWORD_UPDATED" = "true" ]; then
+          export $(cat .vali.env | grep -v '^#' | xargs)
+          # Check if htpasswd is available, if not use Docker
+          if command -v htpasswd >/dev/null 2>&1; then
+            htpasswd -b -B -c config/nginx/.htpasswd ${LOKI_USERNAME:-trainer} ${LOKI_PASSWORD} 2>/dev/null
+          else
+            # Use Docker to generate htpasswd file
+            docker run --rm -v $(pwd)/config/nginx:/work httpd:alpine htpasswd -b -B -c /work/.htpasswd ${LOKI_USERNAME:-trainer} ${LOKI_PASSWORD}
+          fi
+        fi
+      - docker-compose -f docker-compose.observability-server.yml --env-file .env.observability up -d
+      - |
+        export $(cat .vali.env | grep -v '^#' | xargs)
+        echo "========================================="
+        echo "Observability server started!"
+        echo "Grafana: https://$(hostname -I | awk '{print $1}' 2>/dev/null || echo ${OBSERVABILITY_DOMAIN}):3001"
+        echo "Login: ${GRAFANA_TRAINING_USERNAME:-admin} / [password from .vali.env]"
+        echo "========================================="
+
+  stop-observability-server:
+    desc: "Stop the observability server"
+    cmds:
+      - docker-compose -f docker-compose.observability-server.yml down
+
+  deploy-trainer-logs:
+    desc: "Deploy log shipping on trainer node (uses .trainer.env)"
+    cmds:
+      - echo "Deploying trainer log shipping..."
+      - |
+        # Load from .trainer.env ONLY
+        if [ ! -f .trainer.env ]; then
+          echo "ERROR: .trainer.env file not found!"
+          echo "Please add the following variables to .trainer.env:"
+          echo "  LOKI_ENDPOINT=https://validator-server:3101"
+          echo "  LOKI_PASSWORD=your-loki-password"
+          exit 1
+        fi
+        
+        # Load variables from .trainer.env
+        export $(cat .trainer.env | grep -v '^#' | xargs)
+        
+        # Check required variables
+        if [ -z "$LOKI_ENDPOINT" ] || [ -z "$LOKI_PASSWORD" ]; then
+          echo "ERROR: Missing required variables in .trainer.env:"
+          echo "  LOKI_ENDPOINT=${LOKI_ENDPOINT:-<not set>}"
+          echo "  LOKI_PASSWORD=${LOKI_PASSWORD:-<not set>}"
+          exit 1
+        fi
+        
+        # Create trainer env for Vector
+        cat > .env.trainer-logs << EOF
+        LOKI_ENDPOINT=${LOKI_ENDPOINT}
+        LOKI_USERNAME=${LOKI_USERNAME:-trainer}
+        LOKI_PASSWORD=${LOKI_PASSWORD}
+        VECTOR_LOG_LEVEL=${VECTOR_LOG_LEVEL:-info}
+        EOF
+      - docker-compose -f docker-compose.trainer-server.yml --env-file .env.trainer-logs up -d
+      - echo "Log shipping started to ${LOKI_ENDPOINT}"
+
+  stop-trainer-logs:
+    desc: "Stop log shipping on trainer node"
+    cmds:
+      - docker-compose -f docker-compose.trainer-server.yml down
+
+  logs-observability:
+    desc: "View logs from observability server"
+    cmds:
+      - docker-compose -f docker-compose.observability-server.yml logs -f
+
+  logs-trainer-shipper:
+    desc: "View logs from trainer log shipper"
+    cmds:
+      - docker-compose -f docker-compose.trainer-server.yml logs -f vector-log-shipper
+
+  status-trainer-logs:
+    desc: "Check status of trainer logging system"
+    cmds:
+      - echo "=== Observability Server Status ==="
+      - docker-compose -f docker-compose.observability-server.yml ps 2>/dev/null || echo "Not running on this server"
+      - echo ""
+      - echo "=== Trainer Log Shipper Status ==="
+      - docker-compose -f docker-compose.trainer-server.yml ps 2>/dev/null || echo "Not running on this server"
+      - echo ""
+      - echo "=== Vector Metrics ==="
+      - curl -s http://localhost:8686/health 2>/dev/null && echo "Vector is healthy" || echo "Vector not accessible"
+
+  test-trainer-logs:
+    desc: "Test log shipping by creating test containers with different labels"
+    cmds:
+      - ./scripts/test-trainer-logs.sh
+

@@ -1,0 +1,55 @@
+auth_enabled: false  # We handle auth at nginx level
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  http_server_read_timeout: 300s
+  http_server_write_timeout: 300s
+  http_server_idle_timeout: 300s
+
+common:
+  instance_addr: 0.0.0.0  # Listen on all interfaces
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+compactor:
+  retention_enabled: true
+  delete_request_store: filesystem
+  working_directory: /loki/retention
+  compaction_interval: 10m
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+
+limits_config:
+  retention_period: 720h  # 30 days for training logs
+  allow_structured_metadata: true
+  ingestion_rate_mb: 100
+  ingestion_burst_size_mb: 200
+  per_stream_rate_limit: 10MB
+  per_stream_rate_limit_burst: 20MB
+  max_entries_limit_per_query: 10000
+  max_streams_per_user: 10000
+  max_global_streams_per_user: 10000
+
+ruler:
+  alertmanager_url: http://prometheus-training:9090
+
+analytics:
+  reporting_enabled: false
