@@ -25,12 +25,9 @@ from trainer.tasks import update_wandb_url
 from trainer.utils.misc import build_wandb_env
 from trainer.utils.misc import extract_container_error
 from validator.utils.logging import get_all_context_tags
-from validator.utils.logging import get_logger
+from trainer.utils.logging import logger
 from validator.utils.logging import stream_container_logs
 from validator.utils.logging import stream_image_build_logs
-
-
-logger = get_logger(__name__)
 
 
 def calculate_container_resources(gpu_ids: list[int]) -> tuple[str, int]:
@@ -48,7 +45,7 @@ def calculate_container_resources(gpu_ids: list[int]) -> tuple[str, int]:
 
 
 def build_docker_image(
-    dockerfile_path: str, context_path: str = ".", is_image_task: bool = False, tag: str = None, no_cache: bool = True
+    dockerfile_path: str, log_labels: dict[str, str] | None = None,  context_path: str = ".", is_image_task: bool = False, tag: str = None, no_cache: bool = True
 ) -> tuple[str, str | None]:
     client: docker.DockerClient = docker.from_env()
 
@@ -65,7 +62,7 @@ def build_docker_image(
             nocache=no_cache,
             decode=True,
         )
-        stream_image_build_logs(build_output, get_all_context_tags())
+        stream_image_build_logs(build_output, logger=logger, log_context=log_labels)
 
         logger.info("Docker image built successfully.")
         return tag, None
@@ -101,7 +98,7 @@ async def run_trainer_container_image(
     expected_repo_name: str,
     hours_to_complete: float,
     hotkey: str,
-    docker_labels: dict[str, str] | None = None,
+    log_labels: dict[str, str] | None = None,
     gpu_ids: list[int] = [0],
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
@@ -140,7 +137,7 @@ async def run_trainer_container_image(
             remove=False,
             shm_size=shm_size,
             name=container_name,
-            labels=docker_labels,
+            labels=log_labels,
             mem_limit=memory_limit,
             nano_cpus=cpu_limit_nanocpus,
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
@@ -169,7 +166,7 @@ async def run_trainer_container_text(
     file_format: FileFormat,
     expected_repo_name: str,
     hours_to_complete: float,
-    docker_labels: dict[str, str] | None = None,
+    log_labels: dict[str, str] | None = None,
     gpu_ids: list[int] = [0],
 ) -> Container:
     client: docker.DockerClient = docker.from_env()
@@ -214,7 +211,7 @@ async def run_trainer_container_text(
             remove=False,
             shm_size=shm_size,
             name=container_name,
-            labels=docker_labels,
+            labels=log_labels,
             mem_limit=memory_limit,
             nano_cpus=cpu_limit_nanocpus,
             device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
@@ -250,7 +247,7 @@ def run_downloader_container(
     task_type: TaskType,
     hotkey: str,
     file_format: FileFormat | None = None,
-    docker_labels: dict[str, str] | None = None,
+    log_labels: dict[str, str] | None = None,
 ) -> tuple[int, Exception | None]:
     client = docker.from_env()
 
@@ -276,7 +273,7 @@ def run_downloader_container(
             image=cst.TRAINER_DOWNLOADER_DOCKER_IMAGE,
             name=container_name,
             command=command,
-            labels=docker_labels,
+            labels=log_labels,
             volumes={cst.VOLUME_NAMES[1]: {"bind": "/cache", "mode": "rw"}},
             remove=False,
             detach=True,
@@ -318,7 +315,7 @@ async def upload_repo_to_hf(
     expected_repo_name: str,
     huggingface_token: str,
     huggingface_username: str,
-    docker_labels: dict[str, str] | None = None,
+    log_labels: dict[str, str] | None = None,
     wandb_token: str | None = None,
     path_in_repo: str | None = None,
 ):
@@ -417,11 +414,10 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         tag = None
         timeout_seconds = int(training_data.hours_to_complete * 3600)
         task_type = get_task_type(task)
-        logger.info(f"Task Type: {task_type}")
         training_data.hours_to_complete = int(training_data.hours_to_complete)
         await create_volumes_if_dont_exist()
 
-        docker_labels = {
+        log_labels = {
             "task_id": training_data.task_id,
             "hotkey": task.hotkey,
             "model": training_data.model,
@@ -451,7 +447,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             task_type=task_type,
             hotkey=task.hotkey,
             file_format=getattr(training_data, "file_format", None),
-            docker_labels=docker_labels,
+            log_labels=log_labels,
         )
 
         if download_status == 0:
@@ -465,6 +461,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
 
         tag, exc = await asyncio.to_thread(
             build_docker_image,
+            log_labels,
             dockerfile_path=dockerfile_path,
             is_image_task=(task_type == TaskType.IMAGETASK),
             context_path=local_repo_path,
@@ -489,7 +486,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     expected_repo_name=training_data.expected_repo_name,
                     hours_to_complete=training_data.hours_to_complete,
                     hotkey=task.hotkey,
-                    docker_labels=docker_labels,
+                    log_labels=log_labels,
                     gpu_ids=task.gpu_ids,
                 ),
                 timeout=60,
@@ -507,7 +504,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     file_format=training_data.file_format,
                     expected_repo_name=training_data.expected_repo_name,
                     hours_to_complete=training_data.hours_to_complete,
-                    docker_labels=docker_labels,
+                    log_labels=log_labels,
                     gpu_ids=task.gpu_ids,
                 ),
                 timeout=60,
@@ -575,7 +572,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     expected_repo_name=training_data.expected_repo_name,
                     huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
                     huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
-                    docker_labels=docker_labels,
+                    log_labels=log_labels,
                     wandb_token=wandb_token,
                     path_in_repo=path_in_repo,
                 )
