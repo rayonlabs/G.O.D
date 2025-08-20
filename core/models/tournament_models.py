@@ -387,9 +387,9 @@ class BenchmarkInstance(BaseModel):
     """A single benchmark instance (copy task) with its results"""
     copy_task_id: str
     participant_hotkey: str
-    tournament_id: str | None = None
+    tournament_id: str
     created_at: datetime
-    results: list[TaskScore] = Field(default_factory=list)
+    test_loss: float | None = None
 
 
 class BenchmarkTimeline(BaseModel):

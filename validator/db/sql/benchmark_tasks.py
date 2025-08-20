@@ -14,6 +14,7 @@ from core.models.utility_models import TaskType
 async def get_all_benchmark_copies(psql_db: PSQLDB) -> List[BenchmarkTaskCopy]:
     """
     Get all benchmark task copies with their root task details.
+    Filters out entries with null tournament_id.
     """
     async with await psql_db.connection() as connection:
         query = f"""
@@ -33,6 +34,7 @@ async def get_all_benchmark_copies(psql_db: PSQLDB) -> List[BenchmarkTaskCopy]:
             FROM {cst.BENCHMARK_TASK_COPIES_TABLE} btc
             JOIN {cst.BENCHMARK_ROOT_TASKS_TABLE} brt ON brt.{cst.TASK_ID} = btc.{cst.ROOT_TASK_ID}
             JOIN {cst.TASKS_TABLE} t ON brt.{cst.TASK_ID} = t.{cst.TASK_ID}
+            WHERE btc.{cst.TOURNAMENT_ID} IS NOT NULL
             ORDER BY btc.{cst.ROOT_TASK_ID}, btc.{cst.CREATED_AT}
         """
         
@@ -109,19 +111,15 @@ async def build_benchmark_timelines(benchmark_copies: List[BenchmarkTaskCopy], p
     if not benchmark_copies:
         return []
     
-    # Get all copy task IDs
     copy_task_ids = list(set(copy.copy_task_id for copy in benchmark_copies))
     
-    # Get all task node results using existing function
     task_results = await get_task_scores_batch(copy_task_ids, psql_db)
     
-    # Group benchmark copies by root task
     timelines_dict = {}
     
     for copy in benchmark_copies:
         root_task_id = copy.root_task_id
         
-        # Initialize timeline for this root task if not exists
         if root_task_id not in timelines_dict:
             timelines_dict[root_task_id] = BenchmarkTimeline(
                 root_task_id=root_task_id,
@@ -135,18 +133,23 @@ async def build_benchmark_timelines(benchmark_copies: List[BenchmarkTaskCopy], p
                 benchmarks=[]
             )
         
-        # Add benchmark instance
+        test_loss = None
+        copy_results = task_results.get(copy.copy_task_id, [])
+        for result in copy_results:
+            if result.hotkey == copy.participant_hotkey:
+                test_loss = result.test_loss
+                break
+        
         benchmark_instance = BenchmarkInstance(
             copy_task_id=copy.copy_task_id,
             participant_hotkey=copy.participant_hotkey,
             tournament_id=copy.tournament_id,
             created_at=copy.created_at,
-            results=task_results.get(copy.copy_task_id, [])
+            test_loss=test_loss
         )
         
         timelines_dict[root_task_id].benchmarks.append(benchmark_instance)
     
-    # Convert to list and sort by root task ID
     return sorted(timelines_dict.values(), key=lambda x: x.root_task_id)
 
 
