@@ -77,10 +77,6 @@ task_type_ = null
 if exists(.label) && exists(.label.task_id) && .label.task_id != null { task_id_ = .label.task_id }
 .task_id = to_string(task_id_) ?? "unknown"
 
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/main
 # hotkey
 if exists(.label) && exists(.label.hotkey) && .label.hotkey != null { hotkey_ = .label.hotkey }
 .hotkey = to_string(hotkey_) ?? "unknown"
