@@ -32,6 +32,7 @@ from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import get_tournament_gpu_requirement
+from core.models.tournament_models import BenchmarkTimelineResponse
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.tournament.performance_calculator import calculate_boss_round_performance_differences
@@ -46,6 +47,7 @@ from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql
+from validator.db.sql import benchmark_tasks
 from validator.evaluation.tournament_scoring import calculate_tournament_type_scores_from_data
 from validator.utils.logging import get_logger
 
@@ -59,6 +61,8 @@ GET_NEXT_TOURNAMENT_DATES_ENDPOINT = "/v1/tournaments/next-dates"
 GET_ACTIVE_TOURNAMENTS_ENDPOINT = "/v1/tournaments/active"
 GET_TOURNAMENT_HISTORY_ENDPOINT = "/v1/tournaments/history"
 GET_WANDB_URL_ENDPOINT = "/v1/tournaments/wandb-logs/{task_id}"
+GET_BENCHMARK_TIMELINE_ENDPOINT = "/v1/benchmarks/timeline"
+GET_BENCHMARK_TIMELINE_BY_TOURNAMENT_ENDPOINT = "/v1/benchmarks/timeline/{tournament_id}"
 
 
 async def get_tournament_details(
@@ -520,6 +524,34 @@ async def get_wandb_url(
     raise HTTPException(status_code=404, detail=f"Weights & Biases URL not found for task {task_id}")
 
 
+async def get_benchmark_timeline(
+    config: Config = Depends(get_config),
+) -> BenchmarkTimelineResponse:
+    """
+    Get benchmark timeline data for all tasks.
+    Shows how benchmark tasks perform over time across tournaments.
+    """
+    try:
+        return await benchmark_tasks.get_benchmark_timeline(config.psql_db)
+    except Exception as e:
+        logger.error(f"Error fetching benchmark timeline: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch benchmark timeline")
+
+
+async def get_benchmark_timeline_by_tournament(
+    tournament_id: str,
+    config: Config = Depends(get_config),
+) -> BenchmarkTimelineResponse:
+    """
+    Get benchmark timeline data filtered by tournament ID.
+    """
+    try:
+        return await benchmark_tasks.get_benchmark_timeline_by_tournament(tournament_id, config.psql_db)
+    except Exception as e:
+        logger.error(f"Error fetching benchmark timeline for tournament {tournament_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch benchmark timeline")
+
+
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Tournament Analytics"], dependencies=[Depends(get_api_key)])
     router.add_api_route(GET_LATEST_TOURNAMENTS_DETAILS_ENDPOINT, get_latest_tournaments_details, methods=["GET"])
@@ -528,6 +560,8 @@ def factory_router() -> APIRouter:
     router.add_api_route(GET_NEXT_TOURNAMENT_DATES_ENDPOINT, get_next_tournament_dates, methods=["GET"])
     router.add_api_route(GET_ACTIVE_TOURNAMENTS_ENDPOINT, get_active_tournaments, methods=["GET"])
     router.add_api_route(GET_TOURNAMENT_HISTORY_ENDPOINT, get_tournament_history, methods=["GET"])
+    router.add_api_route(GET_BENCHMARK_TIMELINE_ENDPOINT, get_benchmark_timeline, methods=["GET"])
+    router.add_api_route(GET_BENCHMARK_TIMELINE_BY_TOURNAMENT_ENDPOINT, get_benchmark_timeline_by_tournament, methods=["GET"])
 
     public_router = APIRouter(tags=["Tournament Analytics"])
     public_router.add_api_route(GET_WANDB_URL_ENDPOINT, get_wandb_url, methods=["GET"])

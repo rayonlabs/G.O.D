@@ -365,3 +365,46 @@ class TournamentHistoryEntry(BaseModel):
 class TournamentHistoryResponse(BaseModel):
     """Response for tournament history endpoint"""
     tournaments: list[TournamentHistoryEntry]
+
+
+class BenchmarkTaskCopy(BaseModel):
+    """Raw benchmark task copy data from database"""
+    copy_task_id: str
+    root_task_id: str
+    participant_hotkey: str
+    tournament_id: str | None = None
+    created_at: datetime
+    task_type: TaskType
+    model_id: str
+    dataset: str
+    hours_to_complete: int
+    model_params_count: int
+    is_organic: bool
+    task_created_at: datetime | None = None
+
+
+class BenchmarkInstance(BaseModel):
+    """A single benchmark instance (copy task) with its results"""
+    copy_task_id: str
+    participant_hotkey: str
+    tournament_id: str
+    created_at: datetime
+    test_loss: float | None = None
+
+
+class BenchmarkTimeline(BaseModel):
+    """Timeline of benchmark results for a single root task"""
+    root_task_id: str
+    task_type: TaskType
+    model_id: str
+    dataset: str  
+    hours_to_complete: int
+    model_params_count: int
+    is_organic: bool
+    task_created_at: datetime | None = None
+    benchmarks: list[BenchmarkInstance] = Field(default_factory=list)
+
+
+class BenchmarkTimelineResponse(BaseModel):
+    """Response containing benchmark timelines for all tasks"""
+    timelines: list[BenchmarkTimeline]

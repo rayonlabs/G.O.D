@@ -38,6 +38,7 @@ from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import NetworkStats
+from validator.db.sql import grpo as grpo_sql
 from validator.db.sql import submissions_and_scoring as submissions_and_scoring_sql
 from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql
@@ -128,13 +129,22 @@ async def create_task_grpo(
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
 
+    reward_functions = []
+    for reward_function_reference in request.reward_functions:
+        reward_function = await grpo_sql.get_reward_function_by_id(config.psql_db, reward_function_reference.reward_id)
+        if reward_function is None:
+            raise HTTPException(status_code=400, detail=f"Reward function with ID {reward_function.reward_id} not found")
+
+        reward_function.reward_weight = reward_function_reference.reward_weight
+        reward_functions.append(reward_function)
+
     task = GrpoRawTask(
         model_id=request.model_repo,
         ds=request.ds_repo,
         file_format=request.file_format,
         field_prompt=request.field_prompt,
         extra_column=request.extra_column,
-        reward_functions=request.reward_functions,
+        reward_functions=reward_functions,
         is_organic=True,
         status=TaskStatus.PENDING,
         created_at=current_time,

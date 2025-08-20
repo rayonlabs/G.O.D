@@ -53,12 +53,20 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "values": [],
+          "calcs": []
         },
         "pieType": "donut",
         "tooltip": {
           "mode": "single",
           "sort": "none"
+        },
+        "displayLabels": ["name"],
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
         }
       },
       "targets": [
@@ -67,10 +75,13 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "count by(task_type) (group({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}))",
-          "refId": "A"
+          "expr": "sum by(task_type) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[10m]))",
+          "refId": "A",
+          "instant": false,
+          "legendFormat": "{{task_type}}"
         }
       ],
+      "transformations": [],
       "title": "Task Types Activity",
       "type": "piechart"
     },
@@ -112,7 +123,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Value"
+              "options": "Value #A"
             },
             "properties": [
               {
@@ -122,6 +133,18 @@
               {
                 "id": "custom.align",
                 "value": "right"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
               }
             ]
           }

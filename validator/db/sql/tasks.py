@@ -1480,7 +1480,7 @@ async def add_reward_functions(task_id: UUID, reward_functions: list[RewardFunct
 async def get_reward_functions(task_id: UUID, psql_db: PSQLDB, connection: Connection | None = None) -> list[RewardFunction]:
     async def _get_reward_functions(conn: Connection) -> list[RewardFunction]:
         query = f"""
-            SELECT rf.{cst.REWARD_FUNC}, rf.{cst.FUNC_HASH}, rf.{cst.IS_GENERIC}, gtf.{cst.REWARD_WEIGHT}
+            SELECT rf.{cst.REWARD_ID}, rf.{cst.REWARD_FUNC}, rf.{cst.FUNC_HASH}, rf.{cst.IS_GENERIC}, gtf.{cst.REWARD_WEIGHT}
             FROM {cst.REWARD_FUNCTIONS_TABLE} rf
             JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
             WHERE gtf.{cst.TASK_ID} = $1
@@ -1488,6 +1488,7 @@ async def get_reward_functions(task_id: UUID, psql_db: PSQLDB, connection: Conne
         rows = await conn.fetch(query, task_id)
         return [
             RewardFunction(
+                reward_id=str(row[cst.REWARD_ID]),
                 reward_func=row[cst.REWARD_FUNC],
                 func_hash=row[cst.FUNC_HASH],
                 is_generic=row[cst.IS_GENERIC],

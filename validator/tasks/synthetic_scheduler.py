@@ -1,24 +1,24 @@
 import asyncio
-import random
 import os
+import random
 from ast import literal_eval
 from datetime import datetime
 from datetime import timedelta
 from typing import Any
 from typing import AsyncGenerator
-from datasets import load_dataset
 
+from datasets import load_dataset
 from substrateinterface import Keypair
 
 import validator.core.constants as cst
 from core.models.payload_models import ImageModelInfo
 from core.models.payload_models import ImageModelsResponse
 from core.models.payload_models import InstructTextDatasetColumnsResponse
+from core.models.utility_models import FileFormat
 from core.models.utility_models import Message
 from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
-from core.models.utility_models import FileFormat
 from validator.augmentation.augmentation import load_prompts
 from validator.core.config import Config
 from validator.core.constants import END_OF_REASONING_TAG
@@ -27,11 +27,11 @@ from validator.core.constants import MIN_DATASETS_FOR_AUGMENTATION
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
 from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
+from validator.core.models import ChatRawTask
 from validator.core.models import Dataset
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
-from validator.core.models import ChatRawTask
 from validator.core.models import RawTask
 from validator.core.models import RewardFunction
 from validator.db.sql.grpo import get_generic_reward_functions_from_db
@@ -229,16 +229,14 @@ async def get_multiple_datasets(
 
 
 def is_chat_format(example: dict[str, Any]) -> bool:
-    return (
-        isinstance(example.get("conversations"), list) and
-        all("from" in msg and "value" in msg for msg in example["conversations"])
+    return isinstance(example.get("conversations"), list) and all(
+        "from" in msg and "value" in msg for msg in example["conversations"]
     )
 
 
 def is_evol_format(example: dict[str, Any]) -> bool:
-    return (
-        isinstance(example.get("conversations"), list) and
-        all("role" in msg and "content" in msg for msg in example["conversations"])
+    return isinstance(example.get("conversations"), list) and all(
+        "role" in msg and "content" in msg for msg in example["conversations"]
     )
 
 
@@ -255,21 +253,30 @@ async def convert_instruct_dataset_to_chat_format(dataset_id: str, input_field: 
                 role = msg["role"]
                 content = msg["content"]
                 if role == "user":
-                    convs.append({cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_USER, cst.STANDARD_CHAT_CONTENT_FIELD: content})
+                    convs.append(
+                        {cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_USER, cst.STANDARD_CHAT_CONTENT_FIELD: content}
+                    )
                 elif role == "assistant":
-                    convs.append({cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_ASSISTANT, cst.STANDARD_CHAT_CONTENT_FIELD: content})
+                    convs.append(
+                        {cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_ASSISTANT, cst.STANDARD_CHAT_CONTENT_FIELD: content}
+                    )
             if convs:
                 chat_data.append({cst.STANDARD_CHAT_MESSAGES_COLUMN: convs})
         else:
             inp = ex.get(input_field, "").strip()
             out = ex.get(output_field, "").strip()
             if inp and out:
-                chat_data.append({
-                    cst.STANDARD_CHAT_MESSAGES_COLUMN: [
-                        {cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_USER, cst.STANDARD_CHAT_CONTENT_FIELD: inp},
-                        {cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_ASSISTANT, cst.STANDARD_CHAT_CONTENT_FIELD: out}
-                    ]
-                })
+                chat_data.append(
+                    {
+                        cst.STANDARD_CHAT_MESSAGES_COLUMN: [
+                            {cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_USER, cst.STANDARD_CHAT_CONTENT_FIELD: inp},
+                            {
+                                cst.STANDARD_CHAT_ROLE_FIELD: cst.STANDARD_CHAT_ROLE_ASSISTANT,
+                                cst.STANDARD_CHAT_CONTENT_FIELD: out,
+                            },
+                        ]
+                    }
+                )
 
     return chat_data
 
@@ -409,6 +416,7 @@ async def _get_generic_reward_functions(config: Config) -> list[RewardFunction]:
 def _randomize_reward_weights(reward_functions: list[RewardFunction]) -> list[RewardFunction]:
     return [
         RewardFunction(
+            reward_id=reward_function.reward_id,
             reward_func=reward_function.reward_func,
             func_hash=reward_function.func_hash,
             is_generic=reward_function.is_generic,
@@ -507,19 +515,21 @@ async def create_synthetic_chat_task(
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
     model_id = await anext(models)
-    
+
     logger.info("CHAT_TASK: Starting dataset selection...")
     selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
     logger.info(f"CHAT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
-    
+
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-    
+
     dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
 
-    chat_dataset_url = await merge_and_upload_chat_datasets(dataset_ids=[d.dataset_id for d in selected_datasets], input_field=columns.field_input, output_field=columns.field_output)
-    
+    chat_dataset_url = await merge_and_upload_chat_datasets(
+        dataset_ids=[d.dataset_id for d in selected_datasets], input_field=columns.field_input, output_field=columns.field_output
+    )
+
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
@@ -576,11 +586,7 @@ async def _add_new_task_to_network_if_not_enough(
             (TaskType.DPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO),
             (TaskType.GRPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO),
         ]
-        selected_task_type = random.choices(
-            [t[0] for t in TASK_TYPES], 
-            weights=[t[1] for t in TASK_TYPES],
-            k=1
-        )[0]
+        selected_task_type = random.choices([t[0] for t in TASK_TYPES], weights=[t[1] for t in TASK_TYPES], k=1)[0]
 
         if selected_task_type == TaskType.INSTRUCTTEXTTASK:
             probability_of_chat_task = random.random()

@@ -77,6 +77,10 @@ task_type_ = null
 if exists(.label) && exists(.label.task_id) && .label.task_id != null { task_id_ = .label.task_id }
 .task_id = to_string(task_id_) ?? "unknown"
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main
 # hotkey
 if exists(.label) && exists(.label.hotkey) && .label.hotkey != null { hotkey_ = .label.hotkey }
 .hotkey = to_string(hotkey_) ?? "unknown"
@@ -114,7 +118,6 @@ m, err = to_string(.message)
 
 # --- FastAPI normalizer (host logs → same fields/labels as Docker) ---
 [transforms.normalize_fastapi]
-type   = "remap"
 inputs = ["fastapi_logs"]
 source = """
 # -------- message --------
@@ -165,8 +168,6 @@ if ts_ms != null && ts_ms > 1_600_000_000_000 && ts_ms < 4_100_000_000_000 {
 
 # You keep your reduce in case you use it later; sink will bypass it
 [transforms.batch_logs]
-type = "reduce"
-inputs = ["filter_noise"]
 group_by = ["task_id", "container_name", "container_id", "task_type", "model", "hotkey"]
 merge_strategies.message = "concat_newline"
 merge_strategies.count   = "sum"

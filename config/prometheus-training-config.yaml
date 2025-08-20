@@ -18,7 +18,7 @@ scrape_configs:
   # Scrape Vector metrics from trainer servers
   - job_name: 'vector-trainers'
     static_configs:
-      - targets: ${VECTOR_TARGETS:-[]}
+      - targets: []
         labels:
           service: 'vector'
     scrape_interval: 30s
@@ -26,7 +26,7 @@ scrape_configs:
   # Scrape node exporters from trainer servers  
   - job_name: 'node-trainers'
     static_configs:
-      - targets: ${NODE_EXPORTER_TARGETS:-[]}
+      - targets: []
         labels:
           service: 'node-exporter'
     scrape_interval: 30s

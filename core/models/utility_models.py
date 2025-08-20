@@ -81,6 +81,7 @@ class InstructTextDatasetType(BaseModel):
 class RewardFunction(BaseModel):
     """Model representing a reward function with its metadata"""
 
+    reward_id: str | None = Field(None, description="UUID of the reward function in the database")
     reward_func: str = Field(
         ...,
         description="String with the python code of the reward function to use",
@@ -109,7 +110,7 @@ class DpoDatasetType(BaseModel):
     prompt_format: str | None = "{prompt}"
     chosen_format: str | None = "{chosen}"
     rejected_format: str | None = "{rejected}"
-    
+
 
 class ChatTemplateDatasetType(BaseModel):
     chat_template: str | None = "chatml"
