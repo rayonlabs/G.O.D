@@ -30,6 +30,9 @@ from validator.utils.logging import stream_container_logs
 from validator.utils.logging import stream_image_build_logs
 
 
+# logger = get_logger(__name__)
+
+
 def calculate_container_resources(gpu_ids: list[int]) -> tuple[str, int]:
     """Calculate memory limit and CPU limit based on GPU count.
 
@@ -64,10 +67,10 @@ def build_docker_image(
         )
         stream_image_build_logs(build_output, logger=logger, log_context=log_labels)
 
-        logger.info("Docker image built successfully.")
+        logger.info("Docker image built successfully.", extra=log_labels)
         return tag, None
     except (BuildError, APIError) as e:
-        logger.error(f"Docker build failed: {str(e)}")
+        logger.error(f"Docker build failed: {str(e)}", extra=log_labels)
         return None, str(e)
 
 
@@ -268,7 +271,7 @@ def run_downloader_container(
     container = None
 
     try:
-        logger.info(f"Starting downloader container: {container_name}")
+        logger.info(f"Starting downloader container: {container_name}", extra=log_labels)
         container = client.containers.run(
             image=cst.TRAINER_DOWNLOADER_DOCKER_IMAGE,
             name=container_name,
@@ -285,7 +288,7 @@ def run_downloader_container(
         exit_code = result.get("StatusCode", -1)
 
         if exit_code == 0:
-            logger.info(f"Download completed successfully for task {task_id}")
+            logger.info(f"Download completed successfully for task {task_id}", extra=log_labels)
         else:
             logs = container.logs().decode("utf-8", errors="ignore")
             error_message = extract_container_error(logs)
@@ -294,11 +297,11 @@ def run_downloader_container(
         return exit_code, None
 
     except docker.errors.ContainerError as e:
-        logger.error(f"Downloader container failed for task {task_id}: {e}")
+        logger.error(f"Downloader container failed for task {task_id}: {e}", extra=log_labels)
         return 1, e
 
     except Exception as ex:
-        logger.error(f"Unexpected error in downloader for task {task_id}: {ex}")
+        logger.error(f"Unexpected error in downloader for task {task_id}: {ex}", extra=log_labels)
         return 1, ex
 
     finally:
@@ -306,7 +309,7 @@ def run_downloader_container(
             try:
                 container.remove(force=True)
             except Exception as cleanup_err:
-                logger.warning(f"Failed to remove container {container_name}: {cleanup_err}")
+                logger.warning(f"Failed to remove container {container_name}: {cleanup_err}", extra=log_labels)
 
 
 async def upload_repo_to_hf(
@@ -342,21 +345,13 @@ async def upload_repo_to_hf(
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
 
-        # Docker labels for log collection
-        labels = {
-            "task_id": task_id,
-            "hotkey": hotkey,
-            "trainer_type": "uploader",
-            "expected_repo": expected_repo_name,
-        }
-
-        logger.info(f"Starting upload container {container_name} for task {task_id}...")
+        logger.info(f"Starting upload container {container_name} for task {task_id}...", extra=log_labels)
 
         container = client.containers.run(
             image=cst.HF_UPLOAD_DOCKER_IMAGE,
             environment=environment,
             volumes=volumes,
-            labels=labels,
+            labels=log_labels,
             detach=True,
             remove=False,
             name=container_name,
@@ -368,7 +363,7 @@ async def upload_repo_to_hf(
         logs = container.logs().decode("utf-8", errors="ignore")
         exit_code = result.get("StatusCode", -1)
         if exit_code == 0:
-            logger.info(f"Download completed successfully for task {task_id}")
+            logger.info(f"Download completed successfully for task {task_id}", extra=log_labels)
             if wandb_token:
                 match = re.search(r"https://wandb\.ai/\S+", logs)
                 wandb_url = match.group(0) if match else None
@@ -380,10 +375,10 @@ async def upload_repo_to_hf(
                 await log_task(
                     task_id, hotkey, f"[ERROR] Upload container failed | ExitCode: {exit_code} | LastError: {error_message}"
                 )
-                logger.error(f"Upload container failed: {error_message}")
+                logger.error(f"Upload container failed: {error_message}", extra=log_labels)
 
     except Exception as e:
-        logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}")
+        logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}", extra=log_labels)
         raise
 
 
@@ -436,7 +431,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             else f"{local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
         )
 
-        logger.info("Running Cache Download Container")
+        logger.info("Running Cache Download Container", extra=log_labels)
         await log_task(training_data.task_id, task.hotkey, "Downloading data")
 
         download_status, exc = await asyncio.to_thread(
@@ -461,14 +456,15 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
 
         tag, exc = await asyncio.to_thread(
             build_docker_image,
-            log_labels,
             dockerfile_path=dockerfile_path,
+            log_labels=log_labels,
             is_image_task=(task_type == TaskType.IMAGETASK),
             context_path=local_repo_path,
         )
 
         if not tag:
             message = f"[ERROR] Image Build failed | ExitCode: Unknown | LastError: {exc}"
+            logger.error(f"Image build failed: {exc}", extra=log_labels)
             await log_task(training_data.task_id, task.hotkey, message)
             await complete_task(training_data.task_id, task.hotkey, success=False)
             raise RuntimeError(f"Image build failed: {exc}")
@@ -518,7 +514,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
 
         if wait_task in done:
             result = await wait_task
-            logger.info(f"Container.wait() returned: {result}")
+            logger.info(f"Container.wait() returned: {result}", extra=log_labels)
             status_code = result.get("StatusCode", -1)
             if status_code == 0:
                 await log_task(training_data.task_id, task.hotkey, "Training completed successfully.")
@@ -529,7 +525,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                 if error_message:
                     log_message = f"[ERROR] Training container failed | ExitCode: {status_code} | LastError: {error_message}"
                     await log_task(training_data.task_id, task.hotkey, log_message)
-                    logger.error(f"Training container failed: {error_message}")
+                    logger.error(f"Training container failed: {error_message}", extra=log_labels)
                 await complete_task(training_data.task_id, task.hotkey, success=success)
                 await log_task(training_data.task_id, task.hotkey, f"Training failed with status code {status_code}")
         else:
@@ -540,7 +536,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
     except Exception as e:
         log_message = f"[ERROR] Job failed: {e}"
         await log_task(training_data.task_id, task.hotkey, log_message)
-        logger.exception(f"Training job failed: {training_data.task_id}")
+        logger.exception(f"Training job failed: {training_data.task_id}", extra=log_labels)
         await complete_task(training_data.task_id, task.hotkey, success=success)
 
     finally:
@@ -555,12 +551,12 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             except Exception as cleanup_err:
                 await log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
 
-        logger.info("Cleaning up")
+        logger.info("Cleaning up", extra=log_labels)
         if tag:
             delete_image_and_cleanup(tag)
-            logger.info("Cleaned up Docker resources.")
+            logger.info("Cleaned up Docker resources.", extra=log_labels)
         else:
-            logger.info("No Docker image to clean up.")
+            logger.info("No Docker image to clean up.", extra=log_labels)
 
         if success:
             try:

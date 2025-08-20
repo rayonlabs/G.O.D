@@ -136,7 +136,7 @@ def stream_image_build_logs(logs: list[dict], logger: Logger | None = None, log_
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
                     if line.strip():
-                        logger.info(line.strip())
+                        logger.info(line.strip(), extra=log_context)
             if buffer.strip():
                 logger.info(buffer.strip(), extra=log_context)
         except Exception as e:
