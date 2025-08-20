@@ -93,6 +93,11 @@ Your training scripts accept these standardised CLI arguments:
 --hours-to-complete   # Time limit in hours for the job to finish
 ```
 
+## Training Logs and Monitoring
+
+### Grafana Dashboard
+View real-time training logs and metrics at: http://185.141.218.75:3001/d/training-runs/training-runs-dashboard
+
 ## WandB Logging for Your Training Analysis
 
 Include WandB logging so you can analyze your training runs after tournaments complete:
