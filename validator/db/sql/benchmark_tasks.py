@@ -18,21 +18,21 @@ async def get_all_benchmark_copies(psql_db: PSQLDB) -> List[BenchmarkTaskCopy]:
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT 
-                btc.{cst.COPY_TASK_ID}::text as copy_task_id,
-                btc.{cst.ROOT_TASK_ID}::text as root_task_id,
-                btc.{cst.PARTICIPANT_HOTKEY} as participant_hotkey,
-                btc.{cst.TOURNAMENT_ID} as tournament_id,
-                btc.{cst.CREATED_AT} as created_at,
-                t.{cst.TASK_TYPE} as task_type,
-                t.{cst.MODEL_ID} as model_id,
-                t.{cst.DS} as dataset,
-                t.{cst.HOURS_TO_COMPLETE} as hours_to_complete,
-                t.{cst.MODEL_PARAMS_COUNT} as model_params_count,
-                t.{cst.IS_ORGANIC} as is_organic,
-                t.{cst.CREATED_AT} as task_created_at
+                btc.copy_task_id::text as copy_task_id,
+                btc.root_task_id::text as root_task_id,
+                btc.participant_hotkey as participant_hotkey,
+                btc.tournament_id as tournament_id,
+                btc.created_at as created_at,
+                t.task_type as task_type,
+                t.model_id as model_id,
+                t.ds as dataset,
+                t.hours_to_complete as hours_to_complete,
+                t.model_params_count as model_params_count,
+                t.is_organic as is_organic,
+                t.created_at as task_created_at
             FROM {cst.BENCHMARK_TASK_COPIES_TABLE} btc
-            JOIN {cst.BENCHMARK_ROOT_TASKS_TABLE} brt ON btc.{cst.ROOT_TASK_ID} = brt.{cst.ROOT_TASK_ID}
-            JOIN {cst.TASKS_TABLE} t ON brt.{cst.ROOT_TASK_ID} = t.{cst.TASK_ID}
+            JOIN {cst.BENCHMARK_ROOT_TASKS_TABLE} brt ON btc.root_task_id = brt.root_task_id
+            JOIN {cst.TASKS_TABLE} t ON brt.root_task_id = t.task_id
             ORDER BY btc.{cst.ROOT_TASK_ID}, btc.{cst.CREATED_AT}
         """
         
@@ -63,21 +63,21 @@ async def get_benchmark_copies_by_tournament(tournament_id: str, psql_db: PSQLDB
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT 
-                btc.{cst.COPY_TASK_ID}::text as copy_task_id,
-                btc.{cst.ROOT_TASK_ID}::text as root_task_id,
-                btc.{cst.PARTICIPANT_HOTKEY} as participant_hotkey,
-                btc.{cst.TOURNAMENT_ID} as tournament_id,
-                btc.{cst.CREATED_AT} as created_at,
-                t.{cst.TASK_TYPE} as task_type,
-                t.{cst.MODEL_ID} as model_id,
-                t.{cst.DS} as dataset,
-                t.{cst.HOURS_TO_COMPLETE} as hours_to_complete,
-                t.{cst.MODEL_PARAMS_COUNT} as model_params_count,
-                t.{cst.IS_ORGANIC} as is_organic,
-                t.{cst.CREATED_AT} as task_created_at
+                btc.copy_task_id::text as copy_task_id,
+                btc.root_task_id::text as root_task_id,
+                btc.participant_hotkey as participant_hotkey,
+                btc.tournament_id as tournament_id,
+                btc.created_at as created_at,
+                t.task_type as task_type,
+                t.model_id as model_id,
+                t.ds as dataset,
+                t.hours_to_complete as hours_to_complete,
+                t.model_params_count as model_params_count,
+                t.is_organic as is_organic,
+                t.created_at as task_created_at
             FROM {cst.BENCHMARK_TASK_COPIES_TABLE} btc
-            JOIN {cst.BENCHMARK_ROOT_TASKS_TABLE} brt ON btc.{cst.ROOT_TASK_ID} = brt.{cst.ROOT_TASK_ID}
-            JOIN {cst.TASKS_TABLE} t ON brt.{cst.ROOT_TASK_ID} = t.{cst.TASK_ID}
+            JOIN {cst.BENCHMARK_ROOT_TASKS_TABLE} brt ON btc.root_task_id = brt.root_task_id
+            JOIN {cst.TASKS_TABLE} t ON brt.root_task_id = t.task_id
             WHERE btc.{cst.TOURNAMENT_ID} = $1
             ORDER BY btc.{cst.ROOT_TASK_ID}, btc.{cst.CREATED_AT}
         """
