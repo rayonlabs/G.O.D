@@ -92,6 +92,43 @@ def delete_image_and_cleanup(tag: str):
         logger.error(f"Cleanup failed: {e}")
 
 
+def copy_cache_to_temp_volume(cache_volume_name: str = "cache") -> str:
+    client = docker.from_env()
+    temp_volume_name = f"cache_copy_{uuid.uuid4().hex}"
+
+    try:
+        client.volumes.create(name=temp_volume_name)
+        logger.info(f"Created temporary volume: {temp_volume_name}")
+        client.containers.run(
+            image="alpine:latest",
+            command=["sh", "-c", "cp -r /source/* /dest/ && chmod -R 755 /dest/"],
+            volumes={cache_volume_name: {"bind": "/source", "mode": "ro"}, temp_volume_name: {"bind": "/dest", "mode": "rw"}},
+            remove=True,
+            detach=False,
+        )
+
+        logger.info(f"Successfully copied cache data to temporary volume: {temp_volume_name}")
+        return temp_volume_name
+
+    except Exception as e:
+        logger.error(f"Failed to copy cache data to temporary volume: {e}")
+        try:
+            client.volumes.get(temp_volume_name).remove()
+            logger.info(f"Cleaned up temporary volume after failure: {temp_volume_name}")
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to clean up temporary volume {temp_volume_name} after failure: {cleanup_error}")
+        raise
+
+
+def cleanup_temp_volume(volume_name: str) -> None:
+    try:
+        client = docker.from_env()
+        client.volumes.get(volume_name).remove()
+        logger.info(f"Cleaned up temporary volume: {volume_name}")
+    except Exception as e:
+        logger.warning(f"Failed to clean up temporary volume {volume_name}: {e}")
+
+
 async def run_trainer_container_image(
     task_id: str,
     tag: str,
@@ -103,7 +140,7 @@ async def run_trainer_container_image(
     hotkey: str,
     docker_labels: dict[str, str] | None = None,
     gpu_ids: list[int] = [0],
-) -> Container:
+) -> tuple[Container, str]:
     client: docker.DockerClient = docker.from_env()
 
     command: list[str] = [
@@ -125,9 +162,11 @@ async def run_trainer_container_image(
 
     # Calculate resources based on GPU count
     memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
-    
+
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
+
+    temp_cache_volume = copy_cache_to_temp_volume(cst.VOLUME_NAMES[1])
 
     try:
         container: Container = client.containers.run(
@@ -135,7 +174,7 @@ async def run_trainer_container_image(
             command=command,
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
+                temp_cache_volume: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
             },
             remove=False,
             shm_size=shm_size,
@@ -152,10 +191,11 @@ async def run_trainer_container_image(
         )
 
         log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
-        return container
+        return container, temp_cache_volume
     except Exception as e:
         logger.error(e)
-        return e
+        cleanup_temp_volume(temp_cache_volume)
+        return e, temp_cache_volume
 
 
 async def run_trainer_container_text(
@@ -171,7 +211,7 @@ async def run_trainer_container_text(
     hours_to_complete: float,
     docker_labels: dict[str, str] | None = None,
     gpu_ids: list[int] = [0],
-) -> Container:
+) -> tuple[Container, str]:
     client: docker.DockerClient = docker.from_env()
 
     environment = build_wandb_env(task_id, hotkey)
@@ -199,9 +239,11 @@ async def run_trainer_container_text(
 
     # Calculate resources based on GPU count
     memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
-    
+
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
+
+    temp_cache_volume = copy_cache_to_temp_volume(cst.VOLUME_NAMES[1])
 
     try:
         container: Container = client.containers.run(
@@ -209,7 +251,7 @@ async def run_trainer_container_text(
             command=command,
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
+                temp_cache_volume: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
             },
             remove=False,
             shm_size=shm_size,
@@ -226,10 +268,11 @@ async def run_trainer_container_text(
         )
 
         log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
-        return container
+        return container, temp_cache_volume
     except Exception as e:
         logger.error(e)
-        return e
+        cleanup_temp_volume(temp_cache_volume)
+        return e, temp_cache_volume
 
 
 async def create_volumes_if_dont_exist():
@@ -479,7 +522,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         await log_task(training_data.task_id, task.hotkey, f"Docker image built with tag: {tag}")
 
         if task_type == TaskType.IMAGETASK:
-            container = await asyncio.wait_for(
+            container, temp_cache_volume = await asyncio.wait_for(
                 run_trainer_container_image(
                     task_id=training_data.task_id,
                     tag=tag,
@@ -495,7 +538,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                 timeout=60,
             )
         else:
-            container = await asyncio.wait_for(
+            container, temp_cache_volume = await asyncio.wait_for(
                 run_trainer_container_text(
                     task_id=training_data.task_id,
                     hotkey=task.hotkey,
@@ -558,7 +601,10 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             except Exception as cleanup_err:
                 await log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
 
+
         logger.info("Cleaning up")
+        if "temp_cache_volume" in locals():
+            cleanup_temp_volume(temp_cache_volume)
         if tag:
             delete_image_and_cleanup(tag)
             logger.info("Cleaned up Docker resources.")
