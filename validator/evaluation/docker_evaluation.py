@@ -13,10 +13,10 @@ from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
 from core.models.payload_models import EvaluationResultImage
 from core.models.payload_models import EvaluationResultText
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import InstructTextDatasetType
 from core.utils import download_s3_file
@@ -27,6 +27,17 @@ from validator.utils.logging import stream_container_logs
 
 
 logger = get_logger(__name__)
+
+
+async def cleanup_resources(client):
+    """Clean up Docker resources including containers, images, and volumes."""
+    try:
+        await asyncio.to_thread(client.containers.prune)
+        await asyncio.to_thread(client.images.prune, filters={"dangling": True})
+        await asyncio.to_thread(client.volumes.prune)
+        logger.debug("Completed Docker resource cleanup")
+    except Exception as e:
+        logger.error(f"Cleanup failed: {str(e)}")
 
 
 async def get_evaluation_results(container):
@@ -62,30 +73,11 @@ def process_evaluation_results(results: dict, is_image: bool = False) -> DockerE
         if isinstance(result, str) and not isinstance(result, dict):
             processed_results[repo] = Exception(result)
         else:
-            # Handle when result is a list (GRPO specific issue)
-            if isinstance(result, list):
-                logger.warning(f"Converting list result to proper format for repo {repo}: {result}")
-
-                # Extract the score from the list format
-                if len(result) > 0 and isinstance(result[0], dict):
-                    # Find our key-value pair in the first dict of the list
-                    for key, value in result[0].items():
-                        if repo in key:
-                            processed_results[repo] = EvaluationResultText.model_validate({
-                                "is_finetune": True,
-                                "eval_loss": value
-                            })
-                            break
-                    else:
-                        processed_results[repo] = Exception(f"Could not extract eval_loss from list result: {result}")
-                else:
-                    processed_results[repo] = Exception(f"Invalid result format: {result}")
+            if is_image:
+                result["is_finetune"] = True
+                processed_results[repo] = EvaluationResultImage.model_validate(result)
             else:
-                if is_image:
-                    result["is_finetune"] = True
-                    processed_results[repo] = EvaluationResultImage.model_validate(result)
-                else:
-                    processed_results[repo] = EvaluationResultText.model_validate(result)
+                processed_results[repo] = EvaluationResultText.model_validate(result)
 
     return DockerEvaluationResults(
         results=processed_results,
@@ -107,7 +99,7 @@ async def run_evaluation_docker_text(
     elif isinstance(dataset_type, DpoDatasetType):
         command = ["python", "-m", "validator.evaluation.eval_dpo"]
     elif isinstance(dataset_type, GrpoDatasetType):
-        command = ["python", "-m", "validator.evaluation.eval_grpo"]
+        return await run_evaluation_docker_grpo(dataset, models, original_model, dataset_type, file_format, gpu_ids)
     else:
         raise ValueError(f"Unsupported dataset type: {type(dataset_type)}")
     task_type = type(dataset_type).__name__
@@ -138,15 +130,6 @@ async def run_evaluation_docker_text(
         }
     }
 
-    async def cleanup_resources():
-        try:
-            await asyncio.to_thread(client.containers.prune)
-            await asyncio.to_thread(client.images.prune, filters={"dangling": True})
-            await asyncio.to_thread(client.volumes.prune)
-            logger.debug("Completed Docker resource cleanup")
-        except Exception as e:
-            logger.error(f"Cleanup failed: {str(e)}")
-
     try:
         container: Container = await asyncio.to_thread(
             client.containers.run,
@@ -175,10 +158,94 @@ async def run_evaluation_docker_text(
     finally:
         try:
             await asyncio.to_thread(container.remove, force=True)
-            await cleanup_resources()
+            await cleanup_resources(client)
         except Exception as e:
             logger.info(f"A problem with cleaning up {e}")
         client.close()
+
+
+async def run_evaluation_docker_grpo(
+    dataset: str,
+    models: list[str],
+    original_model: str,
+    dataset_type: GrpoDatasetType,
+    file_format: FileFormat,
+    gpu_ids: list[int],
+) -> DockerEvaluationResults:
+    """
+    Run GRPO evaluation with separate containers for each model repo.
+    This approach launches one container per repo and merges results.
+    """
+    command = ["python", "-m", "validator.evaluation.eval_grpo"]
+    dataset_type_str = dataset_type.model_dump_json()
+    dataset_filename = os.path.basename(dataset)
+    dataset_dir = os.path.dirname(os.path.abspath(dataset))
+
+    # Shared environment settings
+    base_environment = {
+        "DATASET": f"/workspace/input_data/{dataset_filename}",
+        "ORIGINAL_MODEL": original_model,
+        "DATASET_TYPE": dataset_type_str,
+        "FILE_FORMAT": file_format.value,
+        "TRANSFORMERS_ALLOW_TORCH_LOAD": "true",
+    }
+
+    volume_bindings = {
+        dataset_dir: {
+            "bind": "/workspace/input_data",
+            "mode": "ro",
+        },
+        os.path.expanduser(cst.CACHE_DIR_HUB): {
+            "bind": "/root/.cache/huggingface/hub",
+            "mode": "rw",
+        }
+    }
+
+    logger.info(f"Starting sequential GRPO evaluation for {len(models)} repos: {models}")
+
+    evaluation_results = {}
+    for repo in models:
+        client = docker.from_env()
+        environment = base_environment.copy()
+        environment["MODELS"] = repo
+
+        try:
+            container: Container = await asyncio.to_thread(
+                client.containers.run,
+                cst.VALIDATOR_DOCKER_IMAGE,
+                command=command,
+                environment=environment,
+                volumes=volume_bindings,
+                runtime="nvidia",
+                device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
+                detach=True,
+            )
+
+            log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+            result = await asyncio.to_thread(container.wait)
+            log_task.cancel()
+
+            if result["StatusCode"] != 0:
+                evaluation_results[repo] = Exception(f"Container for {repo} exited with status {result['StatusCode']}")
+            else:
+                eval_results = await get_evaluation_results(container)
+                evaluation_results[repo] = eval_results[repo]
+                if "model_params_count" in eval_results and "model_params_count" not in evaluation_results:
+                    evaluation_results["model_params_count"] = eval_results["model_params_count"]
+
+        except Exception as e:
+            logger.error(f"Failed to evaluate repo {repo}: {str(e)}", exc_info=True)
+            evaluation_results[repo] = str(e)
+
+        finally:
+            try:
+                await asyncio.to_thread(container.remove, force=True)
+                await cleanup_resources(client)
+            except Exception as e:
+                logger.info(f"Problem with cleaning up container for {repo}: {e}")
+            client.close()
+
+    return process_evaluation_results(evaluation_results, is_image=False)
 
 
 async def run_evaluation_docker_image(
@@ -225,15 +292,6 @@ async def run_evaluation_docker_image(
         "TRANSFORMERS_ALLOW_TORCH_LOAD": "true",
     }
 
-    async def cleanup_resources():
-        try:
-            await asyncio.to_thread(client.containers.prune)
-            await asyncio.to_thread(client.images.prune, filters={"dangling": True})
-            await asyncio.to_thread(client.volumes.prune)
-            logger.debug("Completed Docker resource cleanup")
-        except Exception as e:
-            logger.error(f"Cleanup failed: {str(e)}")
-
     try:
         container = await asyncio.to_thread(
             client.containers.run,
@@ -261,7 +319,7 @@ async def run_evaluation_docker_image(
     finally:
         try:
             await asyncio.to_thread(container.remove, force=True)
-            await cleanup_resources()
+            await cleanup_resources(client)
             if os.path.exists(dataset_dir):
                 shutil.rmtree(dataset_dir)
         except Exception as e:
