@@ -125,7 +125,7 @@ async def run_trainer_container_image(
 
     # Calculate resources based on GPU count
     memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
-    
+
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
 
@@ -199,7 +199,7 @@ async def run_trainer_container_text(
 
     # Calculate resources based on GPU count
     memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
-    
+
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
 
@@ -322,6 +322,7 @@ async def upload_repo_to_hf(
     wandb_token: str | None = None,
     path_in_repo: str | None = None,
 ):
+    container = None
     try:
         client = docker.from_env()
 
@@ -388,6 +389,17 @@ async def upload_repo_to_hf(
     except Exception as e:
         logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}")
         raise
+
+    finally:
+        if container:
+            try:
+                container.reload()
+                if container.status == "running":
+                    container.kill()
+                container.remove(force=True)
+                logger.info(f"Upload container {container.name} cleaned up successfully.")
+            except Exception as cleanup_err:
+                logger.warning(f"Failed to remove upload container {container.name if container else 'unknown'}: {cleanup_err}")
 
 
 def get_task_type(request: TrainerProxyRequest) -> TaskType:
