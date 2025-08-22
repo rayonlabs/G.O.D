@@ -392,6 +392,7 @@ class Img2ImgPayload(BaseModel):
     height: int = 1024
     width: int = 1024
     model_type: str = "sdxl"
+    seed: int | None = None
     is_safetensors: bool = True
     prompt: str | None = None
     base_image: str | None = None

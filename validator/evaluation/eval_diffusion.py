@@ -1,5 +1,6 @@
 import json
 import os
+import random
 
 import numpy as np
 import safetensors.torch
@@ -25,6 +26,10 @@ from validator.utils.retry_utils import retry_on_5xx
 logger = get_logger(__name__)
 hf_api = HfApi()
 
+
+def generate_reproducible_seeds(master_seed: int, n: int = 10) -> list[int]:
+    random.seed(master_seed) 
+    return [random.randint(0, 2**32 - 1) for _ in range(n)]
 
 def load_comfy_workflows(model_type: str):
     if model_type == ImageModelType.SDXL.value:
@@ -139,7 +144,7 @@ def calculate_l2_loss(test_image: Image.Image, generated_image: Image.Image) -> 
 
 
 def edit_workflow(
-    payload: dict, edit_elements: Img2ImgPayload, text_guided: bool, model_type: str, is_safetensors: bool = True
+    payload: dict, edit_elements: Img2ImgPayload, text_guided: bool, model_type: str, seed: int, is_safetensors: bool = True
 ) -> dict:
     if model_type == ImageModelType.SDXL.value:
         if is_safetensors:
@@ -153,6 +158,7 @@ def edit_workflow(
         payload["CFG"]["inputs"]["guidance"] = edit_elements.cfg
 
     payload["Sampler"]["inputs"]["steps"] = edit_elements.steps
+    payload["Sampler"]["inputs"]["seed"] = edit_elements.seed
     payload["Sampler"]["inputs"]["denoise"] = edit_elements.denoise
     payload["Image_loader"]["inputs"]["image"] = edit_elements.base_image
     payload["Lora_loader"]["inputs"]["lora_name"] = edit_elements.lora_name
@@ -175,6 +181,7 @@ def inference(image_base64: str, params: Img2ImgPayload, use_prompt: bool = Fals
         edit_elements=params,
         text_guided=use_prompt,
         model_type=params.model_type,
+        seed=params.seed,
         is_safetensors=params.is_safetensors,
     )
     lora_gen = api_gate.generate(lora_payload)[0]
@@ -185,8 +192,8 @@ def inference(image_base64: str, params: Img2ImgPayload, use_prompt: bool = Fals
 
 
 def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float]]:
-    lora_losses_text_guided = []
-    lora_losses_no_text = []
+    total_text_guided_losses = []
+    total_no_text_losses = []
 
     test_images_list = list_supported_images(dataset_path, cst.SUPPORTED_IMAGE_FILE_EXTENSIONS)
 
@@ -202,11 +209,17 @@ def eval_loop(dataset_path: str, params: Img2ImgPayload) -> dict[str, list[float
         prompt = read_prompt_file(txt_path)
 
         params.prompt = prompt
+        seeds = generate_reproducible_seeds(master_seed=42, n=10)
+        text_guided_losses = []
+        no_text_losses = []
+        for seed in seeds:
+            params.seed = seed
+            text_guided_losses.append(inference(image_base64, params, use_prompt=True))
+            no_text_losses.append(inference(image_base64, params, use_prompt=False))
+        total_text_guided_losses.append(np.mean(text_guided_losses))
+        total_no_text_losses.append(np.mean(no_text_losses))
 
-        lora_losses_text_guided.append(inference(image_base64, params, use_prompt=True))
-        lora_losses_no_text.append(inference(image_base64, params, use_prompt=False))
-
-    return {"text_guided_losses": lora_losses_text_guided, "no_text_losses": lora_losses_no_text}
+    return {"text_guided_losses": total_text_guided_losses, "no_text_losses": total_no_text_losses}
 
 
 def _count_model_parameters(model_path: str, is_safetensors: bool) -> int:
