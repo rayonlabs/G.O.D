@@ -61,6 +61,7 @@ from validator.tournament.boss_round_sync import _copy_task_to_general
 from validator.tournament.boss_round_sync import get_synced_task_id
 from validator.tournament.boss_round_sync import get_synced_task_ids
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
+from validator.tournament.orchestrator import validate_repo_obfuscation
 from validator.tournament.repo_uploader import upload_tournament_participant_repository
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
@@ -563,9 +564,29 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
         logger.info(f"Selected top {len(selected_nodes)} responders by boosted stake")
 
-        # Add selected participants to tournament
-        miners_that_accept_and_give_repos = 0
+        # Validate obfuscation for all selected nodes upfront
+        logger.info("Validating obfuscation for selected participants...")
+        validated_nodes = []
         for responding_node in selected_nodes:
+            repo_url = responding_node.training_repo_response.github_repo
+            logger.info(f"Checking obfuscation for {responding_node.node.hotkey}'s repo: {repo_url}")
+            
+            is_not_obfuscated = await validate_repo_obfuscation(repo_url)
+            
+            if is_not_obfuscated:
+                validated_nodes.append(responding_node)
+                logger.info(f"Repository {repo_url} passed obfuscation check for hotkey {responding_node.node.hotkey}")
+            else:
+                logger.warning(
+                    f"Repository {repo_url} failed obfuscation validation for hotkey {responding_node.node.hotkey}. "
+                    f"Excluding from tournament."
+                )
+
+        logger.info(f"Obfuscation validation complete: {len(validated_nodes)}/{len(selected_nodes)} nodes passed")
+
+        # Add validated participants to tournament
+        miners_that_accept_and_give_repos = 0
+        for responding_node in validated_nodes:
             participant = TournamentParticipant(
                 tournament_id=tournament_id, hotkey=responding_node.node.hotkey, stake_required=responding_node.actual_stake
             )
