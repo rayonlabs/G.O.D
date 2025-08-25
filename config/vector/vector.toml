@@ -10,16 +10,15 @@ address = "0.0.0.0:8686"
 [sources.docker_logs]
 type = "docker_logs"
 docker_host = "unix:///var/run/docker.sock"
-# Collect ALL container logs and include their labels
+
 include_labels = ["task_id", "hotkey", "model", "task_type"]
 
-# FastAPI host → Vector via HTTP JSON
 [sources.fastapi_logs]
 type     = "http_server"
 address  = "0.0.0.0:8688"   # expose 8688 if Vector runs in Docker
 encoding = "json"
 
-# Vector's own metrics
+
 [sources.internal_metrics]
 type = "internal_metrics"
 
@@ -101,7 +100,6 @@ del(.label_task_type)
 del(.label_expected_repo)
 """
 
-# Optional: keep, even if not used by Loki sink right now
 [transforms.filter_noise]
 type = "filter"
 inputs = ["parse_logs"]
@@ -160,9 +158,6 @@ if ts_ms != null && ts_ms > 1_600_000_000_000 && ts_ms < 4_100_000_000_000 {
 .count = 1
 """
 
-
-
-# You keep your reduce in case you use it later; sink will bypass it
 [transforms.batch_logs]
 group_by = ["task_id", "container_name", "container_id", "task_type", "model", "hotkey"]
 merge_strategies.message = "concat_newline"
@@ -174,7 +169,6 @@ flush_period_ms = 5000
 # -------------------------
 [sinks.loki]
 type = "loki"
-# SHIP BOTH: your working docker path + new fastapi path
 inputs = ["parse_logs", "normalize_fastapi"]
 endpoint = "${LOKI_ENDPOINT}"
 auth.strategy = "basic"
@@ -188,7 +182,7 @@ request.retry_attempts = 3
 request.retry_initial_backoff_secs = 1
 tls.verify_certificate = false
 
-# Loki stream labels (same keys as before)
+
 labels.job = "docker-training-containers"
 labels.task_id = "{{ task_id }}"
 labels.hotkey = "{{ hotkey }}"
