@@ -21,11 +21,7 @@ from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
 from validator.core.constants import PROXY_TRAINING_IMAGE_ENDPOINT
 from validator.core.constants import TASK_DETAILS_ENDPOINT
 from validator.core.constants import GET_RECENT_TASKS_ENDPOINT
-from validator.utils.logging import get_logger
-
-
-logger = get_logger(__name__)
-
+from trainer.utils.logging import logger
 
 load_task_history()
 
@@ -45,7 +41,8 @@ async def start_training(req: TrainerProxyRequest) -> JSONResponse:
         await complete_task(req.training_data.task_id, req.hotkey, success=False)
         raise HTTPException(status_code=400, detail=str(e))
 
-    logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}")
+    logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}",
+                extra={"task_id": req.training_data.task_id, "hotkey": req.hotkey, "model": req.training_data.model})
 
     asyncio.create_task(start_training_task(req, local_repo_path))
 

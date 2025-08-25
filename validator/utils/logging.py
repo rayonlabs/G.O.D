@@ -92,8 +92,9 @@ class ContextTagsFilter(logging.Filter):
         return True
 
 
-def stream_container_logs(container: Container, log_context: dict | None = None):
-    logger = get_logger(__name__)
+def stream_container_logs(container: Container, logger: Logger | None = None, log_context: dict | None = None):
+    if not logger:
+        logger = get_logger(__name__)
 
     if not log_context:
         log_context = {}
@@ -111,15 +112,16 @@ def stream_container_logs(container: Container, log_context: dict | None = None)
                     if line:
                         logger.info(line)
             if buffer:
-                logger.info(buffer)
+                logger.info(buffer, extra=log_context)
         except Exception as e:
-            logger.error(f"Error streaming logs: {str(e)}")
+            logger.error(f"Error streaming logs: {str(e)}", extra=log_context)
         finally:
             remove_context_tag("docker_container_name")
 
 
-def stream_image_build_logs(logs: list[dict], log_context: dict = None):
-    logger = get_logger(__name__)
+def stream_image_build_logs(logs: list[dict], logger: Logger | None = None, log_context: dict = None):
+    if not logger:
+        logger = get_logger(__name__)
     if not log_context:
         log_context = {}
 
@@ -134,11 +136,11 @@ def stream_image_build_logs(logs: list[dict], log_context: dict = None):
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
                     if line.strip():
-                        logger.info(line.strip())
+                        logger.info(line.strip(), extra=log_context)
             if buffer.strip():
-                logger.info(buffer.strip())
+                logger.info(buffer.strip(), extra=log_context)
         except Exception as e:
-            logger.error(f"Error streaming image build logs: {str(e)}")
+            logger.error(f"Error streaming image build logs: {str(e)}", extra=log_context)
         finally:
             remove_context_tag("docker_stage")
 

@@ -8,6 +8,7 @@ HF_UPLOAD_DOCKER_IMAGE = "diagonalge/hf-uploader:latest"
 TRAINER_DOWNLOADER_DOCKER_IMAGE = "diagonalge/trainer-downloader:latest"
 CACHE_CLEANER_DOCKER_IMAGE = "diagonalge/cache-cleaner:latest"
 IMAGE_TASKS_HF_SUBFOLDER_PATH = "checkpoints"
+VECTOR_URL = "http://localhost:8688"  # Vector http_server for logging
 
 # Dynamic resource allocation based on GPU count
 # For 8xH100 with 1440GB RAM and 252 CPUs
