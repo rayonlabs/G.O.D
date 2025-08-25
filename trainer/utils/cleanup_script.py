@@ -50,8 +50,6 @@ def clean_checkpoints(task_history: list[dict]):
         finished_at = task.get("finished_at")
         task_id_to_times.setdefault(task_id, []).append(finished_at)
 
-    print(task_id_to_times.items())
-
     for task_id, finished_list in task_id_to_times.items():
 
         if all(is_older_than(finished_at, CUTOFF_HOURS) for finished_at in finished_list):
