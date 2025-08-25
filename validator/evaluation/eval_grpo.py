@@ -199,21 +199,21 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
 
-    tokenizer = load_tokenizer(evaluation_args.original_model)
+    tokenizer = load_tokenizer(evaluation_args.original_model, local_files_only=True)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
     try:
-        if check_for_lora(repo):
+        if check_for_lora(repo, local_files_only=True):
             logger.info("LoRA adapter detected. Loading as with Peft")
-            finetuned_model = load_finetuned_model(repo)
+            finetuned_model = load_finetuned_model(repo, local_files_only=True)
             is_finetune = True
         else:
             logger.info("No LoRA adapter detected. Loading full model")
-            finetuned_model = load_model(repo, is_base_model=False)
+            finetuned_model = load_model(repo, is_base_model=False, local_files_only=True)
             try:
-                is_finetune = model_is_a_finetune(evaluation_args.original_model, finetuned_model)
+                is_finetune = model_is_a_finetune(evaluation_args.original_model, finetuned_model, local_files_only=True)
             except Exception as e:
                 logger.info(f"Problem with detection of finetune for {repo}: {e}")
                 logger.info("Assuming False")

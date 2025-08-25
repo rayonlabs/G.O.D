@@ -27,6 +27,7 @@ CONFIG_DIR = "core/config/"
 OUTPUT_DIR = "core/outputs/"
 CACHE_DIR = "~/.cache/huggingface"
 CACHE_DIR_HUB = os.path.expanduser("~/.cache/huggingface/hub")
+GRPO_MINER_OUTPUT_DIR = "/root/.cache/huggingface/hub/trained_repo"
 DIFFUSION_DATASET_DIR = "core/dataset/images"
 CONTAINER_FLUX_PATH = "/app/flux/unet"
 
@@ -56,7 +57,7 @@ RAYONLABS_HF_USERNAME = "rayonlabs"
 CUSTOM_DATASET_TYPE = "custom"
 
 # DPO default dataset type
-DPO_DEFAULT_DATASET_TYPE = "chatml.default" 
+DPO_DEFAULT_DATASET_TYPE = "chatml.default"
 # Field names must match exactly what Axolotl's formatter expects
 DPO_DEFAULT_FIELD_PROMPT = "question"  # chatml.intel expects 'question'
 DPO_DEFAULT_FIELD_SYSTEM = "system"

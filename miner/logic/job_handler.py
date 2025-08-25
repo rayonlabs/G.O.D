@@ -20,14 +20,14 @@ from core.config.config_handler import update_flash_attention
 from core.config.config_handler import update_model_info
 from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.docker_utils import stream_logs
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DiffusionJob
 from core.models.utility_models import DpoDatasetType
-from core.models.utility_models import TextDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import InstructTextDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
+from core.models.utility_models import TextDatasetType
 from core.models.utility_models import TextJob
 from miner.utils import download_flux_unet
 
@@ -104,8 +104,9 @@ def _load_and_modify_config(
         config["trl"]["reward_weights"] = [reward_function.reward_weight for reward_function in dataset_type.reward_functions]
 
     config = update_flash_attention(config, model)
-    config = update_model_info(config, model, task_id, expected_repo_name)
+    config = update_model_info(config, model, task_id, expected_repo_name, dataset_type=dataset_type)
     config["mlflow_experiment_name"] = dataset
+    config["output_dir"] = cst.GRPO_MINER_OUTPUT_DIR
 
     return config
 
@@ -364,8 +365,102 @@ def _adapt_columns_for_grpo_dataset(dataset_path: str, dataset_type: GrpoDataset
     with open(dataset_path, 'w') as f:
         json.dump(output_data, f, indent=2)
 
+
+def _create_hf_cache_volume(docker_client, volume_name: str):
+    """
+    Create a Docker volume for HuggingFace model cache.
+    """
+    try:
+        volume = docker_client.volumes.get(volume_name)
+        logger.info(f"Using existing volume: {volume_name}")
+        return volume
+    except docker.errors.NotFound:
+        logger.info(f"Creating new volume: {volume_name}")
+        return docker_client.volumes.create(name=volume_name)
+
+
+def _populate_hf_cache_volume(docker_client, volume_name: str, model: str):
+    """
+    Download model and populate the HF cache volume using a temporary container.
+    """
+    logger.info(f"Downloading model to volume: {model}")
+
+    temp_container = docker_client.containers.run(
+        image=cst.MINER_DOCKER_IMAGE,
+        command=["/bin/bash", "-c", f"python -c \"from huggingface_hub import snapshot_download; snapshot_download('{model}')\""],
+        volumes={volume_name: {"bind": "/root/.cache/huggingface", "mode": "rw"}},
+        detach=True,
+        remove=True
+    )
+
+    result = temp_container.wait()
+    if result["StatusCode"] != 0:
+        logs = temp_container.logs().decode()
+        raise DockerException(f"Failed to download model {model}: {logs}")
+
+
+def _run_grpo_upload_container(docker_client, job: TextJob, volume_bindings: dict):
+    """
+    Run a separate container with network access to upload the GRPO trained model to HuggingFace.
+    """
+    logger.info("Running upload container for GRPO model...")
+
+    upload_script = f"""
+huggingface-cli login --token "$HUGGINGFACE_TOKEN" --add-to-git-credential && \\
+python -c "
+from huggingface_hub import HfApi
+import os
+
+api = HfApi(token=os.environ['HUGGINGFACE_TOKEN'])
+api.create_repo(os.environ['HUB_MODEL_ID'], exist_ok=True, private=False)
+api.upload_folder(folder_path='{cst.GRPO_MINER_OUTPUT_DIR}', repo_id=os.environ['HUB_MODEL_ID'])
+print('Upload completed successfully')
+"
+"""
+
+    docker_env = {
+        "HUGGINGFACE_TOKEN": cst.HUGGINGFACE_TOKEN,
+        "HUB_MODEL_ID": f"{cst.HUGGINGFACE_USERNAME}/{job.expected_repo_name or str(uuid.uuid4())}"
+    }
+
+    upload_container = docker_client.containers.run(
+        image=cst.MINER_DOCKER_IMAGE,
+        environment=docker_env,
+        volumes=volume_bindings,
+        detach=True,
+        tty=True,
+        command=["/bin/bash", "-c", upload_script]
+    )
+
+    try:
+        stream_logs(upload_container)
+        result = upload_container.wait()
+
+        if result["StatusCode"] != 0:
+            logger.warning(f"Upload container exited with status {result['StatusCode']}")
+        else:
+            logger.info("Model upload completed successfully")
+
+    finally:
+        upload_container.remove(force=True)
+
 def _create_docker_entrypoint(job):
-    setup_commands = """
+    # For GRPO, skip network-dependent operations (HF/W&B login) since running offline
+    if isinstance(job.dataset_type, GrpoDatasetType):
+        setup_commands = """
+    echo 'Preparing data for GRPO (offline mode)...' && \\
+    if [ "$DATASET_TYPE" != "hf" ] && [ -f "/workspace/input_data/${DATASET_FILENAME}" ]; then \\
+    cp /workspace/input_data/${DATASET_FILENAME} /workspace/axolotl/${DATASET_FILENAME}; \\
+    fi"""
+
+        reward_file = f"rewards_{job.job_id}.py"
+        grpo_command = f"""
+    echo "Moving specific reward function file to src directory..." && \\
+    cp ${{CONFIG_DIR}}/{reward_file} /workspace/axolotl/src/"""
+        setup_commands += " && \\" + grpo_command
+    else:
+        # Standard setup with network access for non-GRPO jobs
+        setup_commands = """
     echo 'Preparing data...' && \\
     if [ -n "$HUGGINGFACE_TOKEN" ]; then \\
     echo "Attempting to log in to Hugging Face" && \\
@@ -382,13 +477,6 @@ def _create_docker_entrypoint(job):
     if [ "$DATASET_TYPE" != "hf" ] && [ -f "/workspace/input_data/${DATASET_FILENAME}" ]; then \\
     cp /workspace/input_data/${DATASET_FILENAME} /workspace/axolotl/${DATASET_FILENAME}; \\
     fi"""
-
-    if isinstance(job.dataset_type, GrpoDatasetType):
-        reward_file = f"rewards_{job.job_id}.py"
-        grpo_command = f"""
-    echo "Moving specific reward function file to src directory..." && \\
-    cp ${{CONFIG_DIR}}/{reward_file} /workspace/axolotl/src/"""
-        setup_commands += " && \\" + grpo_command
 
     training_command = """
     echo 'Starting training command' && \\
@@ -468,16 +556,35 @@ def start_tuning_container(job: TextJob):
 
         _adapt_columns_for_dataset(job)
 
-        container = docker_client.containers.run(
-            image=cst.MINER_DOCKER_IMAGE,
-            environment=docker_env,
-            volumes=volume_bindings,
-            runtime="nvidia",
-            device_requests=[docker.types.DeviceRequest(count=1, capabilities=[["gpu"]])],
-            detach=True,
-            tty=True,
-            command=["/bin/bash", "-c", docker_entrypoint]
-        )
+        network_mode = None
+        if isinstance(job.dataset_type, GrpoDatasetType):
+            logger.info(f"GRPO job detected, downloading model beforehand: {job.model}")
+
+            volume_name = f"hf_cache_{job.job_id}"
+            _create_hf_cache_volume(docker_client, volume_name)
+            _populate_hf_cache_volume(docker_client, volume_name, job.model)
+
+            volume_bindings[volume_name] = {
+                "bind": "/root/.cache/huggingface",
+                "mode": "rw",
+            }
+            network_mode = "none"
+
+        container_kwargs = {
+            "image": cst.MINER_DOCKER_IMAGE,
+            "environment": docker_env,
+            "volumes": volume_bindings,
+            "runtime": "nvidia",
+            "device_requests": [docker.types.DeviceRequest(count=1, capabilities=[["gpu"]])],
+            "detach": True,
+            "tty": True,
+            "command": ["/bin/bash", "-c", docker_entrypoint]
+        }
+
+        if network_mode:
+            container_kwargs["network_mode"] = network_mode
+
+        container = docker_client.containers.run(**container_kwargs)
 
         last_logs = stream_logs(container)
 
@@ -485,6 +592,12 @@ def start_tuning_container(job: TextJob):
 
         if result["StatusCode"] != 0:
             raise DockerException(f"Container exited with non-zero status code: {result['StatusCode']}")
+
+        if isinstance(job.dataset_type, GrpoDatasetType):
+            try:
+                _run_grpo_upload_container(docker_client, job, volume_bindings)
+            except Exception as upload_error:
+                logger.error(f"Failed to upload GRPO model: {str(upload_error)}")
 
     except Exception as e:
         # Waiting for axolotl to fix the issue
@@ -495,11 +608,12 @@ def start_tuning_container(job: TextJob):
             raise
 
     finally:
-        repo = config.get("hub_model_id", None)
-        if repo:
-            hf_api = HfApi(token=cst.HUGGINGFACE_TOKEN)
-            hf_api.update_repo_visibility(repo_id=repo, private=False, token=cst.HUGGINGFACE_TOKEN)
-            logger.info(f"Successfully made repository {repo} public")
+        if not isinstance(job.dataset_type, GrpoDatasetType):
+            repo = config.get("hub_model_id", None)
+            if repo:
+                hf_api = HfApi(token=cst.HUGGINGFACE_TOKEN)
+                hf_api.update_repo_visibility(repo_id=repo, private=False, token=cst.HUGGINGFACE_TOKEN)
+                logger.info(f"Successfully made repository {repo} public")
 
         if "container" in locals():
             try:
@@ -507,3 +621,12 @@ def start_tuning_container(job: TextJob):
                 logger.info("Container removed")
             except Exception as e:
                 logger.warning(f"Failed to remove container: {e}")
+
+        if isinstance(job.dataset_type, GrpoDatasetType):
+            volume_name = f"hf_cache_{job.job_id}"
+            try:
+                volume = docker_client.volumes.get(volume_name)
+                volume.remove(force=True)
+                logger.info(f"Volume {volume_name} removed")
+            except Exception as e:
+                logger.warning(f"Failed to remove volume {volume_name}: {e}")
