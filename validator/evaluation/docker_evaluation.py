@@ -8,6 +8,7 @@ import tarfile
 import docker
 from docker.models.containers import Container
 from docker.types import Mount
+from huggingface_hub import snapshot_download
 
 from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
@@ -176,6 +177,9 @@ async def run_evaluation_docker_grpo(
     Run GRPO evaluation with separate containers for each model repo.
     This approach launches one container per repo and merges results.
     """
+    logger.info(f"Downloading original GRPO model: {original_model}")
+    await asyncio.to_thread(snapshot_download, repo_id=original_model)
+
     command = ["python", "-m", "validator.evaluation.eval_grpo"]
     dataset_type_str = dataset_type.model_dump_json()
     dataset_filename = os.path.basename(dataset)
@@ -208,6 +212,7 @@ async def run_evaluation_docker_grpo(
         client = docker.from_env()
         environment = base_environment.copy()
         environment["MODELS"] = repo
+        await asyncio.to_thread(snapshot_download, repo_id=repo)
 
         try:
             container: Container = await asyncio.to_thread(
@@ -219,6 +224,7 @@ async def run_evaluation_docker_grpo(
                 runtime="nvidia",
                 device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
                 detach=True,
+                network_mode="none",
             )
 
             log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
