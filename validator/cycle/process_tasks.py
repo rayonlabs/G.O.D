@@ -23,7 +23,7 @@ from validator.cycle.util_functions import get_model_num_params
 from validator.db.database import PSQLDB
 from validator.evaluation.scoring import evaluate_and_score
 from validator.utils.cache_clear import clean_all_hf_datasets_cache
-from validator.utils.cache_clear import manage_models_cache
+from validator.utils.cache_clear import run_model_cache_cleanup_container
 from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
@@ -435,7 +435,7 @@ async def cleanup_model_cache_loop(psql_db: PSQLDB):
                 else:
                     cache_stats[model_id]["cache_score"] = float("inf")
 
-            manage_models_cache(cache_stats, cst.MAX_CACHE_SIZE_BYTES)
+            await run_model_cache_cleanup_container(cache_stats, cst.MAX_CACHE_SIZE_BYTES)
         except Exception as e:
             logger.error(f"Error in cache cleanup: {e}", exc_info=True)
         finally:
