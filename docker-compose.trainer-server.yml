@@ -21,6 +21,7 @@ services:
     ports:
       - "8686:8686"   # Vector API
       - "9090:9090"   # Prometheus metrics exporter
+      - "8688:8688"   # FastAPI logs endpoint
     deploy:
       resources:
         limits:

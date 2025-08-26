@@ -10,10 +10,15 @@ address = "0.0.0.0:8686"
 [sources.docker_logs]
 type = "docker_logs"
 docker_host = "unix:///var/run/docker.sock"
-# Collect ALL container logs and include their labels
+
 include_labels = ["task_id", "hotkey", "model", "task_type"]
 
-# Vector's own metrics
+[sources.fastapi_logs]
+type     = "http_server"
+address  = "0.0.0.0:8688"   # expose 8688 if Vector runs in Docker
+encoding = "json"
+
+
 [sources.internal_metrics]
 type = "internal_metrics"
 
@@ -61,17 +66,15 @@ if match!(.message, re) {
 .trainer_server = get_hostname!()
 .environment    = get_env_var("ENVIRONMENT") ?? "production"
 
-# --- Robust Docker label mapping (handles .label_*, .labels.*, .docker.container_labels.*) ---
+# --- Docker label mapping ---
 task_id_   = null
 hotkey_    = null
 model_     = null
-task_type_ = null         
-
+task_type_ = null
 
 # task id
 if exists(.label) && exists(.label.task_id) && .label.task_id != null { task_id_ = .label.task_id }
 .task_id = to_string(task_id_) ?? "unknown"
-
 
 # hotkey
 if exists(.label) && exists(.label.hotkey) && .label.hotkey != null { hotkey_ = .label.hotkey }
@@ -84,8 +87,6 @@ if exists(.label) && exists(.label.model) && .label.model != null { model_ = .la
 # task_type
 if exists(.label) && exists(.label.task_type) && .label.task_type != null { task_type_ = .label.task_type }
 .task_type = to_string(task_type_) ?? "unknown"
-
-
 
 # --- Counter for reduce aggregation (you use this later) ---
 .count = 1
@@ -109,9 +110,55 @@ m, err = to_string(.message)
 !contains(m, "heartbeat")
 """
 
+# --- FastAPI normalizer (host logs → same fields/labels as Docker) ---
+[transforms.normalize_fastapi]
+inputs = ["fastapi_logs"]
+source = """
+# -------- message --------
+.message, _ = to_string(.message)
+
+# -------- level (prefer .level, fallback .levelname) --------
+lvl, _  = to_string(.level)
+lnm, _  = to_string(.levelname)
+if lvl != null && lvl != "" {
+  .level = upcase(lvl)
+} else if lnm != null && lnm != "" {
+  .level = upcase(lnm)
+} else {
+  .level = "INFO"
+}
+
+# -------- direct fields from FastAPI payload --------
+tid,   _ = to_string(.task_id)
+hk,    _ = to_string(.hotkey)
+mdl,   _ = to_string(.model)
+tt,    _ = to_string(.task_type)
+cname, _ = to_string(.container_name)
+cid,   _ = to_string(.container_id)
+svc,   _ = to_string(.service_name)
+rid,   _ = to_string(.request_id)
+stage, _ = to_string(.docker_stage)
+
+.task_id        = if tid   != null && tid   != "" { tid }   else { "unknown" }
+.hotkey         = if hk    != null && hk    != "" { hk }    else { "unknown" }
+.model          = if mdl   != null && mdl   != "" { mdl }   else { "unknown" }
+.task_type      = if tt    != null && tt    != "" { tt }    else { "app" }
+.container_name = if cname != null && cname != "" { cname } else if svc != null && svc != "" { svc } else { "fastapi" }
+.container_id   = if cid   != null && cid   != "" { cid }   else if rid != null && rid != "" { rid } else { "fastapi-host" }
+.docker_stage   = if stage != null && stage != "" { stage } else { "app" }
+
+# -------- timestamp: accept epoch ms if plausible, else now() --------
+ts_ms, _ = to_int(.timestamp)
+if ts_ms != null && ts_ms > 1_600_000_000_000 && ts_ms < 4_100_000_000_000 {
+  .timestamp = from_unix_timestamp(ts_ms, unit: "milliseconds") ?? now()
+} else {
+  .timestamp = now()
+}
+
+.count = 1
+"""
+
 [transforms.batch_logs]
-type = "reduce"
-inputs = ["filter_noise"]
 group_by = ["task_id", "container_name", "container_id", "task_type", "model", "hotkey"]
 merge_strategies.message = "concat_newline"
 merge_strategies.count   = "sum"
@@ -122,7 +169,7 @@ flush_period_ms = 5000
 # -------------------------
 [sinks.loki]
 type = "loki"
-inputs = ["parse_logs"]  # Skip filter_noise and batch_logs for now
+inputs = ["parse_logs", "normalize_fastapi"]
 endpoint = "${LOKI_ENDPOINT}"
 auth.strategy = "basic"
 auth.user = "${LOKI_USERNAME}"
@@ -135,7 +182,7 @@ request.retry_attempts = 3
 request.retry_initial_backoff_secs = 1
 tls.verify_certificate = false
 
-# Loki stream labels
+
 labels.job = "docker-training-containers"
 labels.task_id = "{{ task_id }}"
 labels.hotkey = "{{ hotkey }}"
@@ -149,4 +196,5 @@ labels.model = "{{ model }}"
 type = "prometheus_exporter"
 inputs = ["internal_metrics"]
 address = "0.0.0.0:9090"
+
 default_namespace = "vector"
