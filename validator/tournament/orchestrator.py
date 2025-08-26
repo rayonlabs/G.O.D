@@ -313,7 +313,6 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 pending_training_tasks.pop()
                 continue
 
-            # Validate repository obfuscation
             training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
                 oldest_task_training.hotkey, config.psql_db
             )
@@ -321,20 +320,6 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
             if training_repo is None:
                 logger.error(
                     f"No training repository found for hotkey {oldest_task_training.hotkey} in tournament_participants table"
-                )
-                await tournament_sql.update_tournament_task_training_status(
-                    task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
-                )
-                pending_training_tasks.pop()
-                continue
-
-            logger.info(f"Validating obfuscation for repository: {training_repo}")
-            # TODO: why not check commit hash?
-            is_not_obfuscated = await validate_repo_obfuscation(training_repo)
-
-            if not is_not_obfuscated:
-                logger.warning(
-                    f"Repository {training_repo} failed obfuscation validation for hotkey {oldest_task_training.hotkey}"
                 )
                 await tournament_sql.update_tournament_task_training_status(
                     task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
@@ -378,6 +363,10 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                         f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} for training "
                         f"on trainer {trainer_ip} with GPUs {gpu_ids} for {training_task.task.hours_to_complete} hours"
                     )
+                    
+                    # Add 5 minute delay between sending jobs to avoid overwhelming trainers
+                    logger.info("Waiting 5 minutes before scheduling next task to avoid overwhelming trainers")
+                    await asyncio.sleep(300)  # 5 minutes = 300 seconds
 
                 else:
                     logger.error(f"Failed to start training for task {training_task.task.task_id} on trainer {trainer_ip}")

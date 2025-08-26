@@ -125,7 +125,7 @@ async def run_trainer_container_image(
 
     # Calculate resources based on GPU count
     memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
-    
+
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
 
@@ -135,7 +135,7 @@ async def run_trainer_container_image(
             command=command,
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
+                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
             },
             remove=False,
             shm_size=shm_size,
@@ -199,7 +199,7 @@ async def run_trainer_container_text(
 
     # Calculate resources based on GPU count
     memory_limit, cpu_limit_nanocpus = calculate_container_resources(gpu_ids)
-    
+
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
 
@@ -209,7 +209,7 @@ async def run_trainer_container_text(
             command=command,
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "rw"},
+                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
             },
             remove=False,
             shm_size=shm_size,
@@ -322,9 +322,9 @@ async def upload_repo_to_hf(
     wandb_token: str | None = None,
     path_in_repo: str | None = None,
 ):
+    container = None
     try:
         client = docker.from_env()
-
         local_container_folder = train_paths.get_checkpoints_output_path(task_id, expected_repo_name)
 
         environment = {
@@ -357,29 +357,43 @@ async def upload_repo_to_hf(
             name=container_name,
         )
 
-        log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+        log_streaming_task = asyncio.create_task(
+            asyncio.to_thread(stream_container_logs, container, get_all_context_tags())
+        )
 
         result = container.wait()
         logs = container.logs().decode("utf-8", errors="ignore")
         exit_code = result.get("StatusCode", -1)
-        if exit_code == 0:
-            logger.info(f"Download completed successfully for task {task_id}", extra=log_labels)
-            if wandb_token:
-                match = re.search(r"https://wandb\.ai/\S+", logs)
-                wandb_url = match.group(0) if match else None
-                if wandb_url:
-                    await update_wandb_url(task_id, hotkey, wandb_url)
-        else:
-            error_message = extract_container_error(logs)
-            if error_message:
-                await log_task(
-                    task_id, hotkey, f"[ERROR] Upload container failed | ExitCode: {exit_code} | LastError: {error_message}"
-                )
-                logger.error(f"Upload container failed: {error_message}", extra=log_labels)
+        wandb_url = None
+        if wandb_token:
+            m = re.search(r"https://wandb\.ai/\S+", logs)
+            wandb_url = m.group(0) if m else None
+            if wandb_url:
+                await update_wandb_url(task_id, hotkey, wandb_url)
+
+        if exit_code != 0:
+            last_err = extract_container_error(logs) or "unknown error"
+            msg = (f"HF upload failed | exit_code={exit_code} | container={container_name} | "
+                   f"last_error={last_err}")
+            await log_task(task_id, hotkey, f"[ERROR] {msg}")
+            raise RuntimeError(msg)
 
     except Exception as e:
         logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}", extra=log_labels)
         raise
+
+    finally:
+        if container:
+            try:
+                container.reload()
+                if container.status == "running":
+                    container.kill()
+                container.remove(force=True)
+            except Exception as cleanup_err:
+                logger.warning(
+                    f"Failed to remove upload container {container.name if container else 'unknown'}: {cleanup_err}"
+                )
+
 
 
 def get_task_type(request: TrainerProxyRequest) -> TaskType:
