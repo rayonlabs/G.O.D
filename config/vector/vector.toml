@@ -112,6 +112,7 @@ m, err = to_string(.message)
 
 # --- FastAPI normalizer (host logs → same fields/labels as Docker) ---
 [transforms.normalize_fastapi]
+type   = "remap"
 inputs = ["fastapi_logs"]
 source = """
 # -------- message --------
@@ -157,12 +158,6 @@ if ts_ms != null && ts_ms > 1_600_000_000_000 && ts_ms < 4_100_000_000_000 {
 
 .count = 1
 """
-
-[transforms.batch_logs]
-group_by = ["task_id", "container_name", "container_id", "task_type", "model", "hotkey"]
-merge_strategies.message = "concat_newline"
-merge_strategies.count   = "sum"
-flush_period_ms = 5000
 
 # -------------------------
 # Sinks
