@@ -330,7 +330,7 @@ async def upload_repo_to_hf(
         environment = {
             "HUGGINGFACE_TOKEN": huggingface_token,
             "HUGGINGFACE_USERNAME": huggingface_username,
-            "WANDB_TOKEN": wandb_token,
+            "WANDB_TOKEN": wandb_token or None,
             "WANDB_LOGS_PATH": f"{cst.WANDB_LOGS_DIR}/{task_id}_{hotkey}",
             "LOCAL_FOLDER": local_container_folder,
             "TASK_ID": task_id,
