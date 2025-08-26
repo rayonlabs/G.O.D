@@ -28,7 +28,6 @@ from validator.utils.logging import get_all_context_tags
 from trainer.utils.logging import logger
 from validator.utils.logging import stream_container_logs
 from validator.utils.logging import stream_image_build_logs
-from trainer import constants as cst
 
 
 # logger = get_logger(__name__)
