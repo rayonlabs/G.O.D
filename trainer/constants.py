@@ -15,7 +15,7 @@ VECTOR_URL = "http://localhost:8688"  # Vector http_server for logging
 MEMORY_PER_GPU_GB = 110  # ~61% of 1440GB / 8 GPUs
 CPUS_PER_GPU = 24  # Conservative allocation leaving headroom
 
-CACHE_CLEANUP_CUTOFF_HOURS = 12
+CACHE_CLEANUP_CUTOFF_HOURS = 72
 STALE_TASK_GRACE_MINUTES = 10
 
 #TRAINING PATHS 
