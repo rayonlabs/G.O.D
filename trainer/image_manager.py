@@ -323,7 +323,6 @@ async def upload_repo_to_hf(
     path_in_repo: str | None = None,
 ):
     container = None
-    log_streaming_task = None
     try:
         client = docker.from_env()
         local_container_folder = train_paths.get_checkpoints_output_path(task_id, expected_repo_name)
@@ -384,22 +383,11 @@ async def upload_repo_to_hf(
             await log_task(task_id, hotkey, f"[ERROR] {msg}")
             raise RuntimeError(msg)
 
-        return {"ok": True, "exit_code": exit_code, "wandb_url": wandb_url}
-
     except Exception as e:
         logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}")
         raise
 
     finally:
-        if log_streaming_task:
-            log_streaming_task.cancel()
-            try:
-                await log_streaming_task
-            except asyncio.CancelledError:
-                pass
-            except Exception as log_err:
-                logger.debug(f"Ignored log task error during cleanup: {log_err}")
-
         if container:
             try:
                 container.reload()
