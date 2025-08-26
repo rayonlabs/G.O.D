@@ -223,8 +223,6 @@ async def main():
 
     run_training(config_path)
 
-    patch_model_metadata(output_dir, args.model)
-
     patch_wandb_symlinks(train_cst.WANDB_LOGS_DIR)
 
 

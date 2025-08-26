@@ -318,6 +318,7 @@ async def upload_repo_to_hf(
     expected_repo_name: str,
     huggingface_token: str,
     huggingface_username: str,
+    model: str,
     docker_labels: dict[str, str] | None = None,
     wandb_token: str | None = None,
     path_in_repo: str | None = None,
@@ -333,6 +334,7 @@ async def upload_repo_to_hf(
             "WANDB_TOKEN": wandb_token or None,
             "WANDB_LOGS_PATH": f"{cst.WANDB_LOGS_DIR}/{task_id}_{hotkey}",
             "LOCAL_FOLDER": local_container_folder,
+            "MODEL": model,
             "TASK_ID": task_id,
             "EXPECTED_REPO_NAME": expected_repo_name,
             "HF_REPO_SUBFOLDER": path_in_repo,
@@ -344,18 +346,12 @@ async def upload_repo_to_hf(
         }
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
-        labels = {
-            "task_id": task_id,
-            "hotkey": hotkey,
-            "trainer_type": "uploader",
-            "expected_repo": expected_repo_name,
-        }
 
         container = client.containers.run(
             image=cst.HF_UPLOAD_DOCKER_IMAGE,
             environment=environment,
             volumes=volumes,
-            labels=labels,
+            labels=docker_labels,
             detach=True,
             remove=False,
             name=container_name,
@@ -586,6 +582,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
                     expected_repo_name=training_data.expected_repo_name,
                     huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
                     huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
+                    model=training_data.model,
                     docker_labels=docker_labels,
                     wandb_token=wandb_token,
                     path_in_repo=path_in_repo,
