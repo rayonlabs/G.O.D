@@ -347,7 +347,7 @@ async def upload_repo_to_hf(
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
 
-        logger.info(f"Starting upload container {container_name} for task {task_id}...", extra=log_labels)
+        logger.info(f"Starting upload container {container_name} for task {task_id}...", extra=docker_labels)
 
         container = client.containers.run(
             image=cst.HF_UPLOAD_DOCKER_IMAGE,
@@ -381,7 +381,7 @@ async def upload_repo_to_hf(
             raise RuntimeError(msg)
 
     except Exception as e:
-        logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}", extra=log_labels)
+        logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}", extra=docker_labels)
         raise
 
     finally:
