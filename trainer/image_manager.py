@@ -325,7 +325,6 @@ async def upload_repo_to_hf(
     container = None
     try:
         client = docker.from_env()
-
         local_container_folder = train_paths.get_checkpoints_output_path(task_id, expected_repo_name)
 
         environment = {
@@ -345,16 +344,12 @@ async def upload_repo_to_hf(
         }
 
         container_name = f"hf-upload-{uuid.uuid4().hex}"
-
-        # Docker labels for log collection
         labels = {
             "task_id": task_id,
             "hotkey": hotkey,
             "trainer_type": "uploader",
             "expected_repo": expected_repo_name,
         }
-
-        logger.info(f"Starting upload container {container_name} for task {task_id}...")
 
         container = client.containers.run(
             image=cst.HF_UPLOAD_DOCKER_IMAGE,
@@ -366,25 +361,27 @@ async def upload_repo_to_hf(
             name=container_name,
         )
 
-        log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+        log_streaming_task = asyncio.create_task(
+            asyncio.to_thread(stream_container_logs, container, get_all_context_tags())
+        )
 
         result = container.wait()
         logs = container.logs().decode("utf-8", errors="ignore")
         exit_code = result.get("StatusCode", -1)
-        if exit_code == 0:
-            logger.info(f"Download completed successfully for task {task_id}")
-            if wandb_token:
-                match = re.search(r"https://wandb\.ai/\S+", logs)
-                wandb_url = match.group(0) if match else None
-                if wandb_url:
-                    await update_wandb_url(task_id, hotkey, wandb_url)
-        else:
-            error_message = extract_container_error(logs)
-            if error_message:
-                await log_task(
-                    task_id, hotkey, f"[ERROR] Upload container failed | ExitCode: {exit_code} | LastError: {error_message}"
-                )
-                logger.error(f"Upload container failed: {error_message}")
+
+        wandb_url = None
+        if wandb_token:
+            m = re.search(r"https://wandb\.ai/\S+", logs)
+            wandb_url = m.group(0) if m else None
+            if wandb_url:
+                await update_wandb_url(task_id, hotkey, wandb_url)
+
+        if exit_code != 0:
+            last_err = extract_container_error(logs) or "unknown error"
+            msg = (f"HF upload failed | exit_code={exit_code} | container={container_name} | "
+                   f"last_error={last_err}")
+            await log_task(task_id, hotkey, f"[ERROR] {msg}")
+            raise RuntimeError(msg)
 
     except Exception as e:
         logger.exception(f"Unexpected error during upload_repo_to_hf for task {task_id}: {e}")
@@ -397,9 +394,11 @@ async def upload_repo_to_hf(
                 if container.status == "running":
                     container.kill()
                 container.remove(force=True)
-                logger.info(f"Upload container {container.name} cleaned up successfully.")
             except Exception as cleanup_err:
-                logger.warning(f"Failed to remove upload container {container.name if container else 'unknown'}: {cleanup_err}")
+                logger.warning(
+                    f"Failed to remove upload container {container.name if container else 'unknown'}: {cleanup_err}"
+                )
+
 
 
 def get_task_type(request: TrainerProxyRequest) -> TaskType:
