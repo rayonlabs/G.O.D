@@ -405,28 +405,25 @@ def _run_grpo_upload_container(docker_client, job: TextJob, volume_bindings: dic
     """
     logger.info("Running upload container for GRPO model...")
 
-    upload_script = f"""
-huggingface-cli login --token "$HUGGINGFACE_TOKEN" --add-to-git-credential && \\
-python -c "
-from huggingface_hub import HfApi
-import os
-
-api = HfApi(token=os.environ['HUGGINGFACE_TOKEN'])
-api.create_repo(os.environ['HUB_MODEL_ID'], exist_ok=True, private=False)
-api.upload_folder(folder_path='{cst.GRPO_MINER_OUTPUT_DIR}', repo_id=os.environ['HUB_MODEL_ID'])
-print('Upload completed successfully')
-"
-"""
+    upload_script = f"{cst.MINER_CONTAINER_SCRIPTS_PATH}/upload_grpo_model.sh"
 
     docker_env = {
         "HUGGINGFACE_TOKEN": cst.HUGGINGFACE_TOKEN,
-        "HUB_MODEL_ID": f"{cst.HUGGINGFACE_USERNAME}/{job.expected_repo_name or str(uuid.uuid4())}"
+        "HUB_MODEL_ID": f"{cst.HUGGINGFACE_USERNAME}/{job.expected_repo_name or str(uuid.uuid4())}",
+        "GRPO_MINER_OUTPUT_DIR": cst.GRPO_MINER_OUTPUT_DIR
+    }
+
+    # Add scripts directory to volume bindings for upload script access
+    upload_volume_bindings = volume_bindings.copy()
+    upload_volume_bindings[os.path.abspath("scripts")] = {
+        "bind": cst.MINER_CONTAINER_SCRIPTS_PATH,
+        "mode": "ro",
     }
 
     upload_container = docker_client.containers.run(
         image=cst.MINER_DOCKER_IMAGE,
         environment=docker_env,
-        volumes=volume_bindings,
+        volumes=upload_volume_bindings,
         detach=True,
         tty=True,
         command=["/bin/bash", "-c", upload_script]

@@ -28,6 +28,7 @@ OUTPUT_DIR = "core/outputs/"
 CACHE_DIR = "~/.cache/huggingface"
 CACHE_DIR_HUB = os.path.expanduser("~/.cache/huggingface/hub")
 GRPO_MINER_OUTPUT_DIR = "/root/.cache/huggingface/hub/trained_repo"
+MINER_CONTAINER_SCRIPTS_PATH = "/app/scripts"
 DIFFUSION_DATASET_DIR = "core/dataset/images"
 CONTAINER_FLUX_PATH = "/app/flux/unet"
 
