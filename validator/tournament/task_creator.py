@@ -38,7 +38,7 @@ async def create_text_tournament_tasks(
 ) -> list[str]:
     if isinstance(round_data, GroupRound):
         num_groups = len(round_data.groups)
-        logger.info(f"Creating text tournament for {num_groups} groups (1 instruct + 1 DPO + 1 GRPO per group)")
+        logger.info(f"Creating text tournament for {num_groups} groups (1 task per group)")
         tasks = await _create_group_text_tasks(round_data, tournament_id, round_id, config, is_final_round)
     elif is_final_round:
         logger.info("Creating final text tournament (1 instruct + 1 DPO + 1 GRPO with 1 big model)")
@@ -91,30 +91,26 @@ async def _create_single_group_image_tasks(
     existing_group_tasks = [task for task in existing_tasks if task.group_id == group_id]
     existing_count = len(existing_group_tasks)
 
+    assert t_cst.IMAGE_TASKS_PER_GROUP == 1, "Only 1 image task per group is supported"
     if existing_count >= t_cst.IMAGE_TASKS_PER_GROUP:
-        logger.info(f"    Group {group_index + 1} already has {existing_count} tasks, skipping task creation")
+        logger.info(f"    Group {group_index + 1} already has {existing_count} task(s), skipping task creation")
         return await _get_existing_tasks(existing_group_tasks, config)
 
-    logger.info(
-        f"    Group {group_index + 1} has {existing_count}/{t_cst.IMAGE_TASKS_PER_GROUP} tasks, creating {t_cst.IMAGE_TASKS_PER_GROUP - existing_count} more"
+    logger.info(f"    Group {group_index + 1} has {existing_count}/{t_cst.IMAGE_TASKS_PER_GROUP} task, creating 1 more")
+
+    task = await _create_single_image_task_with_retry(config, image_models, 0, group_index)
+    tournament_task = TournamentTask(
+        tournament_id=tournament_id,
+        round_id=round_id,
+        task_id=task.task_id,
+        group_id=group_id,
+        pair_id=None,
     )
+    await add_tournament_tasks([tournament_task], config.psql_db)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+    logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
 
-    tasks = []
-    for task_num in range(existing_count, t_cst.IMAGE_TASKS_PER_GROUP):
-        task = await _create_single_image_task_with_retry(config, image_models, task_num, group_index)
-        tournament_task = TournamentTask(
-            tournament_id=tournament_id,
-            round_id=round_id,
-            task_id=task.task_id,
-            group_id=group_id,
-            pair_id=None,
-        )
-        await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
-        logger.info(f"    Image {task_num + 1}: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
-        tasks.append(task)
-
-    return tasks
+    return [task]
 
 
 async def _create_final_image_tasks(tournament_id: str, round_id: str, config: Config, image_models: list) -> list[RawTask]:
@@ -228,7 +224,7 @@ async def _create_group_text_tasks(
 
     tasks = []
     for i, group in enumerate(round_data.groups):
-        logger.info(f"  Group {i + 1} ({len(group.member_ids)} members): creating 1 instruct + 1 DPO + 1 GRPO task")
+        logger.info(f"  Group {i + 1} ({len(group.member_ids)} members): creating 1 instruct task")
         group_tasks = await _create_single_group_text_tasks(
             group, i, tournament_id, round_id, config, models, instruct_datasets, dpo_datasets
         )
@@ -253,32 +249,25 @@ async def _create_single_group_text_tasks(
     existing_group_tasks = [task for task in existing_tasks if task.group_id == group_id]
     existing_count = len(existing_group_tasks)
 
-    if existing_count >= t_cst.FINAL_ROUND_TEXT_TASKS:
-        logger.info(f"    Group {group_index + 1} already has {existing_count} tasks, skipping task creation")
+    if existing_count >= t_cst.TEXT_TASKS_PER_GROUP:
+        logger.info(f"    Group {group_index + 1} already has {existing_count} task(s), skipping task creation")
         return await _get_existing_tasks(existing_group_tasks, config)
 
-    logger.info(
-        f"    Group {group_index + 1} has {existing_count}/{t_cst.FINAL_ROUND_TEXT_TASKS} tasks, creating {t_cst.FINAL_ROUND_TEXT_TASKS - existing_count} more"
+    logger.info(f"    Group {group_index + 1} has {existing_count}/{t_cst.TEXT_TASKS_PER_GROUP} task, creating 1 more")
+    assert t_cst.TEXT_TASKS_PER_GROUP == 1, "Only 1 text task per group is supported"
+    task = await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+    tournament_task = TournamentTask(
+        tournament_id=tournament_id,
+        round_id=round_id,
+        task_id=task.task_id,
+        group_id=group_id,
+        pair_id=None,
     )
+    await add_tournament_tasks([tournament_task], config.psql_db)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+    logger.info(f"    Instruct: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}")
 
-    task_types_to_create = _get_missing_task_types(existing_group_tasks)
-    tasks = []
-
-    for task_type in task_types_to_create:
-        task = await _create_text_task_by_type(task_type, config, models, instruct_datasets, dpo_datasets)
-        tournament_task = TournamentTask(
-            tournament_id=tournament_id,
-            round_id=round_id,
-            task_id=task.task_id,
-            group_id=group_id,
-            pair_id=None,
-        )
-        await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
-        logger.info(f"    {task_type.value}: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}")
-        tasks.append(task)
-
-    return tasks
+    return [task]
 
 
 def _get_missing_task_types(existing_group_tasks: list) -> list[TaskType]:
