@@ -3,12 +3,12 @@ import json
 import os
 import re
 import uuid
-
+import shutil
 import docker
 from docker.errors import APIError
 from docker.errors import BuildError
 from docker.models.containers import Container
-
+from pathlib import Path
 import trainer.utils.training_paths as train_paths
 from core.models.payload_models import TrainerProxyRequest
 from core.models.payload_models import TrainRequestImage
@@ -92,6 +92,21 @@ def delete_image_and_cleanup(tag: str):
         logger.error(f"Cleanup failed: {e}")
 
 
+def prepare_temporary_dataset_directory(destination_directory: str):
+    """
+    Create `dest_dir` if it doesn't exist and copy all files from `src_dir` into it.
+    Subdirectories are copied as well.
+    """
+    os.makedirs(destination_directory, exist_ok=True)  # Create target directory if not exists
+
+    for item in os.listdir(cst.VOLUME_NAMES[3]):
+        src_path = os.path.join(cst.VOLUME_NAMES[3], item)
+        dest_path = os.path.join(destination_directory, item)
+
+        if os.path.isdir(src_path):
+            shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
+
+
 async def run_trainer_container_image(
     task_id: str,
     tag: str,
@@ -129,13 +144,18 @@ async def run_trainer_container_image(
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
 
+    # Create a temporary directory for dataset files to allow read/write
+    miner_temporary_dataset_path = f"{cst.VOLUME_NAMES[1]}/{hotkey}/datasets"
+    prepare_temporary_dataset_directory(miner_temporary_dataset_path)
+
     try:
         container: Container = client.containers.run(
             image=tag,
             command=command,
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
+                cst.VOLUME_NAMES[2]: {"bind": cst.CACHE_MODELS_DIR, "mode": "ro"},
+                miner_temporary_dataset_path: {"bind": cst.CACHE_DATASETS_DIR, "mode": "rw"},
             },
             remove=False,
             shm_size=shm_size,
@@ -203,13 +223,18 @@ async def run_trainer_container_text(
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
 
+    # Create a temporary directory for dataset files to allow read/write
+    miner_temporary_dataset_path = f"{cst.VOLUME_NAMES[1]}/{hotkey}/datasets"
+    prepare_temporary_dataset_directory(miner_temporary_dataset_path)
+
     try:
         container: Container = client.containers.run(
             image=tag,
             command=command,
             volumes={
                 cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
+                cst.VOLUME_NAMES[2]: {"bind": cst.CACHE_MODELS_DIR, "mode": "ro"},
+                miner_temporary_dataset_path: {"bind": cst.CACHE_DATASETS_DIR, "mode": "rw"},
             },
             remove=False,
             shm_size=shm_size,
@@ -573,6 +598,13 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             logger.info("Cleaned up Docker resources.", extra=log_labels)
         else:
             logger.info("No Docker image to clean up.", extra=log_labels)
+
+
+        # Delete temporary dataset directory
+        temp_dataset_directory = Path(f"{cst.VOLUME_NAMES[1]}/{task.hotkey}/datasets")
+        if temp_dataset_directory.exists():
+            # Removes the directory and all its contents
+            shutil.rmtree(temp_dataset_directory)
 
         if success:
             try:
