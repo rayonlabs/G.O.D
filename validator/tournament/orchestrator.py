@@ -288,7 +288,6 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
     """
     # Track failed attempts for this scheduling session
     failed_attempts = {}
-    MAX_SCHEDULING_ATTEMPTS = 3
 
     tasks_without_gpus = []
 
@@ -301,17 +300,15 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
             task = oldest_task_training.task
             task_key = f"{task.task_id}_{oldest_task_training.hotkey}"
 
-            # Check max attempts
             if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
                 logger.warning(
-                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), marking as failed"
+                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), but continuing to retry"
                 )
 
-                await tournament_sql.update_tournament_task_training_status(
-                    task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
+            if oldest_task_training.n_training_attempts >= 5 and oldest_task_training.n_training_attempts % 5 == 0:
+                logger.warning(
+                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has been retrying for {oldest_task_training.n_training_attempts} attempts - this may indicate a persistent issue"
                 )
-                pending_training_tasks.pop()
-                continue
 
             training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
                 oldest_task_training.hotkey, config.psql_db
@@ -372,44 +369,32 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                     # Track failed attempts for this scheduling session
                     failed_attempts[task_key] = failed_attempts.get(task_key, 0) + 1
 
-                    if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
+                    if failed_attempts[task_key] >= 10 and failed_attempts[task_key] % 10 == 0:
                         logger.warning(
-                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}), marking as FAILURE"
+                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has failed {failed_attempts[task_key]} scheduling attempts - this may indicate a persistent issue"
                         )
-                        logger.info(
-                            f"Current n_training_attempts: {oldest_task_training.n_training_attempts} for task {training_task.task.task_id} with hotkey {training_task.hotkey}"
-                        )
-                        await tournament_sql.update_tournament_task_training_status(
-                            training_task.task.task_id, training_task.hotkey, TrainingStatus.FAILURE, config.psql_db
-                        )
-                        pending_training_tasks.pop()
                     else:
                         logger.info(
-                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed, scheduling attempt {failed_attempts[task_key]}/{MAX_SCHEDULING_ATTEMPTS}"
+                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed, scheduling attempt "
+                            f"{failed_attempts[task_key]}, will retry"
                         )
-                        await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
+                    await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
                     continue
         except Exception as e:
             logger.error(f"Exception while scheduling training: {str(e)}")
             # Track failed attempts for this scheduling session
             failed_attempts[task_key] = failed_attempts.get(task_key, 0) + 1
 
-            if failed_attempts[task_key] >= MAX_SCHEDULING_ATTEMPTS:
+            if failed_attempts[task_key] >= 10 and failed_attempts[task_key] % 10 == 0:
                 logger.warning(
-                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has exceeded max scheduling attempts ({failed_attempts[task_key]}) due to exception, marking as FAILURE"
+                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has failed {failed_attempts[task_key]} scheduling attempts due to exception - this may indicate a persistent issue"
                 )
-                logger.info(
-                    f"Current n_training_attempts: {oldest_task_training.n_training_attempts} for task {training_task.task.task_id} with hotkey {training_task.hotkey}"
-                )
-                await tournament_sql.update_tournament_task_training_status(
-                    training_task.task.task_id, training_task.hotkey, TrainingStatus.FAILURE, config.psql_db
-                )
-                pending_training_tasks.pop()
             else:
                 logger.info(
-                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed due to exception, scheduling attempt {failed_attempts[task_key]}/{MAX_SCHEDULING_ATTEMPTS}"
+                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed due to exception, scheduling attempt "
+                    f"{failed_attempts[task_key]}, will retry"
                 )
-                await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
+            await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
             continue
 
     if tasks_without_gpus:
