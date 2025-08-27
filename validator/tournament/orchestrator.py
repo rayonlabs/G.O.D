@@ -302,13 +302,14 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
             if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
                 logger.warning(
-                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), but continuing to retry"
+                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), marking as failed"
                 )
 
-            if oldest_task_training.n_training_attempts >= 5 and oldest_task_training.n_training_attempts % 5 == 0:
-                logger.warning(
-                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has been retrying for {oldest_task_training.n_training_attempts} attempts - this may indicate a persistent issue"
+                await tournament_sql.update_tournament_task_training_status(
+                    task.task_id, oldest_task_training.hotkey, TrainingStatus.FAILURE, config.psql_db
                 )
+                pending_training_tasks.pop()
+                continue
 
             training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
                 oldest_task_training.hotkey, config.psql_db
