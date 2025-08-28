@@ -373,6 +373,40 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
         raise ValueError(f"More than 80% of rows are fully empty ({fully_empty_rows}/{total_rows} rows)")
 
     result = _validate_dpo_data(result, task)
+    
+    # Log examples of augmented data for DPO tasks
+    if isinstance(task, DpoRawTask) and result:
+        logger.info(f"[DPO_AUGMENTATION] Showing 2 examples of augmented data:")
+        
+        # Show first 2 examples to see the augmentations
+        for i in range(min(2, len(result))):
+            example = result[i]
+            logger.info(f"[DPO_EXAMPLE_{i+1}]:")
+            
+            # Show prompt (truncate if too long)
+            prompt = example.get(cst.STANDARD_DPO_PROMPT_COLUMN, "")
+            if len(prompt) > 150:
+                prompt_preview = prompt[:150] + "..."
+            else:
+                prompt_preview = prompt
+            logger.info(f"  Prompt: {prompt_preview}")
+            
+            # Show chosen (truncate if too long) 
+            chosen = example.get(cst.STANDARD_DPO_CHOSEN_COLUMN, "")
+            if len(chosen) > 150:
+                chosen_preview = chosen[:150] + "..."
+            else:
+                chosen_preview = chosen
+            logger.info(f"  Chosen: {chosen_preview}")
+            
+            # Show rejected (truncate if too long)
+            rejected = example.get(cst.STANDARD_DPO_REJECTED_COLUMN, "")
+            if len(rejected) > 150:
+                rejected_preview = rejected[:150] + "..."
+            else:
+                rejected_preview = rejected
+            logger.info(f"  Rejected: {rejected_preview}")
+    
     return result
 
 

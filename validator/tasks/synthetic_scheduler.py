@@ -205,35 +205,17 @@ async def get_multiple_datasets(
     keypair: Keypair | None = None,
 ) -> list[Dataset]:
     """Get multiple unique datasets from the generator, validating column availability."""
-    logger.info(f"[GET_DATASETS] Starting dataset selection for {task_type}")
     if num_datasets is None:
         num_datasets = random.randint(MIN_DATASETS_FOR_AUGMENTATION, MAX_DATASETS_FOR_AUGMENTATION)
-    logger.info(f"[GET_DATASETS] Will select {num_datasets} datasets")
 
     selected_datasets = []
     selected_ids = set()
     failed_ids = set()
-    attempts = 0
-    max_attempts = num_datasets * 10  # Prevent infinite loop
 
-    while len(selected_datasets) < num_datasets and attempts < max_attempts:
-        attempts += 1
-        logger.info(f"[GET_DATASETS] Attempt {attempts}, have {len(selected_datasets)}/{num_datasets} datasets")
-        try:
-            dataset = await anext(datasets_generator)
-            logger.info(f"[GET_DATASETS] Got dataset: {dataset.dataset_id}")
-        except StopAsyncIteration:
-            logger.error(f"[GET_DATASETS] Generator exhausted after {attempts} attempts")
-            break
-        except Exception as e:
-            logger.error(f"[GET_DATASETS] Error getting dataset: {e}")
-            continue
+    while len(selected_datasets) < num_datasets:
+        dataset = await anext(datasets_generator)
 
-        if dataset.dataset_id in selected_ids:
-            logger.info(f"[GET_DATASETS] Dataset {dataset.dataset_id} already selected, skipping")
-            continue
-        if dataset.dataset_id in failed_ids:
-            logger.info(f"[GET_DATASETS] Dataset {dataset.dataset_id} previously failed, skipping")
+        if dataset.dataset_id in selected_ids or dataset.dataset_id in failed_ids:
             continue
 
         if task_type and keypair and task_type != TaskType.DPOTASK:
@@ -251,12 +233,8 @@ async def get_multiple_datasets(
 
         selected_datasets.append(dataset)
         selected_ids.add(dataset.dataset_id)
-        logger.info(f"[GET_DATASETS] Added dataset {dataset.dataset_id}, now have {len(selected_datasets)}/{num_datasets}")
 
-    if len(selected_datasets) < num_datasets:
-        logger.warning(f"[GET_DATASETS] Could only get {len(selected_datasets)} of {num_datasets} requested datasets")
-    
-    logger.info(f"[GET_DATASETS] Selected {len(selected_datasets)} unique datasets for task (validated): {[d.dataset_id for d in selected_datasets]}")
+    logger.info(f"Selected {len(selected_datasets)} unique datasets for task (validated)")
     return selected_datasets
 
 
@@ -330,21 +308,11 @@ async def create_synthetic_dpo_task(
     models: AsyncGenerator[str, None],
     datasets: AsyncGenerator[Dataset, None],
 ) -> RawTask:
-    logger.info("[DPO] Starting DPO task creation")
-    try:
-        model_id = await anext(models)
-        logger.info(f"[DPO] Selected model: {model_id}")
-    except Exception as e:
-        logger.error(f"[DPO] Failed to get model: {e}")
-        raise
+    logger.info("DPO task")
+    model_id = await anext(models)
+    logger.info(f"We picked {model_id}")
 
-    try:
-        logger.info("[DPO] Getting datasets...")
-        selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.DPOTASK, keypair=config.keypair)
-        logger.info(f"[DPO] Got {len(selected_datasets)} datasets")
-    except Exception as e:
-        logger.error(f"[DPO] Failed to get datasets: {e}")
-        raise
+    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.DPOTASK, keypair=config.keypair)
 
     primary_dataset = selected_datasets[0]
     logger.info(
@@ -362,7 +330,6 @@ async def create_synthetic_dpo_task(
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
-    logger.info(f"[DPO] Creating DpoRawTask object with datasets: {dataset_ids}")
     task = DpoRawTask(
         model_id=model_id,
         ds=dataset_ids,
@@ -377,18 +344,10 @@ async def create_synthetic_dpo_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"[DPO] DpoRawTask object created successfully")
     logger.info(f"New DPO task created with {len(selected_datasets)} datasets")
 
-    try:
-        logger.info("[DPO] Adding task to database...")
-        task = await add_task(task, config.psql_db)
-        logger.info(f"[DPO] Task added to database with ID: {task.task_id if hasattr(task, 'task_id') else 'unknown'}")
-    except Exception as e:
-        logger.error(f"[DPO] Failed to add task to database: {e}")
-        raise
+    task = await add_task(task, config.psql_db)
 
-    logger.info("[DPO] Task creation completed successfully")
     return task
 
 
@@ -616,13 +575,9 @@ async def _add_new_task_to_network_if_not_enough(
     dpo_datasets: AsyncGenerator[Dataset, None],
     image_models: AsyncGenerator[ImageModelInfo, None],
 ):
-    logger.info("[TASK_CHECK] Starting task availability check...")
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
-    logger.info(f"[TASK_CHECK] Found {len(current_training_tasks)} training tasks")
     current_preeval_tasks = await get_tasks_with_status(TaskStatus.PREEVALUATION, config.psql_db)
-    logger.info(f"[TASK_CHECK] Found {len(current_preeval_tasks)} pre-evaluation tasks")
     current_delayed_tasks = await get_tasks_with_status(TaskStatus.DELAYED, config.psql_db, include_not_ready_tasks=True)
-    logger.info(f"[TASK_CHECK] Found {len(current_delayed_tasks)} delayed tasks")
     total_active_tasks = len(current_training_tasks) + len(current_preeval_tasks)
 
     logger.info(
@@ -630,7 +585,6 @@ async def _add_new_task_to_network_if_not_enough(
         + f" ({len(current_training_tasks)} training, {len(current_preeval_tasks)} pre-evaluation)"
     )
 
-    logger.info(f"[TASK_CHECK] Checking conditions: delayed_tasks={len(current_delayed_tasks)}, active_tasks={total_active_tasks}, max_concurrent={cst.MAX_CONCURRENT_SYNTHETIC_JOBS}")
     if len(current_delayed_tasks) == 0 and total_active_tasks < cst.MAX_CONCURRENT_SYNTHETIC_JOBS:
         logger.info(
             "Current number of training tasks is less than the maximum amount of concurrent synthetic"
@@ -642,9 +596,7 @@ async def _add_new_task_to_network_if_not_enough(
             (TaskType.DPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO),
             (TaskType.GRPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO),
         ]
-        logger.info(f"[TASK_TYPE] Task type weights: INSTRUCT={cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT}, IMAGE={cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE}, DPO={cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO}, GRPO={cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO}")
         selected_task_type = random.choices([t[0] for t in TASK_TYPES], weights=[t[1] for t in TASK_TYPES], k=1)[0]
-        logger.info(f"[TASK_TYPE] Selected task type: {selected_task_type}")
 
         if selected_task_type == TaskType.INSTRUCTTEXTTASK:
             probability_of_chat_task = random.random()
@@ -658,47 +610,34 @@ async def _add_new_task_to_network_if_not_enough(
             logger.info("TASK_TYPE_SELECTION: Creating CHAT task (direct selection)")
             await create_synthetic_chat_task(config, models, instruct_datasets)
         elif selected_task_type == TaskType.IMAGETASK:
-            logger.info("[TASK_CREATE] Creating IMAGE task...")
             await create_synthetic_image_task(config, image_models)
-            logger.info("[TASK_CREATE] IMAGE task creation completed")
         elif selected_task_type == TaskType.DPOTASK:
-            logger.info("[TASK_CREATE] Creating DPO task...")
             await create_synthetic_dpo_task(config, models, dpo_datasets)
-            logger.info("[TASK_CREATE] DPO task creation completed")
         elif selected_task_type == TaskType.GRPOTASK:
-            logger.info("[TASK_CREATE] Creating GRPO task...")
             await create_synthetic_grpo_task(config, models, instruct_datasets)
-            logger.info("[TASK_CREATE] GRPO task creation completed")
-    else:
-        logger.info(f"[TASK_CHECK] Not creating new task - conditions not met (delayed_tasks={len(current_delayed_tasks)}, active_tasks={total_active_tasks} >= max={cst.MAX_CONCURRENT_SYNTHETIC_JOBS})")
 
 
 async def schedule_synthetics_periodically(config: Config):
-    logger.info("[SCHEDULER] Starting the synthetic schedule loop...")
-    logger.info(f"[SCHEDULER] Creating data generators...")
+    logger.info("Starting the synthetic schedule loop...")
     instruct_datasets = _get_instruct_text_datasets(config.keypair)
     dpo_datasets = _get_dpo_datasets(config.keypair)
     standard_models = _get_text_models(config.keypair)
     big_models = _get_text_models(config.keypair, smallest_size_b=12.0, largest_size_b=71.0)
     image_models = _get_image_models(config.keypair)
-    logger.info("[SCHEDULER] Data generators created")
 
     current_try = 0
     while True:
         try:
-            logger.info(f"[SCHEDULER] Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
-            model_prob = random.random()
-            if model_prob < cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
-                logger.info(f"[SCHEDULER] Big Boy Model in Da House (prob={model_prob:.3f} < {cst.PROBABILITY_OF_A_BIG_TEXT_MODEL})")
+            logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
+            if random.random() < cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
+                logger.info("Big Boy Model in Da House")
                 await _add_new_task_to_network_if_not_enough(config, big_models, instruct_datasets, dpo_datasets, image_models)
             else:
-                logger.info(f"[SCHEDULER] Basic Model Selected (prob={model_prob:.3f} >= {cst.PROBABILITY_OF_A_BIG_TEXT_MODEL})")
+                logger.info("Basic Model Selected")
                 await _add_new_task_to_network_if_not_enough(
                     config, standard_models, instruct_datasets, dpo_datasets, image_models
                 )
-            logger.info(f"[SCHEDULER] Task creation attempt completed, resetting tries")
             current_try = 0
-            logger.info(f"[SCHEDULER] Sleeping for {cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK} minutes...")
             await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
         except Exception as e:
             if current_try < cst.NUM_SYNTH_RETRIES - 1:
