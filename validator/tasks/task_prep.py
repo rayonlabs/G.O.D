@@ -251,9 +251,6 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
     fully_empty_rows = 0
     is_chat_task = isinstance(task, ChatRawTask)
     
-    logger.info(f"change_to_json_format called with task type: {type(task).__name__ if task else 'None'}")
-    logger.info(f"Dataset size: {len(dataset) if dataset else 0}, Columns: {columns}")
-    
     # DPO augmentation configuration
     dpo_augmentations = {}
     prompt_honeypot_indices = set()
@@ -320,6 +317,7 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
         # Apply DPO augmentations
         if isinstance(task, DpoRawTask):
+
             try:
                 # 1. Rearrange prompt sentences (applies to ALL rows if enabled)
                 if dpo_augmentations.get('rearrange_sentences') and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
@@ -363,6 +361,7 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                             row_dict[cst.STANDARD_DPO_REJECTED_COLUMN], row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]
             except Exception as e:
                 logger.error(f"Error in swap chosen/rejected: {e}")
+
 
         result.append(row_dict)
         total_rows += 1
