@@ -343,15 +343,15 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                     response_uid = dpo_augmentations['response_uid']
                     
                     if dpo_augmentations['honeypot_in_chosen'] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
-                    if dpo_augmentations['honeypot_at_start']:
-                        row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
-                    else:
-                        row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = f"{row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]} {response_uid}"
-                elif not dpo_augmentations['honeypot_in_chosen'] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                    if dpo_augmentations['honeypot_at_start']:
-                        row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
-                    else:
-                        row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = f"{row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]} {response_uid}"
+                        if dpo_augmentations['honeypot_at_start']:
+                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
+                        else:
+                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = f"{row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]} {response_uid}"
+                    elif not dpo_augmentations['honeypot_in_chosen'] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
+                        if dpo_augmentations['honeypot_at_start']:
+                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
+                        else:
+                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = f"{row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]} {response_uid}"
             except Exception as e:
                 logger.error(f"Error in response honeypot: {e}")
             
