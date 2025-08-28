@@ -100,19 +100,29 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
                 raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
 
             dataset_dicts: list[dict[str, Any]] = response
-            datasets = [Dataset.model_validate(ds) for ds in dataset_dicts]
+            logger.info(f"[DATASET_BIN] Got {len(dataset_dicts)} dataset dicts from content service")
+            datasets = []
+            for idx, ds in enumerate(dataset_dicts):
+                try:
+                    dataset = Dataset.model_validate(ds)
+                    datasets.append(dataset)
+                except Exception as exc:
+                    logger.warning(f"[DATASET_BIN] Failed to validate dataset {idx+1}: {exc}")
+            
+            logger.info(f"[DATASET_BIN] Successfully validated {len(datasets)} datasets")
             random.shuffle(datasets)
 
             for dataset in datasets:
                 logger.info(
-                    f"Dataset: {dataset.dataset_id} (rows: {dataset.num_rows}, "
+                    f"[DATASET_BIN] Yielding dataset: {dataset.dataset_id} (rows: {dataset.num_rows}, "
                     f"bytes: {dataset.num_bytes_parquet_files}, "
                     f"dpo_available: {dataset.dpo_available})"
                 )
                 yield dataset
 
         except Exception as e:
-            logger.warning(f"Failed to fetch datasets for bin {min_rows}-{max_rows} rows: {e}")
+            logger.error(f"[DATASET_BIN] Failed to fetch datasets for bin {min_rows}-{max_rows} rows: {e}")
+            logger.info(f"[DATASET_BIN] Sleeping 5 seconds before retry...")
             await asyncio.sleep(5)
 
 
