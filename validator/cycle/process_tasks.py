@@ -282,12 +282,26 @@ async def _prep_task(task: AnyTypeRawTask, config: Config):
 
 
 async def _processing_pending_tasks(config: Config):
-    logger.debug("Processing pending tasks")
+    logger.info("[PENDING_PROCESS] Starting pending task processing")
 
     pending_tasks = await tasks_sql.get_tasks_with_status(status=TaskStatus.PENDING, psql_db=config.psql_db)
-    logger.info(f"Found {len(pending_tasks)} pending tasks! Will prep them all now...")
-    await asyncio.gather(*[_prep_task(task, config) for task in pending_tasks[: cst.MAX_CONCURRENT_TASK_PREPS]])
+    logger.info(f"[PENDING_PROCESS] Found {len(pending_tasks)} pending tasks! Will prep them all now...")
+    if pending_tasks:
+        for task in pending_tasks:
+            logger.info(f"[PENDING_PROCESS] Task {task.task_id}: type={type(task).__name__}, status={task.status}")
+    
+    tasks_to_prep = pending_tasks[: cst.MAX_CONCURRENT_TASK_PREPS]
+    logger.info(f"[PENDING_PROCESS] Preparing {len(tasks_to_prep)} tasks (max concurrent: {cst.MAX_CONCURRENT_TASK_PREPS})")
+    
+    prep_results = await asyncio.gather(*[_prep_task(task, config) for task in tasks_to_prep], return_exceptions=True)
+    
+    for i, result in enumerate(prep_results):
+        if isinstance(result, Exception):
+            logger.error(f"[PENDING_PROCESS] Task prep failed for task {i}: {result}")
+    
+    logger.info("[PENDING_PROCESS] Cleaning HF datasets cache")
     clean_all_hf_datasets_cache()
+    logger.info("[PENDING_PROCESS] Pending task processing completed")
 
 
 async def _start_training_task(task: AnyTypeRawTask, config: Config) -> None:
@@ -381,15 +395,23 @@ async def _move_to_preevaluation(tasks: list[AnyTypeRawTask], config: Config):
 
 
 async def process_pending_tasks(config: Config) -> None:
+    logger.info("[TASK_PROCESSOR] Starting task processing loop")
     await _move_any_prep_data_to_pending(config)
     while True:
         try:
+            logger.info("[TASK_PROCESSOR] Processing cycle starting...")
             await _processing_pending_tasks(config)
+            logger.info("[TASK_PROCESSOR] Handling delayed tasks...")
             await _handle_delayed_tasks(config)
+            logger.info("[TASK_PROCESSOR] Finding miners for tasks...")
             await _find_miners_for_task(config)
+            logger.info("[TASK_PROCESSOR] Processing ready to train tasks...")
             await _process_ready_to_train_tasks(config)
+            logger.info("[TASK_PROCESSOR] Processing cycle completed")
         except Exception as e:
-            logger.info(f"There was a problem in processing: {e}")
+            logger.error(f"[TASK_PROCESSOR] There was a problem in processing: {e}")
+            import traceback
+            logger.error(f"[TASK_PROCESSOR] Traceback: {traceback.format_exc()}")
             await asyncio.sleep(30)
 
 
