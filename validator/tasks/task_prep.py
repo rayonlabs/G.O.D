@@ -214,82 +214,90 @@ async def download_and_load_dataset(
 
 def _rearrange_sentences(text: str) -> str:
     """Split text by sentences and rearrange with some at front, some at end."""
-    import re
     # Split by sentence endings while keeping the punctuation
-    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = re.split(r"(?<=[.!?])\s+", text)
     sentences = [s.strip() for s in sentences if s.strip()]
-    
+
     if len(sentences) <= 2:
         return text
-    
+
     # Randomly split sentences into front and back portions
     split_point = random.randint(1, len(sentences) - 1)
     front_sentences = sentences[:split_point]
     back_sentences = sentences[split_point:]
-    
+
     # Rearrange: back + front
     rearranged = back_sentences + front_sentences
-    return ' '.join(rearranged)
+    return " ".join(rearranged)
 
 
 def _insert_uid_randomly(text: str, uid: str) -> str:
     """Insert UID at a random position in the text."""
     if not text or len(text) < 20:
         return text + f" {uid}"
-    
+
     words = text.split()
     if len(words) > 2:
         insert_pos = random.randint(1, len(words) - 1)
         words.insert(insert_pos, uid)
-        return ' '.join(words)
+        return " ".join(words)
     return text + f" {uid}"
 
 
-def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None):
+def _generate_dpo_augmentation_config(dataset_size: int) -> dict:
+    if random.random() < cst.DPO_AUGMENTATION_CHANCE:
+        config = {
+            "rearrange_sentences": random.random() < cst.DPO_AUGMENTATION_CHANCE,
+            "add_prompt_honeypot": random.random() < cst.DPO_AUGMENTATION_CHANCE,
+            "add_response_honeypot": random.random() < cst.DPO_AUGMENTATION_CHANCE,
+            "swap_chosen_rejected": random.random() < cst.DPO_AUGMENTATION_CHANCE,
+        }
+
+        # Configure prompt honeypot (applies to ALL prompts if enabled)
+        if config["add_prompt_honeypot"]:
+            config["prompt_uid"] = uuid.uuid4().hex[:8]
+
+        # Configure response honeypot (applies to a percentage of chosen OR rejected)
+        if config["add_response_honeypot"]:
+            config["response_uid"] = uuid.uuid4().hex[:8]
+            config["honeypot_in_chosen"] = random.random() < 0.5
+            config["honeypot_at_start"] = random.random() < 0.5
+            # Select percentage of rows for response honeypot
+            num_response_honeypot = int(dataset_size * cst.DPO_RESPONSE_HONEYPOT_PERCENTAGE)
+            config["response_honeypot_indices"] = set(
+                random.sample(range(dataset_size), min(num_response_honeypot, dataset_size))
+            )
+
+        return config
+    else:
+        return {}
+
+
+def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None, dpo_augmentations: dict = None):
     result = []
     total_rows = 0
     fully_empty_rows = 0
     is_chat_task = isinstance(task, ChatRawTask)
-    
-    # DPO augmentation configuration
-    dpo_augmentations = {}
-    prompt_honeypot_indices = set()
-    response_honeypot_indices = set()
-    
-    if isinstance(task, DpoRawTask):
-        dpo_augmentations = {
-            'rearrange_sentences': random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            'add_prompt_honeypot': random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            'add_response_honeypot': random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            'swap_chosen_rejected': random.random() < cst.DPO_AUGMENTATION_CHANCE,
-        }
-        
-        # Configure prompt honeypot (applies to ALL prompts if enabled)
-        if dpo_augmentations['add_prompt_honeypot']:
-            dpo_augmentations['prompt_uid'] = uuid.uuid4().hex[:8]
-        
-        # Configure response honeypot (applies to a percentage of chosen OR rejected)
-        if dpo_augmentations['add_response_honeypot']:
-            dpo_augmentations['response_uid'] = uuid.uuid4().hex[:8]
-            dpo_augmentations['honeypot_in_chosen'] = random.random() < 0.5
-            dpo_augmentations['honeypot_at_start'] = random.random() < 0.5
-            # Select percentage of rows for response honeypot
-            num_response_honeypot = int(len(dataset) * cst.DPO_RESPONSE_HONEYPOT_PERCENTAGE)
-            response_honeypot_indices = set(random.sample(range(len(dataset)), min(num_response_honeypot, len(dataset))))
-            
-        logger.info(f"DPO Augmentations: rearrange={dpo_augmentations.get('rearrange_sentences')}, "
-                   f"prompt_honeypot={dpo_augmentations.get('add_prompt_honeypot')}, "
-                   f"response_honeypot={dpo_augmentations.get('add_response_honeypot')}, "
-                   f"swap={dpo_augmentations.get('swap_chosen_rejected')}")
-        
-        if dpo_augmentations.get('add_prompt_honeypot'):
+
+    if dpo_augmentations:
+        logger.info(
+            f"DPO Augmentations: rearrange={dpo_augmentations.get('rearrange_sentences')}, "
+            f"prompt_honeypot={dpo_augmentations.get('add_prompt_honeypot')}, "
+            f"response_honeypot={dpo_augmentations.get('add_response_honeypot')}, "
+            f"swap={dpo_augmentations.get('swap_chosen_rejected')}"
+        )
+
+        if dpo_augmentations.get("add_prompt_honeypot"):
             logger.info(f"Prompt honeypot UID: {dpo_augmentations['prompt_uid']} (added to all prompts)")
-        
-        if dpo_augmentations.get('add_response_honeypot'):
-            logger.info(f"Response honeypot UID: {dpo_augmentations['response_uid']} "
-                       f"(in {'chosen' if dpo_augmentations['honeypot_in_chosen'] else 'rejected'} "
-                       f"at {'start' if dpo_augmentations['honeypot_at_start'] else 'end'} "
-                       f"for {len(response_honeypot_indices)}/{len(dataset)} rows)")
+
+        if dpo_augmentations.get("add_response_honeypot"):
+            response_honeypot_indices = dpo_augmentations.get("response_honeypot_indices", set())
+            logger.info(
+                f"Response honeypot UID: {dpo_augmentations['response_uid']} "
+                f"(in {'chosen' if dpo_augmentations['honeypot_in_chosen'] else 'rejected'} "
+                f"at {'start' if dpo_augmentations['honeypot_at_start'] else 'end'} "
+                f"for {len(response_honeypot_indices)}/{len(dataset)} rows)"
+            )
 
     for idx, row in enumerate(dataset):
         row_dict = {}
@@ -316,52 +324,60 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                     is_row_empty = False
 
         # Apply DPO augmentations
-        if isinstance(task, DpoRawTask):
-
+        if isinstance(task, DpoRawTask) and dpo_augmentations:
             try:
                 # 1. Rearrange prompt sentences (applies to ALL rows if enabled)
-                if dpo_augmentations.get('rearrange_sentences') and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
+                if dpo_augmentations.get("rearrange_sentences") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
                     row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_DPO_PROMPT_COLUMN])
             except Exception as e:
                 logger.error(f"Error in rearrange_sentences: {e}")
-            
+
             try:
                 # 2. Add prompt honeypot (applies to ALL rows if enabled)
-                if dpo_augmentations.get('add_prompt_honeypot') and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
+                if dpo_augmentations.get("add_prompt_honeypot") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
                     row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _insert_uid_randomly(
-                        row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], 
-                        dpo_augmentations['prompt_uid']
+                        row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], dpo_augmentations["prompt_uid"]
                     )
             except Exception as e:
                 logger.error(f"Error in prompt honeypot: {e}")
-            
+
             try:
                 # 3. Add response honeypot (applies to percentage of rows if enabled)
-                if dpo_augmentations.get('add_response_honeypot') and idx in response_honeypot_indices:
-                    response_uid = dpo_augmentations['response_uid']
-                    
-                    if dpo_augmentations['honeypot_in_chosen'] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
-                        if dpo_augmentations['honeypot_at_start']:
-                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
+                response_honeypot_indices = dpo_augmentations.get("response_honeypot_indices", set())
+                if dpo_augmentations.get("add_response_honeypot") and idx in response_honeypot_indices:
+                    response_uid = dpo_augmentations["response_uid"]
+
+                    if dpo_augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
+                        if dpo_augmentations["honeypot_at_start"]:
+                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
+                                f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
+                            )
                         else:
-                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = f"{row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]} {response_uid}"
-                    elif not dpo_augmentations['honeypot_in_chosen'] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                        if dpo_augmentations['honeypot_at_start']:
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
+                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
+                                f"{row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]} {response_uid}"
+                            )
+                    elif not dpo_augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
+                        if dpo_augmentations["honeypot_at_start"]:
+                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
+                                f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
+                            )
                         else:
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = f"{row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]} {response_uid}"
+                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
+                                f"{row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]} {response_uid}"
+                            )
             except Exception as e:
                 logger.error(f"Error in response honeypot: {e}")
-            
+
             try:
                 # 4. Swap chosen and rejected (applies to ALL rows if enabled)
-                if dpo_augmentations.get('swap_chosen_rejected'):
+                if dpo_augmentations.get("swap_chosen_rejected"):
                     if cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                        row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN], row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = \
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN], row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]
+                        row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN], row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
+                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN],
+                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN],
+                        )
             except Exception as e:
                 logger.error(f"Error in swap chosen/rejected: {e}")
-
 
         result.append(row_dict)
         total_rows += 1
@@ -372,16 +388,16 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
         raise ValueError(f"More than 80% of rows are fully empty ({fully_empty_rows}/{total_rows} rows)")
 
     result = _validate_dpo_data(result, task)
-    
+
     # Log examples of augmented data for DPO tasks
     if isinstance(task, DpoRawTask) and result:
-        logger.info(f"[DPO_AUGMENTATION] Showing 2 examples of augmented data:")
-        
+        logger.info("[DPO_AUGMENTATION] Showing 2 examples of augmented data:")
+
         # Show first 2 examples to see the augmentations
         for i in range(min(2, len(result))):
             example = result[i]
-            logger.info(f"[DPO_EXAMPLE_{i+1}]:")
-            
+            logger.info(f"[DPO_EXAMPLE_{i + 1}]:")
+
             # Show prompt (truncate if too long)
             prompt = example.get(cst.STANDARD_DPO_PROMPT_COLUMN, "")
             if len(prompt) > 150:
@@ -389,15 +405,15 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
             else:
                 prompt_preview = prompt
             logger.info(f"  Prompt: {prompt_preview}")
-            
-            # Show chosen (truncate if too long) 
+
+            # Show chosen (truncate if too long)
             chosen = example.get(cst.STANDARD_DPO_CHOSEN_COLUMN, "")
             if len(chosen) > 150:
                 chosen_preview = chosen[:150] + "..."
             else:
                 chosen_preview = chosen
             logger.info(f"  Chosen: {chosen_preview}")
-            
+
             # Show rejected (truncate if too long)
             rejected = example.get(cst.STANDARD_DPO_REJECTED_COLUMN, "")
             if len(rejected) > 150:
@@ -405,28 +421,31 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
             else:
                 rejected_preview = rejected
             logger.info(f"  Rejected: {rejected_preview}")
-    
+
     return result
 
 
 def _validate_dpo_data(result: list[dict], task: AnyTextTypeRawTask) -> list[dict]:
     if not isinstance(task, DpoRawTask):
         return result
-    
+
     original_count = len(result)
     filtered_result = [
-        row for row in result 
-        if (row.get(cst.STANDARD_DPO_PROMPT_COLUMN, "").strip() and 
-            row.get(cst.STANDARD_DPO_CHOSEN_COLUMN, "").strip() and 
-            row.get(cst.STANDARD_DPO_REJECTED_COLUMN, "").strip())
+        row
+        for row in result
+        if (
+            row.get(cst.STANDARD_DPO_PROMPT_COLUMN, "").strip()
+            and row.get(cst.STANDARD_DPO_CHOSEN_COLUMN, "").strip()
+            and row.get(cst.STANDARD_DPO_REJECTED_COLUMN, "").strip()
+        )
     ]
-    
+
     if len(filtered_result) < original_count:
         logger.warning(f"Filtered out {original_count - len(filtered_result)} DPO rows with empty prompt/chosen/rejected fields")
-    
+
     if len(filtered_result) == 0:
         raise ValueError("All DPO data points have empty prompt, chosen, or rejected fields")
-    
+
     return filtered_result
 
 
@@ -490,12 +509,19 @@ async def _process_and_upload_datasets(
     logger.info(f"Columns to sample: {columns_to_sample}")
     logger.info(f"Should reupload train: {should_reupload_train}, test: {should_reupload_test}")
     logger.info(f"Dataset HF name: {ds_hf_name}")
+
+    dpo_augmentations = None
+    if isinstance(task, DpoRawTask):
+        max_dataset_size = max(len(train_dataset), len(test_dataset))
+        dpo_augmentations = _generate_dpo_augmentation_config(max_dataset_size)
+        logger.info(f"Generated DPO augmentation config for dataset size {max_dataset_size}")
+
     try:
         if should_reupload_train:
-            train_data_json = change_to_json_format(train_dataset, columns_to_sample, task)
-            
+            train_data_json = change_to_json_format(train_dataset, columns_to_sample, task, dpo_augmentations)
+
             await _validate_and_filter_grpo_reward_functions(task, train_data_json, psql_db)
-            
+
             train_json_path, train_json_size = await save_json_to_temp_file(train_data_json, prefix="train_data_")
             files_to_delete.append(train_json_path)
             await _check_file_size(train_json_size, "train_data")
@@ -505,7 +531,7 @@ async def _process_and_upload_datasets(
         else:
             train_json_url = train_dataset
         if should_reupload_test:
-            test_data_json = change_to_json_format(test_dataset, columns_to_sample, task)
+            test_data_json = change_to_json_format(test_dataset, columns_to_sample, task, dpo_augmentations)
             test_json_path, test_json_size = await save_json_to_temp_file(test_data_json, prefix="test_data_")
             files_to_delete.append(test_json_path)
             await _check_file_size(test_json_size, "test_data")
@@ -513,7 +539,7 @@ async def _process_and_upload_datasets(
         else:
             test_json_url = test_dataset
         if synthetic_data:
-            synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample, task)
+            synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample, task, dpo_augmentations)
             synth_json_path, synth_json_size = await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_")
             files_to_delete.append(synth_json_path)
             await _check_file_size(synth_json_size, "synth_data")
@@ -556,10 +582,10 @@ async def _validate_and_filter_grpo_reward_functions(task: GrpoRawTask, json_dat
     """
     if not isinstance(task, GrpoRawTask) or not task.reward_functions:
         return False
-    
+
     sample_size = min(5, len(json_data))
     json_sample = json_data[:sample_size]
-    
+
     valid_reward_functions = []
     for rf in task.reward_functions:
         is_valid, error_msg, func = validate_reward_function(rf.reward_func, json_sample)
@@ -567,22 +593,22 @@ async def _validate_and_filter_grpo_reward_functions(task: GrpoRawTask, json_dat
             valid_reward_functions.append(rf)
         else:
             logger.warning(f"Removing invalid reward function: {error_msg}")
-    
+
     if not valid_reward_functions:
         raise ValueError("No valid reward functions remain after dataset validation")
-    
+
     # Update database if any functions were filtered out
     if len(valid_reward_functions) != len(task.reward_functions):
         logger.info(f"Filtering reward functions: {len(task.reward_functions)} -> {len(valid_reward_functions)}")
-        
+
         # Update task object
         task.reward_functions = valid_reward_functions
-        
+
         # Update database with filtered reward functions
         await update_task(task, psql_db)
-        
+
         return True
-    
+
     return False
 
 
@@ -630,7 +656,11 @@ def pick_columns_to_sample(task: AnyTextTypeRawTask, dataset: Dataset = None) ->
 
 def validate_and_transform_dpo(data: DpoDatasetColumnsResponse, task: DpoRawTask) -> dict:
     assert isinstance(data, DpoDatasetColumnsResponse)
-    return {cst.STANDARD_DPO_PROMPT_COLUMN: data.field_prompt, cst.STANDARD_DPO_CHOSEN_COLUMN: data.field_chosen, cst.STANDARD_DPO_REJECTED_COLUMN: data.field_rejected}
+    return {
+        cst.STANDARD_DPO_PROMPT_COLUMN: data.field_prompt,
+        cst.STANDARD_DPO_CHOSEN_COLUMN: data.field_chosen,
+        cst.STANDARD_DPO_REJECTED_COLUMN: data.field_rejected,
+    }
 
 
 async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: DpoRawTask) -> list[dict]:
@@ -845,12 +875,9 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
         logger.info(f"Preparing {train_dataset_name}")
 
         if has_multiple_datasets:
-            merged_samples = await load_and_merge_multiple_datasets(
-                dataset_ids,
-                task,
-                keypair
-            )
+            merged_samples = await load_and_merge_multiple_datasets(dataset_ids, task, keypair)
             from datasets import Dataset as HFDataset
+
             try:
                 dataset = HFDataset.from_list(merged_samples)
             except Exception as e:
@@ -880,14 +907,15 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
             elif isinstance(task, GrpoRawTask):
                 dataset = standardize_grpo_column_names(dataset, task)
 
-
             # Subsample when using only a single dataset (50-100% of original size)
             original_size = len(dataset)
             subsample_percentage = random.uniform(0.5, 1.0)
             subsample_size = int(original_size * subsample_percentage)
 
             if subsample_size < original_size:
-                logger.info(f"Subsampling single dataset from {original_size} to {subsample_size} rows ({subsample_percentage:.1%})")
+                logger.info(
+                    f"Subsampling single dataset from {original_size} to {subsample_size} rows ({subsample_percentage:.1%})"
+                )
                 dataset = dataset.shuffle(seed=42).select(range(subsample_size))
             else:
                 logger.info(f"Using full dataset size of {original_size} rows")
@@ -974,7 +1002,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
                         split_point = len(synthetic_ds) // 3
                         synth_for_training = synthetic_ds[:split_point]
                         synth_for_eval = synthetic_ds[split_point:]
-                    
+
                     # Add synthetic data to training set
                     if len(synth_for_training) > 0:
                         synth_train_dataset = Dataset.from_list(synth_for_training)
