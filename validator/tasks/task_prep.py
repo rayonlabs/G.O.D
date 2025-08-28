@@ -340,9 +340,9 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
             try:
                 # 3. Add response honeypot (applies to percentage of rows if enabled)
                 if dpo_augmentations.get('add_response_honeypot') and idx in response_honeypot_indices:
-                response_uid = dpo_augmentations['response_uid']
-                
-                if dpo_augmentations['honeypot_in_chosen'] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
+                    response_uid = dpo_augmentations['response_uid']
+                    
+                    if dpo_augmentations['honeypot_in_chosen'] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
                     if dpo_augmentations['honeypot_at_start']:
                         row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
                     else:
