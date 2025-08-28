@@ -279,10 +279,6 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
     fully_empty_rows = 0
     is_chat_task = isinstance(task, ChatRawTask)
 
-    # Use provided DPO augmentations or generate new ones (for backward compatibility)
-    if dpo_augmentations is None and isinstance(task, DpoRawTask):
-        dpo_augmentations = _generate_dpo_augmentation_config(len(dataset))
-
     if dpo_augmentations:
         logger.info(
             f"DPO Augmentations: rearrange={dpo_augmentations.get('rearrange_sentences')}, "
