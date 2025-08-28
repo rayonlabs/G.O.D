@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import shutil
 import tempfile
 import uuid
@@ -250,6 +251,9 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
     fully_empty_rows = 0
     is_chat_task = isinstance(task, ChatRawTask)
     
+    logger.info(f"change_to_json_format called with task type: {type(task).__name__ if task else 'None'}")
+    logger.info(f"Dataset size: {len(dataset) if dataset else 0}, Columns: {columns}")
+    
     # DPO augmentation configuration
     dpo_augmentations = {}
     prompt_honeypot_indices = set()
@@ -316,19 +320,26 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
         # Apply DPO augmentations
         if isinstance(task, DpoRawTask):
-            # 1. Rearrange prompt sentences (20% chance, applies to ALL rows)
-            if dpo_augmentations.get('rearrange_sentences') and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
-                row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_DPO_PROMPT_COLUMN])
+            try:
+                # 1. Rearrange prompt sentences (applies to ALL rows if enabled)
+                if dpo_augmentations.get('rearrange_sentences') and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
+                    row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_DPO_PROMPT_COLUMN])
+            except Exception as e:
+                logger.error(f"Error in rearrange_sentences: {e}")
             
-            # 2. Add prompt honeypot (20% chance, applies to ALL rows)
-            if dpo_augmentations.get('add_prompt_honeypot') and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
-                row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _insert_uid_randomly(
-                    row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], 
-                    dpo_augmentations['prompt_uid']
-                )
+            try:
+                # 2. Add prompt honeypot (applies to ALL rows if enabled)
+                if dpo_augmentations.get('add_prompt_honeypot') and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
+                    row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _insert_uid_randomly(
+                        row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], 
+                        dpo_augmentations['prompt_uid']
+                    )
+            except Exception as e:
+                logger.error(f"Error in prompt honeypot: {e}")
             
-            # 3. Add response honeypot (20% chance, applies to 25% of rows)
-            if dpo_augmentations.get('add_response_honeypot') and idx in response_honeypot_indices:
+            try:
+                # 3. Add response honeypot (applies to percentage of rows if enabled)
+                if dpo_augmentations.get('add_response_honeypot') and idx in response_honeypot_indices:
                 response_uid = dpo_augmentations['response_uid']
                 
                 if dpo_augmentations['honeypot_in_chosen'] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
@@ -341,12 +352,17 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                         row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
                     else:
                         row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = f"{row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]} {response_uid}"
+            except Exception as e:
+                logger.error(f"Error in response honeypot: {e}")
             
-            # 4. Swap chosen and rejected (20% chance, applies to ALL rows)
-            if dpo_augmentations.get('swap_chosen_rejected'):
-                if cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN], row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = \
-                        row_dict[cst.STANDARD_DPO_REJECTED_COLUMN], row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]
+            try:
+                # 4. Swap chosen and rejected (applies to ALL rows if enabled)
+                if dpo_augmentations.get('swap_chosen_rejected'):
+                    if cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
+                        row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN], row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = \
+                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN], row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]
+            except Exception as e:
+                logger.error(f"Error in swap chosen/rejected: {e}")
 
         result.append(row_dict)
         total_rows += 1
