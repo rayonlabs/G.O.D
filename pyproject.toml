@@ -48,7 +48,8 @@ dependencies = [
     "detoxify",
     "gitpython",
     "nvidia-ml-py3",
-    "aiofiles"
+    "aiofiles",
+    "astor"
 ]
 
 [project.optional-dependencies]

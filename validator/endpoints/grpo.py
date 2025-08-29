@@ -1,4 +1,3 @@
-import re
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -13,31 +12,15 @@ from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.db.sql import grpo as grpo_sql
 from validator.utils.logging import get_logger
+from validator.utils.reward_functions import extract_docstring
+from validator.utils.reward_functions import extract_function_name
+from validator.utils.reward_functions import process_reward_function_code
 
 
 logger = get_logger(__name__)
 
 
 REWARD_FUNCTIONS_ENDPOINT = "/v1/grpo/reward_functions"
-
-
-def extract_function_name(code: str) -> str:
-    """Extract function name from the reward function code."""
-    match = re.search(r"def\s+(\w+)\s*\(", code)
-    return match.group(1) if match else "unknown_function"
-
-
-def extract_docstring(code: str) -> str:
-    """Extract docstring from the reward function code."""
-    # Match triple quotes docstring
-    match = re.search(r'"""(.*?)"""', code, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    # Try single quotes
-    match = re.search(r"'''(.*?)'''", code, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return "No description available"
 
 
 async def get_reward_functions(
@@ -75,11 +58,13 @@ async def add_reward_function(
         Dictionary with the created reward function ID
     """
     try:
+        code_to_store = process_reward_function_code(request.code)
+
         reward_id = await grpo_sql.add_reward_function(
             config.psql_db,
             name=request.name,
             description=request.description,
-            code=request.code,
+            code=code_to_store,
             reward_weight=request.reward_weight,
         )
 

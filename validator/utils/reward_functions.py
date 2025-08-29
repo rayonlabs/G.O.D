@@ -1,6 +1,10 @@
+import ast
 import inspect
 import numbers
+import re
 from typing import Callable
+
+import astor
 
 import validator.core.constants as cst
 from validator.utils.logging import get_logger
@@ -62,3 +66,150 @@ def validate_reward_function(func_def: str, json_sample: list[dict] = None) -> t
         return True, "", func
     except Exception as e:
         return False, str(e), None
+
+
+def restricted_execution(code: str, input_data: str) -> tuple[str, str]:
+    """Execute Python code with RestrictedPython restrictions.
+    
+    Args:
+        code: Python code to execute
+        input_data: Input data to pass to the code
+        
+    Returns:
+        Tuple of (output, error) where output is stdout and error is stderr
+    """
+    import contextlib
+    import io
+
+    from RestrictedPython import compile_restricted
+    from RestrictedPython.Guards import safe_builtins
+    from RestrictedPython.Guards import safe_globals
+    from RestrictedPython.PrintCollector import PrintCollector
+    
+    stderr_capture = io.StringIO()
+    
+    try:
+        compiled_code = compile_restricted(code, '<string>', 'exec')
+        if compiled_code is None:
+            return "", "Failed to compile restricted code"
+        
+        # Set up proper RestrictedPython environment
+        restricted_builtins = safe_builtins.copy()
+        # Add commonly needed builtins
+        extra_builtins = {
+            'sum': sum,
+            'min': min,
+            'max': max,
+            'abs': abs,
+            'round': round,
+            'sorted': sorted,
+            'reversed': reversed,
+            'enumerate': enumerate,
+            'zip': zip,
+            'map': map,
+            'filter': filter,
+        }
+        for name, func in extra_builtins.items():
+            restricted_builtins[name] = func
+        
+        restricted_globals = {
+            '__builtins__': restricted_builtins,
+            '_print_': PrintCollector,
+            '_getattr_': getattr,
+            '_getitem_': lambda obj, key: obj[key],
+            '_getiter_': iter,
+            '_iter_unpack_sequence_': iter,
+            'input': input_data,
+            'sum': sum,
+            'min': min,
+            'max': max,
+            'enumerate': enumerate,
+            'map': map,
+            'filter': filter,
+        }
+        restricted_globals.update(safe_globals)
+        
+        local_vars = {}
+        
+        with contextlib.redirect_stderr(stderr_capture):
+            exec(compiled_code, restricted_globals, local_vars)
+        
+        # Get printed output from PrintCollector
+        print_collector = local_vars.get('_print')
+        if print_collector is not None:
+            # PrintCollector.txt is a list, join it to get string output
+            if hasattr(print_collector, 'txt'):
+                output = ''.join(str(item) for item in print_collector.txt)
+            else:
+                output = str(print_collector)
+        else:
+            output = ""
+            
+        error = stderr_capture.getvalue()
+        return output, error
+        
+    except Exception as e:
+        return "", str(e)
+
+
+def process_reward_function_code(code: str) -> str:
+    """Process reward function code to inject restricted_execution if needed and fix function signature.
+    
+    Args:
+        code: The reward function code
+        
+    Returns:
+        The processed code with restricted_execution injected if needed and proper signature
+    """
+    try:
+        reward_func_ast = ast.parse(code)
+        
+        # Find the function definition and fix its arguments
+        for node in ast.walk(reward_func_ast):
+            if isinstance(node, ast.FunctionDef):
+                args = node.args
+                other_args = [arg for arg in args.args if arg.arg not in ["completions", "kwargs"]]
+                completions_arg = ast.arg(arg="completions", annotation=None)
+                args.args = [completions_arg] + other_args
+                args.kwarg = ast.arg(arg="kwargs", annotation=None)
+                
+                # Inject restricted_execution definition
+                if "restricted_execution" in code:
+                    restricted_exec_source = inspect.getsource(restricted_execution)
+                    restricted_exec_ast = ast.parse(restricted_exec_source)
+                    
+                    restricted_exec_node = None
+                    for exec_node in ast.walk(restricted_exec_ast):
+                        if isinstance(exec_node, ast.FunctionDef) and exec_node.name == "restricted_execution":
+                            restricted_exec_node = exec_node
+                            break
+                    
+                    if restricted_exec_node:
+                        node.body.insert(0, restricted_exec_node)
+                
+                break
+        
+        return astor.to_source(reward_func_ast)
+        
+    except Exception as e:
+        logger.warning(f"Failed to process reward function code: {e}")
+        return code
+
+
+def extract_function_name(code: str) -> str:
+    """Extract function name from the reward function code."""
+    match = re.search(r"def\s+(\w+)\s*\(", code)
+    return match.group(1) if match else "unknown_function"
+
+
+def extract_docstring(code: str) -> str:
+    """Extract docstring from the reward function code."""
+    # Match triple quotes docstring
+    match = re.search(r'"""(.*?)"""', code, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    # Try single quotes
+    match = re.search(r"'''(.*?)'''", code, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return "No description available"

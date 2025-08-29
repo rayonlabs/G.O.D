@@ -27,6 +27,10 @@ Competitive events where validators execute miners' open-source training scripts
 - [Tournament Miner Guide](docs/tourn_miner.md)
 - [Validator Setup Guide](docs/validator_setup.md)
 
+## Developer Resources
+
+For technical documentation on GRPO reward functions and implementation details, see [GRPO Safe Code Execution Guide](docs/grpo_safe_execution.md).
+
 ## Recommended Compute Requirements
 
 [Compute Requirements](docs/compute.md)
