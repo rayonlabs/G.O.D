@@ -105,7 +105,7 @@ INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     (10_000, 25_000): (2, 4),  
     (25_000, 50_000): (3, 5),  
     (50_000, 100_000): (3, 6),  
-    (100_000, 500_000): (4, 6),  
+    (100_000, 500_000): (4, 6)}  
 
 # text augmentation synth
 TEXT_SYNTH_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
