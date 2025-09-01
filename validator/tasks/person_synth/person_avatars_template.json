@@ -1,237 +1,244 @@
 {
-    "8": {
-      "inputs": {
-        "samples": [
-          "Sampler",
-          0
-        ],
-        "vae": [
-          "75",
-          2
-        ]
-      },
-      "class_type": "VAEDecode",
-      "_meta": {
-        "title": "VAE Decode"
-      }
+  "Prompt": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "11",
+        0
+      ]
     },
-    "11": {
-      "inputs": {
-        "instantid_file": "ip-adapter.bin"
-      },
-      "class_type": "InstantIDModelLoader",
-      "_meta": {
-        "title": "Load InstantID Model"
-      }
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "13",
+        0
+      ],
+      "vae": [
+        "10",
+        0
+      ]
     },
-    "13": {
-      "inputs": {
-        "image": "person.jpg",
-        "upload": "image"
-      },
-      "class_type": "LoadImage",
-      "_meta": {
-        "title": "Load Image"
-      }
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "10": {
+    "inputs": {
+      "vae_name": "ae.safetensors"
     },
-    "15": {
-      "inputs": {
-        "images": [
-          "8",
-          0
-        ]
-      },
-      "class_type": "PreviewImage",
-      "_meta": {
-        "title": "Preview Image"
-      }
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "11": {
+    "inputs": {
+      "clip_name1": "t5xxl_fp16.safetensors",
+      "clip_name2": "clip_l.safetensors",
+      "type": "flux",
+      "device": "default"
     },
-    "16": {
-      "inputs": {
-        "control_net_name": "diffusion_pytorch_model.safetensors"
-      },
-      "class_type": "ControlNetLoader",
-      "_meta": {
-        "title": "Load ControlNet Model"
-      }
+    "class_type": "DualCLIPLoader",
+    "_meta": {
+      "title": "DualCLIPLoader"
+    }
+  },
+  "12": {
+    "inputs": {
+      "unet_name": "flux1-kontext-dev.safetensors",
+      "weight_dtype": "default"
     },
-    "38": {
-      "inputs": {
-        "provider": "CUDA"
-      },
-      "class_type": "InstantIDFaceAnalysis",
-      "_meta": {
-        "title": "InstantID Face Analysis"
-      }
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "13": {
+    "inputs": {
+      "noise": [
+        "Seed",
+        0
+      ],
+      "guider": [
+        "22",
+        0
+      ],
+      "sampler": [
+        "16",
+        0
+      ],
+      "sigmas": [
+        "Sampler",
+        0
+      ],
+      "latent_image": [
+        "Latent",
+        0
+      ]
     },
-    "71": {
-      "inputs": {
-        "samples": [
-          "Sampler_initial",
-          0
-        ],
-        "vae": [
-          "75",
-          2
-        ]
-      },
-      "class_type": "VAEDecode",
-      "_meta": {
-        "title": "VAE Decode"
-      }
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "16": {
+    "inputs": {
+      "sampler_name": "euler"
     },
-    "75": {
-      "inputs": {
-        "ckpt_name": "realvisxl.safetensors",
-        "key_opt": "",
-        "mode": "Auto"
-      },
-      "class_type": "CheckpointLoaderSimpleShared //Inspire",
-      "_meta": {
-        "title": "Shared Checkpoint Loader (Inspire)"
-      }
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "Sampler": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 20,
+      "denoise": 1,
+      "model": [
+        "30",
+        0
+      ]
     },
-    "Latent": {
-      "inputs": {
-        "width": 1024,
-        "height": 1024,
-        "batch_size": 1
-      },
-      "class_type": "EmptyLatentImage",
-      "_meta": {
-        "title": "Empty Latent Image"
-      }
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "BasicScheduler"
+    }
+  },
+  "22": {
+    "inputs": {
+      "model": [
+        "30",
+        0
+      ],
+      "conditioning": [
+        "42",
+        0
+      ]
     },
-    "Prompt": {
-      "inputs": {
-        "text": "(portrait:1.5), ",
-        "clip": [
-          "75",
-          1
-        ]
-      },
-      "class_type": "CLIPTextEncode",
-      "_meta": {
-        "title": "CLIP Text Encode (Prompt)"
-      }
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "BasicGuider"
+    }
+  },
+  "Seed": {
+    "inputs": {
+      "noise_seed": 386112450490314
     },
-    "Negative_prompt": {
-      "inputs": {
-        "text": "",
-        "clip": [
-          "75",
-          1
-        ]
-      },
-      "class_type": "CLIPTextEncode",
-      "_meta": {
-        "title": "CLIP Text Encode (Prompt)"
-      }
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "Guidance": {
+    "inputs": {
+      "guidance": 2.5,
+      "conditioning": [
+        "Prompt",
+        0
+      ]
     },
-    "Sampler_initial": {
-      "inputs": {
-        "seed": 927578480132631,
-        "steps": 10,
-        "cfg": 2,
-        "sampler_name": "dpmpp_sde_gpu",
-        "scheduler": "karras",
-        "denoise": 1,
-        "model": [
-          "75",
-          0
-        ],
-        "positive": [
-          "Prompt",
-          0
-        ],
-        "negative": [
-          "Negative_prompt",
-          0
-        ],
-        "latent_image": [
-          "Latent",
-          0
-        ]
-      },
-      "class_type": "KSampler",
-      "_meta": {
-        "title": "KSampler"
-      }
+    "class_type": "FluxGuidance",
+    "_meta": {
+      "title": "FluxGuidance"
+    }
+  },
+  "Latent": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
     },
-    "InstantID": {
-      "inputs": {
-        "ip_weight": 0.7000000000000001,
-        "cn_strength": 0.9,
-        "start_at": 0,
-        "end_at": 1,
-        "noise": 0.2,
-        "combine_embeds": "average",
-        "instantid": [
-          "11",
-          0
-        ],
-        "insightface": [
-          "38",
-          0
-        ],
-        "control_net": [
-          "16",
-          0
-        ],
-        "image": [
-          "13",
-          0
-        ],
-        "model": [
-          "75",
-          0
-        ],
-        "positive": [
-          "Prompt",
-          0
-        ],
-        "negative": [
-          "Negative_prompt",
-          0
-        ],
-        "image_kps": [
-          "71",
-          0
-        ]
-      },
-      "class_type": "ApplyInstantIDAdvanced",
-      "_meta": {
-        "title": "Apply InstantID Advanced"
-      }
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "30": {
+    "inputs": {
+      "max_shift": 1.15,
+      "base_shift": 0.5,
+      "width": 1024,
+      "height": 1024,
+      "model": [
+        "12",
+        0
+      ]
     },
-    "Sampler": {
-      "inputs": {
-        "seed": 1057538968623838,
-        "steps": 15,
-        "cfg": 1.5,
-        "sampler_name": "dpmpp_sde_gpu",
-        "scheduler": "karras",
-        "denoise": 1,
-        "model": [
-          "InstantID",
-          0
-        ],
-        "positive": [
-          "InstantID",
-          1
-        ],
-        "negative": [
-          "InstantID",
-          2
-        ],
-        "latent_image": [
-          "Latent",
-          0
-        ]
-      },
-      "class_type": "KSampler",
-      "_meta": {
-        "title": "KSampler"
-      }
+    "class_type": "ModelSamplingFlux",
+    "_meta": {
+      "title": "ModelSamplingFlux"
+    }
+  },
+  "39": {
+    "inputs": {
+      "pixels": [
+        "40",
+        0
+      ],
+      "vae": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "40": {
+    "inputs": {
+      "image": [
+        "64",
+        0
+      ]
+    },
+    "class_type": "FluxKontextImageScale",
+    "_meta": {
+      "title": "FluxKontextImageScale"
+    }
+  },
+  "42": {
+    "inputs": {
+      "conditioning": [
+        "Guidance",
+        0
+      ],
+      "latent": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "ReferenceLatent"
+    }
+  },
+  "61": {
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "64": {
+    "inputs": {
+      "image": "person.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
     }
   }
+}

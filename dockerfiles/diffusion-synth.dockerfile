@@ -5,10 +5,14 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         python3-dev \
-        git wget python3-venv \
-        ffmpeg libsm6 libxext6 && \
-    apt-get install build-essential libssl-dev libffi-dev python3-lib2to3 python3-distutils python3-dev -y \
+        python3-venv \
+        python3-setuptools \
+        python3-pip \
+        git wget \
+        ffmpeg libsm6 libxext6 \
+        build-essential libssl-dev libffi-dev \
     && rm -rf /var/lib/apt/lists/*
+
 
 COPY . .
 
@@ -26,6 +30,10 @@ RUN . /envs/generate/bin/activate && \
     python -c "from transformers import CLIPVisionModel; CLIPVisionModel.from_pretrained('openai/clip-vit-large-patch14-336')"
 
 ENV SAVE_DIR=""
+
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel huggingface_hub
+
+RUN python setup.py
 
 WORKDIR /app
 
