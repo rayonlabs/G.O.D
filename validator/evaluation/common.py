@@ -80,7 +80,7 @@ def create_finetuned_cache_dir():
 
 
 @retry_on_5xx()
-def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoModelForCausalLM:
+def load_model(model_name_or_path: str, is_base_model: bool = False, local_files_only: bool = False) -> AutoModelForCausalLM:
     try:
         # Only use default cache for the base model
         cache_dir = None if is_base_model else create_finetuned_cache_dir()
@@ -91,6 +91,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
             device_map="auto",
             cache_dir=cache_dir,
             torch_dtype=torch.bfloat16,
+            local_files_only=local_files_only,
         )
     except RuntimeError as e:
         error_msg = str(e)
@@ -105,6 +106,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
                     device_map="auto",
                     cache_dir=cache_dir,
                     torch_dtype=torch.bfloat16,
+                    local_files_only=local_files_only,
                 )
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise
@@ -114,24 +116,42 @@ def load_model(model_name_or_path: str, is_base_model: bool = False) -> AutoMode
 
 
 @retry_on_5xx()
-def load_tokenizer(original_model: str) -> AutoTokenizer:
+def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoTokenizer:
     try:
-        return AutoTokenizer.from_pretrained(original_model, token=os.environ.get("HUGGINGFACE_TOKEN"))
+        return AutoTokenizer.from_pretrained(
+            original_model,
+            token=os.environ.get("HUGGINGFACE_TOKEN"),
+            local_files_only=local_files_only
+        )
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
 
 
 @retry_on_5xx()
-def load_finetuned_model(repo: str) -> AutoPeftModelForCausalLM:
+def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftModelForCausalLM:
     try:
-        cache_dir = create_finetuned_cache_dir()
+        cache_dir = None if local_files_only else create_finetuned_cache_dir()
+        model_path = repo
+        if local_files_only and '/' in repo:
+            hf_cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
+            local_repo_path = os.path.join(hf_cache_dir, "models--" + repo.replace('/', '--'))
+            if os.path.exists(local_repo_path):
+                snapshots_dir = os.path.join(local_repo_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = [d for d in os.listdir(snapshots_dir)
+                               if os.path.isdir(os.path.join(snapshots_dir, d))]
+                    if snapshots:
+                        model_path = os.path.join(snapshots_dir, snapshots[0])
+                        logger.info(f"Using local cache path for LoRA model: {model_path}")
+
         return AutoPeftModelForCausalLM.from_pretrained(
-            repo,
+            model_path,
             is_trainable=False,
             device_map="auto",
             cache_dir=cache_dir,
             torch_dtype=torch.bfloat16,
+            local_files_only=local_files_only,
         )
     except RuntimeError as e:
         error_msg = str(e)
@@ -140,12 +160,13 @@ def load_finetuned_model(repo: str) -> AutoPeftModelForCausalLM:
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 return AutoPeftModelForCausalLM.from_pretrained(
-                    repo,
+                    model_path,
                     is_trainable=False,
                     ignore_mismatched_sizes=True,
                     device_map="auto",
                     cache_dir=cache_dir,
                     torch_dtype=torch.bfloat16,
+                    local_files_only=local_files_only,
                 )
 
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
