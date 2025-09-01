@@ -20,13 +20,17 @@ logger = get_logger(__name__)
 hf_api = HfApi()
 
 
-def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalLM) -> bool:
+def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalLM, local_files_only: bool = False) -> bool:
     max_retries = 3
     base_delay = 2
 
     for attempt in range(max_retries):
         try:
-            original_config = AutoConfig.from_pretrained(original_repo, token=os.environ.get("HUGGINGFACE_TOKEN"))
+            original_config = AutoConfig.from_pretrained(
+                original_repo,
+                token=os.environ.get("HUGGINGFACE_TOKEN"),
+                local_files_only=local_files_only
+            )
             break
         except Exception as e:
             if attempt == max_retries - 1:
@@ -74,18 +78,29 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
 
 
 @retry_on_5xx()
-def check_for_lora(model_id: str) -> bool:
+def check_for_lora(model_id: str, local_files_only: bool = False) -> bool:
     """
     Check if a Hugging Face model has LoRA adapters by looking for adapter_config.json.
 
     Args:
         model_id (str): The Hugging Face model ID (e.g., 'username/model-name') or path
+        local_files_only (bool): If True, only check local files without making API calls
 
     Returns:
         bool: True if it's a LoRA adapter, False otherwise
     """
+    LORA_CONFIG_FILE = "adapter_config.json"
     try:
-        return "adapter_config.json" in hf_api.list_repo_files(model_id)
+        if local_files_only:
+            cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
+            repo_path = os.path.join(cache_dir, "models--" + model_id.replace('/', '--'))
+            if os.path.exists(repo_path):
+                for root, dirs, files in os.walk(repo_path):
+                    if LORA_CONFIG_FILE in files:
+                        return True
+            return False
+        else:
+            return LORA_CONFIG_FILE in hf_api.list_repo_files(model_id)
     except Exception as e:
         logger.error(f"Error checking for LoRA adapters: {e}")
         return False

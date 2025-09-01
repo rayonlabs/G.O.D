@@ -1,5 +1,4 @@
 import asyncio
-import math
 import random
 from datetime import datetime
 from datetime import timezone
@@ -97,25 +96,9 @@ def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
         random.shuffle(pairs)
         return KnockoutRound(pairs=pairs)
     else:
-        num_groups = math.ceil(len(nodes_copy) / t_cst.EXPECTED_GROUP_SIZE)
-        if len(nodes_copy) / num_groups < t_cst.MIN_GROUP_SIZE:
-            num_groups = math.ceil(len(nodes_copy) / t_cst.EXPECTED_GROUP_SIZE - 1)
-
-        groups = [[] for _ in range(num_groups)]
-        base_size = len(nodes_copy) // num_groups
-        remainder = len(nodes_copy) % num_groups
-        group_sizes = [base_size + (1 if i < remainder else 0) for i in range(num_groups)]
-
-        random.shuffle(nodes_copy)
-        idx = 0
-        for g in range(num_groups):
-            group_nodes = nodes_copy[idx : idx + group_sizes[g]]
-            group_hotkeys = [node.hotkey for node in group_nodes]
-            groups[g] = Group(member_ids=group_hotkeys, task_ids=[])
-            idx += group_sizes[g]
-
-        random.shuffle(groups)
-        return GroupRound(groups=groups)
+        hotkeys = [node.hotkey for node in nodes_copy]
+        single_group = Group(member_ids=hotkeys, task_ids=[])
+        return GroupRound(groups=[single_group])
 
 
 async def _create_first_round(
@@ -366,7 +349,9 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             logger.info(f"Processing final round completion for tournament {tournament.tournament_id}")
             logger.info(f"Final round winner: {winner}")
             if winner == cst.EMISSION_BURN_HOTKEY and tournament.base_winner_hotkey:
-                logger.info(f"Defending champion {tournament.base_winner_hotkey} successfully defended (stored as EMISSION_BURN_HOTKEY)")
+                logger.info(
+                    f"Defending champion {tournament.base_winner_hotkey} successfully defended (stored as EMISSION_BURN_HOTKEY)"
+                )
 
             round_tasks = await get_tournament_tasks(completed_round.round_id, psql_db)
             logger.info(f"Found {len(round_tasks)} tasks in final round")
@@ -570,9 +555,9 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         for responding_node in selected_nodes:
             repo_url = responding_node.training_repo_response.github_repo
             logger.info(f"Checking obfuscation for {responding_node.node.hotkey}'s repo: {repo_url}")
-            
+
             is_not_obfuscated = await validate_repo_obfuscation(repo_url)
-            
+
             if is_not_obfuscated:
                 validated_nodes.append(responding_node)
                 logger.info(f"Repository {repo_url} passed obfuscation check for hotkey {responding_node.node.hotkey}")
@@ -968,7 +953,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                     waiting_for_synced_tasks = True
                 elif task_obj and task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
                     logger.info(f"Task {task.task_id} failed during preparation, creating replacement immediately.")
-                    
+
                     # Create replacement task immediately
                     try:
                         logger.info(
@@ -984,10 +969,15 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                             pair_id=task.pair_id,
                             config=config,
                         )
-                        logger.info(f"Successfully created immediate replacement {new_task_id} for prep_task_failure {task.task_id}")
+                        logger.info(
+                            f"Successfully created immediate replacement {new_task_id} for prep_task_failure {task.task_id}"
+                        )
                         waiting_for_synced_tasks = True
                     except Exception as e:
-                        logger.error(f"Failed to create immediate replacement for prep_task_failure {task.task_id}: {str(e)}", exc_info=True)
+                        logger.error(
+                            f"Failed to create immediate replacement for prep_task_failure {task.task_id}: {str(e)}",
+                            exc_info=True,
+                        )
                         # Fall back to copying to general cycle if replacement fails
                         await _copy_task_to_general(task.task_id, config.psql_db)
                         waiting_for_synced_tasks = True
