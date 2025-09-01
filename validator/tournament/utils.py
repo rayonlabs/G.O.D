@@ -24,7 +24,6 @@ from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
-from validator.db.sql.submissions_and_scoring import get_task_winners
 from validator.db.sql.tasks import get_task
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import count_champion_consecutive_wins
@@ -535,58 +534,60 @@ async def get_knockout_winners(
 async def get_group_winners(
     completed_round: TournamentRoundData, round_tasks: list[TournamentTask], psql_db: PSQLDB
 ) -> list[str]:
-    """Get winners from group round based on task wins."""
-    NUM_WINNERS_TO_ADVANCE = 2
-    group_tasks = {}
-    for task in round_tasks:
-        if task.group_id:
-            if task.group_id not in group_tasks:
-                group_tasks[task.group_id] = []
-            group_tasks[task.group_id].append(task.task_id)
+    """Get winners from group round based on adjusted loss scores (top 8 performers)."""
+    TOP_WINNERS_TO_ADVANCE = 8
 
-    logger.info(f"Processing {len(group_tasks)} groups in round {completed_round.round_id}")
-    all_winners_set = set()
-    
-    for group_id, task_ids in group_tasks.items():
-        participants = await get_tournament_group_members(group_id, psql_db)
-        participant_hotkeys = [p.hotkey for p in participants]
-        logger.info(f"Group {group_id}: {len(participant_hotkeys)} participants, {len(task_ids)} tasks")
+    if len(round_tasks) > 1:
+        logger.warning(
+            f"There are {len(round_tasks)} tasks in round {completed_round.round_id}. We are taking the first task only."
+        )
 
-        if not participant_hotkeys or not task_ids:
+    round_task = round_tasks[0]
+    group_id = round_task.group_id
+    task_id = round_task.task_id
+
+    logger.info(f"Processing group {group_id} in round {completed_round.round_id}")
+
+    participants = await get_tournament_group_members(group_id, psql_db)
+    participant_hotkeys = [p.hotkey for p in participants]
+    logger.info(f"Group {group_id} and task {task_id} have {len(participant_hotkeys)} participants")
+
+    if not participant_hotkeys:
+        logger.warning(f"Group {group_id} has no participants")
+        return []
+
+    miner_results = await get_task_results_for_ranking(task_id, psql_db)
+    if not miner_results:
+        logger.warning(f"No valid results for task {task_id}")
+        return []
+
+    ranked_results = calculate_miner_ranking_and_scores(miner_results)
+
+    participant_scores = {}
+    for result in ranked_results:
+        hotkey = result.hotkey
+        adjusted_loss = result.adjusted_loss
+
+        if adjusted_loss is None or np.isnan(adjusted_loss):
             continue
 
-        task_winners = await get_task_winners(task_ids, psql_db)
-        logger.info(f"Group {group_id} task winners: {task_winners}")
+        participant_scores[hotkey] = adjusted_loss
 
-        hotkey_win_counts = Counter(task_winners.values())
-        logger.info(f"Group {group_id} win counts: {dict(hotkey_win_counts)}")
+    if not participant_scores:
+        logger.warning(f"Group {group_id} has no valid scores - proceeding with no winners")
+        return []
 
-        if len(hotkey_win_counts) == 0:
-            logger.warning(f"Group {group_id} has {len(hotkey_win_counts)} winners - proceeding with no winners")
-            continue
+    sorted_participants = sorted(participant_scores.items(), key=lambda x: x[1])
+    logger.info(
+        f"Group {group_id} participants sorted by adjusted loss: {[(hotkey, f'{loss:.6f}') for hotkey, loss in sorted_participants]}"
+    )
 
-        sorted_participants = sorted(hotkey_win_counts.items(), key=lambda x: x[1], reverse=True)
+    num_to_advance = min(TOP_WINNERS_TO_ADVANCE, len(sorted_participants))
+    group_winners = [hotkey for hotkey, _ in sorted_participants[:num_to_advance]]
 
-        if len(sorted_participants) == 1:
-            all_winners_set.add(sorted_participants[0][0])
-            logger.info(f"Group {group_id}: Single winner {sorted_participants[0][0]} with {sorted_participants[0][1]} wins")
-        else:
-            max_wins = sorted_participants[0][1]
-            tied_for_first = [hotkey for hotkey, wins in sorted_participants if wins == max_wins]
+    logger.info(f"Group {group_id}: Advancing top {num_to_advance} by adjusted loss: {group_winners}")
 
-            if len(tied_for_first) == 1:
-                group_winners = [hotkey for hotkey, _ in sorted_participants[:NUM_WINNERS_TO_ADVANCE]]
-                logger.info(f"Group {group_id}: Advancing top {NUM_WINNERS_TO_ADVANCE}: {group_winners}")
-            else:
-                group_winners = tied_for_first
-                logger.info(f"Group {group_id}: {len(tied_for_first)} tied for first with {max_wins} wins each: {group_winners}")
-
-            for winner in group_winners:
-                all_winners_set.add(winner)
-    
-    all_winners = list(all_winners_set)
-    logger.info(f"Total group stage winners (unique): {len(all_winners)} - {all_winners}")
-    return all_winners
+    return group_winners
 
 
 async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLDB, config: Config) -> list[str]:
@@ -597,12 +598,12 @@ async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLD
         winners = await get_knockout_winners(completed_round, round_tasks, psql_db, config)
     else:
         winners = await get_group_winners(completed_round, round_tasks, psql_db)
-    
+
     # Ensure unique winners by converting to set and back to list
     unique_winners = list(set(winners))
     if len(winners) != len(unique_winners):
         logger.info(f"Removed {len(winners) - len(unique_winners)} duplicate winners from round {completed_round.round_id}")
         logger.info(f"Original winners: {winners}")
         logger.info(f"Unique winners: {unique_winners}")
-    
+
     return unique_winners
