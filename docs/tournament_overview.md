@@ -41,15 +41,16 @@ Based on `TOURNAMENT_INTERVAL_HOURS = 24`, the system automatically schedules to
 
 ### 3. Tournament Activation (`TournamentStatus.ACTIVE`)
 - First round created with `_create_first_round()`
-- Round structure determined by participant count:
-  - **Group Stage**: 16+ miners → groups of 6-8 (`EXPECTED_GROUP_SIZE = 8`)
-  - **Knockout Stage**: <16 miners → head-to-head pairs
+- Round structure:
+  - **Group Stage**: All miners compete in one large group
+  - **Top 8 advance**: The top 8 performers from the group stage advance to knockout rounds
+  - **Knockout Stage**: Single elimination format for the top 8
 
 ### 4. Task Creation & Assignment
 
 #### Group Stage Tasks
-- **Text tournaments**: 1 Instruct + 1 DPO + 1 GRPO task per group
-- **Image tournaments**: `IMAGE_TASKS_PER_GROUP = 3` tasks per group
+- **Text tournaments**: 1 Instruct task
+- **Image tournaments**: 1 image task
 
 #### Knockout Stage Tasks  
 - **Text tournaments**: 1 probabilistically selected task per pair (Instruct/DPO/GRPO)
