@@ -87,9 +87,44 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
         logger.info(f"Is base model: {is_base_model}")
         logger.info(f"Local files only: {local_files_only}")
         
+        # For local files, try to use the snapshot path directly
+        if local_files_only:
+            cache_dir = os.path.expanduser("~/.cache/huggingface")
+            cache_path = os.path.join(cache_dir, "hub", f"models--{model_name_or_path.replace('/', '--')}")
+            
+            if os.path.exists(cache_path):
+                snapshots_dir = os.path.join(cache_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = sorted(os.listdir(snapshots_dir))  # Sort to get most recent
+                    
+                    # Find a snapshot with model files
+                    for snapshot in snapshots:
+                        snapshot_path = os.path.join(snapshots_dir, snapshot)
+                        files = os.listdir(snapshot_path)
+                        
+                        # Check if this snapshot has model weights
+                        has_model_files = any(f.endswith(('.bin', '.safetensors')) for f in files)
+                        has_config = 'config.json' in files
+                        
+                        if has_model_files and has_config:
+                            logger.info(f"Using snapshot {snapshot} with model files")
+                            # Try loading from the snapshot path directly
+                            try:
+                                model = AutoModelForCausalLM.from_pretrained(
+                                    snapshot_path,
+                                    device_map="auto",
+                                    torch_dtype=torch.bfloat16,
+                                    local_files_only=True
+                                )
+                                logger.info(f"=== MODEL LOADING SUCCESS (from snapshot) ===")
+                                return model
+                            except Exception as e:
+                                logger.warning(f"Failed to load from snapshot {snapshot}: {e}")
+                                continue
+        
+        # Fallback to standard loading
         # Set cache_dir based on whether it's base model or finetuned
         if local_files_only:
-            # When loading locally, use the standard HF cache
             cache_dir = os.path.expanduser("~/.cache/huggingface")
         elif not is_base_model:
             cache_dir = create_finetuned_cache_dir()
@@ -104,31 +139,8 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
-            logger.info(f"Token provided: {'Yes' if kwargs.get('token') else 'No'}")
         
-        logger.info(f"Cache dir: {cache_dir}")
-        logger.info(f"Model kwargs: {kwargs}")
-        
-        # Check cache existence if using local files
-        if local_files_only and cache_dir:
-            cache_path = os.path.join(cache_dir, "hub", f"models--{model_name_or_path.replace('/', '--')}")
-            logger.info(f"Checking cache path: {cache_path}")
-            if os.path.exists(cache_path):
-                logger.info(f"Cache path exists")
-                # List snapshots
-                snapshots_dir = os.path.join(cache_path, "snapshots")
-                if os.path.exists(snapshots_dir):
-                    snapshots = os.listdir(snapshots_dir)
-                    logger.info(f"Available snapshots: {snapshots}")
-                    if snapshots:
-                        snapshot_path = os.path.join(snapshots_dir, snapshots[0])
-                        files = os.listdir(snapshot_path)
-                        model_files = [f for f in files if f.endswith(('.bin', '.safetensors', '.json'))]
-                        logger.info(f"Model files in snapshot: {model_files[:10]}")  # First 10 files
-            else:
-                logger.warning(f"Cache path does not exist: {cache_path}")
-        
-        logger.info(f"Calling AutoModelForCausalLM.from_pretrained...")
+        logger.info(f"Falling back to standard loading with kwargs: {kwargs}")
         model = AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
         logger.info(f"=== MODEL LOADING SUCCESS ===")
         return model
@@ -211,6 +223,42 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
         logger.info(f"Repository: {repo}")
         logger.info(f"Local files only: {local_files_only}")
         
+        # For local files, try to use the snapshot path directly
+        if local_files_only:
+            cache_dir = os.path.expanduser("~/.cache/huggingface")
+            cache_path = os.path.join(cache_dir, "hub", f"models--{repo.replace('/', '--')}")
+            
+            if os.path.exists(cache_path):
+                snapshots_dir = os.path.join(cache_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = sorted(os.listdir(snapshots_dir))  # Sort to get most recent
+                    
+                    # Find a snapshot with adapter files
+                    for snapshot in snapshots:
+                        snapshot_path = os.path.join(snapshots_dir, snapshot)
+                        files = os.listdir(snapshot_path)
+                        
+                        # Check if this snapshot has adapter files
+                        has_adapter = any('adapter' in f.lower() for f in files)
+                        
+                        if has_adapter:
+                            logger.info(f"Using snapshot {snapshot} with adapter files")
+                            # Try loading from the snapshot path directly
+                            try:
+                                model = AutoPeftModelForCausalLM.from_pretrained(
+                                    snapshot_path,
+                                    is_trainable=False,
+                                    device_map="auto",
+                                    torch_dtype=torch.bfloat16,
+                                    local_files_only=True
+                                )
+                                logger.info(f"=== LORA MODEL LOADING SUCCESS (from snapshot) ===")
+                                return model
+                            except Exception as e:
+                                logger.warning(f"Failed to load from snapshot {snapshot}: {e}")
+                                continue
+        
+        # Fallback to standard loading
         # Set cache_dir based on local_files_only
         if local_files_only:
             cache_dir = os.path.expanduser("~/.cache/huggingface")
@@ -226,31 +274,8 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
-            logger.info(f"Token provided: {'Yes' if kwargs.get('token') else 'No'}")
         
-        logger.info(f"Cache dir: {cache_dir}")
-        logger.info(f"LoRA model kwargs: {kwargs}")
-        
-        # Check cache existence if using local files
-        if local_files_only and cache_dir:
-            cache_path = os.path.join(cache_dir, "hub", f"models--{repo.replace('/', '--')}")
-            logger.info(f"Checking cache path: {cache_path}")
-            if os.path.exists(cache_path):
-                logger.info(f"Cache path exists")
-                # List snapshots
-                snapshots_dir = os.path.join(cache_path, "snapshots")
-                if os.path.exists(snapshots_dir):
-                    snapshots = os.listdir(snapshots_dir)
-                    logger.info(f"Available snapshots: {snapshots}")
-                    if snapshots:
-                        snapshot_path = os.path.join(snapshots_dir, snapshots[0])
-                        files = os.listdir(snapshot_path)
-                        adapter_files = [f for f in files if 'adapter' in f.lower() or 'lora' in f.lower()]
-                        logger.info(f"Adapter/LoRA files in snapshot: {adapter_files}")
-            else:
-                logger.warning(f"Cache path does not exist: {cache_path}")
-        
-        logger.info(f"Calling AutoPeftModelForCausalLM.from_pretrained...")
+        logger.info(f"Falling back to standard loading with kwargs: {kwargs}")
         model = AutoPeftModelForCausalLM.from_pretrained(repo, **kwargs)
         logger.info(f"=== LORA MODEL LOADING SUCCESS ===")
         return model
