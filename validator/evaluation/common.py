@@ -82,6 +82,11 @@ def create_finetuned_cache_dir():
 @retry_on_5xx()
 def load_model(model_name_or_path: str, is_base_model: bool = False, local_files_only: bool = False) -> AutoModelForCausalLM:
     try:
+        logger.info(f"=== MODEL LOADING START ===")
+        logger.info(f"Model: {model_name_or_path}")
+        logger.info(f"Is base model: {is_base_model}")
+        logger.info(f"Local files only: {local_files_only}")
+        
         # Set cache_dir based on whether it's base model or finetuned
         if local_files_only:
             # When loading locally, use the standard HF cache
@@ -99,11 +104,34 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+            logger.info(f"Token provided: {'Yes' if kwargs.get('token') else 'No'}")
         
-        logger.info(f"Loading model: {model_name_or_path}")
+        logger.info(f"Cache dir: {cache_dir}")
         logger.info(f"Model kwargs: {kwargs}")
-            
-        return AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
+        
+        # Check cache existence if using local files
+        if local_files_only and cache_dir:
+            cache_path = os.path.join(cache_dir, "hub", f"models--{model_name_or_path.replace('/', '--')}")
+            logger.info(f"Checking cache path: {cache_path}")
+            if os.path.exists(cache_path):
+                logger.info(f"Cache path exists")
+                # List snapshots
+                snapshots_dir = os.path.join(cache_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = os.listdir(snapshots_dir)
+                    logger.info(f"Available snapshots: {snapshots}")
+                    if snapshots:
+                        snapshot_path = os.path.join(snapshots_dir, snapshots[0])
+                        files = os.listdir(snapshot_path)
+                        model_files = [f for f in files if f.endswith(('.bin', '.safetensors', '.json'))]
+                        logger.info(f"Model files in snapshot: {model_files[:10]}")  # First 10 files
+            else:
+                logger.warning(f"Cache path does not exist: {cache_path}")
+        
+        logger.info(f"Calling AutoModelForCausalLM.from_pretrained...")
+        model = AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
+        logger.info(f"=== MODEL LOADING SUCCESS ===")
+        return model
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
@@ -122,26 +150,61 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
 @retry_on_5xx()
 def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoTokenizer:
     try:
+        logger.info(f"=== TOKENIZER LOADING START ===")
+        logger.info(f"Model: {original_model}")
+        logger.info(f"Local files only: {local_files_only}")
+        
         # When using local_files_only, we still use the repo ID but with cache_dir
+        cache_dir = os.path.expanduser("~/.cache/huggingface") if local_files_only else None
         kwargs = {
             "local_files_only": local_files_only,
-            "cache_dir": os.path.expanduser("~/.cache/huggingface") if local_files_only else None
+            "cache_dir": cache_dir
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+            logger.info(f"Token provided: {'Yes' if kwargs.get('token') else 'No'}")
         
-        logger.info(f"Loading tokenizer for: {original_model}")
+        logger.info(f"Cache dir: {cache_dir}")
         logger.info(f"Tokenizer kwargs: {kwargs}")
-            
-        return AutoTokenizer.from_pretrained(original_model, **kwargs)
+        
+        # Check cache existence if using local files
+        if local_files_only and cache_dir:
+            cache_path = os.path.join(cache_dir, "hub", f"models--{original_model.replace('/', '--')}")
+            logger.info(f"Checking cache path: {cache_path}")
+            if os.path.exists(cache_path):
+                logger.info(f"Cache path exists")
+                # List snapshots
+                snapshots_dir = os.path.join(cache_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = os.listdir(snapshots_dir)
+                    logger.info(f"Available snapshots: {snapshots}")
+                    if snapshots:
+                        snapshot_path = os.path.join(snapshots_dir, snapshots[0])
+                        files = os.listdir(snapshot_path)
+                        tokenizer_files = [f for f in files if 'tokenizer' in f.lower() or f.endswith('.model')]
+                        logger.info(f"Tokenizer-related files in snapshot: {tokenizer_files}")
+            else:
+                logger.warning(f"Cache path does not exist: {cache_path}")
+        
+        logger.info(f"Calling AutoTokenizer.from_pretrained...")
+        tokenizer = AutoTokenizer.from_pretrained(original_model, **kwargs)
+        logger.info(f"=== TOKENIZER LOADING SUCCESS ===")
+        return tokenizer
     except Exception as e:
-        logger.error(f"Exception type: {type(e)}, message: {str(e)}")
+        logger.error(f"=== TOKENIZER LOADING FAILED ===")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception message: {str(e)}")
+        logger.error(f"Full traceback:", exc_info=True)
         raise  # Re-raise the exception to trigger retry
 
 
 @retry_on_5xx()
 def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftModelForCausalLM:
     try:
+        logger.info(f"=== LORA MODEL LOADING START ===")
+        logger.info(f"Repository: {repo}")
+        logger.info(f"Local files only: {local_files_only}")
+        
         # Set cache_dir based on local_files_only
         if local_files_only:
             cache_dir = os.path.expanduser("~/.cache/huggingface")
@@ -157,11 +220,34 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+            logger.info(f"Token provided: {'Yes' if kwargs.get('token') else 'No'}")
         
-        logger.info(f"Loading LoRA model: {repo}")
+        logger.info(f"Cache dir: {cache_dir}")
         logger.info(f"LoRA model kwargs: {kwargs}")
-            
-        return AutoPeftModelForCausalLM.from_pretrained(repo, **kwargs)
+        
+        # Check cache existence if using local files
+        if local_files_only and cache_dir:
+            cache_path = os.path.join(cache_dir, "hub", f"models--{repo.replace('/', '--')}")
+            logger.info(f"Checking cache path: {cache_path}")
+            if os.path.exists(cache_path):
+                logger.info(f"Cache path exists")
+                # List snapshots
+                snapshots_dir = os.path.join(cache_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = os.listdir(snapshots_dir)
+                    logger.info(f"Available snapshots: {snapshots}")
+                    if snapshots:
+                        snapshot_path = os.path.join(snapshots_dir, snapshots[0])
+                        files = os.listdir(snapshot_path)
+                        adapter_files = [f for f in files if 'adapter' in f.lower() or 'lora' in f.lower()]
+                        logger.info(f"Adapter/LoRA files in snapshot: {adapter_files}")
+            else:
+                logger.warning(f"Cache path does not exist: {cache_path}")
+        
+        logger.info(f"Calling AutoPeftModelForCausalLM.from_pretrained...")
+        model = AutoPeftModelForCausalLM.from_pretrained(repo, **kwargs)
+        logger.info(f"=== LORA MODEL LOADING SUCCESS ===")
+        return model
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):

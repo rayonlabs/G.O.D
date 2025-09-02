@@ -226,19 +226,32 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
         logger.info(f"Looking for repo model cache at: {repo_cache_path}")
         logger.info(f"Repo model cache exists: {os.path.exists(repo_cache_path)}")
 
+    logger.info(f"=== STARTING EVALUATION FOR {repo} ===")
     logger.info(f"Loading tokenizer for {evaluation_args.original_model} with local_files_only=True")
-    tokenizer = load_tokenizer(evaluation_args.original_model, local_files_only=True)
-    if tokenizer.pad_token_id is None:
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.pad_token_id = tokenizer.eos_token_id
+    
+    try:
+        tokenizer = load_tokenizer(evaluation_args.original_model, local_files_only=True)
+        logger.info(f"Tokenizer loaded successfully. Type: {type(tokenizer).__name__}")
+        
+        if tokenizer.pad_token_id is None:
+            logger.info("Setting pad_token to eos_token")
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+    except Exception as e:
+        logger.error(f"Failed to load tokenizer: {e}", exc_info=True)
+        raise
 
     try:
-        if check_for_lora(repo, local_files_only=True):
-            logger.info("LoRA adapter detected. Loading as with Peft")
+        logger.info(f"Checking for LoRA adapter in {repo}")
+        has_lora = check_for_lora(repo, local_files_only=True)
+        logger.info(f"LoRA check result: {has_lora}")
+        
+        if has_lora:
+            logger.info("LoRA adapter detected. Loading as Peft model")
             finetuned_model = load_finetuned_model(repo, local_files_only=True)
             is_finetune = True
         else:
-            logger.info("No LoRA adapter detected. Loading full model")
+            logger.info("No LoRA adapter detected. Loading as full model")
             finetuned_model = load_model(repo, is_base_model=False, local_files_only=True)
             try:
                 is_finetune = model_is_a_finetune(evaluation_args.original_model, finetuned_model, local_files_only=True)
