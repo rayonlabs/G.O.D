@@ -263,6 +263,11 @@ async def run_evaluation_docker_grpo(
         container = None  # Initialize container variable
         try:
             logger.info(f"Creating container for {repo} with GPUs: {gpu_ids}")
+            logger.info(f"Docker image: {cst.VALIDATOR_DOCKER_IMAGE}")
+            logger.info(f"Command: {command}")
+            logger.info(f"Environment variables set: {list(environment.keys())}")
+            logger.info(f"Volume bindings: {list(volume_bindings.keys())}")
+            
             container: Container = await asyncio.to_thread(
                 client.containers.run,
                 cst.VALIDATOR_DOCKER_IMAGE,
@@ -274,7 +279,7 @@ async def run_evaluation_docker_grpo(
                 detach=True,
                 network_mode="none",
             )
-            logger.info(f"Container created successfully for {repo}")
+            logger.info(f"Container created successfully for {repo} - ID: {container.id[:12]}")
 
             log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, None, get_all_context_tags()))
             result = await asyncio.to_thread(container.wait)
