@@ -219,8 +219,19 @@ async def run_evaluation_docker_grpo(
         client = docker.from_env()
         environment = base_environment.copy()
         environment["MODELS"] = repo
-        model_path = await asyncio.to_thread(snapshot_download, repo_id=repo, cache_dir=cache_dir)
-        logger.info(f"Model {repo} downloaded to: {model_path}")
+        # Download the model completely including all necessary files
+        try:
+            model_path = await asyncio.to_thread(
+                snapshot_download, 
+                repo_id=repo, 
+                cache_dir=cache_dir,
+                ignore_patterns=["*.h5", "*.ot", "*.msgpack"]  # Skip unnecessary formats
+            )
+            logger.info(f"Model {repo} downloaded to: {model_path}")
+        except Exception as e:
+            logger.error(f"Failed to download {repo}: {str(e)}")
+            evaluation_results[repo] = f"Failed to download model: {str(e)}"
+            continue
 
         try:
             container: Container = await asyncio.to_thread(
