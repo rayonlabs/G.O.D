@@ -215,8 +215,6 @@ async def run_evaluation_docker_grpo(
         "HF_HOME": "/root/.cache/huggingface",
         "TRANSFORMERS_CACHE": "/root/.cache/huggingface/hub",
         "HF_DATASETS_CACHE": "/root/.cache/huggingface/datasets",
-        "TRANSFORMERS_OFFLINE": "1",  # Force offline mode
-        "HF_HUB_OFFLINE": "1",  # Force HF hub offline mode
     }
 
     volume_bindings = {
