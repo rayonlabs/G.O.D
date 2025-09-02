@@ -148,7 +148,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 kwargs["ignore_mismatched_sizes"] = True
-                return AutoModelForCausalLM.from_pretrained(model_path, **kwargs)
+                return AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise
     except Exception as e:
@@ -278,7 +278,7 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 kwargs["ignore_mismatched_sizes"] = True
-                return AutoPeftModelForCausalLM.from_pretrained(model_path, **kwargs)
+                return AutoPeftModelForCausalLM.from_pretrained(repo, **kwargs)
 
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise
