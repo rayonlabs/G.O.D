@@ -218,7 +218,7 @@ async def _get_existing_tasks(existing_tournament_tasks: list, config: Config) -
 async def _create_group_text_tasks(
     round_data: GroupRound, tournament_id: str, round_id: str, config: Config, is_final_round: bool
 ) -> list[RawTask]:
-    models = _get_text_models(config.keypair, smallest_size_b=0.1, largest_size_b=4.0)
+    models = _get_text_models(config.keypair, smallest_size_b=0.1, largest_size_b=3.9)
     instruct_datasets = _get_instruct_text_datasets(config.keypair)
     dpo_datasets = _get_dpo_datasets(config.keypair)
 
