@@ -196,6 +196,9 @@ async def run_evaluation_docker_grpo(
         "DATASET_TYPE": dataset_type_str,
         "FILE_FORMAT": file_format.value,
         "TRANSFORMERS_ALLOW_TORCH_LOAD": "true",
+        "HF_HOME": "/root/.cache/huggingface",
+        "TRANSFORMERS_CACHE": "/root/.cache/huggingface/hub",
+        "HF_DATASETS_CACHE": "/root/.cache/huggingface/datasets",
     }
 
     volume_bindings = {
@@ -216,7 +219,8 @@ async def run_evaluation_docker_grpo(
         client = docker.from_env()
         environment = base_environment.copy()
         environment["MODELS"] = repo
-        await asyncio.to_thread(snapshot_download, repo_id=repo, cache_dir=cache_dir)
+        model_path = await asyncio.to_thread(snapshot_download, repo_id=repo, cache_dir=cache_dir)
+        logger.info(f"Model {repo} downloaded to: {model_path}")
 
         try:
             container: Container = await asyncio.to_thread(

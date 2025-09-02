@@ -199,6 +199,34 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
 
+    # Debug logging for cache paths
+    import os
+    logger.info(f"=== DEBUG: Cache environment variables ===")
+    logger.info(f"HF_HOME: {os.environ.get('HF_HOME', 'not set')}")
+    logger.info(f"TRANSFORMERS_CACHE: {os.environ.get('TRANSFORMERS_CACHE', 'not set')}")
+    logger.info(f"TRANSFORMERS_OFFLINE: {os.environ.get('TRANSFORMERS_OFFLINE', 'not set')}")
+    
+    cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
+    logger.info(f"Cache directory: {cache_dir}")
+    logger.info(f"Cache directory exists: {os.path.exists(cache_dir)}")
+    
+    if os.path.exists(cache_dir):
+        # List what's in the cache
+        logger.info(f"Cache contents: {os.listdir(cache_dir)[:10]}")  # First 10 items
+        
+        # Check for the original model in cache
+        original_model_name = evaluation_args.original_model.replace('/', '--')
+        model_cache_path = os.path.join(cache_dir, f"models--{original_model_name}")
+        logger.info(f"Looking for original model cache at: {model_cache_path}")
+        logger.info(f"Original model cache exists: {os.path.exists(model_cache_path)}")
+        
+        # Check for the repo model in cache
+        repo_name = repo.replace('/', '--')
+        repo_cache_path = os.path.join(cache_dir, f"models--{repo_name}")
+        logger.info(f"Looking for repo model cache at: {repo_cache_path}")
+        logger.info(f"Repo model cache exists: {os.path.exists(repo_cache_path)}")
+
+    logger.info(f"Loading tokenizer for {evaluation_args.original_model} with local_files_only=True")
     tokenizer = load_tokenizer(evaluation_args.original_model, local_files_only=True)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
