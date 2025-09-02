@@ -232,7 +232,32 @@ async def run_evaluation_docker_grpo(
             log_task.cancel()
 
             if result["StatusCode"] != 0:
-                evaluation_results[repo] = f"Container for {repo} exited with status {result['StatusCode']}"
+                # Try to get container logs to understand the failure
+                try:
+                    logs = await asyncio.to_thread(container.logs, tail=100)
+                    error_logs = logs.decode('utf-8') if isinstance(logs, bytes) else str(logs)
+                    logger.error(f"Container for {repo} failed with status {result['StatusCode']}")
+                    logger.error(f"Container logs:\n{error_logs}")
+                    
+                    # Look for specific error patterns
+                    if "ModuleNotFoundError" in error_logs or "ImportError" in error_logs:
+                        import_match = re.search(r"(ModuleNotFoundError|ImportError): (.+)", error_logs)
+                        if import_match:
+                            error_msg = f"Missing module: {import_match.group(2)}"
+                            logger.error(f"Container failed due to missing module: {import_match.group(2)}")
+                            evaluation_results[repo] = f"Container failed - {error_msg}"
+                        else:
+                            evaluation_results[repo] = f"Container failed - Import error detected"
+                    else:
+                        # Include first error line in the result
+                        error_lines = [line for line in error_logs.split('\n') if line.strip()]
+                        if error_lines:
+                            evaluation_results[repo] = f"Container failed - {error_lines[-1][:100]}"
+                        else:
+                            evaluation_results[repo] = f"Container for {repo} exited with status {result['StatusCode']}"
+                except Exception as log_error:
+                    logger.error(f"Failed to retrieve logs for {repo}: {str(log_error)}")
+                    evaluation_results[repo] = f"Container for {repo} exited with status {result['StatusCode']}"
             else:
                 eval_results = await get_evaluation_results(container)
                 evaluation_results[repo] = eval_results[repo]

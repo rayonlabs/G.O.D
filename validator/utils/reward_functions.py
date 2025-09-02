@@ -189,7 +189,6 @@ def process_reward_function_code(code: str) -> str:
                 
                 break
         
-        import astor
         return astor.to_source(reward_func_ast)
         
     except Exception as e:
