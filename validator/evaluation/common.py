@@ -84,9 +84,23 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
     try:
         # Only use default cache for the base model
         cache_dir = None if is_base_model else create_finetuned_cache_dir()
+        
+        # If using local_files_only, convert repo ID to local cache path
+        model_path = model_name_or_path
+        if local_files_only and '/' in model_name_or_path:
+            hf_cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
+            local_repo_path = os.path.join(hf_cache_dir, "models--" + model_name_or_path.replace('/', '--'))
+            if os.path.exists(local_repo_path):
+                snapshots_dir = os.path.join(local_repo_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = [d for d in os.listdir(snapshots_dir)
+                               if os.path.isdir(os.path.join(snapshots_dir, d))]
+                    if snapshots:
+                        model_path = os.path.join(snapshots_dir, snapshots[0])
+                        logger.info(f"Using local cache path: {model_path}")
 
         return AutoModelForCausalLM.from_pretrained(
-            model_name_or_path,
+            model_path,
             token=os.environ.get("HUGGINGFACE_TOKEN"),
             device_map="auto",
             cache_dir=cache_dir,
@@ -100,7 +114,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
                 return AutoModelForCausalLM.from_pretrained(
-                    model_name_or_path,
+                    model_path,
                     token=os.environ.get("HUGGINGFACE_TOKEN"),
                     ignore_mismatched_sizes=True,
                     device_map="auto",
@@ -118,8 +132,22 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
 @retry_on_5xx()
 def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoTokenizer:
     try:
+        # If using local_files_only, convert repo ID to local cache path
+        model_path = original_model
+        if local_files_only and '/' in original_model:
+            hf_cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
+            local_repo_path = os.path.join(hf_cache_dir, "models--" + original_model.replace('/', '--'))
+            if os.path.exists(local_repo_path):
+                snapshots_dir = os.path.join(local_repo_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = [d for d in os.listdir(snapshots_dir)
+                               if os.path.isdir(os.path.join(snapshots_dir, d))]
+                    if snapshots:
+                        model_path = os.path.join(snapshots_dir, snapshots[0])
+                        logger.info(f"Using local cache path for tokenizer: {model_path}")
+        
         return AutoTokenizer.from_pretrained(
-            original_model,
+            model_path,
             token=os.environ.get("HUGGINGFACE_TOKEN"),
             local_files_only=local_files_only
         )
