@@ -218,7 +218,7 @@ async def _get_existing_tasks(existing_tournament_tasks: list, config: Config) -
 async def _create_group_text_tasks(
     round_data: GroupRound, tournament_id: str, round_id: str, config: Config, is_final_round: bool
 ) -> list[RawTask]:
-    models = _get_text_models(config.keypair)
+    models = _get_text_models(config.keypair, smallest_size_b=0.1, largest_size_b=4.0)
     instruct_datasets = _get_instruct_text_datasets(config.keypair)
     dpo_datasets = _get_dpo_datasets(config.keypair)
 
@@ -256,6 +256,10 @@ async def _create_single_group_text_tasks(
     logger.info(f"    Group {group_index + 1} has {existing_count}/{t_cst.TEXT_TASKS_PER_GROUP} task, creating 1 more")
     assert t_cst.TEXT_TASKS_PER_GROUP == 1, "Only 1 text task per group is supported"
     task = await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+    
+    task.hours_to_complete = 2
+    await task_sql.update_task(task, config.psql_db)
+    
     tournament_task = TournamentTask(
         tournament_id=tournament_id,
         round_id=round_id,
@@ -265,7 +269,7 @@ async def _create_single_group_text_tasks(
     )
     await add_tournament_tasks([tournament_task], config.psql_db)
     gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
-    logger.info(f"    Instruct: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}")
+    logger.info(f"    Instruct: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req} - Duration: 2 hours")
 
     return [task]
 
