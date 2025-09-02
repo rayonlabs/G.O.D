@@ -97,18 +97,15 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
                 if os.path.exists(snapshots_dir):
                     snapshots = sorted(os.listdir(snapshots_dir))  # Sort to get most recent
                     
-                    # Find a snapshot with model files
                     for snapshot in snapshots:
                         snapshot_path = os.path.join(snapshots_dir, snapshot)
                         files = os.listdir(snapshot_path)
                         
-                        # Check if this snapshot has model weights
                         has_model_files = any(f.endswith(('.bin', '.safetensors')) for f in files)
                         has_config = 'config.json' in files
                         
                         if has_model_files and has_config:
                             logger.info(f"Using snapshot {snapshot} with model files")
-                            # Try loading from the snapshot path directly
                             try:
                                 model = AutoModelForCausalLM.from_pretrained(
                                     snapshot_path,
@@ -176,7 +173,6 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
                 if os.path.exists(snapshots_dir):
                     snapshots = sorted(os.listdir(snapshots_dir))  # Sort to get most recent
                     
-                    # Find a snapshot with tokenizer files
                     for snapshot in snapshots:
                         snapshot_path = os.path.join(snapshots_dir, snapshot)
                         files = os.listdir(snapshot_path)
@@ -184,7 +180,6 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
                         
                         if tokenizer_files:
                             logger.info(f"Using snapshot {snapshot} with tokenizer files: {tokenizer_files}")
-                            # Try loading from the snapshot path directly
                             try:
                                 tokenizer = AutoTokenizer.from_pretrained(
                                     snapshot_path,
@@ -233,17 +228,14 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
                 if os.path.exists(snapshots_dir):
                     snapshots = sorted(os.listdir(snapshots_dir))  # Sort to get most recent
                     
-                    # Find a snapshot with adapter files
                     for snapshot in snapshots:
                         snapshot_path = os.path.join(snapshots_dir, snapshot)
                         files = os.listdir(snapshot_path)
                         
-                        # Check if this snapshot has adapter files
                         has_adapter = any('adapter' in f.lower() for f in files)
                         
                         if has_adapter:
                             logger.info(f"Using snapshot {snapshot} with adapter files")
-                            # Try loading from the snapshot path directly
                             try:
                                 model = AutoPeftModelForCausalLM.from_pretrained(
                                     snapshot_path,

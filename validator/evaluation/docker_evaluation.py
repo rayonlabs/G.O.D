@@ -180,13 +180,11 @@ async def run_evaluation_docker_grpo(
     """
     logger.info(f"Downloading original GRPO model: {original_model}")
     cache_dir = os.path.expanduser(cst.CACHE_DIR_HUB)
-    # Pre-download the original model AND tokenizer files to ensure everything is in cache
-    # Don't ignore any patterns to ensure we get tokenizer files
     original_model_path = await asyncio.to_thread(
         snapshot_download, 
         repo_id=original_model, 
         cache_dir=cache_dir,
-        ignore_patterns=None  # Download everything including tokenizer files
+        ignore_patterns=None
     )
     logger.info(f"Original model downloaded to: {original_model_path}")
     
@@ -235,14 +233,13 @@ async def run_evaluation_docker_grpo(
         client = docker.from_env()
         environment = base_environment.copy()
         environment["MODELS"] = repo
-        # Download the model completely including all necessary files
         try:
             logger.info(f"Starting download of model {repo}...")
             model_path = await asyncio.to_thread(
                 snapshot_download, 
                 repo_id=repo, 
                 cache_dir=cache_dir,
-                ignore_patterns=["*.h5", "*.ot", "*.msgpack", "*.pkl", "*.pth"]  # Skip unnecessary formats but keep tokenizer files
+                ignore_patterns=["*.h5", "*.ot", "*.msgpack", "*.pkl", "*.pth"]
             )
             logger.info(f"Model {repo} downloaded to: {model_path}")
             
