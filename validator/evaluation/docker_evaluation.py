@@ -297,6 +297,7 @@ async def run_evaluation_docker_grpo(
             log_task.cancel()
 
             if result["StatusCode"] != 0:
+
                 logger.error(f"Container for {repo} exited with non-zero status: {result['StatusCode']}")
                 # Try to get container logs to understand the failure
                 try:
@@ -323,6 +324,7 @@ async def run_evaluation_docker_grpo(
                 except Exception as log_error:
                     logger.error(f"Failed to retrieve logs for {repo}: {str(log_error)}")
                     evaluation_results[repo] = f"Container for {repo} exited with status {result['StatusCode']}"
+
             else:
                 eval_results = await get_evaluation_results(container)
                 evaluation_results[repo] = eval_results[repo]
