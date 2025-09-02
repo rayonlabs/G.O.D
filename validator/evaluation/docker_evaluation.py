@@ -143,7 +143,7 @@ async def run_evaluation_docker_text(
             device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
             detach=True,
         )
-        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, None, get_all_context_tags()))
         result = await asyncio.to_thread(container.wait)
         log_task.cancel()
 
@@ -235,7 +235,7 @@ async def run_evaluation_docker_grpo(
                 network_mode="none",
             )
 
-            log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+            log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, None, get_all_context_tags()))
             result = await asyncio.to_thread(container.wait)
             log_task.cancel()
 
@@ -341,7 +341,7 @@ async def run_evaluation_docker_image(
             device_requests=[docker.types.DeviceRequest(capabilities=[["gpu"]], device_ids=[str(gid) for gid in gpu_ids])],
             detach=True,
         )
-        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+        log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, None, get_all_context_tags()))
         result = await asyncio.to_thread(container.wait)
         log_task.cancel()
 
