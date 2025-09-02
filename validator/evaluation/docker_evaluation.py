@@ -180,9 +180,25 @@ async def run_evaluation_docker_grpo(
     """
     logger.info(f"Downloading original GRPO model: {original_model}")
     cache_dir = os.path.expanduser(cst.CACHE_DIR_HUB)
-    # Pre-download the original model to ensure it's in cache
-    original_model_path = await asyncio.to_thread(snapshot_download, repo_id=original_model, cache_dir=cache_dir)
+    # Pre-download the original model AND tokenizer files to ensure everything is in cache
+    # Don't ignore any patterns to ensure we get tokenizer files
+    original_model_path = await asyncio.to_thread(
+        snapshot_download, 
+        repo_id=original_model, 
+        cache_dir=cache_dir,
+        ignore_patterns=None  # Download everything including tokenizer files
+    )
     logger.info(f"Original model downloaded to: {original_model_path}")
+    
+    # Log what files were downloaded for the original model
+    if os.path.exists(original_model_path):
+        files = os.listdir(original_model_path)
+        logger.info(f"Original model files downloaded: {files}")
+        tokenizer_files = [f for f in files if 'tokenizer' in f.lower() or f.endswith('.model')]
+        if tokenizer_files:
+            logger.info(f"Tokenizer files found: {tokenizer_files}")
+        else:
+            logger.warning(f"WARNING: No tokenizer files found in original model download!")
 
     command = ["python", "-m", "validator.evaluation.eval_grpo"]
     dataset_type_str = dataset_type.model_dump_json()
@@ -228,7 +244,7 @@ async def run_evaluation_docker_grpo(
                 snapshot_download, 
                 repo_id=repo, 
                 cache_dir=cache_dir,
-                ignore_patterns=["*.h5", "*.ot", "*.msgpack"]  # Skip unnecessary formats
+                ignore_patterns=["*.h5", "*.ot", "*.msgpack", "*.pkl", "*.pth"]  # Skip unnecessary formats but keep tokenizer files
             )
             logger.info(f"Model {repo} downloaded to: {model_path}")
             
