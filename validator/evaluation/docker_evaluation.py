@@ -223,6 +223,7 @@ async def run_evaluation_docker_grpo(
         environment["MODELS"] = repo
         # Download the model completely including all necessary files
         try:
+            logger.info(f"Starting download of model {repo}...")
             model_path = await asyncio.to_thread(
                 snapshot_download, 
                 repo_id=repo, 
@@ -230,6 +231,30 @@ async def run_evaluation_docker_grpo(
                 ignore_patterns=["*.h5", "*.ot", "*.msgpack"]  # Skip unnecessary formats
             )
             logger.info(f"Model {repo} downloaded to: {model_path}")
+            
+            # Log what files are actually in the downloaded model
+            if os.path.exists(model_path):
+                files = os.listdir(model_path)
+                logger.info(f"Downloaded files for {repo}: {files}")
+                
+                # Check file sizes to ensure they're not just LFS pointers
+                for file in files:
+                    if file.endswith(('.safetensors', '.bin')):
+                        file_path = os.path.join(model_path, file)
+                        file_size = os.path.getsize(file_path)
+                        logger.info(f"  {file}: {file_size / (1024*1024*1024):.2f} GB")
+                        
+                        # LFS pointer files are typically < 1KB
+                        if file_size < 1000:
+                            logger.warning(f"WARNING: {file} appears to be an LFS pointer (only {file_size} bytes)")
+                
+                # Check for essential files
+                has_config = 'config.json' in files
+                has_weights = any(f.endswith(('.safetensors', '.bin')) for f in files)
+                logger.info(f"Model validation - has config.json: {has_config}, has model weights: {has_weights}")
+            else:
+                logger.error(f"Model path does not exist after download: {model_path}")
+                
         except Exception as e:
             logger.error(f"Failed to download {repo}: {str(e)}")
             evaluation_results[repo] = f"Failed to download model: {str(e)}"
