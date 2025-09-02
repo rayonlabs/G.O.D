@@ -179,7 +179,8 @@ async def run_evaluation_docker_grpo(
     This approach launches one container per repo and merges results.
     """
     logger.info(f"Downloading original GRPO model: {original_model}")
-    await asyncio.to_thread(snapshot_download, repo_id=original_model)
+    cache_dir = os.path.expanduser(cst.CACHE_DIR_HUB)
+    await asyncio.to_thread(snapshot_download, repo_id=original_model, cache_dir=cache_dir)
 
     command = ["python", "-m", "validator.evaluation.eval_grpo"]
     dataset_type_str = dataset_type.model_dump_json()
