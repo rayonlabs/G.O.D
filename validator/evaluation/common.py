@@ -154,39 +154,45 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
         logger.info(f"Model: {original_model}")
         logger.info(f"Local files only: {local_files_only}")
         
-        # When using local_files_only, we still use the repo ID but with cache_dir
-        cache_dir = os.path.expanduser("~/.cache/huggingface") if local_files_only else None
+        # For local files, try to use the snapshot path directly
+        if local_files_only:
+            cache_dir = os.path.expanduser("~/.cache/huggingface")
+            cache_path = os.path.join(cache_dir, "hub", f"models--{original_model.replace('/', '--')}")
+            
+            if os.path.exists(cache_path):
+                snapshots_dir = os.path.join(cache_path, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    snapshots = sorted(os.listdir(snapshots_dir))  # Sort to get most recent
+                    
+                    # Find a snapshot with tokenizer files
+                    for snapshot in snapshots:
+                        snapshot_path = os.path.join(snapshots_dir, snapshot)
+                        files = os.listdir(snapshot_path)
+                        tokenizer_files = [f for f in files if 'tokenizer' in f.lower() or f.endswith('.model')]
+                        
+                        if tokenizer_files:
+                            logger.info(f"Using snapshot {snapshot} with tokenizer files: {tokenizer_files}")
+                            # Try loading from the snapshot path directly
+                            try:
+                                tokenizer = AutoTokenizer.from_pretrained(
+                                    snapshot_path,
+                                    local_files_only=True
+                                )
+                                logger.info(f"=== TOKENIZER LOADING SUCCESS (from snapshot) ===")
+                                return tokenizer
+                            except Exception as e:
+                                logger.warning(f"Failed to load from snapshot {snapshot}: {e}")
+                                continue
+        
+        # Fallback to standard loading
         kwargs = {
             "local_files_only": local_files_only,
-            "cache_dir": cache_dir
+            "cache_dir": os.path.expanduser("~/.cache/huggingface") if local_files_only else None
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
-            logger.info(f"Token provided: {'Yes' if kwargs.get('token') else 'No'}")
         
-        logger.info(f"Cache dir: {cache_dir}")
-        logger.info(f"Tokenizer kwargs: {kwargs}")
-        
-        # Check cache existence if using local files
-        if local_files_only and cache_dir:
-            cache_path = os.path.join(cache_dir, "hub", f"models--{original_model.replace('/', '--')}")
-            logger.info(f"Checking cache path: {cache_path}")
-            if os.path.exists(cache_path):
-                logger.info(f"Cache path exists")
-                # List snapshots
-                snapshots_dir = os.path.join(cache_path, "snapshots")
-                if os.path.exists(snapshots_dir):
-                    snapshots = os.listdir(snapshots_dir)
-                    logger.info(f"Available snapshots: {snapshots}")
-                    if snapshots:
-                        snapshot_path = os.path.join(snapshots_dir, snapshots[0])
-                        files = os.listdir(snapshot_path)
-                        tokenizer_files = [f for f in files if 'tokenizer' in f.lower() or f.endswith('.model')]
-                        logger.info(f"Tokenizer-related files in snapshot: {tokenizer_files}")
-            else:
-                logger.warning(f"Cache path does not exist: {cache_path}")
-        
-        logger.info(f"Calling AutoTokenizer.from_pretrained...")
+        logger.info(f"Falling back to standard loading with kwargs: {kwargs}")
         tokenizer = AutoTokenizer.from_pretrained(original_model, **kwargs)
         logger.info(f"=== TOKENIZER LOADING SUCCESS ===")
         return tokenizer
