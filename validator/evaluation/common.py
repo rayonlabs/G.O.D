@@ -82,22 +82,14 @@ def create_finetuned_cache_dir():
 @retry_on_5xx()
 def load_model(model_name_or_path: str, is_base_model: bool = False, local_files_only: bool = False) -> AutoModelForCausalLM:
     try:
-        # Only use default cache for the base model
-        cache_dir = None if is_base_model else create_finetuned_cache_dir()
-        
-        # If using local_files_only, convert repo ID to local cache path
-        model_path = model_name_or_path
-        if local_files_only and '/' in model_name_or_path:
-            hf_cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-            local_repo_path = os.path.join(hf_cache_dir, "models--" + model_name_or_path.replace('/', '--'))
-            if os.path.exists(local_repo_path):
-                snapshots_dir = os.path.join(local_repo_path, "snapshots")
-                if os.path.exists(snapshots_dir):
-                    snapshots = [d for d in os.listdir(snapshots_dir)
-                               if os.path.isdir(os.path.join(snapshots_dir, d))]
-                    if snapshots:
-                        model_path = os.path.join(snapshots_dir, snapshots[0])
-                        logger.info(f"Using local cache path: {model_path}")
+        # Set cache_dir based on whether it's base model or finetuned
+        if local_files_only:
+            # When loading locally, use the standard HF cache
+            cache_dir = os.path.expanduser("~/.cache/huggingface")
+        elif not is_base_model:
+            cache_dir = create_finetuned_cache_dir()
+        else:
+            cache_dir = None
 
         kwargs = {
             "device_map": "auto",
@@ -107,8 +99,11 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+        
+        logger.info(f"Loading model: {model_name_or_path}")
+        logger.info(f"Model kwargs: {kwargs}")
             
-        return AutoModelForCausalLM.from_pretrained(model_path, **kwargs)
+        return AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
@@ -127,26 +122,18 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
 @retry_on_5xx()
 def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoTokenizer:
     try:
-        # If using local_files_only, convert repo ID to local cache path
-        model_path = original_model
-        if local_files_only and '/' in original_model:
-            hf_cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-            local_repo_path = os.path.join(hf_cache_dir, "models--" + original_model.replace('/', '--'))
-            if os.path.exists(local_repo_path):
-                snapshots_dir = os.path.join(local_repo_path, "snapshots")
-                if os.path.exists(snapshots_dir):
-                    snapshots = [d for d in os.listdir(snapshots_dir)
-                               if os.path.isdir(os.path.join(snapshots_dir, d))]
-                    if snapshots:
-                        model_path = os.path.join(snapshots_dir, snapshots[0])
-                        logger.info(f"Using local cache path for tokenizer: {model_path}")
-        
-        # Don't pass token when using local_files_only
-        kwargs = {"local_files_only": local_files_only}
+        # When using local_files_only, we still use the repo ID but with cache_dir
+        kwargs = {
+            "local_files_only": local_files_only,
+            "cache_dir": os.path.expanduser("~/.cache/huggingface") if local_files_only else None
+        }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+        
+        logger.info(f"Loading tokenizer for: {original_model}")
+        logger.info(f"Tokenizer kwargs: {kwargs}")
             
-        return AutoTokenizer.from_pretrained(model_path, **kwargs)
+        return AutoTokenizer.from_pretrained(original_model, **kwargs)
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
@@ -155,19 +142,11 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
 @retry_on_5xx()
 def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftModelForCausalLM:
     try:
-        cache_dir = None if local_files_only else create_finetuned_cache_dir()
-        model_path = repo
-        if local_files_only and '/' in repo:
-            hf_cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-            local_repo_path = os.path.join(hf_cache_dir, "models--" + repo.replace('/', '--'))
-            if os.path.exists(local_repo_path):
-                snapshots_dir = os.path.join(local_repo_path, "snapshots")
-                if os.path.exists(snapshots_dir):
-                    snapshots = [d for d in os.listdir(snapshots_dir)
-                               if os.path.isdir(os.path.join(snapshots_dir, d))]
-                    if snapshots:
-                        model_path = os.path.join(snapshots_dir, snapshots[0])
-                        logger.info(f"Using local cache path for LoRA model: {model_path}")
+        # Set cache_dir based on local_files_only
+        if local_files_only:
+            cache_dir = os.path.expanduser("~/.cache/huggingface")
+        else:
+            cache_dir = create_finetuned_cache_dir()
 
         kwargs = {
             "is_trainable": False,
@@ -178,8 +157,11 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+        
+        logger.info(f"Loading LoRA model: {repo}")
+        logger.info(f"LoRA model kwargs: {kwargs}")
             
-        return AutoPeftModelForCausalLM.from_pretrained(model_path, **kwargs)
+        return AutoPeftModelForCausalLM.from_pretrained(repo, **kwargs)
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):

@@ -26,24 +26,14 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
 
     for attempt in range(max_retries):
         try:
-            # If using local_files_only, convert repo ID to local cache path
-            model_path = original_repo
-            if local_files_only and '/' in original_repo:
-                cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-                local_repo_path = os.path.join(cache_dir, "models--" + original_repo.replace('/', '--'))
-                if os.path.exists(local_repo_path):
-                    snapshots_dir = os.path.join(local_repo_path, "snapshots")
-                    if os.path.exists(snapshots_dir):
-                        snapshots = [d for d in os.listdir(snapshots_dir)
-                                   if os.path.isdir(os.path.join(snapshots_dir, d))]
-                        if snapshots:
-                            model_path = os.path.join(snapshots_dir, snapshots[0])
-            
-            kwargs = {"local_files_only": local_files_only}
+            kwargs = {
+                "local_files_only": local_files_only,
+                "cache_dir": os.path.expanduser("~/.cache/huggingface") if local_files_only else None
+            }
             if not local_files_only:
                 kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
             
-            original_config = AutoConfig.from_pretrained(model_path, **kwargs)
+            original_config = AutoConfig.from_pretrained(original_repo, **kwargs)
             break
         except Exception as e:
             if attempt == max_retries - 1:
