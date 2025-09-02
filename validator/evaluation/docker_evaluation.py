@@ -260,7 +260,9 @@ async def run_evaluation_docker_grpo(
             evaluation_results[repo] = f"Failed to download model: {str(e)}"
             continue
 
+        container = None  # Initialize container variable
         try:
+            logger.info(f"Creating container for {repo} with GPUs: {gpu_ids}")
             container: Container = await asyncio.to_thread(
                 client.containers.run,
                 cst.VALIDATOR_DOCKER_IMAGE,
@@ -272,6 +274,7 @@ async def run_evaluation_docker_grpo(
                 detach=True,
                 network_mode="none",
             )
+            logger.info(f"Container created successfully for {repo}")
 
             log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, None, get_all_context_tags()))
             result = await asyncio.to_thread(container.wait)
@@ -316,7 +319,8 @@ async def run_evaluation_docker_grpo(
 
         finally:
             try:
-                await asyncio.to_thread(container.remove, force=True)
+                if container is not None:
+                    await asyncio.to_thread(container.remove, force=True)
                 await cleanup_resources(client)
             except Exception as e:
                 logger.info(f"Problem with cleaning up container for {repo}: {e}")
