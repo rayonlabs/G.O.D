@@ -232,7 +232,7 @@ async def run_evaluation_docker_grpo(
             log_task.cancel()
 
             if result["StatusCode"] != 0:
-                evaluation_results[repo] = Exception(f"Container for {repo} exited with status {result['StatusCode']}")
+                evaluation_results[repo] = f"Container for {repo} exited with status {result['StatusCode']}"
             else:
                 eval_results = await get_evaluation_results(container)
                 evaluation_results[repo] = eval_results[repo]
