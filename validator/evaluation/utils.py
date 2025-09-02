@@ -24,25 +24,62 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     max_retries = 3
     base_delay = 2
 
-    for attempt in range(max_retries):
-        try:
-            original_config = AutoConfig.from_pretrained(
-                original_repo,
-                token=os.environ.get("HUGGINGFACE_TOKEN"),
-                local_files_only=local_files_only
-            )
-            break
-        except Exception as e:
-            if attempt == max_retries - 1:
-                raise e
-
-            error_msg = str(e).lower()
-            if any(pattern in error_msg for pattern in ["connection", "timeout", "5xx", "too many requests", "couldn't connect"]):
-                delay = base_delay * (2**attempt)
-                logger.info(f"HuggingFace connection issue (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {delay}s...")
-                time.sleep(delay)
+    # For local files, try to load config directly from snapshot
+    if local_files_only:
+        cache_dir = os.path.expanduser("~/.cache/huggingface")
+        cache_path = os.path.join(cache_dir, "hub", f"models--{original_repo.replace('/', '--')}")
+        
+        if os.path.exists(cache_path):
+            snapshots_dir = os.path.join(cache_path, "snapshots")
+            if os.path.exists(snapshots_dir):
+                snapshots = sorted(os.listdir(snapshots_dir))
+                
+                for snapshot in snapshots:
+                    snapshot_path = os.path.join(snapshots_dir, snapshot)
+                    config_path = os.path.join(snapshot_path, "config.json")
+                    
+                    if os.path.exists(config_path):
+                        logger.info(f"Loading original model config from snapshot: {snapshot}")
+                        try:
+                            original_config = AutoConfig.from_pretrained(
+                                snapshot_path,
+                                local_files_only=True
+                            )
+                            logger.info(f"Successfully loaded config from snapshot")
+                            break
+                        except Exception as e:
+                            logger.warning(f"Failed to load config from snapshot {snapshot}: {e}")
+                            continue
+                else:
+                    logger.error(f"No valid config found in snapshots for {original_repo}")
+                    return False
             else:
-                raise e
+                logger.error(f"No snapshots directory found for {original_repo}")
+                return False
+        else:
+            logger.error(f"No cache found for {original_repo}")
+            return False
+    else:
+        # Standard online loading with retries
+        for attempt in range(max_retries):
+            try:
+                kwargs = {
+                    "token": os.environ.get("HUGGINGFACE_TOKEN")
+                }
+                
+                original_config = AutoConfig.from_pretrained(original_repo, **kwargs)
+                break
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise e
+
+                error_msg = str(e).lower()
+                if any(pattern in error_msg for pattern in ["connection", "timeout", "5xx", "too many requests", "couldn't connect"]):
+                    delay = base_delay * (2**attempt)
+                    logger.info(f"HuggingFace connection issue (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {delay}s...")
+                    time.sleep(delay)
+                else:
+                    raise e
     finetuned_config = finetuned_model.config
 
     try:
