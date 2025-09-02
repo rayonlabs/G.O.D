@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import re
 import shutil
 import tarfile
 
