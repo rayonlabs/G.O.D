@@ -99,29 +99,24 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
                         model_path = os.path.join(snapshots_dir, snapshots[0])
                         logger.info(f"Using local cache path: {model_path}")
 
-        return AutoModelForCausalLM.from_pretrained(
-            model_path,
-            token=os.environ.get("HUGGINGFACE_TOKEN"),
-            device_map="auto",
-            cache_dir=cache_dir,
-            torch_dtype=torch.bfloat16,
-            local_files_only=local_files_only,
-        )
+        kwargs = {
+            "device_map": "auto",
+            "cache_dir": cache_dir,
+            "torch_dtype": torch.bfloat16,
+            "local_files_only": local_files_only
+        }
+        if not local_files_only:
+            kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+            
+        return AutoModelForCausalLM.from_pretrained(model_path, **kwargs)
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
             pattern = re.search(r"shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)", error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
-                return AutoModelForCausalLM.from_pretrained(
-                    model_path,
-                    token=os.environ.get("HUGGINGFACE_TOKEN"),
-                    ignore_mismatched_sizes=True,
-                    device_map="auto",
-                    cache_dir=cache_dir,
-                    torch_dtype=torch.bfloat16,
-                    local_files_only=local_files_only,
-                )
+                kwargs["ignore_mismatched_sizes"] = True
+                return AutoModelForCausalLM.from_pretrained(model_path, **kwargs)
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise
     except Exception as e:
@@ -146,11 +141,12 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
                         model_path = os.path.join(snapshots_dir, snapshots[0])
                         logger.info(f"Using local cache path for tokenizer: {model_path}")
         
-        return AutoTokenizer.from_pretrained(
-            model_path,
-            token=os.environ.get("HUGGINGFACE_TOKEN"),
-            local_files_only=local_files_only
-        )
+        # Don't pass token when using local_files_only
+        kwargs = {"local_files_only": local_files_only}
+        if not local_files_only:
+            kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+            
+        return AutoTokenizer.from_pretrained(model_path, **kwargs)
     except Exception as e:
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise  # Re-raise the exception to trigger retry
@@ -173,29 +169,25 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
                         model_path = os.path.join(snapshots_dir, snapshots[0])
                         logger.info(f"Using local cache path for LoRA model: {model_path}")
 
-        return AutoPeftModelForCausalLM.from_pretrained(
-            model_path,
-            is_trainable=False,
-            device_map="auto",
-            cache_dir=cache_dir,
-            torch_dtype=torch.bfloat16,
-            local_files_only=local_files_only,
-        )
+        kwargs = {
+            "is_trainable": False,
+            "device_map": "auto",
+            "cache_dir": cache_dir,
+            "torch_dtype": torch.bfloat16,
+            "local_files_only": local_files_only
+        }
+        if not local_files_only:
+            kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
+            
+        return AutoPeftModelForCausalLM.from_pretrained(model_path, **kwargs)
     except RuntimeError as e:
         error_msg = str(e)
         if "size mismatch for" in error_msg and ("lm_head.weight" in error_msg or "model.embed_tokens.weight" in error_msg):
             pattern = re.search(r"shape torch\.Size\(\[(\d+), (\d+)\]\).*shape.*torch\.Size\(\[(\d+), \2\]\)", error_msg)
             if pattern and abs(int(pattern.group(1)) - int(pattern.group(3))) == 1:
                 logger.info("Detected vocabulary size off-by-one error, attempting to load with ignore_mismatched_sizes=True")
-                return AutoPeftModelForCausalLM.from_pretrained(
-                    model_path,
-                    is_trainable=False,
-                    ignore_mismatched_sizes=True,
-                    device_map="auto",
-                    cache_dir=cache_dir,
-                    torch_dtype=torch.bfloat16,
-                    local_files_only=local_files_only,
-                )
+                kwargs["ignore_mismatched_sizes"] = True
+                return AutoPeftModelForCausalLM.from_pretrained(model_path, **kwargs)
 
         logger.error(f"Exception type: {type(e)}, message: {str(e)}")
         raise
