@@ -180,7 +180,9 @@ async def run_evaluation_docker_grpo(
     """
     logger.info(f"Downloading original GRPO model: {original_model}")
     cache_dir = os.path.expanduser(cst.CACHE_DIR_HUB)
-    await asyncio.to_thread(snapshot_download, repo_id=original_model, cache_dir=cache_dir)
+    # Pre-download the original model to ensure it's in cache
+    original_model_path = await asyncio.to_thread(snapshot_download, repo_id=original_model, cache_dir=cache_dir)
+    logger.info(f"Original model downloaded to: {original_model_path}")
 
     command = ["python", "-m", "validator.evaluation.eval_grpo"]
     dataset_type_str = dataset_type.model_dump_json()
@@ -214,7 +216,7 @@ async def run_evaluation_docker_grpo(
         client = docker.from_env()
         environment = base_environment.copy()
         environment["MODELS"] = repo
-        await asyncio.to_thread(snapshot_download, repo_id=repo)
+        await asyncio.to_thread(snapshot_download, repo_id=repo, cache_dir=cache_dir)
 
         try:
             container: Container = await asyncio.to_thread(
