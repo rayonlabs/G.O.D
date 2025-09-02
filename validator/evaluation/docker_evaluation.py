@@ -286,12 +286,12 @@ async def run_evaluation_docker_grpo(
             log_task.cancel()
 
             if result["StatusCode"] != 0:
+                logger.error(f"Container for {repo} exited with non-zero status: {result['StatusCode']}")
                 # Try to get container logs to understand the failure
                 try:
-                    logs = await asyncio.to_thread(container.logs, tail=100)
+                    logs = await asyncio.to_thread(container.logs, tail=200)
                     error_logs = logs.decode('utf-8') if isinstance(logs, bytes) else str(logs)
-                    logger.error(f"Container for {repo} failed with status {result['StatusCode']}")
-                    logger.error(f"Container logs:\n{error_logs}")
+                    logger.error(f"Last 200 lines of container logs for {repo}:\n{error_logs}")
                     
                     # Look for specific error patterns
                     if "ModuleNotFoundError" in error_logs or "ImportError" in error_logs:
