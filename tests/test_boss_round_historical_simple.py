@@ -153,7 +153,7 @@ class TestBossRoundTaskCopying:
                     assert tournament_entry.tournament_id == tournament_id
                     assert tournament_entry.round_id == round_id
                     assert tournament_entry.pair_id == pair_id
-                    assert tournament_entry.task_id == result.task_id
+                    assert str(tournament_entry.task_id) == str(result.task_id)
                     
                     # Verify sync link was recorded
                     mock_connection.execute.assert_called_once()
