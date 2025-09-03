@@ -56,7 +56,7 @@ from validator.db.sql.tournaments import update_tournament_status
 from validator.db.sql.tournaments import update_tournament_winner_hotkey
 from validator.tournament import constants as t_cst
 from validator.tournament.benchmark_utils import create_benchmark_tasks_for_tournament_winner
-from validator.tournament.boss_round_sync import _copy_task_to_general
+from validator.tournament.boss_round_sync import copy_tournament_task_into_general_miner_pool
 from validator.tournament.boss_round_sync import get_synced_task_id
 from validator.tournament.boss_round_sync import get_synced_task_ids
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
@@ -373,7 +373,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                     synced_id = await get_synced_task_id(task.task_id, psql_db)
                     if not synced_id:
                         logger.info(f"Syncing missing task {task.task_id} to general")
-                        await _copy_task_to_general(task.task_id, psql_db)
+                        await copy_tournament_task_into_general_miner_pool(task.task_id, psql_db)
                 return  # Wait for next cycle to check completion
             elif len(snyced_task_ids) >= len(round_tasks):
                 logger.info(f"All {len(round_tasks)} tasks have been synced, checking their status...")
@@ -949,7 +949,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                 task_obj = await task_sql.get_task(task.task_id, config.psql_db)
                 if task_obj and task_obj.status == TaskStatus.FAILURE.value:
                     logger.info(f"Task {task.task_id} failed, copying to main cycle to check.")
-                    await _copy_task_to_general(task.task_id, config.psql_db)
+                    await copy_tournament_task_into_general_miner_pool(task.task_id, config.psql_db)
                     waiting_for_synced_tasks = True
                 elif task_obj and task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
                     logger.info(f"Task {task.task_id} failed during preparation, creating replacement immediately.")
@@ -979,7 +979,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                             exc_info=True,
                         )
                         # Fall back to copying to general cycle if replacement fails
-                        await _copy_task_to_general(task.task_id, config.psql_db)
+                        await copy_tournament_task_into_general_miner_pool(task.task_id, config.psql_db)
                         waiting_for_synced_tasks = True
 
     if waiting_for_synced_tasks:
