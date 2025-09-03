@@ -824,9 +824,8 @@ class TestRealFunctionIntegration:
                     assert result.n_eval_attempts == 0  # Reset
                     
                     # Verify the task maintains the training config
-                    assert result.model_repo == historical_task.model_repo
-                    assert result.base_model == historical_task.base_model
-                    assert result.dataset == historical_task.dataset
+                    assert result.model_id == historical_task.model_id
+                    assert result.ds == historical_task.ds
                     assert result.field_instruction == historical_task.field_instruction
                     
                     print(f"✅ Task properly copied:")
@@ -883,10 +882,7 @@ class TestRealFunctionIntegration:
             status=TaskStatus.PENDING,
             account_id=UUID(cst.NULL_ACCOUNT_ID),
             is_organic=False,
-            model_repo="test/model",
             model_id="test/model",  # Required field
-            base_model="llama",
-            dataset="test",
             ds="test",  # Required field
             field_system="system",
             field_instruction="instruction", 
@@ -894,8 +890,7 @@ class TestRealFunctionIntegration:
             field_output="output",
             format="{instruction}",
             no_input_format="{instruction}",
-            max_input_length=1024,
-            hours_to_complete=3.0,  # Required field
+            hours_to_complete=3,  # Required field
             created_at=datetime.utcnow()
         )
         
@@ -937,12 +932,11 @@ class TestRealFunctionIntegration:
                         # Verify the logic
                         assert len(result) == 3  # 1 existing + 2 new
                         
-                        # Check that it tried to fetch the missing types
-                        # The function will try all types but only create tasks for missing ones
+                        # Check that it only tried to fetch the missing types
                         assert 'DpoTask' in historical_fetches
                         assert 'GrpoTask' in historical_fetches
-                        # InstructTextTask is also fetched but returns None since it already exists
-                        assert 'InstructTextTask' in historical_fetches
+                        # InstructTextTask should NOT be fetched since it already exists
+                        assert 'InstructTextTask' not in historical_fetches
                         
                         print(f"✅ Real logic correctly detected existing task")
                         print(f"   Existing type: {existing_raw.task_type}")
