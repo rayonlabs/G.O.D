@@ -159,8 +159,8 @@ class TestBossRoundTaskCopying:
                     mock_connection.execute.assert_called_once()
                     sql_args = mock_connection.execute.call_args[0]
                     assert "boss_round_synced_tasks" in sql_args[0]
-                    assert str(result.task_id) == sql_args[1]  # tournament_task_id
-                    assert historical_task_id == sql_args[2]  # general_task_id (historical)
+                    assert str(result.task_id) == str(sql_args[1])  # tournament_task_id
+                    assert historical_task_id == str(sql_args[2])  # general_task_id (historical)
                     print(f"Sync link: tournament_task {sql_args[1]} -> historical_task {sql_args[2]}")
     
     @pytest.mark.asyncio
@@ -202,8 +202,8 @@ class TestBossRoundTaskCopying:
                 mock_connection.execute.assert_called_once()
                 sql_args = mock_connection.execute.call_args[0]
                 assert "boss_round_synced_tasks" in sql_args[0]
-                assert tournament_task_id == sql_args[1]  # tournament_task_id (original)
-                assert str(result.task_id) == sql_args[2]  # general_task_id (new copy)
+                assert tournament_task_id == str(sql_args[1])  # tournament_task_id (original)
+                assert str(result.task_id) == str(sql_args[2])  # general_task_id (new copy)
                 print(f"Sync link: tournament_task {sql_args[1]} -> general_task {sql_args[2]}")
 
 
@@ -512,8 +512,8 @@ class TestIntegrationFlow:
                 
                 # Verify sync link
                 sql_args = mock_connection.execute.call_args[0]
-                assert str(failed_tournament_task_id) == sql_args[1]
-                assert str(general_task.task_id) == sql_args[2]
+                assert str(failed_tournament_task_id) == str(sql_args[1])
+                assert str(general_task.task_id) == str(sql_args[2])
                 print(f"Sync link recorded: {sql_args[1]} -> {sql_args[2]}")
                 
         print("\n✅ Failed task sync flow verified successfully!")
@@ -563,7 +563,7 @@ class TestHistoricalTasksWithPartialExisting:
                 existing_raw_task = MagicMock()
                 existing_raw_task.task_id = existing_instruct_task.task_id
                 
-                with patch('validator.tournament.task_creator.get_task', 
+                with patch('validator.db.sql.tasks.get_task', 
                           return_value=existing_raw_task):
                     
                     # Mock copying for the 2 new tasks
@@ -644,7 +644,7 @@ class TestHistoricalTasksWithPartialExisting:
                     raw_task.task_id = existing_task.task_id
                     existing_raw_tasks.append(raw_task)
                 
-                with patch('validator.tournament.task_creator.get_task', 
+                with patch('validator.db.sql.tasks.get_task', 
                           side_effect=existing_raw_tasks):
                     
                     # Mock copying for the 1 new task
