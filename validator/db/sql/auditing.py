@@ -25,6 +25,7 @@ from validator.core.models import InstructTextTask
 from validator.core.models import InstructTextTaskWithHotkeyDetails
 from validator.db import constants as cst
 from validator.db.sql import tasks as tasks_sql
+from validator.db.sql import tournaments as tournament_sql
 from validator.utils.util import hide_sensitive_data_till_finished
 from validator.utils.util import normalise_float
 
@@ -531,8 +532,16 @@ async def get_task_with_hotkey_details(task_id: str, config: Config = Depends(ge
 
     logger.info("Got a task!!")
 
+    tournament_id = await tournament_sql.get_tournament_id_by_task_id(task_id, config.psql_db)
+    tournament_status = None
+
+    if tournament_id:
+        tournament = await tournament_sql.get_tournament(tournament_id, config.psql_db)
+        if tournament:
+            tournament_status = tournament.status
+
     # NOTE: If the task is not finished, remove details about synthetic data & test data?
-    task = hide_sensitive_data_till_finished(task_raw)
+    task = hide_sensitive_data_till_finished(task_raw, tournament_status)
 
     query = f"""
         SELECT
