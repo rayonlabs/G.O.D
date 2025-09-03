@@ -72,7 +72,7 @@ async def copy_historical_task_into_boss_round_tournament(
     tournament_task = original_task.model_copy()
     tournament_task.is_organic = False
     tournament_task.task_id = uuid4()
-    tournament_task.status = TaskStatus.PENDING
+    tournament_task.status = TaskStatus.LOOKING_FOR_NODES
     tournament_task.account_id = cst.NULL_ACCOUNT_ID
     tournament_task.times_delayed = 0
     tournament_task.assigned_miners = None
