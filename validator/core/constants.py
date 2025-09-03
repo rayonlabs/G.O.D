@@ -229,6 +229,13 @@ MAX_NUM_REWARD_FUNCTIONS = 5
 PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_LLM = 0.0
 PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_DB = 1 - PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_LLM
 
+# affine grpo synth
+PERCENTAGE_OF_GRPO_TASKS_THAT_SHOULD_BE_AFFINE = 0.3
+GET_AFFINE_GRPO_DATA_ENDPOINT = f"{CONTENT_BASE_URL}/affine-grpo-data/latest"
+AFFINE_GRPO_HARDCODED_REWARD_FUNCTION_ID = (
+    "00000000-0000-0000-0000-000000000001"  # TODO: Replace with real ID once inserted in the db - or put in env var
+)
+
 # diffusion eval stuff
 LORA_SDXL_WORKFLOW_PATH = "validator/evaluation/comfy_workflows/lora_sdxl.json"
 LORA_SDXL_WORKFLOW_PATH_DIFFUSERS = "validator/evaluation/comfy_workflows/lora_sdxl_diffusers.json"

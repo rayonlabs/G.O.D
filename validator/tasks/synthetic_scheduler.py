@@ -6,6 +6,7 @@ from datetime import datetime
 from datetime import timedelta
 from typing import Any
 from typing import AsyncGenerator
+from uuid import UUID
 
 from datasets import load_dataset
 from substrateinterface import Keypair
@@ -34,6 +35,7 @@ from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import RawTask
 from validator.core.models import RewardFunction
+from validator.db.sql import grpo as grpo_sql
 from validator.db.sql.grpo import get_generic_reward_functions_from_db
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
@@ -107,8 +109,8 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
                     dataset = Dataset.model_validate(ds)
                     datasets.append(dataset)
                 except Exception as exc:
-                    logger.warning(f"[DATASET_BIN] Failed to validate dataset {idx+1}: {exc}")
-            
+                    logger.warning(f"[DATASET_BIN] Failed to validate dataset {idx + 1}: {exc}")
+
             logger.info(f"[DATASET_BIN] Successfully validated {len(datasets)} datasets")
             random.shuffle(datasets)
 
@@ -122,7 +124,7 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
 
         except Exception as e:
             logger.error(f"[DATASET_BIN] Failed to fetch datasets for bin {min_rows}-{max_rows} rows: {e}")
-            logger.info(f"[DATASET_BIN] Sleeping 5 seconds before retry...")
+            logger.info("[DATASET_BIN] Sleeping 5 seconds before retry...")
             await asyncio.sleep(5)
 
 
@@ -477,6 +479,67 @@ async def create_synthetic_grpo_task(
 
 
 @retry_with_backoff
+async def create_synthetic_affine_grpo_task(
+    config: Config,
+    models: AsyncGenerator[str, None],
+) -> RawTask:
+    """Create a synthetic GRPO task using affine data from the content service."""
+    model_id = await anext(models)
+
+    try:
+        response = await call_content_service(cst.GET_AFFINE_GRPO_DATA_ENDPOINT, config.keypair)
+        logger.info(f"Retrieved affine GRPO data: {response}")
+
+        if not isinstance(response, dict):
+            raise ValueError("Expected dict response from affine GRPO data endpoint")
+
+        s3_url = response.get("s3_url")
+        if not s3_url:
+            raise ValueError("No s3_url in affine GRPO data response")
+
+        affine_reward_function = await grpo_sql.get_reward_function_by_id(
+            config.psql_db, UUID(cst.AFFINE_GRPO_HARDCODED_REWARD_FUNCTION_ID)
+        )
+
+        if not affine_reward_function:
+            logger.warning("Affine reward function not found, using generic reward functions")
+            reward_functions = await _get_generic_reward_functions(config)
+        else:
+            affine_reward_function.reward_weight = 1.0
+            reward_functions = [affine_reward_function]
+
+        num_entries = response.get("num_entries", 10_000)
+        number_of_hours = _get_training_hours_from_num_rows(num_entries)
+
+        current_time = datetime.utcnow()
+        end_timestamp = current_time + timedelta(hours=number_of_hours)
+
+        task = GrpoRawTask(
+            model_id=model_id,
+            ds=s3_url,
+            field_prompt="prompt",
+            reward_functions=reward_functions,
+            status=TaskStatus.PENDING,
+            is_organic=False,
+            created_at=current_time,
+            termination_at=end_timestamp,
+            hours_to_complete=number_of_hours,
+            account_id=cst.NULL_ACCOUNT_ID,
+            file_format=FileFormat.S3,
+            extra_column="extra",
+        )
+
+        logger.info(f"New affine GRPO task created with S3 dataset: {s3_url}")
+
+        task = await add_task(task, config.psql_db)
+
+        return task
+
+    except Exception as e:
+        logger.error(f"Failed to create affine GRPO task: {e}")
+
+
+@retry_with_backoff
 async def create_synthetic_instruct_text_task(
     config: Config,
     models: AsyncGenerator[str, None],
@@ -614,7 +677,12 @@ async def _add_new_task_to_network_if_not_enough(
         elif selected_task_type == TaskType.DPOTASK:
             await create_synthetic_dpo_task(config, models, dpo_datasets)
         elif selected_task_type == TaskType.GRPOTASK:
-            await create_synthetic_grpo_task(config, models, instruct_datasets)
+            if random.random() < cst.PERCENTAGE_OF_GRPO_TASKS_THAT_SHOULD_BE_AFFINE:
+                logger.info("TASK_TYPE_SELECTION: Creating AFFINE GRPO task")
+                await create_synthetic_affine_grpo_task(config, models)
+            else:
+                logger.info("TASK_TYPE_SELECTION: Creating regular GRPO task")
+                await create_synthetic_grpo_task(config, models, instruct_datasets)
 
 
 async def schedule_synthetics_periodically(config: Config):
