@@ -16,6 +16,7 @@ from validator.db.sql.tasks import get_task
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.utils.logging import get_logger
+from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
@@ -86,6 +87,19 @@ async def copy_historical_task_into_boss_round_tournament(
     tournament_task.termination_at = None
     tournament_task.completed_at = None
     tournament_task.n_eval_attempts = 0
+
+    # Resign S3 URLs to ensure they're not expired
+    if tournament_task.training_data:
+        logger.info("Regenerating presigned URL for training_data")
+        tournament_task.training_data = await async_minio_client.get_new_presigned_url(tournament_task.training_data)
+    
+    if tournament_task.test_data:
+        logger.info("Regenerating presigned URL for test_data")
+        tournament_task.test_data = await async_minio_client.get_new_presigned_url(tournament_task.test_data)
+    
+    if hasattr(tournament_task, 'synthetic_data') and tournament_task.synthetic_data:
+        logger.info("Regenerating presigned URL for synthetic_data")
+        tournament_task.synthetic_data = await async_minio_client.get_new_presigned_url(tournament_task.synthetic_data)
 
     await add_task(tournament_task, psql_db)
     
