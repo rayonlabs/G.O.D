@@ -160,7 +160,7 @@ class TestBossRoundTaskCopying:
                     sql_args = mock_connection.execute.call_args[0]
                     assert "boss_round_synced_tasks" in sql_args[0]
                     assert str(result.task_id) == str(sql_args[1])  # tournament_task_id
-                    assert historical_task_id == str(sql_args[2])  # general_task_id (historical)
+                    assert str(historical_task_id) == str(sql_args[2])  # general_task_id (historical)
                     print(f"Sync link: tournament_task {sql_args[1]} -> historical_task {sql_args[2]}")
     
     @pytest.mark.asyncio
@@ -552,16 +552,17 @@ class TestHistoricalTasksWithPartialExisting:
                   return_value=[existing_instruct_task]):
             print(f"Existing task found: {existing_instruct_task.task_id}")
             
-            # We should only need to fetch 2 more tasks (DPO and GRPO)
+            # We should only need to fetch 2 more tasks (DPO and GRPO) since InstructText exists
             historical_dpo_id = uuid4()
             historical_grpo_id = uuid4()
             
             with patch('validator.tournament.task_creator.get_random_historical_task_by_type',
                       side_effect=[historical_dpo_id, historical_grpo_id]) as mock_get_historical:
                 
-                # Mock the existing task retrieval
+                # Mock the existing task retrieval - need to set the task_type
                 existing_raw_task = MagicMock()
                 existing_raw_task.task_id = existing_instruct_task.task_id
+                existing_raw_task.task_type = TaskType.INSTRUCTTEXTTASK.value  # Important: set the type!
                 
                 with patch('validator.db.sql.tasks.get_task', 
                           return_value=existing_raw_task):
@@ -586,13 +587,13 @@ class TestHistoricalTasksWithPartialExisting:
                         # Should have 3 tasks total (1 existing + 2 new)
                         assert len(result) == 3
                         
-                        # Should only have called get_random_historical 2 times
+                        # Should only have called get_random_historical 2 times (skip InstructText)
                         assert mock_get_historical.call_count == 2
                         print(f"✅ Only fetched {mock_get_historical.call_count} new historical tasks")
                         
-                        # Check that we didn't try to fetch InstructText since it exists
+                        # Check that we only fetched DPO and GRPO
                         called_types = [call[1]['task_type'] for call in mock_get_historical.call_args_list]
-                        assert 'InstructTextTask' not in called_types
+                        assert len(called_types) == 2
                         assert 'DpoTask' in called_types
                         assert 'GrpoTask' in called_types
                         print(f"Task types fetched: {called_types}")
