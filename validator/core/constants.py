@@ -214,7 +214,7 @@ PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO = (
     - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
 )
 PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = (
-    0.5  # person synth chance is 1 minus this (only for sdxl models, flux is always person)
+    0  # person synth chance is 1 minus this (only for sdxl models, flux is always person)
 )
 PROBABILITY_STYLE_COMBINATION = 0.5
 PERSON_SYNTH_DS_PREFIX = "person"
