@@ -1033,8 +1033,9 @@ async def count_champion_consecutive_wins(psql_db: PSQLDB, tournament_type: Tour
     """Count consecutive tournament wins for the current champion (their current winning streak)."""
     async with await psql_db.connection() as connection:
         # Get all completed tournaments ordered by date descending
+        # Include base_winner_hotkey to handle EMISSION_BURN_HOTKEY wins correctly
         query = f"""
-            SELECT {cst.WINNER_HOTKEY}, {cst.CREATED_AT}
+            SELECT {cst.WINNER_HOTKEY}, {cst.BASE_WINNER_HOTKEY}, {cst.CREATED_AT}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1 
               AND {cst.TOURNAMENT_STATUS} = 'completed'
@@ -1047,7 +1048,13 @@ async def count_champion_consecutive_wins(psql_db: PSQLDB, tournament_type: Tour
 
         consecutive_wins = 0
         for row in results:
-            if row[cst.WINNER_HOTKEY] == champion_hotkey:
+            winner = row[cst.WINNER_HOTKEY]
+            base_winner = row[cst.BASE_WINNER_HOTKEY]
+            
+            # Check if the champion won this tournament
+            # Either directly (winner_hotkey == champion_hotkey)
+            # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
+            if winner == champion_hotkey or (winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
@@ -1073,8 +1080,9 @@ async def count_champion_consecutive_wins_at_tournament(
             return 0
 
         # Get all completed tournaments of the same type that finished before this tournament started
+        # Include base_winner_hotkey to handle EMISSION_BURN_HOTKEY wins correctly
         query = f"""
-            SELECT {cst.WINNER_HOTKEY}, {cst.CREATED_AT}
+            SELECT {cst.WINNER_HOTKEY}, {cst.BASE_WINNER_HOTKEY}, {cst.CREATED_AT}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1 
               AND {cst.TOURNAMENT_STATUS} = 'completed'
@@ -1088,7 +1096,13 @@ async def count_champion_consecutive_wins_at_tournament(
 
         consecutive_wins = 0
         for row in results:
-            if row[cst.WINNER_HOTKEY] == champion_hotkey:
+            winner = row[cst.WINNER_HOTKEY]
+            base_winner = row[cst.BASE_WINNER_HOTKEY]
+            
+            # Check if the champion won this tournament
+            # Either directly (winner_hotkey == champion_hotkey)
+            # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
+            if winner == champion_hotkey or (winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
