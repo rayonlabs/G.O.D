@@ -122,8 +122,11 @@ PENDING → ACTIVE → COMPLETED
 
 When tournament reaches final round with single winner:
 
-1. **Boss Round Sync**: `sync_boss_round_tasks_to_general()` copies tasks to main evaluation cycle (real-time miners)
-2. **Delay Strategy**: Tasks scheduled with random 1-4 hour delays to prevent gaming
+1. **Historical Task Selection**: Boss round uses proven historical tasks from the database with at least 2 successful quality scores
+   - Text tournaments: 1 of each type (InstructText, DPO, GRPO) 
+   - Image tournaments: 3 random image tasks
+   - Tasks are copied with new IDs while preserving original training data
+2. **Score Comparison**: Tournament miners' results are compared against the best historical scores from general miners
 3. **Winner Determination**: Based on `calculate_final_round_winner()` with 5% margin requirement
 4. **Champion Defense**: Previous winner retains title unless clearly outperformed
 

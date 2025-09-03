@@ -509,6 +509,8 @@ def compute_required_gpus(task: RawTask) -> int:
         return 1
     if task.task_type == TaskType.DPOTASK:
         num_params = num_params * 2
+    elif task.task_type == TaskType.GRPOTASK:
+        num_params = num_params * 3
 
     if num_params < cst.MODEL_SIZE_REQUIRING_2_GPUS:
         return 1

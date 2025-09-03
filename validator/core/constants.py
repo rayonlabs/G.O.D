@@ -166,7 +166,7 @@ TASK_TIME_DELAY = 15  # number of minutes we wait to retry an organic request
 MAX_DELAY_TIMES = 6
 # Maximum number of evaluation attempts when all scores are zero (including the first one)
 MAX_EVAL_ATTEMPTS = 4
-MODEL_SIZE_REQUIRING_2_GPUS = 35 * 10**9  # 35B params
+MODEL_SIZE_REQUIRING_2_GPUS = 30 * 10**9  # 30B params
 
 # Tournament GPU requirement thresholds (in billions of parameters)
 TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100 = 4.0
