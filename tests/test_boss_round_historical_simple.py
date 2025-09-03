@@ -766,8 +766,10 @@ class TestRealFunctionIntegration:
             account_id=uuid4(),
             is_organic=True,
             model_repo="test/model",
+            model_id="test/model",  # Required field
             base_model="llama-3",
             dataset="historical_dataset",
+            ds="historical_dataset",  # Required field
             max_input_length=2048,
             field_system="system",
             field_instruction="instruction",
@@ -775,11 +777,12 @@ class TestRealFunctionIntegration:
             field_output="output",
             format="{instruction} {input}",
             no_input_format="{instruction}",
+            hours_to_complete=4.0,  # Required field
             created_at=datetime.utcnow(),
             times_delayed=0,
             n_eval_attempts=3,
-            assigned_miners=["miner1", "miner2"],
-            miner_scores={"miner1": 0.95, "miner2": 0.88}
+            assigned_miners=[1, 2],  # Should be list of ints (node IDs)
+            miner_scores=[0.95, 0.88]  # Should be list of floats
         )
         
         historical_task_id = str(historical_task.task_id)
@@ -879,8 +882,10 @@ class TestRealFunctionIntegration:
             account_id=UUID(cst.NULL_ACCOUNT_ID),
             is_organic=False,
             model_repo="test/model",
+            model_id="test/model",  # Required field
             base_model="llama",
             dataset="test",
+            ds="test",  # Required field
             field_system="system",
             field_instruction="instruction", 
             field_input="input",
@@ -888,6 +893,7 @@ class TestRealFunctionIntegration:
             format="{instruction}",
             no_input_format="{instruction}",
             max_input_length=1024,
+            hours_to_complete=3.0,  # Required field
             created_at=datetime.utcnow()
         )
         
