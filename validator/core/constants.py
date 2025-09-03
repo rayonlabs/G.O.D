@@ -105,24 +105,25 @@ INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
     (10_000, 25_000): (2, 4),
     (25_000, 50_000): (3, 5),
     (50_000, 100_000): (3, 6),
-    (100_000, 500_000): (4, 6)}
+    (100_000, 500_000): (4, 6),
+}
 
 # text augmentation synth
-TEXT_SYNTH_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
+TEXT_SYNTH_MODEL = "ArliAI/QwQ-32B-ArliAI-RpR-v1"
 TEXT_SYNTH_WEAKER_MODEL = "llama-3-2-3b"
 TEXT_SYNTH_MODEL_TEMPERATURE = 0.6
 TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
 END_OF_REASONING_TAG = "</think>"
 
 # image prompt generation synth
-IMAGE_PROMPT_GEN_MODEL = "casperhansen/deepseek-r1-distill-qwen-32b-awq"
+IMAGE_PROMPT_GEN_MODEL = "ArliAI/QwQ-32B-ArliAI-RpR-v1"
 IMAGE_PROMPT_GEN_MODEL_TEMPERATURE = 0.4
 IMAGE_PROMPT_GEN_MODEL_MAX_TOKENS = 5024
 IMAGE_STYLE_PICKING_NUM_TRIES = 10
 PERSON_GEN_RETRIES = 3
 
 # endpoints
-PROMPT_GEN_ENDPOINT = "https://api.nineteen.ai/v1/chat/completions"
+PROMPT_GEN_ENDPOINT = "https://llm.chutes.ai/v1/chat/completions"
 IMAGE_GEN_ENDPOINT = "https://api.nineteen.ai/v1/text-to-image"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
@@ -148,7 +149,6 @@ TOURNAMENT_PARTICIPATION_WEIGHT = 0.0001  # Weight given to active participants
 
 # Tournament weight distribution
 TOURNAMENT_SIMPLE_DECAY_BASE = 0.3  # Base for simple exponential decay (1st=1.0, 2nd=0.2, 3rd=0.04, etc.)
-
 
 
 # General miner pool sizes
