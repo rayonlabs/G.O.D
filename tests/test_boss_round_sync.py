@@ -16,7 +16,7 @@ from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.constants import NULL_ACCOUNT_ID
 from validator.core.models import InstructTextRawTask
-from validator.tournament.boss_round_sync import _copy_task_to_general
+from validator.tournament.boss_round_sync import copy_tournament_task_into_general_miner_pool
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
 
 
@@ -97,14 +97,14 @@ async def test_sync_boss_round_tasks_schedules_correctly(mock_config, mock_psql_
 
 @pytest.mark.asyncio
 async def test_copy_task_to_general_creates_correct_copy(mock_config, mock_psql_db, sample_instruct_task):
-    """Test that _copy_task_to_general creates a proper copy with updated fields."""
+    """Test that copy_tournament_task_into_general_miner_pool creates a proper copy with updated fields."""
 
     original_task_id = sample_instruct_task.task_id
 
     with patch("validator.tournament.boss_round_sync.get_task", return_value=sample_instruct_task) as mock_get_task:
         with patch("validator.tournament.boss_round_sync.add_task") as mock_add_task:
             with patch("validator.tournament.boss_round_sync._record_task_sync_link") as mock_record_link:
-                await _copy_task_to_general(str(original_task_id), mock_psql_db)
+                await copy_tournament_task_into_general_miner_pool(str(original_task_id), mock_psql_db)
 
                 # Should get the original task
                 mock_get_task.assert_called_once_with(str(original_task_id), mock_psql_db)
