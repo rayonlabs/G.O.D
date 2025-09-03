@@ -758,7 +758,7 @@ class TestRealFunctionIntegration:
         print("\n=== REAL BOSS ROUND TASK COPY FLOW ===")
         
         # Create a realistic historical task
-        from core.models.task_models import InstructTextTask
+        from validator.core.models import InstructTextTask
         historical_task = InstructTextTask(
             task_id=uuid4(),
             task_type=TaskType.INSTRUCTTEXTTASK,
@@ -871,7 +871,7 @@ class TestRealFunctionIntegration:
         )
         
         # Create a mock for the existing task when retrieved
-        from core.models.task_models import InstructTextTask
+        from validator.core.models import InstructTextTask
         existing_raw = InstructTextTask(
             task_id=existing_task.task_id,
             task_type=TaskType.INSTRUCTTEXTTASK,
