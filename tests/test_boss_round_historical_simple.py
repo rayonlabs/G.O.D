@@ -137,7 +137,7 @@ class TestBossRoundTaskCopying:
                     assert result.task_id != sample_task.task_id  # New ID
                     assert result.status == TaskStatus.PENDING
                     assert result.is_organic == False
-                    assert result.account_id == UUID(cst.NULL_ACCOUNT_ID)
+                    assert str(result.account_id) == cst.NULL_ACCOUNT_ID
                     assert result.times_delayed == 0
                     assert result.assigned_miners is None
                     assert result.n_eval_attempts == 0
@@ -168,7 +168,7 @@ class TestBossRoundTaskCopying:
         """Test copying a failed tournament task to general miner pool."""
         from validator.tournament.boss_round_sync import copy_tournament_task_into_general_miner_pool
         
-        sample_task_dict['status'] = TaskStatus.FAILED.value
+        sample_task_dict['status'] = TaskStatus.FAILURE.value
         # Create a mock task object
         sample_task = MagicMock()
         for key, value in sample_task_dict.items():
@@ -193,7 +193,7 @@ class TestBossRoundTaskCopying:
                 assert result.task_id != sample_task.task_id  # New ID
                 assert result.status == TaskStatus.LOOKING_FOR_NODES  # Ready for general miners
                 assert result.is_organic == False
-                assert result.account_id == UUID(cst.NULL_ACCOUNT_ID)
+                assert str(result.account_id) == cst.NULL_ACCOUNT_ID
                 
                 # Verify task was added
                 mock_add_task.assert_called_once()
@@ -269,18 +269,25 @@ class TestBossRoundTaskCreation:
         tournament_id = str(uuid4())
         round_id = str(uuid4())
         
+        print("\n=== TEXT BOSS ROUND TASK CREATION TEST ===")
+        
         # Mock existing tasks check (no existing tasks)
         with patch('validator.tournament.task_creator.get_tournament_tasks', return_value=[]):
-            # Mock historical task IDs
-            historical_ids = [uuid4(), uuid4(), uuid4()]
+            # Mock historical task IDs - one for each type
+            historical_instruct_id = uuid4()
+            historical_dpo_id = uuid4()  
+            historical_grpo_id = uuid4()
+            historical_ids = [historical_instruct_id, historical_dpo_id, historical_grpo_id]
+            
             with patch('validator.tournament.task_creator.get_random_historical_task_by_type', 
-                      side_effect=historical_ids):
+                      side_effect=historical_ids) as mock_get_historical:
                 # Mock task copying
                 copied_tasks = []
-                for hist_id in historical_ids:
+                for i, hist_id in enumerate(historical_ids):
                     task = MagicMock()
                     task.task_id = uuid4()
                     copied_tasks.append(task)
+                    print(f"Historical task {hist_id} -> Tournament task {task.task_id}")
                 
                 with patch('validator.tournament.task_creator.copy_historical_task_into_boss_round_tournament',
                           side_effect=copied_tasks):
@@ -293,6 +300,26 @@ class TestBossRoundTaskCreation:
                     
                     # Should create 3 tasks (one of each type)
                     assert len(result) == 3
+                    
+                    # Verify each task type was requested
+                    calls = mock_get_historical.call_args_list
+                    assert len(calls) == 3
+                    
+                    # Check that each task type was requested with correct parameters
+                    for i, call in enumerate(calls):
+                        task_type = call[1]['task_type']
+                        print(f"Requested task type {i+1}: {task_type}")
+                        assert call[1]['start_date'] == '2025-06-01'
+                        assert call[1]['end_date'] == '2025-08-01'
+                        assert call[1]['min_successful_scores'] == 2
+                    
+                    # Verify the task types requested
+                    requested_types = [call[1]['task_type'] for call in calls]
+                    assert 'InstructTextTask' in requested_types
+                    assert 'DpoTask' in requested_types
+                    assert 'GrpoTask' in requested_types
+                    
+                    print(f"✅ Created {len(result)} boss round text tasks from historical data")
     
     @pytest.mark.asyncio
     async def test_create_historical_image_boss_round_tasks_success(self, mock_config):
@@ -457,12 +484,12 @@ class TestIntegrationFlow:
         failed_tournament_task_id = uuid4()
         failed_task = MagicMock()
         failed_task.task_id = failed_tournament_task_id
-        failed_task.status = TaskStatus.FAILED
+        failed_task.status = TaskStatus.FAILURE
         failed_task.task_type = TaskType.DPOTASK
         failed_task.is_organic = False
         failed_task.model_copy = MagicMock(return_value=MagicMock(
             task_id=failed_tournament_task_id,
-            status=TaskStatus.FAILED
+            status=TaskStatus.FAILURE
         ))
         
         with patch('validator.tournament.boss_round_sync.get_task', return_value=failed_task):
@@ -490,3 +517,161 @@ class TestIntegrationFlow:
                 print(f"Sync link recorded: {sql_args[1]} -> {sql_args[2]}")
                 
         print("\n✅ Failed task sync flow verified successfully!")
+
+
+class TestHistoricalTasksWithPartialExisting:
+    """Test boss round creation when some tasks already exist."""
+    
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.psql_db = MagicMock()
+        return config
+    
+    @pytest.mark.asyncio
+    async def test_create_text_boss_round_with_partial_existing(self, mock_config):
+        """Test creating text boss round when 1 task already exists."""
+        from validator.tournament.task_creator import _create_historical_text_boss_round_tasks
+        from core.models.tournament_models import TournamentTask
+        
+        tournament_id = str(uuid4())
+        round_id = str(uuid4())
+        
+        print("\n=== TEXT BOSS ROUND WITH PARTIAL EXISTING TASKS ===")
+        
+        # Mock that 1 task already exists (e.g., InstructText already created)
+        existing_instruct_task = TournamentTask(
+            tournament_id=tournament_id,
+            round_id=round_id,
+            task_id=uuid4(),
+            pair_id=f"{round_id}_pair_001",
+            group_id=None
+        )
+        
+        with patch('validator.tournament.task_creator.get_tournament_tasks', 
+                  return_value=[existing_instruct_task]):
+            print(f"Existing task found: {existing_instruct_task.task_id}")
+            
+            # We should only need to fetch 2 more tasks (DPO and GRPO)
+            historical_dpo_id = uuid4()
+            historical_grpo_id = uuid4()
+            
+            with patch('validator.tournament.task_creator.get_random_historical_task_by_type',
+                      side_effect=[historical_dpo_id, historical_grpo_id]) as mock_get_historical:
+                
+                # Mock the existing task retrieval
+                existing_raw_task = MagicMock()
+                existing_raw_task.task_id = existing_instruct_task.task_id
+                
+                with patch('validator.tournament.task_creator.get_task', 
+                          return_value=existing_raw_task):
+                    
+                    # Mock copying for the 2 new tasks
+                    new_tasks = []
+                    for hist_id in [historical_dpo_id, historical_grpo_id]:
+                        task = MagicMock()
+                        task.task_id = uuid4()
+                        new_tasks.append(task)
+                        print(f"Creating new task from historical {hist_id} -> {task.task_id}")
+                    
+                    with patch('validator.tournament.task_creator.copy_historical_task_into_boss_round_tournament',
+                              side_effect=new_tasks):
+                        
+                        result = await _create_historical_text_boss_round_tasks(
+                            tournament_id=tournament_id,
+                            round_id=round_id,
+                            config=mock_config
+                        )
+                        
+                        # Should have 3 tasks total (1 existing + 2 new)
+                        assert len(result) == 3
+                        
+                        # Should only have called get_random_historical 2 times
+                        assert mock_get_historical.call_count == 2
+                        print(f"✅ Only fetched {mock_get_historical.call_count} new historical tasks")
+                        
+                        # Check that we didn't try to fetch InstructText since it exists
+                        called_types = [call[1]['task_type'] for call in mock_get_historical.call_args_list]
+                        assert 'InstructTextTask' not in called_types
+                        assert 'DpoTask' in called_types
+                        assert 'GrpoTask' in called_types
+                        print(f"Task types fetched: {called_types}")
+    
+    @pytest.mark.asyncio
+    async def test_create_image_boss_round_with_partial_existing(self, mock_config):
+        """Test creating image boss round when 2 tasks already exist."""
+        from validator.tournament.task_creator import _create_historical_image_boss_round_tasks
+        from core.models.tournament_models import TournamentTask
+        
+        tournament_id = str(uuid4())
+        round_id = str(uuid4())
+        pair_id = f"{round_id}_pair_001"
+        
+        print("\n=== IMAGE BOSS ROUND WITH PARTIAL EXISTING TASKS ===")
+        
+        # Mock that 2 image tasks already exist
+        existing_tasks = [
+            TournamentTask(
+                tournament_id=tournament_id,
+                round_id=round_id,
+                task_id=uuid4(),
+                pair_id=pair_id,
+                group_id=None
+            ),
+            TournamentTask(
+                tournament_id=tournament_id,
+                round_id=round_id,
+                task_id=uuid4(),
+                pair_id=pair_id,
+                group_id=None
+            )
+        ]
+        
+        with patch('validator.tournament.task_creator.get_tournament_tasks', 
+                  return_value=existing_tasks):
+            print(f"Found {len(existing_tasks)} existing tasks")
+            
+            # We should only need to fetch 1 more task (3 total - 2 existing = 1)
+            new_historical_id = uuid4()
+            
+            with patch('validator.tournament.task_creator.get_random_historical_task_by_type',
+                      return_value=new_historical_id) as mock_get_historical:
+                
+                # Mock the existing tasks retrieval
+                existing_raw_tasks = []
+                for existing_task in existing_tasks:
+                    raw_task = MagicMock()
+                    raw_task.task_id = existing_task.task_id
+                    existing_raw_tasks.append(raw_task)
+                
+                with patch('validator.tournament.task_creator.get_task', 
+                          side_effect=existing_raw_tasks):
+                    
+                    # Mock copying for the 1 new task
+                    new_task = MagicMock()
+                    new_task.task_id = uuid4()
+                    print(f"Creating new task from historical {new_historical_id} -> {new_task.task_id}")
+                    
+                    with patch('validator.tournament.task_creator.copy_historical_task_into_boss_round_tournament',
+                              return_value=new_task):
+                        
+                        result = await _create_historical_image_boss_round_tasks(
+                            tournament_id=tournament_id,
+                            round_id=round_id,
+                            config=mock_config
+                        )
+                        
+                        # Should have 3 tasks total (2 existing + 1 new)
+                        assert len(result) == 3
+                        
+                        # Should only have called get_random_historical 1 time
+                        assert mock_get_historical.call_count == 1
+                        print(f"✅ Only fetched {mock_get_historical.call_count} new historical task")
+                        
+                        # Verify parameters
+                        call_args = mock_get_historical.call_args[1]
+                        assert call_args['task_type'] == 'ImageTask'
+                        assert call_args['start_date'] == '2025-06-01'
+                        assert call_args['end_date'] == '2025-08-01'
+                        assert call_args['min_successful_scores'] == 2
+                        print(f"Parameters verified for historical task fetch")
