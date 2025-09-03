@@ -496,7 +496,7 @@ async def _create_historical_text_boss_round_tasks(
     for task in existing_pair_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
         if task_obj:
-            existing_task_types.add(task_obj.task_type)
+            existing_task_types.add(task_obj.task_type.value if hasattr(task_obj.task_type, 'value') else task_obj.task_type)
             tasks.append(task_obj)
     
     # Create only the missing task types
