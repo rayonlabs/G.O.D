@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import json
 import os
 import random
@@ -229,7 +228,7 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
         "prompt": prompt,
         "model": cst.IMAGE_GEN_MODEL,
         "steps": cst.IMAGE_GEN_STEPS,
-        "cfg_scale": cst.IMAGE_GEN_CFG_SCALE,
+        "guidance_scale": cst.IMAGE_GEN_CFG_SCALE,
         "height": height,
         "width": width,
         "negative_prompt": "",
@@ -238,8 +237,8 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
     result = await post_to_nineteen_image(payload, keypair)
 
     try:
-        result_dict = json.loads(result) if isinstance(result, str) else result
-        return result_dict["image_b64"]
+        image_bytes = await result.content.read()
+        return image_bytes
     except (json.JSONDecodeError, KeyError) as e:
         logger.error(f"Error parsing image generation response: {e}")
         raise ValueError("Failed to generate image")
@@ -296,7 +295,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
         image = await generate_image(prompt, config.keypair, width, height)
 
         with tempfile.NamedTemporaryFile(dir=cst.TEMP_PATH_FOR_IMAGES, suffix=".png") as img_file:
-            img_file.write(base64.b64decode(image))
+            img_file.write(image)
             img_url = await upload_file_to_minio(img_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.png")
 
         with tempfile.NamedTemporaryFile(suffix=".txt") as txt_file:
