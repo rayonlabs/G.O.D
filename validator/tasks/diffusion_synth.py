@@ -227,7 +227,7 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
     payload = {
         "prompt": prompt,
         "model": cst.IMAGE_GEN_MODEL,
-        "steps": cst.IMAGE_GEN_STEPS,
+        "num_inference_steps": cst.IMAGE_GEN_STEPS,
         "guidance_scale": cst.IMAGE_GEN_CFG_SCALE,
         "height": height,
         "width": width,
