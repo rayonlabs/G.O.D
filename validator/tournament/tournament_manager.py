@@ -418,15 +418,31 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
 
                 try:
                     participant1, participant2 = await get_final_round_participants(completed_round, psql_db)
-                    runner_up = participant2 if participant1 == winner else participant1
+                    logger.info(f"Final round participants from DB: {participant1}, {participant2}")
+                    logger.info(f"Winner determined by get_round_winners: {winner}")
+                    logger.info(f"Tournament base_winner_hotkey (previous champion): {tournament.base_winner_hotkey}")
+                    
+                    # Simple logic: EMISSION_BURN_HOTKEY is the defending champion
+                    if winner == cst.EMISSION_BURN_HOTKEY:
+                        # Defending champion won - upload EMISSION_BURN_HOTKEY to position 1
+                        logger.info("Defending champion (EMISSION_BURN_HOTKEY) won")
+                        position_1_upload = cst.EMISSION_BURN_HOTKEY
+                        position_2_upload = participant1  # The challenger who lost
+                    else:
+                        # Challenger won - upload winner to position 1, EMISSION_BURN_HOTKEY to position 2
+                        logger.info(f"Challenger {winner} won")
+                        position_1_upload = winner
+                        position_2_upload = cst.EMISSION_BURN_HOTKEY
 
+                    logger.info(f"Uploading position 1 repository for hotkey: {position_1_upload}")
                     await upload_participant_repository(
-                        tournament.tournament_id, tournament.tournament_type, winner, 1, config, psql_db
+                        tournament.tournament_id, tournament.tournament_type, position_1_upload, 1, config, psql_db
                     )
-                    if runner_up:
-                        await upload_participant_repository(
-                            tournament.tournament_id, tournament.tournament_type, runner_up, 2, config, psql_db
-                        )
+                    
+                    logger.info(f"Uploading position 2 repository for hotkey: {position_2_upload}")
+                    await upload_participant_repository(
+                        tournament.tournament_id, tournament.tournament_type, position_2_upload, 2, config, psql_db
+                    )
                 except Exception as e:
                     logger.error(f"Error determining final round participants: {e}")
                     await upload_participant_repository(
