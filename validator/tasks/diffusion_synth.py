@@ -294,7 +294,7 @@ async def generate_style_synthetic(config: Config, num_prompts: int) -> tuple[li
         height = random.randrange(cst.MIN_IMAGE_HEIGHT, cst.MAX_IMAGE_HEIGHT + 1, cst.IMAGE_RESOLUTION_STEP)
         image = await generate_image(prompt, config.keypair, width, height)
 
-        with tempfile.NamedTemporaryFile(dir=cst.TEMP_PATH_FOR_IMAGES, suffix=".png") as img_file:
+        with tempfile.NamedTemporaryFile(dir=cst.TEMP_PATH_FOR_IMAGES, suffix=".png", mode="wb") as img_file:
             img_file.write(image)
             img_url = await upload_file_to_minio(img_file.name, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_{i}.png")
 
