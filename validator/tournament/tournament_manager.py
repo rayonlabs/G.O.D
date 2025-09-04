@@ -434,15 +434,15 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                         position_1_upload = winner
                         position_2_upload = cst.EMISSION_BURN_HOTKEY
 
-                    logger.info(f"Uploading position 1 repository for hotkey: {winner_for_upload}")
+                    logger.info(f"Uploading position 1 repository for hotkey: {position_1_upload}")
                     await upload_participant_repository(
-                        tournament.tournament_id, tournament.tournament_type, winner_for_upload, 1, config, psql_db
+                        tournament.tournament_id, tournament.tournament_type, position_1_upload, 1, config, psql_db
                     )
-                    if loser_for_upload:
-                        logger.info(f"Uploading position 2 repository for hotkey: {loser_for_upload}")
-                        await upload_participant_repository(
-                            tournament.tournament_id, tournament.tournament_type, loser_for_upload, 2, config, psql_db
-                        )
+                    
+                    logger.info(f"Uploading position 2 repository for hotkey: {position_2_upload}")
+                    await upload_participant_repository(
+                        tournament.tournament_id, tournament.tournament_type, position_2_upload, 2, config, psql_db
+                    )
                 except Exception as e:
                     logger.error(f"Error determining final round participants: {e}")
                     await upload_participant_repository(
