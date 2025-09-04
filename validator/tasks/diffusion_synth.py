@@ -237,7 +237,7 @@ async def generate_image(prompt: str, keypair: Keypair, width: int, height: int)
     result = await post_to_nineteen_image(payload, keypair)
 
     try:
-        image_bytes = await result.content.read()
+        image_bytes = result.content
         return image_bytes
     except (json.JSONDecodeError, KeyError) as e:
         logger.error(f"Error parsing image generation response: {e}")
