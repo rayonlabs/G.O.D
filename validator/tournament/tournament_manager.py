@@ -422,23 +422,17 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                     logger.info(f"Winner determined by get_round_winners: {winner}")
                     logger.info(f"Tournament base_winner_hotkey (previous champion): {tournament.base_winner_hotkey}")
                     
-                    # Determine who to upload for each position
+                    # Simple logic: EMISSION_BURN_HOTKEY is the defending champion
                     if winner == cst.EMISSION_BURN_HOTKEY:
-                        logger.info("Winner is EMISSION_BURN_HOTKEY - defending champion won")
-                        winner_for_upload = cst.EMISSION_BURN_HOTKEY
-                        loser_for_upload = participant1 if participant1 != tournament.base_winner_hotkey else participant2
-                        logger.info(f"Will upload: position 1={winner_for_upload}, position 2={loser_for_upload}")
-                    elif winner in [participant1, participant2]:
-                        logger.info(f"Winner {winner} is one of the participants - challenger won")
-                        winner_for_upload = winner
-                        loser_for_upload = participant2 if participant1 == winner else participant1
-                        logger.info(f"Will upload: position 1={winner_for_upload}, position 2={loser_for_upload}")
+                        # Defending champion won - upload EMISSION_BURN_HOTKEY to position 1
+                        logger.info("Defending champion (EMISSION_BURN_HOTKEY) won")
+                        position_1_upload = cst.EMISSION_BURN_HOTKEY
+                        position_2_upload = participant1  # The challenger who lost
                     else:
-                        logger.warning(f"Winner {winner} doesn't match EMISSION_BURN_HOTKEY or participants!")
-                        logger.warning("Using fallback logic")
-                        winner_for_upload = winner
-                        loser_for_upload = participant1
-                        logger.info(f"Will upload: position 1={winner_for_upload}, position 2={loser_for_upload}")
+                        # Challenger won - upload winner to position 1, EMISSION_BURN_HOTKEY to position 2
+                        logger.info(f"Challenger {winner} won")
+                        position_1_upload = winner
+                        position_2_upload = cst.EMISSION_BURN_HOTKEY
 
                     logger.info(f"Uploading position 1 repository for hotkey: {winner_for_upload}")
                     await upload_participant_repository(
