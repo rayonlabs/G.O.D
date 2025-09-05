@@ -71,7 +71,7 @@ def get_task(task_id: str, hotkey: str) -> TrainerTaskLog | None:
 async def log_task(task_id: str, hotkey: str, message: str):
     task = get_task(task_id, hotkey)
     if task:
-        timestamped_message = f"[{datetime.utcnow().isoformat()}] {message}"
+        timestamped_message = f"[{dt.utcnow().isoformat()}] {message}"
         task.logs.append(timestamped_message)
         await save_task_history()
 
