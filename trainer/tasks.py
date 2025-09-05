@@ -18,6 +18,8 @@ TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
 async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
     task_id = task.training_data.task_id
     hotkey = task.hotkey
+    
+    logger.info(f"[SECURITY] start_task called - TaskID: {task_id}, Hotkey: {hotkey}, Repo: {task.github_repo}")
 
     existing_task = get_task(task_id, hotkey)
     if existing_task:
@@ -34,6 +36,9 @@ async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
         started_at=datetime.utcnow(),
         finished_at=None,
     )
+    
+    logger.info(f"[SECURITY] Adding new task to history - TaskID: {task_id}, Hotkey: {hotkey}, Repo: {task.github_repo}")
+    
     task_history.append(log_entry)
     await save_task_history()
     return log_entry.training_data.task_id, log_entry.hotkey

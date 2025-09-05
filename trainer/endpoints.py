@@ -42,7 +42,10 @@ async def verify_orchestrator_ip(request: Request):
     logger.info(f"Allowing request from IP: {client_ip}")
     return client_ip
 
-async def start_training(req: TrainerProxyRequest) -> JSONResponse:
+async def start_training(req: TrainerProxyRequest, request: Request) -> JSONResponse:
+    client_ip = request.client.host if request.client else "unknown"
+    logger.info(f"[SECURITY] start_training called - IP: {client_ip}, Hotkey: {req.hotkey}, Repo: {req.github_repo}")
+    
     await start_task(req)
 
     try:
