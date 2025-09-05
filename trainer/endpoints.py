@@ -31,7 +31,12 @@ async def verify_orchestrator_ip(request: Request):
     """Verify request comes from validator/orchestrator"""
     # Simple test log to see if logging works at all
     print("PRINT TEST: verify_orchestrator_ip called")
-    logger.info("SECURITY TEST LOG - verify_orchestrator_ip called")
+    
+    try:
+        logger.info("SECURITY TEST LOG - verify_orchestrator_ip called")
+        print("PRINT TEST: logger.info worked")
+    except Exception as e:
+        print(f"PRINT TEST: logger failed: {e}")
     
     import datetime
     import os as os_mod
