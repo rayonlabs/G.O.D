@@ -28,18 +28,22 @@ load_task_history()
 
 
 async def verify_orchestrator_ip(request: Request):
-    """Verify request comes from orchestrator IP"""
+    """Verify request comes from validator/orchestrator"""
     client_ip = request.client.host if request.client else "unknown"
-    allowed_ip = os.getenv("ORCHESTRATOR_IP", "185.141.218.75")
+    
+    # Get both public and private validator IPs from environment
+    public_ip = os.getenv("VALIDATOR_PUBLIC_IP", "185.141.218.75")
+    private_ip = os.getenv("VALIDATOR_PRIVATE_IP", "10.0.1.153")
+    allowed_ips = [public_ip, private_ip]
     
     # Debug logging
-    logger.info(f"IP check - Client: {client_ip}, Allowed: {allowed_ip}")
+    logger.info(f"IP check - Client: {client_ip}, Allowed IPs: {allowed_ips}")
     
-    if client_ip != allowed_ip:
-        logger.warning(f"Blocking request from IP: {client_ip}")
+    if client_ip not in allowed_ips:
+        logger.warning(f"Blocking request from unauthorized IP: {client_ip}")
         raise HTTPException(status_code=403, detail="Access forbidden")
     
-    logger.info(f"Allowing request from IP: {client_ip}")
+    logger.info(f"Allowing request from validator IP: {client_ip}")
     return client_ip
 
 async def start_training(req: TrainerProxyRequest, request: Request) -> JSONResponse:
