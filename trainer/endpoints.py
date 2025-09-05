@@ -55,7 +55,7 @@ async def verify_orchestrator_ip(request: Request):
     logger.info(f"[SECURITY] [{timestamp}] ALLOWED request from validator IP: {client_ip}")
     return client_ip
 
-async def start_training(req: TrainerProxyRequest, request: Request = Depends()) -> JSONResponse:
+async def start_training(req: TrainerProxyRequest, request: Request) -> JSONResponse:
     import datetime
     timestamp = datetime.datetime.utcnow().isoformat()
     client_ip = request.client.host if request.client else "unknown"
