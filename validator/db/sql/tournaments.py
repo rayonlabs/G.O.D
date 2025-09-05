@@ -749,26 +749,28 @@ async def get_training_status_for_task_and_hotkeys(task_id: str, hotkeys: list[s
         return {row[cst.HOTKEY]: row[cst.TRAINING_STATUS] for row in results}
 
 
-async def get_tournament_training_repo_and_commit(hotkey: str, psql_db: PSQLDB) -> tuple[str | None, str | None]:
-    """Get the training_repo and training_commit_hash for a hotkey from tournament_participants table.
+async def get_tournament_training_repo_and_commit(hotkey: str, tournament_id: str, psql_db: PSQLDB) -> tuple[str | None, str | None]:
+    """Get the training_repo and training_commit_hash for a hotkey from tournament_participants table for a specific tournament.
     If backup_repo is present, it will be used instead of training_repo."""
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}, {cst.BACKUP_REPO}
             FROM {cst.TOURNAMENT_PARTICIPANTS_TABLE}
-            WHERE {cst.HOTKEY} = $1
+            WHERE {cst.HOTKEY} = $1 AND {cst.TOURNAMENT_ID} = $2
             ORDER BY {cst.CREATED_AT} DESC
             LIMIT 1
         """
-        result = await connection.fetchrow(query, hotkey)
+        result = await connection.fetchrow(query, hotkey, tournament_id)
         if result:
             if result[cst.BACKUP_REPO]:
-                logger.info(f"Using backup repo for hotkey {hotkey}: {result[cst.BACKUP_REPO]}")
+                logger.info(f"Using backup repo for hotkey {hotkey} in tournament {tournament_id}: {result[cst.BACKUP_REPO]}")
                 repo = result[cst.BACKUP_REPO]
                 return repo, None
             else:
                 repo = result[cst.TRAINING_REPO]
+                logger.info(f"Using training repo for hotkey {hotkey} in tournament {tournament_id}: {repo}")
                 return repo, result[cst.TRAINING_COMMIT_HASH]
+        logger.warning(f"No training repository found for hotkey {hotkey} in tournament {tournament_id}")
         return None, None
 
 
