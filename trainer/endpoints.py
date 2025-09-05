@@ -29,26 +29,7 @@ load_task_history()
 
 async def verify_orchestrator_ip(request: Request):
     """Verify request comes from validator/orchestrator"""
-    # Simple test log to see if logging works at all
-    print("PRINT TEST: verify_orchestrator_ip called")
-    
-    try:
-        # Try different log levels and formats
-        logger.info("SECURITY TEST LOG - verify_orchestrator_ip called")
-        logger.error("SECURITY ERROR LOG - verify_orchestrator_ip called") 
-        logger.warning("SECURITY WARNING LOG - verify_orchestrator_ip called")
-        print("PRINT TEST: All logger calls worked")
-        
-        # Try standard Python logging as backup
-        import logging
-        std_logger = logging.getLogger("security_test")
-        std_logger.addHandler(logging.StreamHandler())
-        std_logger.setLevel(logging.INFO)
-        std_logger.info("STANDARD LOGGER TEST - this should appear")
-        print("PRINT TEST: Standard logger test done")
-        
-    except Exception as e:
-        print(f"PRINT TEST: logger failed: {e}")
+    # Security logging is now working!
     
     import datetime
     import os as os_mod
