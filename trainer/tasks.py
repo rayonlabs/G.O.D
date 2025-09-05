@@ -91,7 +91,7 @@ def get_running_tasks() -> list[TrainerTaskLog]:
 
 
 def get_recent_tasks(hours: float = 1.0) -> list[TrainerTaskLog]:
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    cutoff = dt.utcnow() - timedelta(hours=hours)
 
     recent_tasks = [
         task for task in task_history
@@ -101,8 +101,8 @@ def get_recent_tasks(hours: float = 1.0) -> list[TrainerTaskLog]:
 
     recent_tasks.sort(
         key=lambda t: max(
-            t.finished_at or datetime.min,
-            t.started_at or datetime.min
+            t.finished_at or dt.min,
+            t.started_at or dt.min
         ),
         reverse=True
     )
