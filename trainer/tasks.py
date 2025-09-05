@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime as dt
 from datetime import timedelta
 from pathlib import Path
 import aiofiles
@@ -16,8 +16,7 @@ TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
 
 
 async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
-    import datetime
-    timestamp = datetime.datetime.utcnow().isoformat()
+    timestamp = dt.utcnow().isoformat()
     task_id = task.training_data.task_id
     hotkey = task.hotkey
     
@@ -31,7 +30,7 @@ async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
     if existing_task:
         existing_task.logs.clear()
         existing_task.status = TaskStatus.TRAINING
-        existing_task.started_at = datetime.utcnow()
+        existing_task.started_at = dt.utcnow()
         existing_task.finished_at = None
         await save_task_history()
         return task_id, hotkey
@@ -39,7 +38,7 @@ async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
     log_entry = TrainerTaskLog(
         **task.dict(),
         status=TaskStatus.TRAINING,
-        started_at=datetime.utcnow(),
+        started_at=dt.utcnow(),
         finished_at=None,
     )
     
@@ -57,7 +56,7 @@ async def complete_task(task_id: str, hotkey: str, success: bool = True):
         logger.warning(f"[SECURITY] complete_task - Task not found: {task_id}, {hotkey}")
         return
     task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
-    task.finished_at = datetime.utcnow()
+    task.finished_at = dt.utcnow()
     logger.info(f"[SECURITY] Task completed - TaskID: {task_id}, Status: {task.status}")
     await save_task_history()
 
