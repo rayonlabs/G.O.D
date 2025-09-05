@@ -36,7 +36,17 @@ class VectorHandler(logging.Handler):
 def setup_logger():
     logger = logging.getLogger("trainer")
     logger.setLevel(logging.INFO)
+    
+    # Add Vector handler (for remote logging)
     logger.addHandler(VectorHandler(VECTOR_URL))
+    
+    # Add console handler so we can see logs locally
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(name)s | %(message)s')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
     return logger
 
 logger = setup_logger()
