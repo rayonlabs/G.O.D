@@ -31,9 +31,9 @@ async def verify_orchestrator_ip(request: Request):
     """Verify request comes from validator/orchestrator"""
     # Security logging is now working!
     
-    import datetime
+    from datetime import datetime as dt
     import os as os_mod
-    timestamp = datetime.datetime.utcnow().isoformat()
+    timestamp = dt.utcnow().isoformat()
     client_ip = request.client.host if request.client else "unknown"
     
     # Get forensic details
