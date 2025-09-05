@@ -35,7 +35,7 @@ async def verify_orchestrator_ip(request: Request):
     # Debug logging
     logger.info(f"IP check - Client: {client_ip}, Allowed: {allowed_ip}")
     
-    if client_ip != allowed_ip and client_ip != "127.0.0.1":
+    if client_ip != allowed_ip:
         logger.warning(f"Blocking request from IP: {client_ip}")
         raise HTTPException(status_code=403, detail="Access forbidden")
     
