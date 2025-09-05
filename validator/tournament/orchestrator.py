@@ -312,7 +312,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 continue
 
             training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
-                oldest_task_training.hotkey, config.psql_db
+                oldest_task_training.hotkey, tournament_id, config.psql_db
             )
 
             if training_repo is None:
@@ -450,7 +450,8 @@ async def _create_training_request(
         TrainerProxyRequest: The training request
     """
     expected_repo_name = await task_sql.get_expected_repo_name(task.task_id, hotkey, config.psql_db)
-    training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(hotkey, config.psql_db)
+    tournament_id = await tournament_sql.get_tournament_id_by_task_id(task.task_id, config.psql_db)
+    training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(hotkey, tournament_id, config.psql_db)
 
     logger.info(f"Creating training request for hotkey {hotkey}, task {task.task_id}")
     logger.info(f"Expected repo name: {expected_repo_name}")
