@@ -29,6 +29,9 @@ load_task_history()
 
 async def verify_orchestrator_ip(request: Request):
     """Verify request comes from validator/orchestrator"""
+    # Simple test log to see if logging works at all
+    logger.info("SECURITY TEST LOG - verify_orchestrator_ip called")
+    
     import datetime
     import os as os_mod
     timestamp = datetime.datetime.utcnow().isoformat()
