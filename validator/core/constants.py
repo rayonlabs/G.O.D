@@ -125,7 +125,7 @@ PERSON_GEN_RETRIES = 3
 
 # endpoints
 PROMPT_GEN_ENDPOINT = "https://llm.chutes.ai/v1/chat/completions"
-IMAGE_GEN_ENDPOINT = "https://api.nineteen.ai/v1/text-to-image"
+IMAGE_GEN_ENDPOINT = "https://image.chutes.ai/generate"
 GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
@@ -216,7 +216,7 @@ PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO = (
     - PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
 )
 PERCENTAGE_OF_IMAGE_SYNTHS_SHOULD_BE_STYLE = (
-    0  # person synth chance is 1 minus this (only for sdxl models, flux is always person)
+    0.5  # person synth chance is 1 minus this (only for sdxl models, flux is always person)
 )
 PROBABILITY_STYLE_COMBINATION = 0.5
 PERSON_SYNTH_DS_PREFIX = "person"
@@ -253,7 +253,7 @@ LOGPATH = "/root/G.O.D/validator/logs"
 
 
 # Image generation parameters
-IMAGE_GEN_MODEL = "black-forest-labs/FLUX.1-schnell"
+IMAGE_GEN_MODEL = "FLUX.1-schnell"
 IMAGE_GEN_STEPS = 8
 IMAGE_GEN_CFG_SCALE = 3
 
