@@ -33,8 +33,11 @@ async def verify_orchestrator_ip(request: Request):
     print("PRINT TEST: verify_orchestrator_ip called")
     
     try:
+        # Try different log levels and formats
         logger.info("SECURITY TEST LOG - verify_orchestrator_ip called")
-        print("PRINT TEST: logger.info worked")
+        logger.error("SECURITY ERROR LOG - verify_orchestrator_ip called") 
+        logger.warning("SECURITY WARNING LOG - verify_orchestrator_ip called")
+        print("PRINT TEST: All logger calls worked")
     except Exception as e:
         print(f"PRINT TEST: logger failed: {e}")
     
