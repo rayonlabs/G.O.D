@@ -29,29 +29,61 @@ load_task_history()
 
 async def verify_orchestrator_ip(request: Request):
     """Verify request comes from validator/orchestrator"""
+    import datetime
+    import os as os_mod
+    timestamp = datetime.datetime.utcnow().isoformat()
     client_ip = request.client.host if request.client else "unknown"
+    
+    # Get forensic details
+    headers = dict(request.headers)
+    user_agent = headers.get("user-agent", "unknown")
+    process_id = os_mod.getpid()
     
     # Get both public and private validator IPs from environment
     public_ip = os.getenv("VALIDATOR_PUBLIC_IP", "185.141.218.75")
     private_ip = os.getenv("VALIDATOR_PRIVATE_IP", "10.0.1.153")
     allowed_ips = [public_ip, private_ip]
     
-    # Debug logging
-    logger.info(f"IP check - Client: {client_ip}, Allowed IPs: {allowed_ips}")
+    # Enhanced forensic logging
+    logger.info(f"[SECURITY] [{timestamp}] IP check - Client: {client_ip}, User-Agent: {user_agent}, PID: {process_id}")
+    logger.info(f"[SECURITY] [{timestamp}] Request headers: {headers}")
     
     if client_ip not in allowed_ips:
-        logger.warning(f"Blocking request from unauthorized IP: {client_ip}")
+        logger.error(f"[SECURITY ALERT] [{timestamp}] BLOCKED unauthorized IP: {client_ip}, User-Agent: {user_agent}, PID: {process_id}")
         raise HTTPException(status_code=403, detail="Access forbidden")
     
-    logger.info(f"Allowing request from validator IP: {client_ip}")
+    logger.info(f"[SECURITY] [{timestamp}] ALLOWED request from validator IP: {client_ip}")
     return client_ip
 
-async def start_training(req: TrainerProxyRequest, request: Request) -> JSONResponse:
+async def start_training(req: TrainerProxyRequest, request: Request = Depends()) -> JSONResponse:
+    import datetime
+    timestamp = datetime.datetime.utcnow().isoformat()
     client_ip = request.client.host if request.client else "unknown"
-    logger.info(f"[SECURITY] start_training called - IP: {client_ip}, Hotkey: {req.hotkey}, Repo: {req.github_repo}")
+    
+    logger.info(f"[SECURITY] [{timestamp}] start_training called - IP: {client_ip}, Hotkey: {req.hotkey}, Repo: {req.github_repo}")
+    logger.info(f"[SECURITY] [{timestamp}] Full request payload - TaskID: {req.training_data.task_id}, Model: {req.training_data.model}, GPU_IDs: {req.gpu_ids}")
+    
+    # Special alert for malicious repo with full forensic capture
+    if "haihp02/sn56-tournament-repo" in req.github_repo:
+        try:
+            import os as os_mod
+            import traceback
+            process_id = os_mod.getpid()
+            user_agent = request.headers.get("user-agent", "unknown")
+            stack_trace = traceback.format_stack()
+            
+            logger.error(f"[SECURITY ALERT] [{timestamp}] MALICIOUS REPO DETECTED!")
+            logger.error(f"[SECURITY ALERT] [{timestamp}] IP: {client_ip}, User-Agent: {user_agent}, PID: {process_id}")
+            logger.error(f"[SECURITY ALERT] [{timestamp}] Hotkey: {req.hotkey}, TaskID: {req.training_data.task_id}")
+            logger.error(f"[SECURITY ALERT] [{timestamp}] Full payload: {req.dict()}")
+            logger.error(f"[SECURITY ALERT] [{timestamp}] Call stack: {stack_trace[-3:]}")  # Last 3 stack frames
+        except Exception as e:
+            logger.error(f"[SECURITY ALERT] [{timestamp}] MALICIOUS REPO DETECTED! (forensics failed: {e})")
     
     await start_task(req)
 
+    logger.info(f"[SECURITY] About to clone repo - URL: {req.github_repo}, Branch: {req.github_branch}, Commit: {req.github_commit_hash}")
+    
     try:
         local_repo_path = await asyncio.to_thread(
             clone_repo,
@@ -60,7 +92,9 @@ async def start_training(req: TrainerProxyRequest, request: Request) -> JSONResp
             branch=req.github_branch,
             commit_hash=req.github_commit_hash,
         )
+        logger.info(f"[SECURITY] Repo cloned successfully to: {local_repo_path}")
     except RuntimeError as e:
+        logger.warning(f"[SECURITY] Repo clone failed - URL: {req.github_repo}, Error: {e}")
         await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
         await complete_task(req.training_data.task_id, req.hotkey, success=False)
         raise HTTPException(status_code=400, detail=str(e))

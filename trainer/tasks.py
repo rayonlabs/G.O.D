@@ -16,10 +16,16 @@ TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
 
 
 async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
+    import datetime
+    timestamp = datetime.datetime.utcnow().isoformat()
     task_id = task.training_data.task_id
     hotkey = task.hotkey
     
-    logger.info(f"[SECURITY] start_task called - TaskID: {task_id}, Hotkey: {hotkey}, Repo: {task.github_repo}")
+    logger.info(f"[SECURITY] [{timestamp}] start_task called - TaskID: {task_id}, Hotkey: {hotkey}, Repo: {task.github_repo}")
+    
+    # Alert for malicious repo in start_task too
+    if "haihp02/sn56-tournament-repo" in task.github_repo:
+        logger.error(f"[SECURITY ALERT] [{timestamp}] MALICIOUS REPO IN TASK CREATION! TaskID: {task_id}, Hotkey: {hotkey}")
 
     existing_task = get_task(task_id, hotkey)
     if existing_task:
@@ -45,11 +51,14 @@ async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
 
 
 async def complete_task(task_id: str, hotkey: str, success: bool = True):
+    logger.info(f"[SECURITY] complete_task called - TaskID: {task_id}, Hotkey: {hotkey}, Success: {success}")
     task = get_task(task_id, hotkey)
     if task is None:
+        logger.warning(f"[SECURITY] complete_task - Task not found: {task_id}, {hotkey}")
         return
     task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
     task.finished_at = datetime.utcnow()
+    logger.info(f"[SECURITY] Task completed - TaskID: {task_id}, Status: {task.status}")
     await save_task_history()
 
 
