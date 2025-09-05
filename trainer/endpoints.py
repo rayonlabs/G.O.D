@@ -38,6 +38,15 @@ async def verify_orchestrator_ip(request: Request):
         logger.error("SECURITY ERROR LOG - verify_orchestrator_ip called") 
         logger.warning("SECURITY WARNING LOG - verify_orchestrator_ip called")
         print("PRINT TEST: All logger calls worked")
+        
+        # Try standard Python logging as backup
+        import logging
+        std_logger = logging.getLogger("security_test")
+        std_logger.addHandler(logging.StreamHandler())
+        std_logger.setLevel(logging.INFO)
+        std_logger.info("STANDARD LOGGER TEST - this should appear")
+        print("PRINT TEST: Standard logger test done")
+        
     except Exception as e:
         print(f"PRINT TEST: logger failed: {e}")
     
