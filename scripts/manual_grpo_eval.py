@@ -115,8 +115,36 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
     # Get available GPUs
     gpu_ids = get_available_gpus(max_gpus=2)
     
-    # Download the model to evaluate (exactly like main validator does)
+    # Extract info from task
+    dataset_url = task_row['dataset_url'] or (task_row['synthetic_data'] if task_row['synthetic_data'] else None)
+    original_model = task_row['model_id']
+    file_format = FileFormat(task_row['file_format']) if task_row['file_format'] else FileFormat.S3
+    
     cache_dir = os.path.expanduser(cst.CACHE_DIR_HUB)
+    
+    # Download the original GRPO model (exactly like main validator does)
+    print(f"📥 Downloading original GRPO model: {original_model}")
+    try:
+        original_model_path = snapshot_download(
+            repo_id=original_model, 
+            cache_dir=cache_dir,
+            ignore_patterns=None
+        )
+        print(f"✅ Original model downloaded to: {original_model_path}")
+        
+        if os.path.exists(original_model_path):
+            files = os.listdir(original_model_path)
+            print(f"📁 Original model files downloaded: {files}")
+            tokenizer_files = [f for f in files if 'tokenizer' in f.lower() or f.endswith('.model')]
+            if tokenizer_files:
+                print(f"🔤 Tokenizer files found: {tokenizer_files}")
+            else:
+                print(f"⚠️ WARNING: No tokenizer files found in original model download!")
+    except Exception as e:
+        print(f"❌ Failed to download original model {original_model}: {e}")
+        return False
+    
+    # Download the model to evaluate (exactly like main validator does)
     print(f"📥 Starting download of model {model_repo}...")
     try:
         model_path = snapshot_download(
@@ -153,11 +181,6 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
     except Exception as e:
         print(f"❌ Failed to download model {model_repo}: {e}")
         return False
-    
-    # Extract info from task
-    dataset_url = task_row['dataset_url'] or (task_row['synthetic_data'] if task_row['synthetic_data'] else None)
-    original_model = task_row['model_id']
-    file_format = FileFormat(task_row['file_format']) if task_row['file_format'] else FileFormat.S3
     
     # Create RewardFunction objects (matching validator pattern)
     reward_functions = []
@@ -205,10 +228,9 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
         "-e", f"FILE_FORMAT={file_format.value}",
         "-e", f"DATASET_TYPE={dataset_type.model_dump_json()}",  # Use pydantic serialization
         "-e", "TRANSFORMERS_ALLOW_TORCH_LOAD=true",
-        "-e", "HF_HOME=/root/.cache/huggingface", 
-        "-e", "TRANSFORMERS_CACHE=/root/.cache/huggingface/hub",
+        "-e", "HF_HOME=/root/.cache/huggingface",
+        "-e", "TRANSFORMERS_CACHE=/root/.cache/huggingface/hub", 
         "-e", "HF_DATASETS_CACHE=/root/.cache/huggingface/datasets",
-        "-e", "TRANSFORMERS_OFFLINE=0",
         cst.VALIDATOR_DOCKER_IMAGE,
         "python", "-m", "validator.evaluation.eval_grpo"
     ]
