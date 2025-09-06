@@ -117,7 +117,9 @@ async def main():
     
     # Collect the actual IDs for auto-update
     actual_ids = []
-    async with pool.acquire() as conn:
+    pool = await asyncpg.create_pool(connection_string)
+    try:
+        async with pool.acquire() as conn:
         for func in reward_functions:
             query = f"""
                 SELECT reward_id
