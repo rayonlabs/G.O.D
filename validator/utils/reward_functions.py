@@ -162,38 +162,87 @@ def process_reward_function_code(code: str) -> str:
         The processed code with restricted_execution injected if needed and proper signature
     """
     try:
+        logger.info(f"Starting to process reward function code, length: {len(code)} chars")
+        logger.debug(f"Code preview: {code[:200]}...")
+        
+        # Check if restricted_execution is mentioned in the code
+        has_restricted_execution = "restricted_execution" in code
+        logger.info(f"Code contains 'restricted_execution': {has_restricted_execution}")
+        
         reward_func_ast = ast.parse(code)
+        logger.info("Successfully parsed code to AST")
         
         # Find the function definition and fix its arguments
+        function_found = False
         for node in ast.walk(reward_func_ast):
             if isinstance(node, ast.FunctionDef):
+                logger.info(f"Found function definition: {node.name}")
+                function_found = True
+                
                 args = node.args
+                logger.debug(f"Original args: {[arg.arg for arg in args.args]}")
+                logger.debug(f"Original kwarg: {args.kwarg.arg if args.kwarg else None}")
+                
                 other_args = [arg for arg in args.args if arg.arg not in ["completions", "kwargs"]]
                 completions_arg = ast.arg(arg="completions", annotation=None)
                 args.args = [completions_arg] + other_args
                 args.kwarg = ast.arg(arg="kwargs", annotation=None)
                 
+                logger.info(f"Updated function signature for {node.name}")
+                logger.debug(f"New args: {[arg.arg for arg in args.args]}")
+                
                 # Inject restricted_execution definition
                 if "restricted_execution" in code:
-                    restricted_exec_source = inspect.getsource(restricted_execution)
-                    restricted_exec_ast = ast.parse(restricted_exec_source)
+                    logger.info("Attempting to inject restricted_execution function")
+                    try:
+                        restricted_exec_source = inspect.getsource(restricted_execution)
+                        logger.debug(f"Got restricted_execution source, length: {len(restricted_exec_source)} chars")
+                        
+                        restricted_exec_ast = ast.parse(restricted_exec_source)
+                        logger.debug("Successfully parsed restricted_execution source to AST")
+                        
+                        restricted_exec_node = None
+                        for exec_node in ast.walk(restricted_exec_ast):
+                            if isinstance(exec_node, ast.FunctionDef) and exec_node.name == "restricted_execution":
+                                restricted_exec_node = exec_node
+                                logger.info("Found restricted_execution function node in AST")
+                                break
+                        
+                        if restricted_exec_node:
+                            node.body.insert(0, restricted_exec_node)
+                            logger.info("Successfully injected restricted_execution function into reward function body")
+                        else:
+                            logger.error("Could not find restricted_execution function node in parsed AST")
                     
-                    restricted_exec_node = None
-                    for exec_node in ast.walk(restricted_exec_ast):
-                        if isinstance(exec_node, ast.FunctionDef) and exec_node.name == "restricted_execution":
-                            restricted_exec_node = exec_node
-                            break
-                    
-                    if restricted_exec_node:
-                        node.body.insert(0, restricted_exec_node)
+                    except Exception as injection_e:
+                        logger.error(f"Failed to inject restricted_execution: {injection_e}")
+                        logger.debug(f"Injection error details: {type(injection_e).__name__}: {str(injection_e)}")
+                else:
+                    logger.info("Code does not contain 'restricted_execution', skipping injection")
                 
                 break
         
+        if not function_found:
+            logger.warning("No function definition found in code")
+        
+        logger.info("Converting AST back to source code")
         import astor
-        return astor.to_source(reward_func_ast)
+        result = astor.to_source(reward_func_ast)
+        logger.info(f"Successfully converted AST to source, result length: {len(result)} chars")
+        logger.debug(f"Result preview: {result[:300]}...")
+        
+        # Verify injection worked
+        if "restricted_execution" in code:
+            has_injected = "def restricted_execution(" in result
+            logger.info(f"Injection verification - 'def restricted_execution(' found in result: {has_injected}")
+        
+        return result
         
     except Exception as e:
-        logger.warning(f"Failed to process reward function code: {e}")
+        logger.error(f"Failed to process reward function code: {e}")
+        logger.debug(f"Error details: {type(e).__name__}: {str(e)}")
+        import traceback
+        logger.debug(f"Full traceback: {traceback.format_exc()}")
         return code
 
 
