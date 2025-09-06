@@ -51,6 +51,9 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
     column_mapping = {
         dataset_type.field_prompt: cst.TRL_GRPO_FIELD_PROMPT,
     }
+    
+    if dataset_type.extra_column:
+        column_mapping[dataset_type.extra_column] = cst.STANDARD_GRPO_EXTRA_COLUMN
     for src_col, dst_col in column_mapping.items():
         if src_col in dataset.column_names and src_col != dst_col:
             dataset = dataset.rename_column(src_col, dst_col)
