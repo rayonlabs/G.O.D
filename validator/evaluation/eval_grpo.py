@@ -114,14 +114,6 @@ def evaluate_grpo_model(
     has_extra_column = evaluation_args.dataset_type.extra_column and cst.STANDARD_GRPO_EXTRA_COLUMN in eval_dataset.column_names
     extra_column_data = eval_dataset[cst.STANDARD_GRPO_EXTRA_COLUMN] if has_extra_column else None
 
-    logger.info(f"🔍 DATASET DEBUG: has_extra_column = {has_extra_column}")
-    logger.info(f"🔍 DATASET DEBUG: extra_column configured = {evaluation_args.dataset_type.extra_column}")
-    logger.info(f"🔍 DATASET DEBUG: columns in dataset = {eval_dataset.column_names}")
-    logger.info(f"🔍 DATASET DEBUG: STANDARD_GRPO_EXTRA_COLUMN = {cst.STANDARD_GRPO_EXTRA_COLUMN}")
-    if extra_column_data:
-        logger.info(f"🔍 DATASET DEBUG: extra_column_data length = {len(extra_column_data)}")
-        logger.info(f"🔍 DATASET DEBUG: first extra_data sample = {str(extra_column_data[0])[:200]}...")
-
     if extra_column_data is not None:
         import json
         parsed_extra_data = []
