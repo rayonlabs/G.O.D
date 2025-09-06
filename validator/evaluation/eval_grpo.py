@@ -117,17 +117,35 @@ def evaluate_grpo_model(
 
             if supports_extra and has_extra_column:
                 def wrapper(completions, extra_data, **kwargs):
+                    logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (with extra_data)")
                     raw_results = original_func(completions, extra_data=extra_data)
                     raw_rewards[func_name].extend(raw_results)
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
+                    
+                    # Log reward details every 2 completions to see results sooner
+                    if len(captured_rewards[func_name]) % 2 == 0:
+                        avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
+                        avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
+                        total_count = len(captured_rewards[func_name])
+                        logger.info(f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}")
+                    
                     return weighted_results
             else:
                 def wrapper(completions, **kwargs):
+                    logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (no extra_data)")
                     raw_results = original_func(completions)
                     raw_rewards[func_name].extend(raw_results)
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
+                    
+                    # Log reward details every 2 completions to see results sooner
+                    if len(captured_rewards[func_name]) % 2 == 0:
+                        avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
+                        avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
+                        total_count = len(captured_rewards[func_name])
+                        logger.info(f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}")
+                    
                     return weighted_results
 
             return wrapper
@@ -166,12 +184,25 @@ def evaluate_grpo_model(
     logger.info(f"Final GRPO evaluation results: {eval_results}")
 
     final_weighted_rewards = {}
+    final_raw_rewards = {}
+    
+    logger.info("🎯 FINAL REWARD STATISTICS:")
     for name, captured_reward_list in captured_rewards.items():
         if captured_reward_list:
             final_weighted_rewards[name] = sum(captured_reward_list) / len(captured_reward_list)
+            raw_reward_list = raw_rewards.get(name, [])
+            final_raw_rewards[name] = sum(raw_reward_list) / len(raw_reward_list) if raw_reward_list else 0
+            
+            logger.info(f"🏆 {name}: avg_raw={final_raw_rewards[name]:.4f}, avg_weighted={final_weighted_rewards[name]:.4f}, samples={len(captured_reward_list)}")
+    
+    total_avg_reward = sum(final_weighted_rewards.values())
+    logger.info(f"🎯 TOTAL AVERAGE WEIGHTED REWARD: {total_avg_reward:.4f}")
 
     evaluation_results = {
-        "eval_loss": sum(final_weighted_rewards.values()) - eval_results.get("eval_loss", 0.0),
+        "eval_loss": total_avg_reward - eval_results.get("eval_loss", 0.0),
+        "final_weighted_rewards": final_weighted_rewards,
+        "final_raw_rewards": final_raw_rewards,
+        "total_avg_reward": total_avg_reward
     }
     return evaluation_results
 
