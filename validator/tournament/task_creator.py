@@ -10,6 +10,7 @@ from validator.core.config import Config
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
+from validator.core.constants import PERCENTAGE_OF_INSTRUCT_TASKS_THAT_SHOULD_BE_CHAT
 from validator.core.models import RawTask
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.tournaments import add_tournament_tasks
@@ -22,6 +23,7 @@ from validator.tasks.synthetic_scheduler import create_synthetic_dpo_task
 from validator.tasks.synthetic_scheduler import create_synthetic_grpo_task
 from validator.tasks.synthetic_scheduler import create_synthetic_image_task
 from validator.tasks.synthetic_scheduler import create_synthetic_instruct_text_task
+from validator.tasks.synthetic_scheduler import create_synthetic_chat_task
 from validator.tournament import constants as t_cst
 from validator.utils.logging import get_logger
 from validator.db.sql.historical_tasks import get_random_historical_task_by_type
@@ -284,6 +286,8 @@ def _get_missing_task_types(existing_group_tasks: list) -> list[TaskType]:
 
     if TaskType.INSTRUCTTEXTTASK not in existing_types:
         task_types_to_create.append(TaskType.INSTRUCTTEXTTASK)
+    if TaskType.CHATTASK not in existing_types:
+        task_types_to_create.append(TaskType.CHATTASK)
     if TaskType.DPOTASK not in existing_types:
         task_types_to_create.append(TaskType.DPOTASK)
     if TaskType.GRPOTASK not in existing_types:
@@ -297,6 +301,8 @@ async def _create_text_task_by_type(
 ) -> RawTask:
     if task_type == TaskType.INSTRUCTTEXTTASK:
         return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+    elif task_type == TaskType.CHATTASK:
+        return await create_synthetic_chat_task(config, models, instruct_datasets)
     elif task_type == TaskType.DPOTASK:
         return await create_synthetic_dpo_task(config, models, dpo_datasets)
     elif task_type == TaskType.GRPOTASK:
@@ -368,6 +374,8 @@ async def _create_final_text_task_by_type(
     if task_type == TaskType.INSTRUCTTEXTTASK:
         models_to_use = big_models if use_big_model else small_models
         return await create_synthetic_instruct_text_task(config, models_to_use, instruct_datasets)
+    elif task_type == TaskType.CHATTASK:
+        return await create_synthetic_chat_task(config, models_to_use, instruct_datasets)
     elif task_type == TaskType.DPOTASK:
         return await create_synthetic_dpo_task(config, small_models, dpo_datasets)
     elif task_type == TaskType.GRPOTASK:
@@ -433,7 +441,11 @@ async def _create_single_probability_task(
 ) -> RawTask:
     rand_val = random.random()
     if rand_val < instruct_prob:
-        return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+        chat_prob = random.random()
+        if chat_prob < PERCENTAGE_OF_INSTRUCT_TASKS_THAT_SHOULD_BE_CHAT:
+            return await create_synthetic_chat_task(config, models, instruct_datasets)
+        else:
+            return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
     elif rand_val < (instruct_prob + dpo_prob):
         return await create_synthetic_dpo_task(config, models, dpo_datasets)
     else:
@@ -465,6 +477,8 @@ async def create_new_task_of_same_type(task: RawTask, config: Config) -> RawTask
 
     if task.task_type == TaskType.INSTRUCTTEXTTASK:
         return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+    elif task.task_type == TaskType.CHATTASK:
+        return await create_synthetic_chat_task(config, models, instruct_datasets)
     elif task.task_type == TaskType.DPOTASK:
         return await create_synthetic_dpo_task(config, models, dpo_datasets)
     elif task.task_type == TaskType.GRPOTASK:
@@ -503,6 +517,17 @@ async def _create_historical_text_boss_round_tasks(
     if TaskType.INSTRUCTTEXTTASK.value not in existing_task_types:
         task = await _create_single_historical_text_task(
             TaskType.INSTRUCTTEXTTASK,
+            tournament_id,
+            round_id,
+            pair_id,
+            config
+        )
+        if task:
+            tasks.append(task)
+
+    if TaskType.CHATTASK.value not in existing_task_types:
+        task = await _create_single_historical_text_task(
+            TaskType.CHATTASK,
             tournament_id,
             round_id,
             pair_id,

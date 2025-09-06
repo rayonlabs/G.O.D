@@ -16,12 +16,14 @@ from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from validator.core.models import DpoTaskWithHotkeyDetails
 from validator.core.models import GrpoTaskWithHotkeyDetails
 from validator.core.models import ImageTaskWithHotkeyDetails
 from validator.core.models import InstructTextTaskWithHotkeyDetails
+from validator.core.models import ChatTaskWithHotkeyDetails
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.utils.logging import get_logger
@@ -53,6 +55,8 @@ async def fetch_task_details(task_id: str):
 
         if task_type == TaskType.INSTRUCTTEXTTASK.value:
             return InstructTextTaskWithHotkeyDetails(**data)
+        elif task_type == TaskType.CHATTASK.value:
+            return ChatTaskWithHotkeyDetails(**data)
         elif task_type == TaskType.IMAGETASK.value:
             return ImageTaskWithHotkeyDetails(**data)
         elif task_type == TaskType.DPOTASK.value:
@@ -130,6 +134,15 @@ async def run_evaluation_from_task_id(
             field_system=task_details.field_system,
             format=task_details.format,
             no_input_format=task_details.no_input_format,
+        )
+    elif task_type == TaskType.CHATTASK:
+        dataset_type = ChatTemplateDatasetType(
+            chat_template=task_details.chat_template,
+            chat_column=task_details.chat_column,
+            chat_role_field=task_details.chat_role_field,
+            chat_content_field=task_details.chat_content_field,
+            chat_user_reference=task_details.chat_user_reference,
+            chat_assistant_reference=task_details.chat_assistant_reference,
         )
     elif task_type == TaskType.DPOTASK:
         dataset_type = DpoDatasetType(

@@ -485,7 +485,7 @@ async def create_synthetic_instruct_text_task(
     model_id = await anext(models)
 
     logger.info("INSTRUCT_TASK: Starting dataset selection...")
-    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
+    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.CHATTASK, keypair=config.keypair)
     logger.info(f"INSTRUCT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
 
     primary_dataset = selected_datasets[0]
@@ -527,7 +527,7 @@ async def create_synthetic_chat_task(
     model_id = await anext(models)
 
     logger.info("CHAT_TASK: Starting dataset selection...")
-    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
+    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.CHATTASK, keypair=config.keypair)
     logger.info(f"CHAT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
 
     primary_dataset = selected_datasets[0]
@@ -592,6 +592,7 @@ async def _add_new_task_to_network_if_not_enough(
         )
         TASK_TYPES = [
             (TaskType.INSTRUCTTEXTTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT),
+            (TaskType.CHATTASK, cst.PERCENTAGE_OF_INSTRUCT_TASKS_THAT_SHOULD_BE_CHAT),
             (TaskType.IMAGETASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_IMAGE),
             (TaskType.DPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO),
             (TaskType.GRPOTASK, cst.PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO),

@@ -32,6 +32,7 @@ from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import TaskType
 from miner.logic.job_handler import create_reward_funcs_file
 
@@ -176,7 +177,7 @@ async def main():
     parser.add_argument("--model", required=True, help="Model name or path")
     parser.add_argument("--dataset", required=True, help="Dataset path or HF dataset name")
     parser.add_argument("--dataset-type", required=True, help="JSON string of dataset type config")
-    parser.add_argument("--task-type", required=True, choices=["InstructTextTask", "DpoTask", "GrpoTask"], help="Type of task")
+    parser.add_argument("--task-type", required=True, choices=["InstructTextTask", "DpoTask", "GrpoTask", "ChatTask"], help="Type of task")
     parser.add_argument("--file-format", required=True, choices=["csv", "json", "hf", "s3"], help="File format")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
     parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
@@ -191,6 +192,8 @@ async def main():
             dataset_type = DpoDatasetType(**dataset_type_dict)
         elif args.task_type == TaskType.INSTRUCTTEXTTASK.value:
             dataset_type = InstructTextDatasetType(**dataset_type_dict)
+        elif args.task_type == TaskType.CHATTASK.value:
+            dataset_type = ChatTemplateDatasetType(**dataset_type_dict)
         elif args.task_type == TaskType.GRPOTASK.value:
             dataset_type = GrpoDatasetType(**dataset_type_dict)
         else:
