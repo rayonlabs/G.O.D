@@ -119,17 +119,26 @@ def restricted_execution(code: str, input_data: str) -> tuple[str, str]:
             '_getitem_': lambda obj, key: obj[key],
             '_getiter_': iter,
             '_iter_unpack_sequence_': iter,
-            'input': input_data,
+            # Allow access to commonly used builtins
             'sum': sum,
             'min': min,
             'max': max,
             'enumerate': enumerate,
             'map': map,
             'filter': filter,
+            'list': list,
+            'dict': dict,
+            'str': str,
+            'int': int,
+            'float': float,
+            'bool': bool,
+            'len': len,
+            'range': range,
         }
         restricted_globals.update(safe_globals)
         
-        local_vars = {}
+        # Use restricted_globals as local_vars too so variables are accessible
+        local_vars = restricted_globals.copy()
         
         with contextlib.redirect_stderr(stderr_capture):
             exec(compiled_code, restricted_globals, local_vars)
@@ -139,11 +148,16 @@ def restricted_execution(code: str, input_data: str) -> tuple[str, str]:
         if print_collector is not None:
             # PrintCollector.txt is a list, join it to get string output
             if hasattr(print_collector, 'txt'):
-                output = ''.join(str(item) for item in print_collector.txt)
+                output = '\n'.join(str(item) for item in print_collector.txt)
             else:
                 output = str(print_collector)
         else:
-            output = ""
+            # Also check if there's output in the globals (sometimes PrintCollector stores it there)
+            print_collector = restricted_globals.get('_print')
+            if print_collector is not None and hasattr(print_collector, 'txt'):
+                output = '\n'.join(str(item) for item in print_collector.txt)
+            else:
+                output = ""
             
         error = stderr_capture.getvalue()
         return output, error
