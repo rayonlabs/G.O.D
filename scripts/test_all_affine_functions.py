@@ -23,16 +23,16 @@ async def test_all_affine_functions():
     connection_string = os.getenv("DATABASE_URL")
     pool = await asyncpg.create_pool(connection_string)
     
-    # Test data for each type with known correct results
+    # Test data for each type with known correct results - using real data formats
     test_cases = [
-        # SAT test cases
+        # SAT test cases - using cls and sol format
         {
             "name": "SAT",
             "reward_id": cst.AFFINE_REWARD_FN_IDS[0],
             "test_data": {
                 "task_type": "SAT",
-                "cnf_formula": "p cnf 3 3\n1 -2 3 0\n-1 2 0\n2 -3 0",
-                "expected_satisfiable": True
+                "cls": [[1, -2, 3], [-1, 2], [2, -3]],  # Simple 3-SAT problem
+                "sol": {"1": True, "2": True, "3": True}  # Known solution
             },
             "completions": [
                 ("Good assignment", "Looking at this 3-SAT problem:\n<ASSIGNMENT>\nx1 = True\nx2 = True\nx3 = True\n</ASSIGNMENT>"),
@@ -40,7 +40,7 @@ async def test_all_affine_functions():
                 ("No assignment", "This looks difficult to solve.")
             ]
         },
-        # ABD test cases  
+        # ABD test cases - same format (program, expected_output)
         {
             "name": "ABD", 
             "reward_id": cst.AFFINE_REWARD_FN_IDS[1],
@@ -56,13 +56,14 @@ async def test_all_affine_functions():
                 ("No INPUT tags", "The answer is 5 and 10")
             ]
         },
-        # DED test cases
+        # DED test cases - using problem field like real data
         {
             "name": "DED",
             "reward_id": cst.AFFINE_REWARD_FN_IDS[2], 
             "test_data": {
                 "task_type": "DED",
-                "solution": "n = int(input())\nprint(n * 2)",
+                "problem": "Write a program that doubles the input number.",
+                "solution": "```python\nn = int(input())\nprint(n * 2)\n```",
                 "premises": ["5"]
             },
             "completions": [
