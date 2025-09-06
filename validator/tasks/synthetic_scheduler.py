@@ -497,16 +497,29 @@ async def create_synthetic_affine_grpo_task(
         if not s3_url:
             raise ValueError("No s3_url in affine GRPO data response")
 
-        affine_reward_function = await grpo_sql.get_reward_function_by_id(
-            config.psql_db, UUID(cst.AFFINE_GRPO_HARDCODED_REWARD_FUNCTION_ID)
-        )
-
-        if not affine_reward_function:
-            logger.warning("Affine reward function not found, using generic reward functions")
+        logger.info(f"Looking for affine reward functions with IDs: {cst.AFFINE_REWARD_FN_IDS}")
+        
+        affine_reward_functions = []
+        for reward_id in cst.AFFINE_REWARD_FN_IDS:
+            logger.debug(f"Attempting to fetch reward function with ID: {reward_id}")
+            reward_function = await grpo_sql.get_reward_function_by_id(
+                config.psql_db, UUID(reward_id)
+            )
+            if reward_function:
+                logger.info(f"Found reward function {reward_id}, setting weight to 1.0")
+                reward_function.reward_weight = 1.0
+                affine_reward_functions.append(reward_function)
+            else:
+                logger.warning(f"Reward function {reward_id} not found in database")
+        
+        logger.info(f"Successfully loaded {len(affine_reward_functions)} affine reward functions")
+        
+        if not affine_reward_functions:
+            logger.error("No affine reward functions found in database, falling back to generic functions")
             reward_functions = await _get_generic_reward_functions(config)
         else:
-            affine_reward_function.reward_weight = 1.0
-            reward_functions = [affine_reward_function]
+            logger.info(f"Using {len(affine_reward_functions)} affine-specific reward functions")
+            reward_functions = affine_reward_functions
 
         num_entries = response.get("num_entries", 10_000)
         number_of_hours = _get_training_hours_from_num_rows(num_entries)
