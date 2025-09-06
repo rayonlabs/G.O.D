@@ -29,8 +29,21 @@ def test_reward_function(completions, extra_data=None, **kwargs):
     import os
     import json
     
-    # Log to file instead of stdout
-    with open('/tmp/reward_debug.log', 'a') as f:
+    # Log to multiple locations to ensure we catch it
+    log_locations = ['/tmp/reward_debug.log', '/root/reward_debug.log', './reward_debug.log']
+    log_content = f"""
+=== REWARD FUNCTION CALLED ===
+Completions count: {len(completions)}
+Extra data type: {type(extra_data)}
+Extra data: {str(extra_data)[:500]}
+""" + (f"First completion: {str(completions[0])[:500]}" if completions else "No completions") + """
+==================
+"""
+    
+    for log_path in log_locations:
+        try:
+            with open(log_path, 'a') as f:
+                f.write(log_content)
         f.write(f"\\n=== REWARD FUNCTION CALLED ===\\n")
         f.write(f"Completions count: {len(completions)}\\n")
         f.write(f"Extra data type: {type(extra_data)}\\n")
