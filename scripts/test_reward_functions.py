@@ -10,7 +10,7 @@ from core.models.utility_models import GrpoDatasetType
 from validator.core.models import EvaluationArgs
 from validator.utils.affine_reward_functions import sat_reward_function, abd_reward_function, ded_reward_function
 from validator.utils.reward_functions import validate_reward_function
-from validator.core.database import Database
+from core.database import Database
 from validator.db.models import Task, GrpoTask, RewardFunction
 
 def get_task_data(task_id: str):
