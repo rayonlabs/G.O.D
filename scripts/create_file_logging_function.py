@@ -44,13 +44,8 @@ Extra data: {str(extra_data)[:500]}
         try:
             with open(log_path, 'a') as f:
                 f.write(log_content)
-        f.write(f"\\n=== REWARD FUNCTION CALLED ===\\n")
-        f.write(f"Completions count: {len(completions)}\\n")
-        f.write(f"Extra data type: {type(extra_data)}\\n")
-        f.write(f"Extra data: {str(extra_data)[:500]}\\n")
-        if completions:
-            f.write(f"First completion: {str(completions[0])[:500]}\\n")
-        f.write("==================\\n")
+        except:
+            pass  # Ignore write errors
     
     # Return non-zero scores to test if logging is the issue
     return [0.5] * len(completions)
