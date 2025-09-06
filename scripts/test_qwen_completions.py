@@ -72,11 +72,20 @@ async def test_qwen_completions():
                     try:
                         extra_data = json.loads(extra_data_str)
                         task_type = extra_data.get('task_type', 'Unknown')
-                    except:
+                        
+                        print(f"Task type: {task_type}")
+                        print(f"Prompt preview: {prompt[:200]}...")
+                        
+                        # Show the reference solution and premises for DED tasks
+                        if task_type == 'DED':
+                            solution = extra_data.get('solution', '')[:300]
+                            premises = extra_data.get('premises', [])
+                            print(f"Reference solution: {solution}...")
+                            print(f"Premises: {premises}")
+                            
+                    except Exception as e:
                         task_type = 'Unknown'
-                    
-                    print(f"Task type: {task_type}")
-                    print(f"Prompt preview: {prompt[:200]}...")
+                        print(f"❌ Error parsing extra_data: {e}")
                     
                     # Generate completion
                     messages = [
