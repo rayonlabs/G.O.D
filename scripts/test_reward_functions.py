@@ -5,12 +5,9 @@ import json
 import os
 import asyncio
 
-from core.models.utility_models import GrpoDatasetType
-from validator.core.models import EvaluationArgs
+from core.models.utility_models import GrpoDatasetType, RewardFunction
 from validator.utils.affine_reward_functions import sat_reward_function, abd_reward_function, ded_reward_function
 from validator.utils.reward_functions import validate_reward_function
-from validator.db.database import PSQLDB
-from validator.db.models import Task, GrpoTask, RewardFunction
 
 async def get_task_data(task_id: str):
     """Fetch task data and reward functions from database"""
