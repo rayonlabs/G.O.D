@@ -146,14 +146,18 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
     print(f"🏆 Reward functions: {len(reward_functions)}")
     print(f"📋 Field prompt: {task_row['field_prompt']}")
     print(f"📝 Extra column: {dataset_type.extra_column}")
+    print(f"🎮 Using GPUs: {gpu_ids}")
     
     # Get HF cache directory (platform independent)
     hf_cache = os.path.expanduser("~/.cache/huggingface")
     
+    # Create GPU device specification for Docker
+    gpu_device_requests = f"\"device={','.join(map(str, gpu_ids))}\""
+    
     # Docker command to run evaluation (matching validator pattern)
     docker_cmd = [
         "docker", "run", "--rm",
-        "--gpus", "all",
+        "--gpus", gpu_device_requests,
         "-v", f"{hf_cache}:/root/.cache/huggingface",
         "-e", f"DATASET={dataset_url}",
         "-e", f"ORIGINAL_MODEL={original_model}",
@@ -170,23 +174,19 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
     
     print(f"\n🐳 Docker image: {cst.VALIDATOR_DOCKER_IMAGE}")
     print(f"🐳 Running Docker command:")
-    print(f"   docker run --rm --gpus all ... {cst.VALIDATOR_DOCKER_IMAGE}")
+    print(f"   docker run --rm --gpus {gpu_device_requests} ... {cst.VALIDATOR_DOCKER_IMAGE}")
     
     try:
+        print(f"\n📋 Container Output (streaming):")
+        print("=" * 80)
+        
+        # Stream output in real-time without capturing
         result = subprocess.run(
             docker_cmd,
-            capture_output=True,
-            text=True,
             timeout=1800  # 30 minute timeout
         )
         
-        print(f"\n📋 STDOUT:")
-        print(result.stdout)
-        
-        if result.stderr:
-            print(f"\n❌ STDERR:")
-            print(result.stderr)
-        
+        print("=" * 80)
         print(f"\n✅ Exit code: {result.returncode}")
         
         return result.returncode == 0
