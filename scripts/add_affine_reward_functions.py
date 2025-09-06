@@ -17,11 +17,28 @@ from validator.core import constants as cst
 import asyncpg
 
 
+def load_env_file():
+    """Load DATABASE_URL from .vali.env file"""
+    try:
+        with open('.vali.env', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('DATABASE_URL=') and not line.startswith('#'):
+                    return line.split('=', 1)[1]
+        return None
+    except FileNotFoundError:
+        return None
+
 async def main():
     # Database connection string
     connection_string = os.getenv("DATABASE_URL")
+    
+    # If not in env, try to load from .vali.env file
     if not connection_string:
-        print("❌ ERROR: DATABASE_URL environment variable not set")
+        connection_string = load_env_file()
+    
+    if not connection_string:
+        print("❌ ERROR: DATABASE_URL not found in environment or .vali.env file")
         return
     
     print("🚀 Adding affine reward functions to database...")
