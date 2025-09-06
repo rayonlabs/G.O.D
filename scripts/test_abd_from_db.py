@@ -32,7 +32,7 @@ async def test_abd_from_db():
             query = """
                 SELECT reward_func, func_hash 
                 FROM reward_functions 
-                WHERE reward_id = 'd7000869-e268-4f84-b72f-838ca4da43f1'
+                WHERE reward_id = '912fa425-ac2f-4a9f-8767-c419fd4b9269'
             """
             row = await conn.fetchrow(query)
             
