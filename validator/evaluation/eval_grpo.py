@@ -111,7 +111,6 @@ def evaluate_grpo_model(
     captured_rewards = {name: [] for name in reward_func_names}
     raw_rewards = {name: [] for name in reward_func_names}
     wrapped_reward_funcs = []
-    batch_offset = [0]  # Use list to make it mutable in closure
 
     has_extra_column = evaluation_args.dataset_type.extra_column and cst.STANDARD_GRPO_EXTRA_COLUMN in eval_dataset.column_names
     extra_column_data = eval_dataset[cst.STANDARD_GRPO_EXTRA_COLUMN] if has_extra_column else None
@@ -131,20 +130,37 @@ def evaluate_grpo_model(
                 parsed_extra_data.append(item)
         extra_column_data = parsed_extra_data
 
+    # Shared batch state
+    class BatchTracker:
+        def __init__(self):
+            self.offset = 0
+        
+        def get_batch_data(self, completions, dataset_extra_data):
+            start_idx = self.offset
+            end_idx = start_idx + len(completions)
+            batch_data = dataset_extra_data[start_idx:end_idx] if dataset_extra_data else None
+            self.offset = end_idx  # Update for next call
+            return batch_data, start_idx, end_idx
+    
+    batch_tracker = BatchTracker()
+
     for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
-        def create_wrapper(original_func, func_name, weight, dataset_extra_data):
+        def create_wrapper(original_func, func_name, weight, dataset_extra_data, is_first_func):
             supports_extra = supports_extra_data(original_func)
 
             if supports_extra and has_extra_column:
                 def wrapper(completions, extra_data=None, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (with extra_data)")
                     
-                    start_idx = batch_offset[0]
-                    end_idx = start_idx + len(completions)
-                    actual_extra_data = dataset_extra_data[start_idx:end_idx] if dataset_extra_data else None
-                    
-                    if i == 0:  # Only update offset once per batch (for first function)
-                        batch_offset[0] = end_idx
+                    if is_first_func:
+                        actual_extra_data, start_idx, end_idx = batch_tracker.get_batch_data(completions, dataset_extra_data)
+                        # Store for other functions in this batch
+                        wrapper._current_batch_data = actual_extra_data
+                        wrapper._batch_info = (start_idx, end_idx)
+                    else:
+                        # Reuse data from first function
+                        actual_extra_data = getattr(wrapped_reward_funcs[0], '_current_batch_data', None)
+                        start_idx, end_idx = getattr(wrapped_reward_funcs[0], '_batch_info', (0, 0))
                     
                     logger.info(f"🔍 {func_name}: batch offset {start_idx}-{end_idx}, extra_data sample = {str(actual_extra_data[0] if actual_extra_data else None)[:100]}...")
                     
@@ -182,7 +198,7 @@ def evaluate_grpo_model(
 
             return wrapper
 
-        wrapped_reward_funcs.append(create_wrapper(original_func, func_name, weight, extra_column_data))
+        wrapped_reward_funcs.append(create_wrapper(original_func, func_name, weight, extra_column_data, i == 0))
 
     @find_executable_batch_size(starting_batch_size=cst.GRPO_INITIAL_BATCH_SIZE)
     def evaluate_grpo_with_batch_size(batch_size):
