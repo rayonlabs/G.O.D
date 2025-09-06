@@ -130,27 +130,21 @@ def evaluate_grpo_model(
                 parsed_extra_data.append(item)
         extra_column_data = parsed_extra_data
 
-    # Simple global counter - assume TRL processes sequentially
-    completion_count = [0]
-
     for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
-        def create_wrapper(original_func, func_name, weight, dataset_extra_data, is_first_func):
+        def create_wrapper(original_func, func_name, weight):
             supports_extra = supports_extra_data(original_func)
 
             if supports_extra and has_extra_column:
-                def wrapper(completions, extra_data=None, **kwargs):
-                    logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (with extra_data)")
+                def wrapper(completions, **kwargs):
+                    logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions")
                     
-                    start_idx = completion_count[0]
-                    end_idx = start_idx + len(completions)
-                    actual_extra_data = dataset_extra_data[start_idx:end_idx] if dataset_extra_data else None
+                    # TRL should pass dataset columns directly as kwargs
+                    extra_data_from_trl = kwargs.get(cst.STANDARD_GRPO_EXTRA_COLUMN)
                     
-                    if is_first_func:
-                        completion_count[0] = end_idx
+                    logger.info(f"🔍 {func_name}: TRL kwargs keys = {list(kwargs.keys())}")
+                    logger.info(f"🔍 {func_name}: extra_data from TRL = {str(extra_data_from_trl[0] if extra_data_from_trl else 'None')[:100]}...")
                     
-                    logger.info(f"🔍 {func_name}: batch {start_idx}-{end_idx}, extra_data sample = {str(actual_extra_data[0] if actual_extra_data else None)[:100]}...")
-                    
-                    raw_results = original_func(completions, extra_data=actual_extra_data)
+                    raw_results = original_func(completions, extra_data=extra_data_from_trl, **kwargs)
                     
                     logger.info(f"🔍 {func_name}: returned scores = {raw_results[:3]}... (showing first 3)")
                     raw_rewards[func_name].extend(raw_results)
@@ -184,7 +178,7 @@ def evaluate_grpo_model(
 
             return wrapper
 
-        wrapped_reward_funcs.append(create_wrapper(original_func, func_name, weight, extra_column_data, i == 0))
+        wrapped_reward_funcs.append(create_wrapper(original_func, func_name, weight))
 
     @find_executable_batch_size(starting_batch_size=cst.GRPO_INITIAL_BATCH_SIZE)
     def evaluate_grpo_with_batch_size(batch_size):
