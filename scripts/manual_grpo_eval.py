@@ -18,6 +18,42 @@ from core.models.utility_models import GrpoDatasetType, RewardFunction, FileForm
 logger = get_logger(__name__)
 
 
+def get_available_gpus(max_gpus=2):
+    """Get list of available GPU IDs with low memory usage"""
+    try:
+        result = subprocess.run([
+            'nvidia-smi', '--query-gpu=index,memory.used,memory.total', 
+            '--format=csv,noheader,nounits'
+        ], capture_output=True, text=True, check=True)
+        
+        available_gpus = []
+        for line in result.stdout.strip().split('\n'):
+            if line.strip():
+                gpu_id, mem_used, mem_total = line.split(', ')
+                gpu_id = int(gpu_id)
+                mem_used = int(mem_used)
+                mem_total = int(mem_total)
+                
+                # Consider GPU available if less than 10% memory is used
+                if mem_used / mem_total < 0.1:
+                    available_gpus.append(gpu_id)
+                
+                if len(available_gpus) >= max_gpus:
+                    break
+        
+        if not available_gpus:
+            logger.warning("No GPUs with low memory usage found, using GPU 0")
+            return [0]
+        
+        logger.info(f"Using GPUs: {available_gpus}")
+        return available_gpus
+        
+    except Exception as e:
+        logger.error(f"Failed to check GPU availability: {e}")
+        logger.info("Falling back to GPU 0")
+        return [0]
+
+
 def load_env_file():
     """Load environment variables from .vali.env file"""
     try:
@@ -74,6 +110,9 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
     """Run GRPO evaluation using Docker container"""
     
     task_row = task_info
+    
+    # Get available GPUs
+    gpu_ids = get_available_gpus(max_gpus=2)
     
     # Extract info from task
     dataset_url = task_row['dataset_url'] or (task_row['synthetic_data'] if task_row['synthetic_data'] else None)
