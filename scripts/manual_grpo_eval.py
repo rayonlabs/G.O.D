@@ -205,9 +205,10 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
         "-e", f"FILE_FORMAT={file_format.value}",
         "-e", f"DATASET_TYPE={dataset_type.model_dump_json()}",  # Use pydantic serialization
         "-e", "TRANSFORMERS_ALLOW_TORCH_LOAD=true",
-        "-e", "HF_HOME=/root/.cache/huggingface",
+        "-e", "HF_HOME=/root/.cache/huggingface", 
         "-e", "TRANSFORMERS_CACHE=/root/.cache/huggingface/hub",
         "-e", "HF_DATASETS_CACHE=/root/.cache/huggingface/datasets",
+        "-e", "TRANSFORMERS_OFFLINE=0",
         cst.VALIDATOR_DOCKER_IMAGE,
         "python", "-m", "validator.evaluation.eval_grpo"
     ]
