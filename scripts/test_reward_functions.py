@@ -61,7 +61,7 @@ async def get_task_data(task_id: str):
                 WHERE gtf.task_id = $1
                 ORDER BY gtf.reward_weight DESC
             """
-            reward_functions_data = await conn.fetchall(reward_query, UUID(task_id))
+            reward_functions_data = await conn.fetch(reward_query, UUID(task_id))
             
             print(f"✅ Found task with {len(reward_functions_data)} reward functions")
             
