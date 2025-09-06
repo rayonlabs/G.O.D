@@ -5,7 +5,7 @@ Affine-style reward functions for GRPO tasks.
 from .reward_functions import restricted_execution
 
 
-def sat_reward_function(completions, **kwargs):
+def sat_reward_function(completions, extra_data=None, **kwargs):
     """
     SAT (Boolean Satisfiability) reward function with partial credit.
 
@@ -13,9 +13,10 @@ def sat_reward_function(completions, **kwargs):
     Expects extra_data with task_type='SAT' and 'cls' field.
     """
     import re
+    import json
 
-    # Get extra_data from kwargs
-    extra_data_list = kwargs.get('extra_data', [])
+    # Handle extra_data parameter
+    extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 
     # If no extra_data provided, return zeros
     if not extra_data_list:
@@ -29,18 +30,26 @@ def sat_reward_function(completions, **kwargs):
 
     scores = []
 
-    for completion, extra_data in zip(completions, extra_data_list):
+    for completion, extra_data_item in zip(completions, extra_data_list):
+        # Handle JSON string extra_data
+        if isinstance(extra_data_item, str):
+            try:
+                extra_data_item = json.loads(extra_data_item)
+            except json.JSONDecodeError:
+                scores.append(0.0)
+                continue
+        
         # Validate extra_data
-        if not isinstance(extra_data, dict):
+        if not isinstance(extra_data_item, dict):
             scores.append(0.0)
             continue
 
         # Check task type
-        if extra_data.get("task_type", "").upper() != "SAT":
+        if extra_data_item.get("task_type", "").upper() != "SAT":
             scores.append(0.0)
             continue
 
-        cls = extra_data.get("cls", [])
+        cls = extra_data_item.get("cls", [])
         if not isinstance(cls, list):
             scores.append(0.0)
             continue
@@ -91,7 +100,7 @@ def sat_reward_function(completions, **kwargs):
     return scores
 
 
-def abd_reward_function(completions, **kwargs):
+def abd_reward_function(completions, extra_data=None, **kwargs):
     """
     ABD (Algorithmic Backward Design) reward function with partial credit.
 
@@ -100,9 +109,10 @@ def abd_reward_function(completions, **kwargs):
     Uses restricted_execution for safe code execution.
     """
     import re
+    import json
 
-    # Get extra_data from kwargs
-    extra_data_list = kwargs.get('extra_data', [])
+    # Handle extra_data parameter  
+    extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 
     if not extra_data_list:
         return [0.0] * len(completions)
@@ -115,19 +125,27 @@ def abd_reward_function(completions, **kwargs):
 
     scores = []
 
-    for completion, extra_data in zip(completions, extra_data_list):
+    for completion, extra_data_item in zip(completions, extra_data_list):
+        # Handle JSON string extra_data
+        if isinstance(extra_data_item, str):
+            try:
+                extra_data_item = json.loads(extra_data_item)
+            except json.JSONDecodeError:
+                scores.append(0.0)
+                continue
+        
         # Validate extra_data
-        if not isinstance(extra_data, dict):
+        if not isinstance(extra_data_item, dict):
             scores.append(0.0)
             continue
 
         # Check task type
-        if extra_data.get("task_type", "").upper() != "ABD":
+        if extra_data_item.get("task_type", "").upper() != "ABD":
             scores.append(0.0)
             continue
 
-        program = extra_data.get("program", "")
-        expected_output = extra_data.get("expected_output", "")
+        program = extra_data_item.get("program", "")
+        expected_output = extra_data_item.get("expected_output", "")
 
         if not program:
             scores.append(0.0)
@@ -209,7 +227,7 @@ def input(prompt=""):
     return scores
 
 
-def ded_reward_function(completions, **kwargs):
+def ded_reward_function(completions, extra_data=None, **kwargs):
     """
     DED (Deductive/Code) reward function with partial credit.
 
@@ -218,9 +236,10 @@ def ded_reward_function(completions, **kwargs):
     Uses restricted_execution for safe code execution.
     """
     import re
+    import json
 
-    # Get extra_data from kwargs
-    extra_data_list = kwargs.get('extra_data', [])
+    # Handle extra_data parameter  
+    extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 
     if not extra_data_list:
         return [0.0] * len(completions)
@@ -233,19 +252,27 @@ def ded_reward_function(completions, **kwargs):
 
     scores = []
 
-    for completion, extra_data in zip(completions, extra_data_list):
+    for completion, extra_data_item in zip(completions, extra_data_list):
+        # Handle JSON string extra_data
+        if isinstance(extra_data_item, str):
+            try:
+                extra_data_item = json.loads(extra_data_item)
+            except json.JSONDecodeError:
+                scores.append(0.0)
+                continue
+        
         # Validate extra_data
-        if not isinstance(extra_data, dict):
+        if not isinstance(extra_data_item, dict):
             scores.append(0.0)
             continue
 
         # Check task type
-        if extra_data.get("task_type", "").upper() != "DED":
+        if extra_data_item.get("task_type", "").upper() != "DED":
             scores.append(0.0)
             continue
 
-        solution = extra_data.get("solution", "")
-        premises = extra_data.get("premises", [])
+        solution = extra_data_item.get("solution", "")
+        premises = extra_data_item.get("premises", [])
 
         if not solution:
             scores.append(0.0)
