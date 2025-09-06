@@ -17,15 +17,18 @@ import asyncpg
 
 
 def load_env_file():
-    """Load DATABASE_URL from .vali.env file"""
+    """Load environment variables from .vali.env file"""
     try:
         with open('.vali.env', 'r') as f:
             for line in f:
                 line = line.strip()
-                if line.startswith('DATABASE_URL=') and not line.startswith('#'):
-                    return line.split('=', 1)[1]
-        return None
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    if key in ['DATABASE_URL', 'FRONTEND_API_KEY', 'VALIDATOR_PORT']:
+                        os.environ[key] = value
+                        print(f"🔧 Loaded {key} from .vali.env")
     except FileNotFoundError:
+        print("⚠️  .vali.env file not found")
         return None
 
 async def delete_existing_functions(connection_string):
