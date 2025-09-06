@@ -162,8 +162,8 @@ def process_reward_function_code(code: str) -> str:
         The processed code with restricted_execution injected if needed and proper signature
     """
     try:
-        logger.info(f"Starting to process reward function code, length: {len(code)} chars")
-        logger.debug(f"Code preview: {code[:200]}...")
+        logger.error(f"INJECTION DEBUG: Starting to process reward function code, length: {len(code)} chars")
+        logger.error(f"INJECTION DEBUG: Code preview: {code[:200]}...")
         
         # Check if restricted_execution is mentioned in the code
         has_restricted_execution = "restricted_execution" in code
