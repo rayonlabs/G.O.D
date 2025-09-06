@@ -17,7 +17,6 @@ import asyncpg
 
 
 def load_env_file():
-    """Load environment variables from .vali.env file"""
     try:
         with open('.vali.env', 'r') as f:
             for line in f:
@@ -32,7 +31,6 @@ def load_env_file():
         return None
 
 async def delete_existing_functions(connection_string):
-    """Delete existing affine reward functions"""
     pool = await asyncpg.create_pool(connection_string)
     
     try:
@@ -50,10 +48,8 @@ async def delete_existing_functions(connection_string):
         await pool.close()
 
 async def main():
-    # Load environment variables from .vali.env file first
     load_env_file()
     
-    # Database connection string
     connection_string = os.getenv("DATABASE_URL")
     
     if not connection_string:
@@ -63,11 +59,9 @@ async def main():
     print("🚀 Setting up affine reward functions via API endpoint...")
     print(f"Database URL: {connection_string.split('@')[1] if '@' in connection_string else 'localhost'}")
     
-    # Delete existing functions first to ensure clean state
     print("\n🗑️  Cleaning up existing functions...")
     await delete_existing_functions(connection_string)
     
-    # List of functions to add
     reward_functions = [
         ("SAT Reward Function", "Partial credit reward function for SAT problems", sat_reward_function),
         ("ABD Reward Function", "Partial credit reward function for ABD problems", abd_reward_function),
@@ -78,7 +72,6 @@ async def main():
     for i, (name, desc, func) in enumerate(reward_functions, 1):
         print(f"  {i}. {name} ({func.__name__})")
     
-    # Determine API endpoint and authentication  
     validator_port = os.getenv("VALIDATOR_PORT", "9001")
     api_key = os.getenv("FRONTEND_API_KEY")
     api_base = f"http://localhost:{validator_port}"
@@ -90,12 +83,10 @@ async def main():
     else:
         print("⚠️  No FRONTEND_API_KEY found in environment")
     
-    # Headers for Bearer token authentication
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     
-    # Add functions via API endpoint
     added_ids = []
     for name, description, func in reward_functions:
         func_code = inspect.getsource(func)
@@ -130,12 +121,10 @@ async def main():
     if added_ids:
         print(f"\n🔍 Verifying functions were added to database...")
         
-        # Connect to database to check the added functions
         pool = await asyncpg.create_pool(connection_string)
         
         try:
             async with pool.acquire() as conn:
-                # Query for our functions by searching function names in the code
                 for name, description, func in reward_functions:
                     query = f"""
                         SELECT reward_id, func_hash 
@@ -149,7 +138,7 @@ async def main():
                     
                     if result:
                         reward_id = result['reward_id']
-                        func_hash = result['func_hash'][:12]  # First 12 chars of hash
+                        func_hash = result['func_hash'][:12]
                         print(f"✅ {func.__name__}:")
                         print(f"   ID: {reward_id}")
                         print(f"   Hash: {func_hash}...")
@@ -164,12 +153,10 @@ async def main():
     if len(added_ids) == 3:
         print(f"\n🔄 Auto-updating constants file...")
         
-        # Read current constants file
         constants_path = "validator/core/constants.py"
         with open(constants_path, 'r') as f:
             content = f.read()
         
-        # Update the AFFINE_REWARD_FN_IDS
         old_pattern = r'AFFINE_REWARD_FN_IDS = \[[\s\S]*?\]'
         new_ids_str = f'''AFFINE_REWARD_FN_IDS = [
     "{added_ids[0]}",  # sat_reward_function
@@ -180,7 +167,6 @@ async def main():
         import re
         updated_content = re.sub(old_pattern, new_ids_str, content)
         
-        # Write back to file
         with open(constants_path, 'w') as f:
             f.write(updated_content)
             

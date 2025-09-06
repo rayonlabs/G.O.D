@@ -150,8 +150,7 @@ def evaluate_grpo_model(
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
                     
-                    # Log reward details every 2 completions to see results sooner
-                    if len(captured_rewards[func_name]) % 2 == 0:
+                    if len(captured_rewards[func_name]) % 20 == 0:
                         avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
                         avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
                         total_count = len(captured_rewards[func_name])
@@ -166,8 +165,7 @@ def evaluate_grpo_model(
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
                     
-                    # Log reward details every 2 completions to see results sooner
-                    if len(captured_rewards[func_name]) % 2 == 0:
+                    if len(captured_rewards[func_name]) % 20 == 0:
                         avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
                         avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
                         total_count = len(captured_rewards[func_name])
