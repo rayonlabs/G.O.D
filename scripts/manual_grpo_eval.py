@@ -57,7 +57,7 @@ async def get_task_info(task_id: str):
             
             # Get reward functions
             reward_query = """
-                SELECT rf.reward_id, rf.reward_func, rf.reward_weight, rf.func_hash, rf.is_generic
+                SELECT rf.reward_id, rf.reward_func, gtf.reward_weight, rf.func_hash, rf.is_generic
                 FROM grpo_task_functions gtf
                 JOIN reward_functions rf ON gtf.reward_id = rf.reward_id
                 WHERE gtf.task_id = $1
