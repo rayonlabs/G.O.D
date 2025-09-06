@@ -111,6 +111,7 @@ def evaluate_grpo_model(
     captured_rewards = {name: [] for name in reward_func_names}
     raw_rewards = {name: [] for name in reward_func_names}
     wrapped_reward_funcs = []
+    batch_offset = [0]  # Use list to make it mutable in closure
 
     has_extra_column = evaluation_args.dataset_type.extra_column and cst.STANDARD_GRPO_EXTRA_COLUMN in eval_dataset.column_names
     extra_column_data = eval_dataset[cst.STANDARD_GRPO_EXTRA_COLUMN] if has_extra_column else None
@@ -137,9 +138,15 @@ def evaluate_grpo_model(
             if supports_extra and has_extra_column:
                 def wrapper(completions, extra_data=None, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (with extra_data)")
-                    actual_extra_data = dataset_extra_data[:len(completions)] if dataset_extra_data else None
                     
-                    logger.info(f"🔍 {func_name}: extra_data sample = {str(actual_extra_data[0] if actual_extra_data else None)[:100]}...")
+                    start_idx = batch_offset[0]
+                    end_idx = start_idx + len(completions)
+                    actual_extra_data = dataset_extra_data[start_idx:end_idx] if dataset_extra_data else None
+                    
+                    if i == 0:  # Only update offset once per batch (for first function)
+                        batch_offset[0] = end_idx
+                    
+                    logger.info(f"🔍 {func_name}: batch offset {start_idx}-{end_idx}, extra_data sample = {str(actual_extra_data[0] if actual_extra_data else None)[:100]}...")
                     
                     raw_results = original_func(completions, extra_data=actual_extra_data)
                     
