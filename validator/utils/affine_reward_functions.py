@@ -312,46 +312,16 @@ def ded_reward_function(completions, extra_data=None, **kwargs):
 
             # Get test input
             test_input = str(premises[0]) if premises else ""
-            input_lines = test_input.split("\n")
 
-            # Execute expected solution
-            exec_expected = """
-input_lines = """ + repr(input_lines) + """
-input_index = 0
-
-def input(prompt=""):
-    global input_index
-    if input_index < len(input_lines):
-        result = input_lines[input_index]
-        input_index += 1
-        return result
-    return ""
-
-""" + solution
-
-            # Use restricted_execution
-            expected_output, expected_error = restricted_execution(exec_expected, test_input)
+            # Execute expected solution directly using restricted_execution
+            expected_output, expected_error = restricted_execution(solution, test_input)
 
             if expected_error:
                 scores.append(0.35)  # Can't get expected output
                 continue
 
-            # Execute submitted code
-            exec_submitted = """
-input_lines = """ + repr(input_lines) + """
-input_index = 0
-
-def input(prompt=""):
-    global input_index
-    if input_index < len(input_lines):
-        result = input_lines[input_index]
-        input_index += 1
-        return result
-    return ""
-
-""" + submitted_code
-
-            actual_output, actual_error = restricted_execution(exec_submitted, test_input)
+            # Execute submitted code directly using restricted_execution
+            actual_output, actual_error = restricted_execution(submitted_code, test_input)
 
             if actual_error:
                 scores.append(0.4)  # Valid syntax but runtime error

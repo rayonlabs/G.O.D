@@ -112,14 +112,24 @@ def restricted_execution(code: str, input_data: str) -> tuple[str, str]:
         for name, func in extra_builtins.items():
             restricted_builtins[name] = func
         
+        input_lines = input_data.split('\n') if input_data else []
+        
+        def create_input_func(lines):
+            lines_iter = iter(lines)
+            def input_func(prompt=""):
+                try:
+                    return next(lines_iter)
+                except StopIteration:
+                    return ""
+            return input_func
+        
         restricted_globals = {
             '__builtins__': restricted_builtins,
             '_print_': PrintCollector,
             '_getattr_': getattr,
             '_getitem_': lambda obj, key: obj[key],
             '_getiter_': iter,
-            '_iter_unpack_sequence_': iter,
-            # Allow access to commonly used builtins
+            'input': create_input_func(input_lines),
             'sum': sum,
             'min': min,
             'max': max,
@@ -137,27 +147,16 @@ def restricted_execution(code: str, input_data: str) -> tuple[str, str]:
         }
         restricted_globals.update(safe_globals)
         
-        # Use restricted_globals as local_vars too so variables are accessible
-        local_vars = restricted_globals.copy()
+        local_vars = {}
         
         with contextlib.redirect_stderr(stderr_capture):
             exec(compiled_code, restricted_globals, local_vars)
         
-        # Get printed output from PrintCollector
         print_collector = local_vars.get('_print')
-        if print_collector is not None:
-            # PrintCollector.txt is a list, join it to get string output
-            if hasattr(print_collector, 'txt'):
-                output = '\n'.join(str(item) for item in print_collector.txt)
-            else:
-                output = str(print_collector)
+        if print_collector and hasattr(print_collector, 'txt'):
+            output = '\n'.join(str(item) for item in print_collector.txt)
         else:
-            # Also check if there's output in the globals (sometimes PrintCollector stores it there)
-            print_collector = restricted_globals.get('_print')
-            if print_collector is not None and hasattr(print_collector, 'txt'):
-                output = '\n'.join(str(item) for item in print_collector.txt)
-            else:
-                output = ""
+            output = ""
             
         error = stderr_capture.getvalue()
         return output, error
