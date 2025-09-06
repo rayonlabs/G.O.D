@@ -101,13 +101,11 @@ def abd_reward_function(completions, extra_data=None, **kwargs):
     import re
     import json
 
-    # Handle extra_data parameter  
     extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 
     if not extra_data_list:
         return [0.0] * len(completions)
 
-    # Handle both single dict and list of dicts
     if isinstance(extra_data_list, dict):
         extra_data_list = [extra_data_list] * len(completions)
     elif len(extra_data_list) == 1 and len(completions) > 1:
@@ -116,7 +114,6 @@ def abd_reward_function(completions, extra_data=None, **kwargs):
     scores = []
 
     for completion, extra_data_item in zip(completions, extra_data_list):
-        # Handle JSON string extra_data
         if isinstance(extra_data_item, str):
             try:
                 extra_data_item = json.loads(extra_data_item)
@@ -124,12 +121,10 @@ def abd_reward_function(completions, extra_data=None, **kwargs):
                 scores.append(0.0)
                 continue
         
-        # Validate extra_data
         if not isinstance(extra_data_item, dict):
             scores.append(0.0)
             continue
 
-        # Check task type
         if extra_data_item.get("task_type", "").upper() != "ABD":
             scores.append(0.0)
             continue
@@ -141,56 +136,46 @@ def abd_reward_function(completions, extra_data=None, **kwargs):
             scores.append(0.0)
             continue
 
-        # Evaluate ABD
         try:
-            # Extract program from fence if present
             fence_pattern = re.compile(r"```(?:python)?\s*([\s\S]*?)```", re.IGNORECASE)
             match = fence_pattern.search(program)
             if match:
                 program = match.group(1).strip()
 
-            # Remove thinking tags from completion
             response = str(completion)
             response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL)
             response = re.sub(r"<thinking>.*?</thinking>", "", response, flags=re.DOTALL)
 
-            # Extract INPUT
             input_matches = re.findall(r"<INPUT>(.*?)</INPUT>", response, re.IGNORECASE | re.DOTALL)
 
             if not input_matches:
-                # Small credit for attempting format
                 if "<INPUT" in response.upper():
                     scores.append(0.1)
                 else:
                     scores.append(0.0)
                 continue
 
-            # Get the input
             generated_input = input_matches[-1].strip()
             lines = [ln.rstrip() for ln in generated_input.splitlines()]
             while lines and not lines[-1].strip():
                 lines.pop()
             generated_input = "\n".join(lines)
 
-            # Use restricted_execution directly with program and input
             output, error = restricted_execution(program, generated_input)
 
             if error:
-                scores.append(0.2)  # Credit for valid input format
+                scores.append(0.2)
                 continue
 
-            # Compare outputs
             output_clean = "\n".join(line.rstrip() for line in output.strip().splitlines())
             expected_clean = "\n".join(line.rstrip() for line in str(expected_output).strip().splitlines())
 
             if output_clean == expected_clean:
                 scores.append(1.0)
             else:
-                # Simple similarity for partial credit
                 if not output_clean or not expected_clean:
                     scores.append(0.3)
                 else:
-                    # Character overlap ratio
                     matches = sum(c1 == c2 for c1, c2 in zip(output_clean, expected_clean))
                     similarity = matches / max(len(output_clean), len(expected_clean))
                     scores.append(min(0.3 + (0.6 * similarity), 0.95))
@@ -212,13 +197,11 @@ def ded_reward_function(completions, extra_data=None, **kwargs):
     import re
     import json
 
-    # Handle extra_data parameter  
     extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 
     if not extra_data_list:
         return [0.0] * len(completions)
 
-    # Handle both single dict and list of dicts
     if isinstance(extra_data_list, dict):
         extra_data_list = [extra_data_list] * len(completions)
     elif len(extra_data_list) == 1 and len(completions) > 1:
@@ -227,7 +210,6 @@ def ded_reward_function(completions, extra_data=None, **kwargs):
     scores = []
 
     for completion, extra_data_item in zip(completions, extra_data_list):
-        # Handle JSON string extra_data
         if isinstance(extra_data_item, str):
             try:
                 extra_data_item = json.loads(extra_data_item)
@@ -235,12 +217,10 @@ def ded_reward_function(completions, extra_data=None, **kwargs):
                 scores.append(0.0)
                 continue
         
-        # Validate extra_data
         if not isinstance(extra_data_item, dict):
             scores.append(0.0)
             continue
 
-        # Check task type
         if extra_data_item.get("task_type", "").upper() != "DED":
             scores.append(0.0)
             continue
@@ -252,14 +232,11 @@ def ded_reward_function(completions, extra_data=None, **kwargs):
             scores.append(0.0)
             continue
 
-        # Evaluate DED
         try:
-            # Extract code from fence in completion
             fence_pattern = re.compile(r"```(?:python)?\s*([\s\S]*?)```", re.IGNORECASE)
             match = fence_pattern.search(str(completion))
 
             if not match:
-                # Small credit for code-like content
                 if any(keyword in str(completion) for keyword in ["def ", "print", "input", "return"]):
                     scores.append(0.1)
                 else:
@@ -268,40 +245,34 @@ def ded_reward_function(completions, extra_data=None, **kwargs):
 
             submitted_code = match.group(1).strip()
 
-            # Check syntax validity
             try:
                 compile(submitted_code, '<string>', 'exec')
             except:
-                scores.append(0.2)  # Invalid syntax
+                scores.append(0.2)
                 continue
 
-            # Extract solution code if fenced
             sol_match = fence_pattern.search(solution)
             if sol_match:
                 solution = sol_match.group(1).strip()
 
             if not premises or not isinstance(premises, list):
-                scores.append(0.3)  # Valid syntax but can't test
+                scores.append(0.3)
                 continue
 
-            # Get test input
             test_input = str(premises[0]) if premises else ""
 
-            # Execute expected solution directly using restricted_execution
             expected_output, expected_error = restricted_execution(solution, test_input)
 
             if expected_error:
-                scores.append(0.35)  # Can't get expected output
+                scores.append(0.35)
                 continue
 
-            # Execute submitted code directly using restricted_execution
             actual_output, actual_error = restricted_execution(submitted_code, test_input)
 
             if actual_error:
-                scores.append(0.4)  # Valid syntax but runtime error
+                scores.append(0.4)
                 continue
 
-            # Compare outputs
             expected_clean = "\n".join(line.rstrip() for line in expected_output.strip().splitlines())
             actual_clean = "\n".join(line.rstrip() for line in actual_output.strip().splitlines())
 
@@ -310,11 +281,9 @@ def ded_reward_function(completions, extra_data=None, **kwargs):
             elif expected_clean in actual_clean or actual_clean in expected_clean:
                 scores.append(0.8)
             else:
-                scores.append(0.5)  # Successful execution but wrong output
+                scores.append(0.5)
 
         except Exception:
             scores.append(0.0)
 
     return scores
-
-
