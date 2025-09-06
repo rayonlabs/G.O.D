@@ -125,36 +125,39 @@ async def main():
         except Exception as e:
             print(f"❌ Error posting {func.__name__}: {e}")
     
-    print("\n🔍 Checking what IDs were assigned...")
-    
-    # Connect to database to check the added functions
-    pool = await asyncpg.create_pool(connection_string)
-    
-    try:
-        async with pool.acquire() as conn:
-            # Query for our functions by searching function names in the code
-            for func in reward_functions:
-                query = f"""
-                    SELECT reward_id, func_hash 
-                    FROM reward_functions 
-                    WHERE reward_func LIKE $1
-                    ORDER BY created_at DESC
-                    LIMIT 1
-                """
-                pattern = f"%def {func.__name__}%"
-                result = await conn.fetchrow(query, pattern)
-                
-                if result:
-                    reward_id = result['reward_id']
-                    func_hash = result['func_hash'][:12]  # First 12 chars of hash
-                    print(f"✅ {func.__name__}:")
-                    print(f"   ID: {reward_id}")
-                    print(f"   Hash: {func_hash}...")
-                else:
-                    print(f"❌ {func.__name__}: Not found in database")
+    if added_ids:
+        print(f"\n🔍 Verifying functions were added to database...")
+        
+        # Connect to database to check the added functions
+        pool = await asyncpg.create_pool(connection_string)
+        
+        try:
+            async with pool.acquire() as conn:
+                # Query for our functions by searching function names in the code
+                for name, description, func in reward_functions:
+                    query = f"""
+                        SELECT reward_id, func_hash 
+                        FROM reward_functions 
+                        WHERE reward_func LIKE $1
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """
+                    pattern = f"%def {func.__name__}%"
+                    result = await conn.fetchrow(query, pattern)
                     
-    finally:
-        await pool.close()
+                    if result:
+                        reward_id = result['reward_id']
+                        func_hash = result['func_hash'][:12]  # First 12 chars of hash
+                        print(f"✅ {func.__name__}:")
+                        print(f"   ID: {reward_id}")
+                        print(f"   Hash: {func_hash}...")
+                    else:
+                        print(f"❌ {func.__name__}: Not found in database")
+                        
+        finally:
+            await pool.close()
+    else:
+        print(f"\n❌ No functions were successfully added via API")
     
     if len(added_ids) == 3:
         print(f"\n🔄 Auto-updating constants file...")
