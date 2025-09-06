@@ -124,11 +124,28 @@ async def test_reward_functions_with_task(task_id: str):
         for i, sample in enumerate(sample_data):
             print(f"Sample {i}: {sample}")
         
-        # Test completions (dummy for now)
-        test_completions = [
-            "I think x1=True, x2=False, x3=True would work for this SAT problem.",
-            "Let me try x1=False, x2=True, x3=False for the SAT instance.",
-        ]
+        # Extract real completions from the dataset
+        real_completions = []
+        extra_data_samples = []
+        
+        print(f"\n=== Extracting Real Completions ===")
+        for i, sample in enumerate(sample_data[:5]):  # Test first 5 samples
+            completion = sample.get('completion', sample.get('response', ''))
+            extra_data_str = sample.get('extra_data', '{}')
+            
+            print(f"\nSample {i}:")
+            print(f"  Completion preview: {str(completion)[:150]}...")
+            print(f"  Extra data preview: {extra_data_str[:200]}...")
+            
+            if completion:
+                real_completions.append(completion)
+                try:
+                    extra_data_samples.append(json.loads(extra_data_str))
+                except json.JSONDecodeError:
+                    print(f"  ❌ Failed to parse extra_data")
+                    extra_data_samples.append({})
+        
+        print(f"\n✅ Extracted {len(real_completions)} real completions")
         
         # Test each reward function
         print(f"\n=== Testing Reward Functions ===")
