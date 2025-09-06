@@ -8,18 +8,8 @@ def test_direct_restricted_execution():
     """Test restricted_execution directly"""
     print("=== Testing restricted_execution directly ===")
     
+    # Simple code that uses the input() function directly
     code = """
-input_lines = ['5']
-input_index = 0
-
-def input(prompt=""):
-    global input_index
-    if input_index < len(input_lines):
-        result = input_lines[input_index]
-        input_index += 1
-        return result
-    return ""
-
 n = int(input())
 print(n * 2)
 """
