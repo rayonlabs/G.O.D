@@ -120,18 +120,20 @@ async def main():
     pool = await asyncpg.create_pool(connection_string)
     try:
         async with pool.acquire() as conn:
-        for func in reward_functions:
-            query = f"""
-                SELECT reward_id
-                FROM reward_functions 
-                WHERE reward_func LIKE $1
-                ORDER BY created_at DESC
-                LIMIT 1
-            """
-            pattern = f"%def {func.__name__}%"
-            result = await conn.fetchrow(query, pattern)
-            if result:
-                actual_ids.append(str(result['reward_id']))
+            for func in reward_functions:
+                query = f"""
+                    SELECT reward_id
+                    FROM reward_functions 
+                    WHERE reward_func LIKE $1
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """
+                pattern = f"%def {func.__name__}%"
+                result = await conn.fetchrow(query, pattern)
+                if result:
+                    actual_ids.append(str(result['reward_id']))
+    finally:
+        await pool.close()
     
     if len(actual_ids) == 3:
         print(f"\n🔄 Auto-updating constants file...")
