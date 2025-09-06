@@ -14,6 +14,7 @@ import asyncpg
 from core import constants as cst
 from validator.utils.logging import get_logger
 from core.models.utility_models import GrpoDatasetType, RewardFunction, FileFormat
+from huggingface_hub import snapshot_download
 
 logger = get_logger(__name__)
 
@@ -113,6 +114,45 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
     
     # Get available GPUs
     gpu_ids = get_available_gpus(max_gpus=2)
+    
+    # Download the model to evaluate (exactly like main validator does)
+    cache_dir = os.path.expanduser(cst.CACHE_DIR_HUB)
+    print(f"📥 Starting download of model {model_repo}...")
+    try:
+        model_path = snapshot_download(
+            repo_id=model_repo, 
+            cache_dir=cache_dir,
+            ignore_patterns=["*.h5", "*.ot", "*.msgpack", "*.pkl", "*.pth"]
+        )
+        print(f"✅ Model {model_repo} downloaded to: {model_path}")
+        
+        # Log what files are actually in the downloaded model (like main validator)
+        if os.path.exists(model_path):
+            files = os.listdir(model_path)
+            print(f"📁 Downloaded files for {model_repo}: {files}")
+            
+            # Check file sizes to ensure they're not just LFS pointers (like main validator)
+            for file in files:
+                if file.endswith(('.safetensors', '.bin')):
+                    file_path = os.path.join(model_path, file)
+                    file_size = os.path.getsize(file_path)
+                    print(f"  {file}: {file_size / (1024*1024*1024):.2f} GB")
+                    
+                    # LFS pointer files are typically < 1KB
+                    if file_size < 1000:
+                        print(f"⚠️  WARNING: {file} appears to be an LFS pointer (only {file_size} bytes)")
+            
+            # Check for essential files (like main validator)
+            has_config = 'config.json' in files
+            has_weights = any(f.endswith(('.safetensors', '.bin')) for f in files)
+            print(f"🔍 Model validation - has config.json: {has_config}, has model weights: {has_weights}")
+        else:
+            print(f"❌ Model path does not exist after download: {model_path}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Failed to download model {model_repo}: {e}")
+        return False
     
     # Extract info from task
     dataset_url = task_row['dataset_url'] or (task_row['synthetic_data'] if task_row['synthetic_data'] else None)
