@@ -88,10 +88,10 @@ async def main():
     else:
         print("⚠️  No FRONTEND_API_KEY found in environment")
     
-    # Headers for authentication
+    # Headers for Bearer token authentication
     headers = {"Content-Type": "application/json"}
     if api_key:
-        headers["X-API-Key"] = api_key
+        headers["Authorization"] = f"Bearer {api_key}"
     
     # Add functions via API endpoint
     added_ids = []
