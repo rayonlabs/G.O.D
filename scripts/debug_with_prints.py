@@ -11,42 +11,11 @@ def create_debug_abd():
     original_code = inspect.getsource(abd_reward_function)
     processed_code = process_reward_function_code(original_code)
     
-    # Add debug prints to key locations with proper indentation
+    # Add simple debug print at function start
     debug_code = processed_code.replace(
-        'for completion, extra_data_item in zip(completions, extra_data_list):',
-        '''for completion, extra_data_item in zip(completions, extra_data_list):
-            print(f"🔍 PROCESSED DEBUG: Processing completion: {str(completion)[:50]}...")
-            print(f"🔍 PROCESSED DEBUG: extra_data_item: {extra_data_item}")'''
-    )
-    
-    debug_code = debug_code.replace(
-        'if extra_data_item.get("task_type", "").upper() != "ABD":',
-        '''task_type = extra_data_item.get("task_type", "")
-            print(f"🔍 PROCESSED DEBUG: task_type: {task_type}")
-            if task_type.upper() != "ABD":
-                print(f"🔍 PROCESSED DEBUG: Wrong task type, expected ABD, got {task_type}")'''
-    )
-    
-    debug_code = debug_code.replace(
-        'output, error = restricted_execution(program, generated_input)',
-        '''print(f"🔍 PROCESSED DEBUG: About to call restricted_execution")
-            print(f"🔍 PROCESSED DEBUG: program: {program}")
-            print(f"🔍 PROCESSED DEBUG: generated_input: {generated_input}")
-            output, error = restricted_execution(program, generated_input)
-            print(f"🔍 PROCESSED DEBUG: output: {output}")
-            print(f"🔍 PROCESSED DEBUG: error: {error}")'''
-    )
-    
-    debug_code = debug_code.replace(
-        'scores.append(1.0)',
-        '''print(f"🔍 PROCESSED DEBUG: Perfect match! Appending 1.0")
-            scores.append(1.0)'''
-    )
-    
-    debug_code = debug_code.replace(
-        'scores.append(0.0)',
-        '''print(f"🔍 PROCESSED DEBUG: Appending 0.0")
-            scores.append(0.0)'''
+        'scores = []',
+        '''print("🔍 PROCESSED DEBUG: Function started, about to process completions")
+    scores = []'''
     )
     
     # Create the function
