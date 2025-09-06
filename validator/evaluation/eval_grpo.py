@@ -72,7 +72,8 @@ def evaluate_grpo_model(
 
     dataset_path = evaluation_config.datasets[0]["path"]
     eval_dataset = load_dataset("json", data_files=dataset_path, split="train")
-
+    
+    eval_dataset = eval_dataset.shuffle(seed=42)
 
     eval_dataset = _adapt_grpo_columns_to_trl(eval_dataset, evaluation_args.dataset_type)
 
