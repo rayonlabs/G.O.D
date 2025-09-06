@@ -76,12 +76,22 @@ async def main():
     for i, (name, desc, func) in enumerate(reward_functions, 1):
         print(f"  {i}. {name} ({func.__name__})")
     
-    # Determine API endpoint
+    # Determine API endpoint and authentication  
     validator_port = os.getenv("VALIDATOR_PORT", "9001")
+    api_key = os.getenv("FRONTEND_API_KEY")
     api_base = f"http://localhost:{validator_port}"
     endpoint = f"{api_base}/v1/grpo/reward_functions"
     
     print(f"\n🌐 Using API endpoint: {endpoint}")
+    if api_key:
+        print(f"🔐 Using API key: {api_key[:8]}...")
+    else:
+        print("⚠️  No FRONTEND_API_KEY found in environment")
+    
+    # Headers for authentication
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["X-API-Key"] = api_key
     
     # Add functions via API endpoint
     added_ids = []
@@ -97,7 +107,7 @@ async def main():
         
         print(f"\n📤 Posting {func.__name__}...")
         try:
-            response = requests.post(endpoint, json=payload, timeout=30)
+            response = requests.post(endpoint, json=payload, headers=headers, timeout=30)
             
             if response.status_code == 200:
                 result = response.json()
