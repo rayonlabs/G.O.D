@@ -136,13 +136,14 @@ def evaluate_grpo_model(
                 def wrapper(completions, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions")
                     
-                    # TRL should pass dataset columns directly as kwargs
-                    extra_data_from_trl = kwargs.get(cst.STANDARD_GRPO_EXTRA_COLUMN)
-                    
                     logger.info(f"🔍 {func_name}: TRL kwargs keys = {list(kwargs.keys())}")
-                    logger.info(f"🔍 {func_name}: extra_data from TRL = {str(extra_data_from_trl[0] if extra_data_from_trl else 'None')[:100]}...")
                     
-                    raw_results = original_func(completions, extra_data=extra_data_from_trl, **kwargs)
+                    # TRL already passes extra_data in kwargs - don't double-pass it
+                    extra_data_from_trl = kwargs.get(cst.STANDARD_GRPO_EXTRA_COLUMN)
+                    if extra_data_from_trl:
+                        logger.info(f"🔍 {func_name}: extra_data from TRL = {str(extra_data_from_trl[0])[:100]}...")
+                    
+                    raw_results = original_func(completions, **kwargs)
                     
                     logger.info(f"🔍 {func_name}: returned scores = {raw_results[:3]}... (showing first 3)")
                     raw_rewards[func_name].extend(raw_results)
