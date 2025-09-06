@@ -50,12 +50,11 @@ async def delete_existing_functions(connection_string):
         await pool.close()
 
 async def main():
+    # Load environment variables from .vali.env file first
+    load_env_file()
+    
     # Database connection string
     connection_string = os.getenv("DATABASE_URL")
-    
-    # If not in env, try to load from .vali.env file
-    if not connection_string:
-        connection_string = load_env_file()
     
     if not connection_string:
         print("❌ ERROR: DATABASE_URL not found in environment or .vali.env file")
