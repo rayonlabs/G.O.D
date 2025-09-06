@@ -182,24 +182,8 @@ def abd_reward_function(completions, extra_data=None, **kwargs):
                 lines.pop()
             generated_input = "\n".join(lines)
 
-            # Create execution code with simulated input
-            input_lines = generated_input.split("\n")
-            exec_code = """
-input_lines = """ + repr(input_lines) + """
-input_index = 0
-
-def input(prompt=""):
-    global input_index
-    if input_index < len(input_lines):
-        result = input_lines[input_index]
-        input_index += 1
-        return result
-    return ""
-
-""" + program
-
-            # Use restricted_execution (will be injected by process_reward_function_code)
-            output, error = restricted_execution(exec_code, generated_input)
+            # Use restricted_execution directly with program and input
+            output, error = restricted_execution(program, generated_input)
 
             if error:
                 scores.append(0.2)  # Credit for valid input format
