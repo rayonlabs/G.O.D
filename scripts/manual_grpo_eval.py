@@ -42,48 +42,47 @@ async def get_task_info(task_id: str):
     
     try:
         async with pool.acquire() as conn:
-            # Get basic task info
+            # Get task info including GRPO specific data
             query = """
-                SELECT task_id, model_id, ds as dataset_url, test_data, training_data, 
-                       synthetic_data, task_type, field_prompt
-                FROM tasks 
-                WHERE task_id = $1
+                SELECT t.task_id, t.model_id, t.ds as dataset_url, t.test_data, t.training_data, 
+                       t.task_type, gt.field_prompt, gt.file_format, gt.synthetic_data, gt.extra_column
+                FROM tasks t
+                JOIN grpo_tasks gt ON t.task_id = gt.task_id
+                WHERE t.task_id = $1
             """
             task_row = await conn.fetchrow(query, UUID(task_id))
             
             if not task_row:
                 raise ValueError(f"Task {task_id} not found")
             
-            # Get GRPO specific info including reward functions
-            grpo_query = """
-                SELECT gt.file_format, gt.synthetic_data, gt.extra_column,
-                       rf.reward_id, rf.reward_func, rf.reward_weight, rf.func_hash, rf.is_generic
-                FROM grpo_tasks gt
-                LEFT JOIN grpo_task_functions gtf ON gt.task_id = gtf.task_id
-                LEFT JOIN reward_functions rf ON gtf.reward_id = rf.reward_id
-                WHERE gt.task_id = $1
+            # Get reward functions
+            reward_query = """
+                SELECT rf.reward_id, rf.reward_func, rf.reward_weight, rf.func_hash, rf.is_generic
+                FROM grpo_task_functions gtf
+                JOIN reward_functions rf ON gtf.reward_id = rf.reward_id
+                WHERE gtf.task_id = $1
             """
-            grpo_rows = await conn.fetch(grpo_query, UUID(task_id))
+            reward_rows = await conn.fetch(reward_query, UUID(task_id))
             
-            return task_row, grpo_rows
+            return task_row, reward_rows
             
     finally:
         await pool.close()
 
 
-def run_grpo_evaluation(task_info, grpo_info, model_repo: str):
+def run_grpo_evaluation(task_info, reward_info, model_repo: str):
     """Run GRPO evaluation using Docker container"""
     
     task_row = task_info
     
     # Extract info from task
-    dataset_url = task_row['dataset_url'] or task_row['synthetic_data']
+    dataset_url = task_row['dataset_url'] or (task_row['synthetic_data'] if task_row['synthetic_data'] else None)
     original_model = task_row['model_id']
-    file_format = FileFormat(grpo_info[0]['file_format']) if grpo_info else FileFormat.S3
+    file_format = FileFormat(task_row['file_format']) if task_row['file_format'] else FileFormat.S3
     
     # Create RewardFunction objects (matching validator pattern)
     reward_functions = []
-    for row in grpo_info:
+    for row in reward_info:
         if row['reward_func']:
             reward_function = RewardFunction(
                 reward_id=row['reward_id'],
@@ -98,7 +97,7 @@ def run_grpo_evaluation(task_info, grpo_info, model_repo: str):
     dataset_type = GrpoDatasetType(
         field_prompt=task_row['field_prompt'],
         reward_functions=reward_functions,
-        extra_column=grpo_info[0]['extra_column'] if grpo_info else 'extra_data'
+        extra_column=task_row['extra_column'] if task_row['extra_column'] else 'extra_data'
     )
     
     print(f"🚀 Starting GRPO evaluation for task {task_row['task_id']}")
@@ -174,13 +173,13 @@ async def main():
     
     try:
         print(f"🔍 Fetching task information for {task_id}...")
-        task_info, grpo_info = await get_task_info(task_id)
+        task_info, reward_info = await get_task_info(task_id)
         
         print(f"✅ Found task: {task_info['task_type']}")
         print(f"📊 Dataset: {task_info['dataset_url'] or 'synthetic_data'}")
         print(f"🤖 Original model: {task_info['model_id']}")
         
-        success = run_grpo_evaluation(task_info, grpo_info, model_repo)
+        success = run_grpo_evaluation(task_info, reward_info, model_repo)
         
         if success:
             print("🎉 Evaluation completed successfully!")
