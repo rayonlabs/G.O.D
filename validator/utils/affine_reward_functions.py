@@ -15,14 +15,11 @@ def sat_reward_function(completions, extra_data=None, **kwargs):
     import re
     import json
 
-    # Handle extra_data parameter
     extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 
-    # If no extra_data provided, return zeros
     if not extra_data_list:
         return [0.0] * len(completions)
 
-    # Handle both single dict and list of dicts
     if isinstance(extra_data_list, dict):
         extra_data_list = [extra_data_list] * len(completions)
     elif len(extra_data_list) == 1 and len(completions) > 1:
@@ -31,7 +28,6 @@ def sat_reward_function(completions, extra_data=None, **kwargs):
     scores = []
 
     for completion, extra_data_item in zip(completions, extra_data_list):
-        # Handle JSON string extra_data
         if isinstance(extra_data_item, str):
             try:
                 extra_data_item = json.loads(extra_data_item)
@@ -39,12 +35,10 @@ def sat_reward_function(completions, extra_data=None, **kwargs):
                 scores.append(0.0)
                 continue
         
-        # Validate extra_data
         if not isinstance(extra_data_item, dict):
             scores.append(0.0)
             continue
 
-        # Check task type
         if extra_data_item.get("task_type", "").upper() != "SAT":
             scores.append(0.0)
             continue
@@ -54,13 +48,12 @@ def sat_reward_function(completions, extra_data=None, **kwargs):
             scores.append(0.0)
             continue
 
-        # Evaluate SAT
         try:
             if not cls:
                 scores.append(0.0)
                 continue
 
-            # Parse variable assignments
+            # Parse variable assignments from completion
             assignments = {}
             for match in re.findall(r'x(\d+)\s*=\s*(True|False|1|0)', str(completion), re.IGNORECASE):
                 var_num = int(match[0])
@@ -71,7 +64,6 @@ def sat_reward_function(completions, extra_data=None, **kwargs):
                 scores.append(0.0)
                 continue
 
-            # Count satisfied clauses
             satisfied_count = 0
             for clause in cls:
                 if not isinstance(clause, list):
@@ -90,7 +82,6 @@ def sat_reward_function(completions, extra_data=None, **kwargs):
                 if clause_satisfied:
                     satisfied_count += 1
 
-            # Partial credit
             score = satisfied_count / len(cls) if cls else 0.0
             scores.append(score)
 
