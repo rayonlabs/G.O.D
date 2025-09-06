@@ -138,7 +138,12 @@ def evaluate_grpo_model(
                 def wrapper(completions, extra_data=None, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (with extra_data)")
                     actual_extra_data = dataset_extra_data[:len(completions)] if dataset_extra_data else None
+                    
+                    logger.info(f"🔍 {func_name}: extra_data sample = {str(actual_extra_data[0] if actual_extra_data else None)[:100]}...")
+                    
                     raw_results = original_func(completions, extra_data=actual_extra_data)
+                    
+                    logger.info(f"🔍 {func_name}: returned scores = {raw_results[:3]}... (showing first 3)")
                     raw_rewards[func_name].extend(raw_results)
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
