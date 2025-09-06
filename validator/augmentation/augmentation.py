@@ -136,6 +136,17 @@ async def get_dataset_column_mapping(dataset_id: str, task_type: TaskType, keypa
         if response.get("field_system"):
             column_mapping["system"] = response["field_system"]
         return column_mapping
+    elif task_type == TaskType.CHATTASK:
+        column_mapping = {}
+        if "field_instruction" in response:
+            column_mapping["instruction"] = response["field_instruction"]
+        if "field_output" in response:
+            column_mapping["output"] = response["field_output"]
+        if response.get("field_input"):
+            column_mapping["input"] = response["field_input"]
+        if response.get("field_system"):
+            column_mapping["system"] = response["field_system"]
+        return column_mapping
     elif task_type == TaskType.GRPOTASK:
         return {"prompt": response.get("field_prompt", "prompt")}
     else:

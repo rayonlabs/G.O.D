@@ -308,7 +308,7 @@ class MinerResultsText(MinerResults):
     @field_validator("task_type")
     def validate_task_type(cls, v):
         if v not in {TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK}:
-            raise ValueError("Must be INSTRUCTTEXTTASK, DPOTASK or GRPOTASK")
+            raise ValueError("Must be INSTRUCTTEXTTASK, CHATTASK, DPOTASK or GRPOTASK")
         return v
 
 
@@ -493,6 +493,8 @@ class EvaluationArgs(BaseModel):
                 data = json.loads(value)
                 if "field_instruction" in data and "field_input" in data:
                     return InstructTextDatasetType.model_validate(data)
+                elif "chat_column" in data:
+                    return ChatTemplateDatasetType.model_validate(data) # TODO correct?
                 elif "field_chosen" in data:
                     return DpoDatasetType.model_validate(data)
                 elif "reward_functions" in data:
