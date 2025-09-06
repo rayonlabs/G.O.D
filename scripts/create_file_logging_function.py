@@ -45,8 +45,9 @@ def test_reward_function(completions, extra_data=None, **kwargs):
     
     try:
         async with pool.acquire() as conn:
-            # Insert the test function
-            test_id = "test0000-0000-0000-0000-000000000001"
+            # Use the first existing constant ID to replace it temporarily
+            from validator.core import constants as cst
+            test_id = cst.AFFINE_REWARD_FN_IDS[0]  # Replace the SAT function temporarily
             
             insert_query = """
                 INSERT INTO reward_functions (reward_id, reward_func, func_hash, is_generic)
@@ -59,9 +60,9 @@ def test_reward_function(completions, extra_data=None, **kwargs):
             print(f"✅ Created file-logging test function: {test_id}")
             
             # Replace one of the task functions with this test
-            print(f"\nRun this SQL to test:")
-            print(f"UPDATE grpo_task_functions SET reward_id = '{test_id}' WHERE task_id = '438b7328-859f-4d87-b99a-6d85acdbcc15' LIMIT 1;")
-            print(f"\nAfter evaluation, check: cat /tmp/reward_debug.log")
+            print(f"\n✅ Replaced SAT function with file-logging test function")
+            print(f"Now run evaluation and check: cat /tmp/reward_debug.log")
+            print(f"The test function always returns 0.5 scores.")
                 
     finally:
         await pool.close()
