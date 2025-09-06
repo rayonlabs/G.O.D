@@ -12,60 +12,97 @@ from validator.utils.reward_functions import validate_reward_function
 from validator.db.database import PSQLDB
 from validator.db.models import Task, GrpoTask, RewardFunction
 
-def get_task_data(task_id: str):
+async def get_task_data(task_id: str):
     """Fetch task data and reward functions from database"""
     print(f"🔍 Fetching data for task_id: {task_id}")
     
-    db = Database()
+    import asyncpg
+    from uuid import UUID
     
-    with db.session() as session:
-        # Get the task and grpo_task data
-        task = session.query(Task).filter(Task.task_id == task_id).first()
-        if not task:
-            print(f"❌ Task {task_id} not found")
-            return None, None, None
-        
-        grpo_task = session.query(GrpoTask).filter(GrpoTask.task_id == task_id).first()
-        if not grpo_task:
-            print(f"❌ GRPO task {task_id} not found")
-            return None, None, None
+    connection_string = os.getenv("DATABASE_URL")
+    if not connection_string:
+        raise ValueError("DATABASE_URL not found")
+    
+    pool = await asyncpg.create_pool(connection_string)
+    
+    try:
+        async with pool.acquire() as conn:
+            # Get task info including GRPO specific data
+            task_query = """
+                SELECT t.task_id, t.model_id, t.ds as dataset_url, t.test_data, t.training_data, 
+                       t.task_type, gt.field_prompt, gt.file_format, gt.synthetic_data, gt.extra_column
+                FROM tasks t
+                JOIN grpo_tasks gt ON t.task_id = gt.task_id
+                WHERE t.task_id = $1
+            """
+            task_data = await conn.fetchrow(task_query, UUID(task_id))
             
-        # Get reward functions
-        reward_functions = session.query(RewardFunction).filter(
-            RewardFunction.reward_function_id.in_(grpo_task.reward_function_ids)
-        ).all()
-        
-        print(f"✅ Found task with {len(reward_functions)} reward functions")
-        
-        # Create dataset type
-        dataset_type = GrpoDatasetType(
-            task_name=task.task_name,
-            field_prompt=grpo_task.field_prompt,
-            extra_column=grpo_task.extra_column,
-            reward_functions=reward_functions
-        )
-        
-        return task, grpo_task, dataset_type
+            if not task_data:
+                print(f"❌ Task {task_id} not found")
+                return None, None
+            
+            # Get reward functions
+            reward_query = """
+                SELECT rf.reward_id, rf.reward_func, gtf.reward_weight, rf.func_hash, rf.is_generic
+                FROM grpo_task_functions gtf
+                JOIN reward_functions rf ON gtf.reward_id = rf.reward_id
+                WHERE gtf.task_id = $1
+                ORDER BY gtf.reward_weight DESC
+            """
+            reward_functions_data = await conn.fetchall(reward_query, UUID(task_id))
+            
+            print(f"✅ Found task with {len(reward_functions_data)} reward functions")
+            
+            # Convert to RewardFunction objects
+            reward_functions = []
+            for rf_data in reward_functions_data:
+                reward_functions.append(RewardFunction(
+                    reward_function_id=str(rf_data['reward_id']),
+                    name=f"reward_func_{len(reward_functions)}",
+                    reward_func=rf_data['reward_func'],
+                    reward_weight=rf_data['reward_weight'],
+                    func_hash=rf_data['func_hash'],
+                    is_generic=rf_data['is_generic']
+                ))
+            
+            # Create dataset type
+            dataset_type = GrpoDatasetType(
+                task_name=f"task_{task_id[:8]}",
+                field_prompt=task_data['field_prompt'],
+                extra_column=task_data['extra_column'],
+                reward_functions=reward_functions
+            )
+            
+            return dict(task_data), dataset_type
+    finally:
+        await pool.close()
 
-def test_reward_functions_with_task(task_id: str):
+async def test_reward_functions_with_task(task_id: str):
     """Test reward functions with actual task data"""
-    task, grpo_task, dataset_type = get_task_data(task_id)
+    result = await get_task_data(task_id)
     
-    if not task:
+    if not result:
         return
     
+    task, dataset_type = result
+    
     print(f"\n=== Task Info ===")
-    print(f"Task ID: {task.task_id}")
-    print(f"Task Name: {task.task_name}")
-    print(f"Dataset: {task.dataset}")
-    print(f"Field Prompt: {grpo_task.field_prompt}")
-    print(f"Extra Column: {grpo_task.extra_column}")
+    print(f"Task ID: {task['task_id']}")
+    print(f"Model ID: {task['model_id']}")
+    print(f"Dataset URL: {task['dataset_url']}")
+    print(f"Field Prompt: {task['field_prompt']}")
+    print(f"Extra Column: {task['extra_column']}")
+    print(f"File Format: {task['file_format']}")
     
     # Load the dataset to get some sample data
     from datasets import load_dataset
     
     try:
-        eval_dataset = load_dataset("json", data_files=task.dataset, split="train")
+        # Use the correct dataset path from the task
+        dataset_path = task['test_data'] or task['training_data'] or task['dataset_url']
+        print(f"Loading dataset from: {dataset_path}")
+        
+        eval_dataset = load_dataset("json", data_files=dataset_path, split="train")
         print(f"Dataset loaded with {len(eval_dataset)} samples")
         print(f"Dataset columns: {eval_dataset.column_names}")
         
@@ -86,6 +123,7 @@ def test_reward_functions_with_task(task_id: str):
         for i, rf in enumerate(dataset_type.reward_functions):
             print(f"\n--- Reward Function {i}: {rf.name} ---")
             print(f"Weight: {rf.reward_weight}")
+            print(f"Function preview: {rf.reward_func[:200]}...")
             
             # Validate the function
             is_valid, error_msg, reward_func_callable = validate_reward_function(rf.reward_func, sample_data)
@@ -96,29 +134,35 @@ def test_reward_functions_with_task(task_id: str):
             print(f"✅ Reward function is valid")
             
             # Test with sample extra_data
-            if grpo_task.extra_column and 'extra_data' in eval_dataset.column_names:
-                extra_data = eval_dataset['extra_data'][:2]
-                print(f"Using extra_data from dataset: {extra_data}")
+            if task['extra_column'] and task['extra_column'] in eval_dataset.column_names:
+                extra_data = eval_dataset[task['extra_column']][:2]
+                print(f"Using extra_data from dataset column '{task['extra_column']}': {extra_data}")
                 
                 try:
                     result = reward_func_callable(test_completions, extra_data=extra_data)
                     print(f"✅ Result: {result}")
                 except Exception as e:
                     print(f"❌ Error calling reward function: {e}")
+                    import traceback
+                    traceback.print_exc()
             else:
-                print(f"No extra_data column found, testing without extra_data")
+                print(f"No extra_data column found (looking for '{task['extra_column']}'), testing without extra_data")
                 try:
                     result = reward_func_callable(test_completions)
                     print(f"✅ Result: {result}")
                 except Exception as e:
                     print(f"❌ Error calling reward function: {e}")
+                    import traceback
+                    traceback.print_exc()
                     
     except Exception as e:
         print(f"❌ Error loading dataset: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test reward functions with actual task data")
     parser.add_argument("task_id", help="Task ID to test")
     args = parser.parse_args()
     
-    test_reward_functions_with_task(args.task_id)
+    asyncio.run(test_reward_functions_with_task(args.task_id))
