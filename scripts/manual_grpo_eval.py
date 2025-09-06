@@ -11,7 +11,7 @@ from uuid import UUID
 
 import asyncpg
 
-from validator.core import constants as cst
+from core import constants as cst
 from validator.utils.logging import get_logger
 from core.models.utility_models import GrpoDatasetType, RewardFunction, FileFormat
 
