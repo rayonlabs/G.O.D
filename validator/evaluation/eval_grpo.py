@@ -130,19 +130,8 @@ def evaluate_grpo_model(
                 parsed_extra_data.append(item)
         extra_column_data = parsed_extra_data
 
-    # Shared batch state
-    class BatchTracker:
-        def __init__(self):
-            self.offset = 0
-        
-        def get_batch_data(self, completions, dataset_extra_data):
-            start_idx = self.offset
-            end_idx = start_idx + len(completions)
-            batch_data = dataset_extra_data[start_idx:end_idx] if dataset_extra_data else None
-            self.offset = end_idx  # Update for next call
-            return batch_data, start_idx, end_idx
-    
-    batch_tracker = BatchTracker()
+    # Simple global counter - assume TRL processes sequentially
+    completion_count = [0]
 
     for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
         def create_wrapper(original_func, func_name, weight, dataset_extra_data, is_first_func):
@@ -152,17 +141,14 @@ def evaluate_grpo_model(
                 def wrapper(completions, extra_data=None, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (with extra_data)")
                     
-                    if is_first_func:
-                        actual_extra_data, start_idx, end_idx = batch_tracker.get_batch_data(completions, dataset_extra_data)
-                        # Store for other functions in this batch
-                        wrapper._current_batch_data = actual_extra_data
-                        wrapper._batch_info = (start_idx, end_idx)
-                    else:
-                        # Reuse data from first function
-                        actual_extra_data = getattr(wrapped_reward_funcs[0], '_current_batch_data', None)
-                        start_idx, end_idx = getattr(wrapped_reward_funcs[0], '_batch_info', (0, 0))
+                    start_idx = completion_count[0]
+                    end_idx = start_idx + len(completions)
+                    actual_extra_data = dataset_extra_data[start_idx:end_idx] if dataset_extra_data else None
                     
-                    logger.info(f"🔍 {func_name}: batch offset {start_idx}-{end_idx}, extra_data sample = {str(actual_extra_data[0] if actual_extra_data else None)[:100]}...")
+                    if is_first_func:
+                        completion_count[0] = end_idx
+                    
+                    logger.info(f"🔍 {func_name}: batch {start_idx}-{end_idx}, extra_data sample = {str(actual_extra_data[0] if actual_extra_data else None)[:100]}...")
                     
                     raw_results = original_func(completions, extra_data=actual_extra_data)
                     
