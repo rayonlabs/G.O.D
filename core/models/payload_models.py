@@ -515,4 +515,4 @@ class AddRewardFunctionRequest(BaseModel):
 
 
 # Type alias for task details types
-AnyTypeTaskDetails = InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
+AnyTypeTaskDetails = InstructTextTaskDetails | ChatTaskDetails| ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
