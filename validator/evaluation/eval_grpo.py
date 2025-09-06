@@ -111,14 +111,31 @@ def evaluate_grpo_model(
     has_extra_column = evaluation_args.dataset_type.extra_column and cst.STANDARD_GRPO_EXTRA_COLUMN in eval_dataset.column_names
     extra_column_data = eval_dataset[cst.STANDARD_GRPO_EXTRA_COLUMN] if has_extra_column else None
 
+    # Parse extra_column_data if it contains JSON strings
+    if extra_column_data is not None:
+        import json
+        parsed_extra_data = []
+        for item in extra_column_data:
+            if isinstance(item, str):
+                try:
+                    parsed_item = json.loads(item)
+                    parsed_extra_data.append(parsed_item)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse extra_data as JSON: {item[:100]}...")
+                    parsed_extra_data.append(item)
+            else:
+                parsed_extra_data.append(item)
+        extra_column_data = parsed_extra_data
+
     for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
-        def create_wrapper(original_func, func_name, weight):
+        def create_wrapper(original_func, func_name, weight, dataset_extra_data):
             supports_extra = supports_extra_data(original_func)
 
             if supports_extra and has_extra_column:
-                def wrapper(completions, extra_data, **kwargs):
+                def wrapper(completions, extra_data=None, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (with extra_data)")
-                    raw_results = original_func(completions, extra_data=extra_data)
+                    actual_extra_data = dataset_extra_data[:len(completions)] if dataset_extra_data else None
+                    raw_results = original_func(completions, extra_data=actual_extra_data)
                     raw_rewards[func_name].extend(raw_results)
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
@@ -150,7 +167,7 @@ def evaluate_grpo_model(
 
             return wrapper
 
-        wrapped_reward_funcs.append(create_wrapper(original_func, func_name, weight))
+        wrapped_reward_funcs.append(create_wrapper(original_func, func_name, weight, extra_column_data))
 
     @find_executable_batch_size(starting_batch_size=cst.GRPO_INITIAL_BATCH_SIZE)
     def evaluate_grpo_with_batch_size(batch_size):
