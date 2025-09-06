@@ -9,9 +9,24 @@ from core.models.utility_models import GrpoDatasetType, RewardFunction
 from validator.utils.affine_reward_functions import sat_reward_function, abd_reward_function, ded_reward_function
 from validator.utils.reward_functions import validate_reward_function
 
+def load_env_file():
+    """Load environment variables from .vali.env file"""
+    try:
+        with open('.vali.env', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+    except FileNotFoundError:
+        print("⚠️  .vali.env file not found")
+
 async def get_task_data(task_id: str):
     """Fetch task data and reward functions from database"""
     print(f"🔍 Fetching data for task_id: {task_id}")
+    
+    # Load environment variables
+    load_env_file()
     
     import asyncpg
     from uuid import UUID
