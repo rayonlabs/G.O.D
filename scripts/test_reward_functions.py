@@ -133,7 +133,8 @@ async def test_reward_functions_with_task(task_id: str):
         # Test each reward function
         print(f"\n=== Testing Reward Functions ===")
         for i, rf in enumerate(dataset_type.reward_functions):
-            print(f"\n--- Reward Function {i}: {rf.name} ---")
+            func_name = getattr(rf, 'name', f'reward_func_{i}')
+            print(f"\n--- Reward Function {i}: {func_name} ---")
             print(f"Weight: {rf.reward_weight}")
             print(f"Function preview: {rf.reward_func[:200]}...")
             
