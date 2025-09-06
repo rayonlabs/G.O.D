@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-Script to add the new affine reward functions to the database.
+Script to add the new affine reward functions to the database via API endpoint.
 """
 import asyncio
 import os
-from uuid import UUID
+import requests
+import inspect
 
-from validator.db.sql.manually_add_grpo_rewards import manually_store_reward_functions
-from validator.db.sql.grpo import get_reward_function_by_id
 from validator.utils.affine_reward_functions import (
     sat_reward_function,
     abd_reward_function, 
@@ -59,7 +58,7 @@ async def main():
         print("❌ ERROR: DATABASE_URL not found in environment or .vali.env file")
         return
     
-    print("🚀 Setting up affine reward functions...")
+    print("🚀 Setting up affine reward functions via API endpoint...")
     print(f"Database URL: {connection_string.split('@')[1] if '@' in connection_string else 'localhost'}")
     
     # Delete existing functions first to ensure clean state
@@ -68,21 +67,53 @@ async def main():
     
     # List of functions to add
     reward_functions = [
-        sat_reward_function,
-        abd_reward_function,
-        ded_reward_function
+        ("SAT Reward Function", "Partial credit reward function for SAT problems", sat_reward_function),
+        ("ABD Reward Function", "Partial credit reward function for ABD problems", abd_reward_function),
+        ("DED Reward Function", "Partial credit reward function for DED problems", ded_reward_function),
     ]
     
-    print(f"\n📋 Functions to add:")
-    for i, func in enumerate(reward_functions, 1):
-        print(f"  {i}. {func.__name__}")
+    print(f"\n📋 Functions to add via API:")
+    for i, (name, desc, func) in enumerate(reward_functions, 1):
+        print(f"  {i}. {name} ({func.__name__})")
     
-    # Add functions to database
-    await manually_store_reward_functions(
-        connection_string=connection_string,
-        reward_functions=reward_functions,
-        is_generic=True  # Set to True so they can be used across tasks
-    )
+    # Determine API endpoint
+    validator_port = os.getenv("VALIDATOR_PORT", "9001")
+    api_base = f"http://localhost:{validator_port}"
+    endpoint = f"{api_base}/v1/grpo/reward_functions"
+    
+    print(f"\n🌐 Using API endpoint: {endpoint}")
+    
+    # Add functions via API endpoint
+    added_ids = []
+    for name, description, func in reward_functions:
+        func_code = inspect.getsource(func)
+        
+        payload = {
+            "name": name,
+            "description": description,
+            "code": func_code,
+            "weight": 1.0
+        }
+        
+        print(f"\n📤 Posting {func.__name__}...")
+        try:
+            response = requests.post(endpoint, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                reward_id = result.get("reward_id")
+                if reward_id:
+                    added_ids.append(reward_id)
+                    print(f"✅ Successfully added {func.__name__}")
+                    print(f"   ID: {reward_id}")
+                else:
+                    print(f"❌ API response missing reward_id: {result}")
+            else:
+                print(f"❌ API request failed: {response.status_code}")
+                print(f"   Response: {response.text}")
+                
+        except Exception as e:
+            print(f"❌ Error posting {func.__name__}: {e}")
     
     print("\n🔍 Checking what IDs were assigned...")
     
@@ -115,27 +146,7 @@ async def main():
     finally:
         await pool.close()
     
-    # Collect the actual IDs for auto-update
-    actual_ids = []
-    pool = await asyncpg.create_pool(connection_string)
-    try:
-        async with pool.acquire() as conn:
-            for func in reward_functions:
-                query = f"""
-                    SELECT reward_id
-                    FROM reward_functions 
-                    WHERE reward_func LIKE $1
-                    ORDER BY created_at DESC
-                    LIMIT 1
-                """
-                pattern = f"%def {func.__name__}%"
-                result = await conn.fetchrow(query, pattern)
-                if result:
-                    actual_ids.append(str(result['reward_id']))
-    finally:
-        await pool.close()
-    
-    if len(actual_ids) == 3:
+    if len(added_ids) == 3:
         print(f"\n🔄 Auto-updating constants file...")
         
         # Read current constants file
@@ -146,9 +157,9 @@ async def main():
         # Update the AFFINE_REWARD_FN_IDS
         old_pattern = r'AFFINE_REWARD_FN_IDS = \[[\s\S]*?\]'
         new_ids_str = f'''AFFINE_REWARD_FN_IDS = [
-    "{actual_ids[0]}",  # sat_reward_function
-    "{actual_ids[1]}",  # abd_reward_function  
-    "{actual_ids[2]}",  # ded_reward_function
+    "{added_ids[0]}",  # sat_reward_function
+    "{added_ids[1]}",  # abd_reward_function  
+    "{added_ids[2]}",  # ded_reward_function
 ]'''
         
         import re
@@ -160,19 +171,19 @@ async def main():
             
         print(f"✅ Updated {constants_path} with actual reward function IDs")
         print(f"\n📝 New constants:")
-        print(f"AFFINE_REWARD_FN_IDS = {actual_ids}")
+        print(f"AFFINE_REWARD_FN_IDS = {added_ids}")
         
         print(f"\n⚠️  NEXT STEPS:")
         print(f"1. Restart your validator to pick up the new constants")
         print(f"2. Check validator logs for 'Looking for affine reward functions' messages")
         print(f"3. Verify all 3 functions are found and loaded")
     else:
-        print(f"\n❌ ERROR: Expected 3 function IDs, got {len(actual_ids)}")
+        print(f"\n❌ ERROR: Expected 3 function IDs, got {len(added_ids)}")
         print(f"📝 Current constants in validator/core/constants.py:")
         print(f"AFFINE_REWARD_FN_IDS = {cst.AFFINE_REWARD_FN_IDS}")
         print(f"\n⚠️  MANUAL STEPS REQUIRED:")
-        print(f"1. Copy the actual reward_ids from above")
-        print(f"2. Update AFFINE_REWARD_FN_IDS in validator/core/constants.py")
+        print(f"1. Check API responses above for any errors")
+        print(f"2. Manually update AFFINE_REWARD_FN_IDS if needed")
         print(f"3. Restart your validator to pick up the new constants")
 
 
