@@ -13,8 +13,7 @@ import asyncpg
 
 from validator.core import constants as cst
 from validator.utils.logging import get_logger
-from core.models.utility_models import GrpoDatasetType, RewardFunction
-from core.models.data_models import FileFormat
+from core.models.utility_models import GrpoDatasetType, RewardFunction, FileFormat
 
 logger = get_logger(__name__)
 
