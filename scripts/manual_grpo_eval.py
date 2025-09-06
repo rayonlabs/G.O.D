@@ -85,7 +85,7 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
     for row in reward_info:
         if row['reward_func']:
             reward_function = RewardFunction(
-                reward_id=row['reward_id'],
+                reward_id=str(row['reward_id']),
                 reward_func=row['reward_func'],
                 reward_weight=float(row['reward_weight']),
                 func_hash=row['func_hash'],
