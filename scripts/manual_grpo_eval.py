@@ -125,7 +125,8 @@ def run_grpo_evaluation(task_info, reward_info, model_repo: str):
         "-e", "HF_HOME=/root/.cache/huggingface",
         "-e", "TRANSFORMERS_CACHE=/root/.cache/huggingface/hub",
         "-e", "HF_DATASETS_CACHE=/root/.cache/huggingface/datasets",
-        cst.VALIDATOR_DOCKER_IMAGE
+        cst.VALIDATOR_DOCKER_IMAGE,
+        "python", "-m", "validator.evaluation.eval_grpo"
     ]
     
     print(f"\n🐳 Docker image: {cst.VALIDATOR_DOCKER_IMAGE}")
