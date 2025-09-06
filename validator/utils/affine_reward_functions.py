@@ -53,7 +53,6 @@ def sat_reward_function(completions, extra_data=None, **kwargs):
                 scores.append(0.0)
                 continue
 
-            # Parse variable assignments from completion
             assignments = {}
             for match in re.findall(r'x(\d+)\s*=\s*(True|False|1|0)', str(completion), re.IGNORECASE):
                 var_num = int(match[0])
