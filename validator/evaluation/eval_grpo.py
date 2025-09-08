@@ -51,6 +51,9 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
     column_mapping = {
         dataset_type.field_prompt: cst.TRL_GRPO_FIELD_PROMPT,
     }
+    
+    if dataset_type.extra_column:
+        column_mapping[dataset_type.extra_column] = cst.STANDARD_GRPO_EXTRA_COLUMN
     for src_col, dst_col in column_mapping.items():
         if src_col in dataset.column_names and src_col != dst_col:
             dataset = dataset.rename_column(src_col, dst_col)
@@ -69,7 +72,6 @@ def evaluate_grpo_model(
 
     dataset_path = evaluation_config.datasets[0]["path"]
     eval_dataset = load_dataset("json", data_files=dataset_path, split="train")
-
 
     eval_dataset = _adapt_grpo_columns_to_trl(eval_dataset, evaluation_args.dataset_type)
 
@@ -111,23 +113,64 @@ def evaluate_grpo_model(
     has_extra_column = evaluation_args.dataset_type.extra_column and cst.STANDARD_GRPO_EXTRA_COLUMN in eval_dataset.column_names
     extra_column_data = eval_dataset[cst.STANDARD_GRPO_EXTRA_COLUMN] if has_extra_column else None
 
+    if extra_column_data is not None:
+        import json
+        parsed_extra_data = []
+        for item in extra_column_data:
+            if isinstance(item, str):
+                try:
+                    parsed_item = json.loads(item)
+                    parsed_extra_data.append(parsed_item)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse extra_data as JSON: {item[:100]}...")
+                    parsed_extra_data.append(item)
+            else:
+                parsed_extra_data.append(item)
+        extra_column_data = parsed_extra_data
+
     for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
         def create_wrapper(original_func, func_name, weight):
             supports_extra = supports_extra_data(original_func)
 
             if supports_extra and has_extra_column:
-                def wrapper(completions, extra_data, **kwargs):
-                    raw_results = original_func(completions, extra_data=extra_data)
+                def wrapper(completions, **kwargs):
+                    logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions")
+                    
+                    logger.info(f"🔍 {func_name}: TRL kwargs keys = {list(kwargs.keys())}")
+                    
+                    # TRL already passes extra_data in kwargs - don't double-pass it
+                    extra_data_from_trl = kwargs.get(cst.STANDARD_GRPO_EXTRA_COLUMN)
+                    if extra_data_from_trl:
+                        logger.info(f"🔍 {func_name}: extra_data from TRL = {str(extra_data_from_trl[0])[:100]}...")
+                    
+                    raw_results = original_func(completions, **kwargs)
+                    
+                    logger.info(f"🔍 {func_name}: returned scores = {raw_results[:3]}... (showing first 3)")
                     raw_rewards[func_name].extend(raw_results)
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
+                    
+                    if len(captured_rewards[func_name]) % 20 == 0:
+                        avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
+                        avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
+                        total_count = len(captured_rewards[func_name])
+                        logger.info(f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}")
+                    
                     return weighted_results
             else:
                 def wrapper(completions, **kwargs):
+                    logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (no extra_data)")
                     raw_results = original_func(completions)
                     raw_rewards[func_name].extend(raw_results)
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
+                    
+                    if len(captured_rewards[func_name]) % 20 == 0:
+                        avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
+                        avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
+                        total_count = len(captured_rewards[func_name])
+                        logger.info(f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}")
+                    
                     return weighted_results
 
             return wrapper
@@ -166,12 +209,25 @@ def evaluate_grpo_model(
     logger.info(f"Final GRPO evaluation results: {eval_results}")
 
     final_weighted_rewards = {}
+    final_raw_rewards = {}
+    
+    logger.info("🎯 FINAL REWARD STATISTICS:")
     for name, captured_reward_list in captured_rewards.items():
         if captured_reward_list:
             final_weighted_rewards[name] = sum(captured_reward_list) / len(captured_reward_list)
+            raw_reward_list = raw_rewards.get(name, [])
+            final_raw_rewards[name] = sum(raw_reward_list) / len(raw_reward_list) if raw_reward_list else 0
+            
+            logger.info(f"🏆 {name}: avg_raw={final_raw_rewards[name]:.4f}, avg_weighted={final_weighted_rewards[name]:.4f}, samples={len(captured_reward_list)}")
+    
+    total_avg_reward = sum(final_weighted_rewards.values())
+    logger.info(f"🎯 TOTAL AVERAGE WEIGHTED REWARD: {total_avg_reward:.4f}")
 
     evaluation_results = {
-        "eval_loss": sum(final_weighted_rewards.values()) - eval_results.get("eval_loss", 0.0),
+        "eval_loss": total_avg_reward - eval_results.get("eval_loss", 0.0),
+        "final_weighted_rewards": final_weighted_rewards,
+        "final_raw_rewards": final_raw_rewards,
+        "total_avg_reward": total_avg_reward
     }
     return evaluation_results
 
