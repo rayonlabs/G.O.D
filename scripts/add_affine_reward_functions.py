@@ -24,6 +24,8 @@ def load_env_file():
                 if line and not line.startswith('#') and '=' in line:
                     key, value = line.split('=', 1)
                     if key in ['DATABASE_URL', 'FRONTEND_API_KEY', 'VALIDATOR_PORT']:
+                        # Strip quotes from value if present
+                        value = value.strip().strip('"').strip("'")
                         os.environ[key] = value
                         print(f"🔧 Loaded {key} from .vali.env")
     except FileNotFoundError:
