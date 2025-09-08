@@ -234,9 +234,9 @@ PERCENTAGE_OF_GRPO_TASKS_THAT_SHOULD_BE_AFFINE = 0.6
 ENABLE_AFFINE_GRPO_FOR_LEGACY_JOBS_ONLY = True
 GET_AFFINE_GRPO_DATA_ENDPOINT = f"{PROD_CONTENT_BASE_URL}/affine-grpo-data/latest"  # Force prod for affine data
 AFFINE_REWARD_FN_IDS = [
-    "00000000-0000-0000-0000-000000000001",  # sat_reward_function
-    "00000000-0000-0000-0000-000000000002",  # abd_reward_function
-    "00000000-0000-0000-0000-000000000003",  # ded_reward_function
+    "2226678e-df0d-42d0-8adb-551aec0ed88e",  # sat_reward_function
+    "dadf301b-14cc-4bb2-9bb8-7d658d29661c",  # abd_reward_function
+    "b5008828-8628-4ef5-b3f2-f77580028b67",  # ded_reward_function
 ]
 
 # diffusion eval stuff
