@@ -237,6 +237,7 @@ AFFINE_REWARD_FN_IDS = [
     "2226678e-df0d-42d0-8adb-551aec0ed88e",  # sat_reward_function
     "dadf301b-14cc-4bb2-9bb8-7d658d29661c",  # abd_reward_function
     "b5008828-8628-4ef5-b3f2-f77580028b67",  # ded_reward_function
+
 ]
 
 # diffusion eval stuff
