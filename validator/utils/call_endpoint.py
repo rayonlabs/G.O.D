@@ -112,7 +112,7 @@ async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> st
 
 async def post_to_nineteen_image(payload: dict[str, Any], keypair: Keypair) -> str | None:
     response = await _post_to_nineteen_ai(IMAGE_GEN_ENDPOINT, payload, keypair)
-    return response.json()
+    return response
 
 
 @retry_http_with_backoff

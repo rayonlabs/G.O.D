@@ -1,7 +1,8 @@
 import asyncio
+import os
 
-from fastapi import APIRouter
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from core.models.payload_models import TrainerProxyRequest
@@ -24,6 +25,15 @@ from validator.core.constants import GET_RECENT_TASKS_ENDPOINT
 from trainer.utils.logging import logger
 
 load_task_history()
+
+
+async def verify_orchestrator_ip(request: Request):
+    """Verify request comes from orchestrator IP"""
+    client_ip = request.client.host
+    allowed_ip = os.getenv("ORCHESTRATOR_IP", "185.141.218.75")
+    if client_ip != allowed_ip and client_ip != "127.0.0.1":
+        raise HTTPException(status_code=403, detail="Access forbidden")
+    return client_ip
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:
     await start_task(req)
@@ -70,8 +80,8 @@ async def get_recent_tasks_list(hours:int) -> list[TrainerTaskLog]:
 
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Proxy Trainer"])
-    router.add_api_route(PROXY_TRAINING_IMAGE_ENDPOINT, start_training, methods=["POST"])
-    router.add_api_route(GET_GPU_AVAILABILITY_ENDPOINT, get_available_gpus, methods=["GET"])
-    router.add_api_route(GET_RECENT_TASKS_ENDPOINT, get_recent_tasks_list, methods=["GET"])
-    router.add_api_route(TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])
+    router.add_api_route(PROXY_TRAINING_IMAGE_ENDPOINT, start_training, methods=["POST"], dependencies=[Depends(verify_orchestrator_ip)])
+    router.add_api_route(GET_GPU_AVAILABILITY_ENDPOINT, get_available_gpus, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
+    router.add_api_route(GET_RECENT_TASKS_ENDPOINT, get_recent_tasks_list, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
+    router.add_api_route(TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
     return router
