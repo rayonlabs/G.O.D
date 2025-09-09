@@ -17,7 +17,7 @@ plt.style.use('dark_background')
 
 def fetch_benchmark_data():
     validator_host = os.getenv('VALIDATOR_HOST', '185.141.218.75')
-    validator_port = '9001'  # Validator is actually running on 9001
+    validator_port = '9001'
     base_url = f"http://{validator_host}:{validator_port}"
     url = f"{base_url}/v1/benchmarks/timeline"
     
@@ -49,34 +49,48 @@ def moving_average_with_confidence(data, window=3):
     return ma, upper_band, lower_band
 
 def plot_task_group(tasks, task_type, ax):
-    colors = ['#00D9FF', '#FF00FF', '#00FF00', '#FFD700', '#FF6B6B', '#4ECDC4', '#95E77E']
+    tournament_losses = {}
+    max_tournaments = 0
     
-    for idx, task in enumerate(tasks):
+    for task in tasks:
         benchmarks = task['benchmarks']
-        test_losses = []
-        
-        for benchmark in benchmarks:
+        for i, benchmark in enumerate(benchmarks):
             if benchmark['test_loss'] is not None:
-                test_losses.append(benchmark['test_loss'])
-        
-        if not test_losses:
-            continue
-            
-        x = list(range(1, len(test_losses) + 1))
-        
-        ma, upper, lower = moving_average_with_confidence(test_losses, window=3)
-        x_ma = list(range(1, len(ma) + 1))
-        
-        color = colors[idx % len(colors)]
-        
-        ax.fill_between(x_ma, lower, upper, alpha=0.15, color=color)
-        
-        model_name = task['model_id'].split('/')[-1][:20]
-        ax.plot(x_ma, ma, color=color, linewidth=2.5, alpha=0.9, label=model_name)
+                if i not in tournament_losses:
+                    tournament_losses[i] = []
+                tournament_losses[i].append(benchmark['test_loss'])
+                max_tournaments = max(max_tournaments, i + 1)
+    
+    if not tournament_losses:
+        return
+    
+    avg_losses = []
+    for i in range(max_tournaments):
+        if i in tournament_losses:
+            avg_losses.append(np.mean(tournament_losses[i]))
+    
+    if not avg_losses:
+        return
+    
+    x = list(range(1, len(avg_losses) + 1))
+    
+    ma, upper, lower = moving_average_with_confidence(avg_losses, window=3)
+    x_ma = list(range(1, len(ma) + 1))
+    
+    color_map = {
+        'Image': '#00D9FF',
+        'Instruct': '#FF00FF', 
+        'DPO': '#00FF00',
+        'GRPO': '#FFD700'
+    }
+    color = color_map.get(task_type, '#4ECDC4')
+    
+    ax.fill_between(x_ma, lower, upper, alpha=0.15, color=color)
+    ax.plot(x_ma, ma, color=color, linewidth=2.5, alpha=0.9)
     
     ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
     ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
-    ax.set_title(f'{task_type.replace("Task", "")} Performance', fontsize=14, fontweight='bold', pad=20)
+    ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
     
     ax.grid(False)
     ax.spines['top'].set_visible(False)
@@ -86,9 +100,6 @@ def plot_task_group(tasks, task_type, ax):
     
     if x_ma:
         ax.set_xticks(range(1, max(x_ma) + 1))
-    
-    if len(tasks) > 1:
-        ax.legend(frameon=False, loc='best', fontsize=9, ncol=2)
 
 def main():
     print("Fetching benchmark data from localhost:8010...")
@@ -101,31 +112,18 @@ def main():
     timelines = data['timelines']
     
     image_tasks = [t for t in timelines if t['task_type'] == 'ImageTask']
-    text_tasks = [t for t in timelines if t['task_type'] in ['InstructTextTask', 'DpoTask']]
+    instruct_tasks = [t for t in timelines if t['task_type'] == 'InstructTextTask']
+    dpo_tasks = [t for t in timelines if t['task_type'] == 'DpoTask']
+    grpo_tasks = [t for t in timelines if t['task_type'] == 'GrpoTask']
     
-    fig_width = 16
-    fig_height = 6
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.patch.set_facecolor('#0d1117')
+    axes = axes.flatten()
     
-    if image_tasks and text_tasks:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(fig_width, fig_height))
-        fig.patch.set_facecolor('#0d1117')
-        
-        plot_task_group(image_tasks, 'Image Tasks', ax1)
-        plot_task_group(text_tasks, 'Text Tasks', ax2)
-        
-    elif image_tasks:
-        fig, ax = plt.subplots(1, 1, figsize=(fig_width//2, fig_height))
-        fig.patch.set_facecolor('#0d1117')
-        plot_task_group(image_tasks, 'Image Tasks', ax)
-        
-    elif text_tasks:
-        fig, ax = plt.subplots(1, 1, figsize=(fig_width//2, fig_height))
-        fig.patch.set_facecolor('#0d1117')
-        plot_task_group(text_tasks, 'Text Tasks', ax)
-    
-    else:
-        print("No valid tasks with test losses found")
-        return
+    plot_task_group(image_tasks, 'Image', axes[0])
+    plot_task_group(instruct_tasks, 'Instruct', axes[1])
+    plot_task_group(dpo_tasks, 'DPO', axes[2])
+    plot_task_group(grpo_tasks, 'GRPO', axes[3])
     
     plt.tight_layout()
     
