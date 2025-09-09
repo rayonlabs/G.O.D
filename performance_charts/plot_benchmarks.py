@@ -88,17 +88,26 @@ def plot_task_group(tasks, task_type, ax):
         return
     
     avg_losses = []
-    for i in range(max_tournaments):
-        if i in tournament_losses:
-            avg_losses.append(np.mean(tournament_losses[i]))
+    tournament_numbers = []
+    for i in sorted(tournament_losses.keys()):
+        avg_losses.append(np.mean(tournament_losses[i]))
+        tournament_numbers.append(i + 1)  # Convert 0-based to 1-based tournament numbers
     
     if not avg_losses:
+        ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
+        ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
+        ax.grid(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_linewidth(1.5)
+        ax.spines['bottom'].set_linewidth(1.5)
+        ax.text(0.5, 0.5, 'No test losses available', ha='center', va='center',
+                transform=ax.transAxes, fontsize=12, alpha=0.5)
         return
     
-    x = list(range(1, len(avg_losses) + 1))
-    
     ma, upper, lower = moving_average_with_confidence(avg_losses, window=3)
-    x_ma = list(range(1, len(ma) + 1))
+    x_ma = tournament_numbers[:len(ma)]
     
     color_map = {
         'Image': '#00D9FF',
@@ -122,7 +131,7 @@ def plot_task_group(tasks, task_type, ax):
     ax.spines['bottom'].set_linewidth(1.5)
     
     if x_ma:
-        ax.set_xticks(range(1, max(x_ma) + 1))
+        ax.set_xticks(x_ma)
 
 def main():
     print("Fetching benchmark data from localhost:8010...")
@@ -135,15 +144,13 @@ def main():
     timelines = data['timelines']
     
     image_tasks = [t for t in timelines if t['task_type'] == 'ImageTask']
-    instruct_tasks = [t for t in timelines if t['task_type'] == 'InstructTextTask']
-    dpo_tasks = [t for t in timelines if t['task_type'] == 'DpoTask']
+    text_tasks = [t for t in timelines if t['task_type'] in ['InstructTextTask', 'DpoTask']]
     
-    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     fig.patch.set_facecolor('#0d1117')
     
     plot_task_group(image_tasks, 'Image', axes[0])
-    plot_task_group(instruct_tasks, 'Instruct', axes[1])
-    plot_task_group(dpo_tasks, 'DPO', axes[2])
+    plot_task_group(text_tasks, 'Text', axes[1])
     
     plt.tight_layout()
     
