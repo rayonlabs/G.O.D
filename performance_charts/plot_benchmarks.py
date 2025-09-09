@@ -49,21 +49,9 @@ def moving_average_with_confidence(data, window=3):
     return ma, upper_band, lower_band
 
 def plot_task_group(tasks, task_type, ax):
-    # Group by tournament_id to average properly
-    tournament_data = {}
+    colors = ['#00D9FF', '#FF00FF', '#00FF00', '#FFD700', '#FF6B6B', '#4ECDC4', '#95E77E']
     
-    for task in tasks:
-        for benchmark in task['benchmarks']:
-            if benchmark['test_loss'] is not None:
-                tournament_id = benchmark['tournament_id']
-                if tournament_id not in tournament_data:
-                    tournament_data[tournament_id] = {
-                        'losses': [],
-                        'created_at': benchmark['created_at']
-                    }
-                tournament_data[tournament_id]['losses'].append(benchmark['test_loss'])
-    
-    if not tournament_data:
+    if not tasks:
         ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
         ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
         ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
@@ -76,23 +64,21 @@ def plot_task_group(tasks, task_type, ax):
                 transform=ax.transAxes, fontsize=12, alpha=0.5)
         return
     
-    # Sort tournaments by created_at and calculate averages
-    sorted_tournaments = sorted(tournament_data.items(), key=lambda x: x[1]['created_at'])
-    avg_losses = [np.mean(data['losses']) for _, data in sorted_tournaments]
-    
-    ma, upper, lower = moving_average_with_confidence(avg_losses, window=3)
-    x_ma = list(range(1, len(ma) + 1))
-    
-    color_map = {
-        'Image': '#00D9FF',
-        'Instruct': '#FF00FF', 
-        'DPO': '#00FF00',
-        'GRPO': '#FFD700'
-    }
-    color = color_map.get(task_type, '#4ECDC4')
-    
-    ax.fill_between(x_ma, lower, upper, alpha=0.15, color=color)
-    ax.plot(x_ma, ma, color=color, linewidth=2.5, alpha=0.9)
+    for idx, task in enumerate(tasks):
+        task_data = []
+        for benchmark in task['benchmarks']:
+            if benchmark['test_loss'] is not None:
+                task_data.append((benchmark['created_at'], benchmark['test_loss']))
+        
+        if not task_data:
+            continue
+        
+        task_data.sort()
+        losses = [loss for _, loss in task_data]
+        x = list(range(1, len(losses) + 1))
+        
+        color = colors[idx % len(colors)]
+        ax.plot(x, losses, color=color, linewidth=2.5, alpha=0.9)
     
     ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
     ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
