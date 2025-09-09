@@ -134,8 +134,7 @@ def main():
     output_path = f'performance_charts/figures/benchmark_performance_{date_str}.png'
     plt.savefig(output_path, dpi=150, facecolor='#0d1117', edgecolor='none', bbox_inches='tight')
     print(f"\nChart saved to: {output_path}")
-    
-    plt.show()
+    plt.close()
 
 if __name__ == "__main__":
     main()
