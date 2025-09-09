@@ -49,14 +49,21 @@ def moving_average_with_confidence(data, window=3):
     return ma, upper_band, lower_band
 
 def plot_task_group(tasks, task_type, ax):
-    all_benchmarks = []
+    # Group by tournament_id to average properly
+    tournament_data = {}
     
     for task in tasks:
         for benchmark in task['benchmarks']:
             if benchmark['test_loss'] is not None:
-                all_benchmarks.append((benchmark['created_at'], benchmark['test_loss']))
+                tournament_id = benchmark['tournament_id']
+                if tournament_id not in tournament_data:
+                    tournament_data[tournament_id] = {
+                        'losses': [],
+                        'created_at': benchmark['created_at']
+                    }
+                tournament_data[tournament_id]['losses'].append(benchmark['test_loss'])
     
-    if not all_benchmarks:
+    if not tournament_data:
         ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
         ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
         ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
@@ -69,10 +76,11 @@ def plot_task_group(tasks, task_type, ax):
                 transform=ax.transAxes, fontsize=12, alpha=0.5)
         return
     
-    all_benchmarks.sort()
-    losses = [loss for _, loss in all_benchmarks]
+    # Sort tournaments by created_at and calculate averages
+    sorted_tournaments = sorted(tournament_data.items(), key=lambda x: x[1]['created_at'])
+    avg_losses = [np.mean(data['losses']) for _, data in sorted_tournaments]
     
-    ma, upper, lower = moving_average_with_confidence(losses, window=3)
+    ma, upper, lower = moving_average_with_confidence(avg_losses, window=3)
     x_ma = list(range(1, len(ma) + 1))
     
     color_map = {
