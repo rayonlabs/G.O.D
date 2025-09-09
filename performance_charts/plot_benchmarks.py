@@ -7,16 +7,25 @@ import pandas as pd
 from scipy.ndimage import uniform_filter1d
 import warnings
 import os
+from dotenv import load_dotenv
+
 warnings.filterwarnings('ignore')
+
+load_dotenv('.vali.env')
 
 plt.style.use('dark_background')
 
 def fetch_benchmark_data():
-    base_url = "http://localhost:8010"
+    validator_host = os.getenv('VALIDATOR_HOST', '185.141.218.75')
+    validator_port = os.getenv('VALIDATOR_PORT', '8010')
+    base_url = f"http://{validator_host}:{validator_port}"
     url = f"{base_url}/v1/benchmarks/timeline"
     
+    api_key = os.getenv('FRONTEND_API_KEY')
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
