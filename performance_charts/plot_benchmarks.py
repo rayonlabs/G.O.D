@@ -49,32 +49,14 @@ def moving_average_with_confidence(data, window=3):
     return ma, upper_band, lower_band
 
 def plot_task_group(tasks, task_type, ax):
-    if not tasks:
-        ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
-        ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
-        ax.grid(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_linewidth(1.5)
-        ax.spines['bottom'].set_linewidth(1.5)
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', 
-                transform=ax.transAxes, fontsize=12, alpha=0.5)
-        return
-    
-    tournament_losses = {}
-    max_tournaments = 0
+    all_benchmarks = []
     
     for task in tasks:
-        benchmarks = sorted(task['benchmarks'], key=lambda x: x['created_at'])
-        for i, benchmark in enumerate(benchmarks):
+        for benchmark in task['benchmarks']:
             if benchmark['test_loss'] is not None:
-                if i not in tournament_losses:
-                    tournament_losses[i] = []
-                tournament_losses[i].append(benchmark['test_loss'])
-                max_tournaments = max(max_tournaments, i + 1)
+                all_benchmarks.append((benchmark['created_at'], benchmark['test_loss']))
     
-    if not tournament_losses:
+    if not all_benchmarks:
         ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
         ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
         ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
@@ -83,31 +65,15 @@ def plot_task_group(tasks, task_type, ax):
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_linewidth(1.5)
         ax.spines['bottom'].set_linewidth(1.5)
-        ax.text(0.5, 0.5, 'No test losses available', ha='center', va='center',
+        ax.text(0.5, 0.5, 'No data available', ha='center', va='center',
                 transform=ax.transAxes, fontsize=12, alpha=0.5)
         return
     
-    avg_losses = []
-    tournament_numbers = []
-    for i in sorted(tournament_losses.keys()):
-        avg_losses.append(np.mean(tournament_losses[i]))
-        tournament_numbers.append(i + 1)  # Convert 0-based to 1-based tournament numbers
+    all_benchmarks.sort()
+    losses = [loss for _, loss in all_benchmarks]
     
-    if not avg_losses:
-        ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
-        ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
-        ax.grid(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_linewidth(1.5)
-        ax.spines['bottom'].set_linewidth(1.5)
-        ax.text(0.5, 0.5, 'No test losses available', ha='center', va='center',
-                transform=ax.transAxes, fontsize=12, alpha=0.5)
-        return
-    
-    ma, upper, lower = moving_average_with_confidence(avg_losses, window=3)
-    x_ma = tournament_numbers[:len(ma)]
+    ma, upper, lower = moving_average_with_confidence(losses, window=3)
+    x_ma = list(range(1, len(ma) + 1))
     
     color_map = {
         'Image': '#00D9FF',
