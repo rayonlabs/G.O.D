@@ -17,7 +17,7 @@ plt.style.use('dark_background')
 
 def fetch_benchmark_data():
     validator_host = os.getenv('VALIDATOR_HOST', '185.141.218.75')
-    validator_port = os.getenv('VALIDATOR_PORT', '8010')
+    validator_port = '8010'  # Validator API runs on 8010, not VALIDATOR_PORT from env
     base_url = f"http://{validator_host}:{validator_port}"
     url = f"{base_url}/v1/benchmarks/timeline"
     
