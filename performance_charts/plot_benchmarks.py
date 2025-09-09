@@ -49,11 +49,24 @@ def moving_average_with_confidence(data, window=3):
     return ma, upper_band, lower_band
 
 def plot_task_group(tasks, task_type, ax):
+    if not tasks:
+        ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
+        ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
+        ax.grid(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_linewidth(1.5)
+        ax.spines['bottom'].set_linewidth(1.5)
+        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', 
+                transform=ax.transAxes, fontsize=12, alpha=0.5)
+        return
+    
     tournament_losses = {}
     max_tournaments = 0
     
     for task in tasks:
-        benchmarks = task['benchmarks']
+        benchmarks = sorted(task['benchmarks'], key=lambda x: x['created_at'])
         for i, benchmark in enumerate(benchmarks):
             if benchmark['test_loss'] is not None:
                 if i not in tournament_losses:
@@ -62,6 +75,16 @@ def plot_task_group(tasks, task_type, ax):
                 max_tournaments = max(max_tournaments, i + 1)
     
     if not tournament_losses:
+        ax.set_title(f'{task_type} Tournament Performance', fontsize=14, fontweight='bold', pad=20)
+        ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
+        ax.grid(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_linewidth(1.5)
+        ax.spines['bottom'].set_linewidth(1.5)
+        ax.text(0.5, 0.5, 'No test losses available', ha='center', va='center',
+                transform=ax.transAxes, fontsize=12, alpha=0.5)
         return
     
     avg_losses = []
@@ -114,16 +137,13 @@ def main():
     image_tasks = [t for t in timelines if t['task_type'] == 'ImageTask']
     instruct_tasks = [t for t in timelines if t['task_type'] == 'InstructTextTask']
     dpo_tasks = [t for t in timelines if t['task_type'] == 'DpoTask']
-    grpo_tasks = [t for t in timelines if t['task_type'] == 'GrpoTask']
     
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
     fig.patch.set_facecolor('#0d1117')
-    axes = axes.flatten()
     
     plot_task_group(image_tasks, 'Image', axes[0])
     plot_task_group(instruct_tasks, 'Instruct', axes[1])
     plot_task_group(dpo_tasks, 'DPO', axes[2])
-    plot_task_group(grpo_tasks, 'GRPO', axes[3])
     
     plt.tight_layout()
     
