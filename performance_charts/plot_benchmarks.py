@@ -75,10 +75,13 @@ def plot_task_group(tasks, task_type, ax):
         
         task_data.sort()
         losses = [loss for _, loss in task_data]
-        x = list(range(1, len(losses) + 1))
+        
+        ma, upper, lower = moving_average_with_confidence(losses, window=3)
+        x_ma = list(range(1, len(ma) + 1))
         
         color = colors[idx % len(colors)]
-        ax.plot(x, losses, color=color, linewidth=2.5, alpha=0.9)
+        ax.fill_between(x_ma, lower, upper, alpha=0.15, color=color)
+        ax.plot(x_ma, ma, color=color, linewidth=2.5, alpha=0.9)
     
     ax.set_xlabel('Tournament', fontsize=12, fontweight='bold')
     ax.set_ylabel('Test Loss', fontsize=12, fontweight='bold')
@@ -89,6 +92,9 @@ def plot_task_group(tasks, task_type, ax):
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_linewidth(1.5)
     ax.spines['bottom'].set_linewidth(1.5)
+    
+    # Set integer x-ticks
+    ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
 
 def main():
     print("Fetching benchmark data from localhost:8010...")
