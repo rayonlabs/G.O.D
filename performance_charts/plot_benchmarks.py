@@ -89,9 +89,6 @@ def plot_task_group(tasks, task_type, ax):
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_linewidth(1.5)
     ax.spines['bottom'].set_linewidth(1.5)
-    
-    if x_ma:
-        ax.set_xticks(x_ma)
 
 def main():
     print("Fetching benchmark data from localhost:8010...")
