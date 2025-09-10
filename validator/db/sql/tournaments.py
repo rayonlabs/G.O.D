@@ -749,7 +749,9 @@ async def get_training_status_for_task_and_hotkeys(task_id: str, hotkeys: list[s
         return {row[cst.HOTKEY]: row[cst.TRAINING_STATUS] for row in results}
 
 
-async def get_tournament_training_repo_and_commit(hotkey: str, tournament_id: str, psql_db: PSQLDB) -> tuple[str | None, str | None]:
+async def get_tournament_training_repo_and_commit(
+    hotkey: str, tournament_id: str, psql_db: PSQLDB
+) -> tuple[str | None, str | None]:
     """Get the training_repo and training_commit_hash for a hotkey from tournament_participants table for a specific tournament.
     If backup_repo is present, it will be used instead of training_repo."""
     async with await psql_db.connection() as connection:
@@ -1052,11 +1054,13 @@ async def count_champion_consecutive_wins(psql_db: PSQLDB, tournament_type: Tour
         for row in results:
             winner = row[cst.WINNER_HOTKEY]
             base_winner = row[cst.BASE_WINNER_HOTKEY]
-            
+
             # Check if the champion won this tournament
             # Either directly (winner_hotkey == champion_hotkey)
             # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
-            if winner == champion_hotkey or (winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey):
+            if winner == champion_hotkey or (
+                winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey
+            ):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
@@ -1100,11 +1104,13 @@ async def count_champion_consecutive_wins_at_tournament(
         for row in results:
             winner = row[cst.WINNER_HOTKEY]
             base_winner = row[cst.BASE_WINNER_HOTKEY]
-            
+
             # Check if the champion won this tournament
             # Either directly (winner_hotkey == champion_hotkey)
             # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
-            if winner == champion_hotkey or (winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey):
+            if winner == champion_hotkey or (
+                winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey
+            ):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
@@ -1124,6 +1130,16 @@ async def get_tournament_id_by_task_id(task_id: str, psql_db: PSQLDB) -> str | N
         result = await connection.fetchrow(query, task_id)
         if result:
             return result[cst.TOURNAMENT_ID]
+
+        benchmark_query = f"""
+            SELECT {cst.TOURNAMENT_ID}
+            FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            WHERE {cst.COPY_TASK_ID} = $1
+        """
+        benchmark_result = await connection.fetchrow(benchmark_query, task_id)
+        if benchmark_result:
+            return benchmark_result[cst.TOURNAMENT_ID]
+
         return None
 
 
@@ -1190,6 +1206,18 @@ async def is_benchmark_task(task_id: str, psql_db: PSQLDB) -> bool:
             FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
             WHERE {cst.TASK_ID} = $1
             UNION
+            SELECT 1
+            FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
+            WHERE {cst.COPY_TASK_ID} = $1
+        """
+        result = await connection.fetchrow(query, task_id)
+        return result is not None
+
+
+async def is_benchmark_task_copy(task_id: str, psql_db: PSQLDB) -> bool:
+    """Check if a task is a benchmark task copy (not a root task)."""
+    async with await psql_db.connection() as connection:
+        query = f"""
             SELECT 1
             FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
             WHERE {cst.COPY_TASK_ID} = $1
