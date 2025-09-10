@@ -1214,18 +1214,6 @@ async def is_benchmark_task(task_id: str, psql_db: PSQLDB) -> bool:
         return result is not None
 
 
-async def is_benchmark_task_copy(task_id: str, psql_db: PSQLDB) -> bool:
-    """Check if a task is a benchmark task copy (not a root task)."""
-    async with await psql_db.connection() as connection:
-        query = f"""
-            SELECT 1
-            FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
-            WHERE {cst.COPY_TASK_ID} = $1
-        """
-        result = await connection.fetchrow(query, task_id)
-        return result is not None
-
-
 async def get_all_benchmark_results(psql_db: PSQLDB) -> list[dict]:
     """
     Get all benchmark results across all root tasks.
