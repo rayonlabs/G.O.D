@@ -498,22 +498,20 @@ async def create_synthetic_affine_grpo_task(
             raise ValueError("No s3_url in affine GRPO data response")
 
         logger.info(f"Looking for affine reward functions with IDs: {cst.AFFINE_REWARD_FN_IDS}")
-        
+
         affine_reward_functions = []
         for reward_id in cst.AFFINE_REWARD_FN_IDS:
             logger.debug(f"Attempting to fetch reward function with ID: {reward_id}")
-            reward_function = await grpo_sql.get_reward_function_by_id(
-                config.psql_db, UUID(reward_id)
-            )
+            reward_function = await grpo_sql.get_reward_function_by_id(config.psql_db, UUID(reward_id))
             if reward_function:
                 logger.info(f"Found reward function {reward_id}, setting weight to 1.0")
                 reward_function.reward_weight = 1.0
                 affine_reward_functions.append(reward_function)
             else:
                 logger.warning(f"Reward function {reward_id} not found in database")
-        
+
         logger.info(f"Successfully loaded {len(affine_reward_functions)} affine reward functions")
-        
+
         if not affine_reward_functions:
             logger.error("No affine reward functions found in database, falling back to generic functions")
             reward_functions = await _get_generic_reward_functions(config)
@@ -650,6 +648,7 @@ async def _add_new_task_to_network_if_not_enough(
     instruct_datasets: AsyncGenerator[Dataset, None],
     dpo_datasets: AsyncGenerator[Dataset, None],
     image_models: AsyncGenerator[ImageModelInfo, None],
+    grpo_models: AsyncGenerator[str, None] | None = None,
 ):
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
     current_preeval_tasks = await get_tasks_with_status(TaskStatus.PREEVALUATION, config.psql_db)
@@ -690,12 +689,13 @@ async def _add_new_task_to_network_if_not_enough(
         elif selected_task_type == TaskType.DPOTASK:
             await create_synthetic_dpo_task(config, models, dpo_datasets)
         elif selected_task_type == TaskType.GRPOTASK:
+            grpo_models_to_use = grpo_models if grpo_models is not None else models
             if random.random() < cst.PERCENTAGE_OF_GRPO_TASKS_THAT_SHOULD_BE_AFFINE:
                 logger.info("TASK_TYPE_SELECTION: Creating AFFINE GRPO task")
-                await create_synthetic_affine_grpo_task(config, models)
+                await create_synthetic_affine_grpo_task(config, grpo_models_to_use)
             else:
                 logger.info("TASK_TYPE_SELECTION: Creating regular GRPO task")
-                await create_synthetic_grpo_task(config, models, instruct_datasets)
+                await create_synthetic_grpo_task(config, grpo_models_to_use, instruct_datasets)
 
 
 async def schedule_synthetics_periodically(config: Config):
@@ -704,6 +704,7 @@ async def schedule_synthetics_periodically(config: Config):
     dpo_datasets = _get_dpo_datasets(config.keypair)
     standard_models = _get_text_models(config.keypair)
     big_models = _get_text_models(config.keypair, smallest_size_b=12.0, largest_size_b=71.0)
+    grpo_models = _get_text_models(config.keypair, smallest_size_b=1.0)
     image_models = _get_image_models(config.keypair)
 
     current_try = 0
@@ -712,11 +713,12 @@ async def schedule_synthetics_periodically(config: Config):
             logger.info(f"Try {current_try + 1}/{cst.NUM_SYNTH_RETRIES} - We are attempting to create a new task")
             if random.random() < cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
                 logger.info("Big Boy Model in Da House")
+
                 await _add_new_task_to_network_if_not_enough(config, big_models, instruct_datasets, dpo_datasets, image_models)
             else:
                 logger.info("Basic Model Selected")
                 await _add_new_task_to_network_if_not_enough(
-                    config, standard_models, instruct_datasets, dpo_datasets, image_models
+                    config, standard_models, instruct_datasets, dpo_datasets, image_models, grpo_models
                 )
             current_try = 0
             await asyncio.sleep(cst.NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK * 60)
