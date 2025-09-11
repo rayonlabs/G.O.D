@@ -26,6 +26,8 @@ from validator.augmentation.augmentation import generate_augmented_text_dataset
 from validator.augmentation.augmentation import generate_dpo_reformulation
 from validator.augmentation.augmentation import load_and_merge_multiple_datasets
 from validator.augmentation.augmentation import load_prompts
+from validator.augmentation.word_honeypots import generate_word_honeypot_config
+from validator.augmentation.word_honeypots import apply_word_honeypot_to_text
 from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
@@ -298,6 +300,10 @@ def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
                 random.sample(range(dataset_size), min(num_output_honeypot, dataset_size))
             )
 
+        # Generate word honeypot configuration
+        word_honeypot_config = generate_word_honeypot_config(dataset_size)
+        config.update(word_honeypot_config)
+
         return config
     else:
         return {}
@@ -336,6 +342,20 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                 f"input_honeypot={augmentations.get('add_input_honeypot')}, "
                 f"output_honeypot={augmentations.get('add_output_honeypot')}"
             )
+            
+            # Log word honeypot transformations
+            input_word_transforms = augmentations.get('input_apply_word_transforms', False)
+            output_word_transforms = augmentations.get('output_apply_word_transforms', False)
+            if input_word_transforms or output_word_transforms:
+                logger.info(f"Word Honeypots: input_transforms={input_word_transforms}, output_transforms={output_word_transforms}")
+                
+                if input_word_transforms:
+                    input_transform_type = augmentations.get('input_text_transform_type', 'none')
+                    logger.info(f"  Input word transform: {input_transform_type}")
+                    
+                if output_word_transforms:
+                    output_transform_type = augmentations.get('output_text_transform_type', 'none')
+                    logger.info(f"  Output word transform: {output_transform_type}")
 
             if augmentations.get("add_input_honeypot"):
                 logger.info(
@@ -471,6 +491,32 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                         row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{row_dict[cst.STANDARD_OUTPUT_COLUMN]} {output_uid}"
             except Exception as e:
                 logger.error(f"Error in output honeypot: {e}")
+
+            try:
+                # 5. Apply word transformations to input (applies to ALL rows if enabled)
+                if cst.STANDARD_INSTRUCT_COLUMN in row_dict:
+                    transformed_input = apply_word_honeypot_to_text(
+                        text=row_dict[cst.STANDARD_INSTRUCT_COLUMN],
+                        config=augmentations,
+                        is_input=True
+                    )
+                    if transformed_input != row_dict[cst.STANDARD_INSTRUCT_COLUMN]:
+                        row_dict[cst.STANDARD_INSTRUCT_COLUMN] = transformed_input
+            except Exception as e:
+                logger.error(f"Error in word transformations (input): {e}")
+
+            try:
+                # 6. Apply word transformations to output (applies conditionally if enabled)
+                if cst.STANDARD_OUTPUT_COLUMN in row_dict:
+                    transformed_output = apply_word_honeypot_to_text(
+                        text=row_dict[cst.STANDARD_OUTPUT_COLUMN],
+                        config=augmentations,
+                        is_input=False
+                    )
+                    if transformed_output != row_dict[cst.STANDARD_OUTPUT_COLUMN]:
+                        row_dict[cst.STANDARD_OUTPUT_COLUMN] = transformed_output
+            except Exception as e:
+                logger.error(f"Error in word transformations (output): {e}")
 
         result.append(row_dict)
         total_rows += 1
