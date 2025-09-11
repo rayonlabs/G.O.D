@@ -1094,11 +1094,11 @@ def _get_specific_query_for_task_type(task_type: str) -> str | None:
         """
     elif task_type == TaskType.CHATTASK.value:
         return f"""
-            SELECT t.*, tt.chat_template,
-                   tt.chat_column, tt.chat_role_field, tt.chat_content_field,
-                   tt.chat_user_reference, tt.chat_assistant_reference, tt.synthetic_data
+            SELECT t.*, ct.chat_template,
+                   ct.chat_column, ct.chat_role_field, ct.chat_content_field,
+                   ct.chat_user_reference, ct.chat_assistant_reference, ct.synthetic_data
             FROM {cst.TASKS_TABLE} t
-            LEFT JOIN {cst.CHAT_TASKS_TABLE} it ON t.{cst.TASK_ID} = it.{cst.TASK_ID}
+            LEFT JOIN {cst.CHAT_TASKS_TABLE} ct ON t.{cst.TASK_ID} = ct.{cst.TASK_ID}
             WHERE t.{cst.TASK_ID} = ANY($1)
         """
     elif task_type == TaskType.IMAGETASK.value:
