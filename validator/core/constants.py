@@ -62,15 +62,15 @@ NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 5
 TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
 GET_SYNTH_DATA = True
-MAX_SYNTH_DATA_POINTS = 400
+MAX_AUGMENTATION_SAMPLES = 400  # Max samples for dataset augmentation/merging
 MAX_TEST_DATA_POINTS = 400
 
 ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
-# Synthetic data constants - used for both DPO and Instruct Text tasks
-SYNTHETIC_TOTAL_SIZE = 10 # to be turned off this week - temp 
-SYNTHETIC_FOR_TRAINING = 5
-SYNTHETIC_FOR_EVAL = 5
+# Synthetic data generation constants - for actual synthetic data creation
+SYNTHETIC_GENERATION_TOTAL = 10  # Total synthetic samples to generate
+SYNTHETIC_FOR_TRAINING = 5      # How many go to training
+SYNTHETIC_FOR_EVAL = 5          # How many go to evaluation
 SYNTH_EXAMPLES_FROM_TRAIN = 395
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"

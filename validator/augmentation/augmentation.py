@@ -11,7 +11,7 @@ from core.models.utility_models import Message
 from core.models.utility_models import Prompts
 from core.models.utility_models import Role
 from validator.core.constants import END_OF_REASONING_TAG
-from validator.core.constants import MAX_SYNTH_DATA_POINTS
+from validator.core.constants import MAX_AUGMENTATION_SAMPLES
 from validator.core.constants import PROMPT_PATH
 from validator.core.constants import STANDARD_DPO_CHOSEN_COLUMN
 from validator.core.constants import STANDARD_DPO_PROMPT_COLUMN
@@ -155,7 +155,7 @@ def load_and_sample_dataset(dataset_name: str, columns_to_sample: list[str], num
     Args:
         dataset_name: Name of the dataset to load
         columns_to_sample: List of column names to keep
-        num_samples: Number of samples to take (defaults to MAX_SYNTH_DATA_POINTS)
+        num_samples: Number of samples to take (defaults to MAX_AUGMENTATION_SAMPLES)
 
     Returns:
         List of sampled data points
@@ -173,7 +173,7 @@ def load_and_sample_dataset(dataset_name: str, columns_to_sample: list[str], num
     filtered_dataset = train_dataset.remove_columns([col for col in train_dataset.column_names if col not in columns_to_sample])
 
     if num_samples is None:
-        num_samples = MAX_SYNTH_DATA_POINTS
+        num_samples = MAX_AUGMENTATION_SAMPLES
     logger.info(f"Taking {num_samples} samples from {dataset_name}")
 
     sampled_data = filtered_dataset.shuffle(seed=42, buffer_size=1000).take(num_samples)
