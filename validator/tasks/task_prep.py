@@ -176,7 +176,7 @@ async def get_additional_synth_data(
     dataset: Dataset, columns_to_sample: list[str], keypair: Keypair, task: AnyTextTypeRawTask
 ) -> list[dict]:
     num_samples = min(
-        cst.MAX_SYNTH_DATA_POINTS,
+        cst.SYNTHETIC_GENERATION_TOTAL,
         int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
     )
     logger.info(f"Generating {num_samples} additional synthetic data points")
@@ -600,7 +600,7 @@ def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = Fal
             )
         else:
             num_synthetic_samples = min(
-                cst.MAX_SYNTH_DATA_POINTS,
+                cst.SYNTHETIC_GENERATION_TOTAL,
                 int(len(train_dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
             )
             split_index = dataset_length - num_synthetic_samples
@@ -801,7 +801,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     prompt_field = cst.STANDARD_DPO_PROMPT_COLUMN
     logger.info(f"Generating synthetic DPO data from the standardized field {prompt_field}")
 
-    num_samples = min(cst.SYNTHETIC_TOTAL_SIZE * 2, len(dataset))
+    num_samples = min(cst.SYNTHETIC_GENERATION_TOTAL * 2, len(dataset))
 
     sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
     prompts = sampled_data[prompt_field]
@@ -810,7 +810,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     prompts_for_gen = [{cst.STANDARD_DPO_PROMPT_COLUMN: prompt} for prompt in prompts]
 
     prompts_obj = load_prompts()
-    logger.info(f"Attempting to generate {cst.SYNTHETIC_TOTAL_SIZE} synthetic DPO samples")
+    logger.info(f"Attempting to generate {cst.SYNTHETIC_GENERATION_TOTAL} synthetic DPO samples")
 
     synthetic_dataset = []
     json_errors = 0
@@ -823,7 +823,7 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
     total_batches = (len(prompts_for_gen) + cst.SYNTH_GEN_BATCH_SIZE - 1) // cst.SYNTH_GEN_BATCH_SIZE
     batch_idx = 0
 
-    while len(synthetic_dataset) < cst.SYNTHETIC_TOTAL_SIZE and batch_idx < len(prompts_for_gen):
+    while len(synthetic_dataset) < cst.SYNTHETIC_GENERATION_TOTAL and batch_idx < len(prompts_for_gen):
         end_idx = min(batch_idx + cst.SYNTH_GEN_BATCH_SIZE, len(prompts_for_gen))
         batch = prompts_for_gen[batch_idx:end_idx]
         current_batch = (batch_idx // cst.SYNTH_GEN_BATCH_SIZE) + 1
@@ -892,17 +892,17 @@ async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: 
                     break
 
         batch_idx = end_idx
-        logger.info(f"Progress: {len(synthetic_dataset)}/{cst.SYNTHETIC_TOTAL_SIZE} synthetic samples generated")
+        logger.info(f"Progress: {len(synthetic_dataset)}/{cst.SYNTHETIC_GENERATION_TOTAL} synthetic samples generated")
 
     logger.info(
         f"Finished generating synthetic data. Got {len(synthetic_dataset)} samples total. "
         f"JSON errors: {json_errors}, Other errors: {generic_errors}"
     )
 
-    if len(synthetic_dataset) < cst.SYNTHETIC_TOTAL_SIZE:
-        missing_samples = cst.SYNTHETIC_TOTAL_SIZE - len(synthetic_dataset)
+    if len(synthetic_dataset) < cst.SYNTHETIC_GENERATION_TOTAL:
+        missing_samples = cst.SYNTHETIC_GENERATION_TOTAL - len(synthetic_dataset)
         logger.warning(
-            f"Could only generate {len(synthetic_dataset)}/{cst.SYNTHETIC_TOTAL_SIZE} "
+            f"Could only generate {len(synthetic_dataset)}/{cst.SYNTHETIC_GENERATION_TOTAL} "
             f"synthetic samples. Adding {missing_samples} samples from training data."
         )
 
@@ -1094,7 +1094,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
             if isinstance(task, DpoRawTask):
                 logger.info("DPO task: Generating synthetic dataset using TEXT_SYNTH_MODEL and TEXT_SYNTH_WEAKER_MODEL")
                 synthetic_data_list = await asyncio.wait_for(generate_synthetic_dpo_data(train_ds, keypair, task), timeout=300)
-                if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_TOTAL_SIZE:
+                if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_GENERATION_TOTAL:
                     synth_for_training = synthetic_data_list[: cst.SYNTHETIC_FOR_TRAINING]
                     synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING :]
 
@@ -1127,7 +1127,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
 
                 # Always mix training data into synthetic evaluation and put some synth in training
                 if synthetic_ds and len(synthetic_ds) > 0:
-                    if len(synthetic_ds) >= cst.SYNTHETIC_TOTAL_SIZE:
+                    if len(synthetic_ds) >= cst.SYNTHETIC_GENERATION_TOTAL:
                         # Original logic for large synthetic datasets
                         synth_for_training = synthetic_ds[: cst.SYNTHETIC_FOR_TRAINING]
                         synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING :]
