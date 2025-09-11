@@ -654,7 +654,8 @@ async def _add_new_task_to_network_if_not_enough(
     current_training_tasks = await get_tasks_with_status(TaskStatus.TRAINING, config.psql_db)
     current_preeval_tasks = await get_tasks_with_status(TaskStatus.PREEVALUATION, config.psql_db)
     current_delayed_tasks = await get_tasks_with_status(TaskStatus.DELAYED, config.psql_db, include_not_ready_tasks=True)
-    total_active_tasks = len(current_training_tasks) + len(current_preeval_tasks)
+    current_pending_tasks = await get_tasks_with_status(TaskStatus.PENDING, config.psql_db)
+    total_active_tasks = len(current_training_tasks) + len(current_preeval_tasks) + len(current_pending_tasks)
 
     logger.info(
         f"There are {total_active_tasks} active tasks"
