@@ -273,31 +273,83 @@ def _generate_dpo_augmentation_config(dataset_size: int) -> dict:
         return {}
 
 
-def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None, dpo_augmentations: dict = None):
+def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
+    """Generate augmentation configuration for instruct tasks."""
+    if random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE:
+        config = {
+            "rearrange_input": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
+            "rearrange_output": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
+            "add_input_honeypot": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
+            "add_output_honeypot": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
+        }
+
+        # Configure input honeypot (applies to ALL instructions if enabled)
+        if config["add_input_honeypot"]:
+            config["input_uid"] = uuid.uuid4().hex[:8]
+            config["input_honeypot_at_start"] = random.random() < 0.5
+
+        # Configure output honeypot (applies to a percentage of outputs)
+        if config["add_output_honeypot"]:
+            config["output_uid"] = uuid.uuid4().hex[:8]
+            config["output_honeypot_at_start"] = random.random() < 0.5
+            # Select percentage of rows for output honeypot
+            num_output_honeypot = int(dataset_size * cst.INSTRUCT_RESPONSE_HONEYPOT_PERCENTAGE)
+            config["output_honeypot_indices"] = set(
+                random.sample(range(dataset_size), min(num_output_honeypot, dataset_size))
+            )
+
+        return config
+    else:
+        return {}
+
+
+def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None, augmentations: dict = None):
     result = []
     total_rows = 0
     fully_empty_rows = 0
     is_chat_task = isinstance(task, ChatRawTask)
 
-    if dpo_augmentations:
-        logger.info(
-            f"DPO Augmentations: rearrange={dpo_augmentations.get('rearrange_sentences')}, "
-            f"prompt_honeypot={dpo_augmentations.get('add_prompt_honeypot')}, "
-            f"response_honeypot={dpo_augmentations.get('add_response_honeypot')}, "
-            f"swap={dpo_augmentations.get('swap_chosen_rejected')}"
-        )
-
-        if dpo_augmentations.get("add_prompt_honeypot"):
-            logger.info(f"Prompt honeypot UID: {dpo_augmentations['prompt_uid']} (added to all prompts)")
-
-        if dpo_augmentations.get("add_response_honeypot"):
-            response_honeypot_indices = dpo_augmentations.get("response_honeypot_indices", set())
+    if augmentations:
+        if isinstance(task, DpoRawTask):
             logger.info(
-                f"Response honeypot UID: {dpo_augmentations['response_uid']} "
-                f"(in {'chosen' if dpo_augmentations['honeypot_in_chosen'] else 'rejected'} "
-                f"at {'start' if dpo_augmentations['honeypot_at_start'] else 'end'} "
-                f"for {len(response_honeypot_indices)}/{len(dataset)} rows)"
+                f"DPO Augmentations: rearrange={augmentations.get('rearrange_sentences')}, "
+                f"prompt_honeypot={augmentations.get('add_prompt_honeypot')}, "
+                f"response_honeypot={augmentations.get('add_response_honeypot')}, "
+                f"swap={augmentations.get('swap_chosen_rejected')}"
             )
+
+            if augmentations.get("add_prompt_honeypot"):
+                logger.info(f"Prompt honeypot UID: {augmentations['prompt_uid']} (added to all prompts)")
+
+            if augmentations.get("add_response_honeypot"):
+                response_honeypot_indices = augmentations.get("response_honeypot_indices", set())
+                logger.info(
+                    f"Response honeypot UID: {augmentations['response_uid']} "
+                    f"(in {'chosen' if augmentations['honeypot_in_chosen'] else 'rejected'} "
+                    f"at {'start' if augmentations['honeypot_at_start'] else 'end'} "
+                    f"for {len(response_honeypot_indices)}/{len(dataset)} rows)"
+                )
+        elif isinstance(task, InstructTextRawTask):
+            logger.info(
+                f"Instruct Augmentations: rearrange_input={augmentations.get('rearrange_input')}, "
+                f"rearrange_output={augmentations.get('rearrange_output')}, "
+                f"input_honeypot={augmentations.get('add_input_honeypot')}, "
+                f"output_honeypot={augmentations.get('add_output_honeypot')}"
+            )
+
+            if augmentations.get("add_input_honeypot"):
+                logger.info(
+                    f"Input honeypot UID: {augmentations['input_uid']} "
+                    f"(at {'start' if augmentations.get('input_honeypot_at_start') else 'end'} of all instructions)"
+                )
+
+            if augmentations.get("add_output_honeypot"):
+                output_honeypot_indices = augmentations.get("output_honeypot_indices", set())
+                logger.info(
+                    f"Output honeypot UID: {augmentations['output_uid']} "
+                    f"(at {'start' if augmentations.get('output_honeypot_at_start') else 'end'} "
+                    f"for {len(output_honeypot_indices)}/{len(dataset)} rows)"
+                )
 
     for idx, row in enumerate(dataset):
         row_dict = {}
@@ -324,31 +376,31 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                     is_row_empty = False
 
         # Apply DPO augmentations
-        if isinstance(task, DpoRawTask) and dpo_augmentations:
+        if isinstance(task, DpoRawTask) and augmentations:
             try:
                 # 1. Rearrange prompt sentences (applies to ALL rows if enabled)
-                if dpo_augmentations.get("rearrange_sentences") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
+                if augmentations.get("rearrange_sentences") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
                     row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_DPO_PROMPT_COLUMN])
             except Exception as e:
                 logger.error(f"Error in rearrange_sentences: {e}")
 
             try:
                 # 2. Add prompt honeypot (applies to ALL rows if enabled)
-                if dpo_augmentations.get("add_prompt_honeypot") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
+                if augmentations.get("add_prompt_honeypot") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
                     row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _insert_uid_randomly(
-                        row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], dpo_augmentations["prompt_uid"]
+                        row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], augmentations["prompt_uid"]
                     )
             except Exception as e:
                 logger.error(f"Error in prompt honeypot: {e}")
 
             try:
                 # 3. Add response honeypot (applies to percentage of rows if enabled)
-                response_honeypot_indices = dpo_augmentations.get("response_honeypot_indices", set())
-                if dpo_augmentations.get("add_response_honeypot") and idx in response_honeypot_indices:
-                    response_uid = dpo_augmentations["response_uid"]
+                response_honeypot_indices = augmentations.get("response_honeypot_indices", set())
+                if augmentations.get("add_response_honeypot") and idx in response_honeypot_indices:
+                    response_uid = augmentations["response_uid"]
 
-                    if dpo_augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
-                        if dpo_augmentations["honeypot_at_start"]:
+                    if augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
+                        if augmentations["honeypot_at_start"]:
                             row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
                                 f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
                             )
@@ -356,8 +408,8 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                             row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
                                 f"{row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]} {response_uid}"
                             )
-                    elif not dpo_augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                        if dpo_augmentations["honeypot_at_start"]:
+                    elif not augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
+                        if augmentations["honeypot_at_start"]:
                             row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
                                 f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
                             )
@@ -370,7 +422,7 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
             try:
                 # 4. Swap chosen and rejected (applies to ALL rows if enabled)
-                if dpo_augmentations.get("swap_chosen_rejected"):
+                if augmentations.get("swap_chosen_rejected"):
                     if cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
                         row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN], row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
                             row_dict[cst.STANDARD_DPO_REJECTED_COLUMN],
@@ -378,6 +430,47 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                         )
             except Exception as e:
                 logger.error(f"Error in swap chosen/rejected: {e}")
+
+        # Apply Instruct augmentations
+        if isinstance(task, InstructTextRawTask) and augmentations:
+            try:
+                # 1. Rearrange input/instruction (applies to ALL rows if enabled)
+                if augmentations.get("rearrange_input") and cst.STANDARD_INSTRUCT_COLUMN in row_dict:
+                    row_dict[cst.STANDARD_INSTRUCT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_INSTRUCT_COLUMN])
+            except Exception as e:
+                logger.error(f"Error in rearrange_input: {e}")
+
+            try:
+                # 2. Rearrange output (applies to ALL rows if enabled)
+                if augmentations.get("rearrange_output") and cst.STANDARD_OUTPUT_COLUMN in row_dict:
+                    row_dict[cst.STANDARD_OUTPUT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_OUTPUT_COLUMN])
+            except Exception as e:
+                logger.error(f"Error in rearrange_output: {e}")
+
+            try:
+                # 3. Add input honeypot (applies to ALL rows if enabled)
+                if augmentations.get("add_input_honeypot") and cst.STANDARD_INSTRUCT_COLUMN in row_dict:
+                    input_uid = augmentations["input_uid"]
+                    if augmentations.get("input_honeypot_at_start"):
+                        row_dict[cst.STANDARD_INSTRUCT_COLUMN] = f"{input_uid} {row_dict[cst.STANDARD_INSTRUCT_COLUMN]}"
+                    else:
+                        row_dict[cst.STANDARD_INSTRUCT_COLUMN] = _insert_uid_randomly(
+                            row_dict[cst.STANDARD_INSTRUCT_COLUMN], input_uid
+                        )
+            except Exception as e:
+                logger.error(f"Error in input honeypot: {e}")
+
+            try:
+                # 4. Add output honeypot (applies to percentage of rows if enabled)
+                output_honeypot_indices = augmentations.get("output_honeypot_indices", set())
+                if augmentations.get("add_output_honeypot") and idx in output_honeypot_indices:
+                    output_uid = augmentations["output_uid"]
+                    if augmentations.get("output_honeypot_at_start"):
+                        row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{output_uid} {row_dict[cst.STANDARD_OUTPUT_COLUMN]}"
+                    else:
+                        row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{row_dict[cst.STANDARD_OUTPUT_COLUMN]} {output_uid}"
+            except Exception as e:
+                logger.error(f"Error in output honeypot: {e}")
 
         result.append(row_dict)
         total_rows += 1
@@ -421,6 +514,41 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
             else:
                 rejected_preview = rejected
             logger.info(f"  Rejected: {rejected_preview}")
+
+    # Log examples of augmented data for Instruct tasks
+    if isinstance(task, InstructTextRawTask) and augmentations and result:
+        logger.info("[INSTRUCT_AUGMENTATION] Showing 2 examples of augmented data:")
+
+        # Show first 2 examples to see the augmentations
+        for i in range(min(2, len(result))):
+            example = result[i]
+            logger.info(f"[INSTRUCT_EXAMPLE_{i + 1}]:")
+
+            # Show instruction (truncate if too long)
+            instruction = example.get(cst.STANDARD_INSTRUCT_COLUMN, "")
+            if len(instruction) > 150:
+                instruction_preview = instruction[:150] + "..."
+            else:
+                instruction_preview = instruction
+            logger.info(f"  Instruction: {instruction_preview}")
+
+            # Show output (truncate if too long)
+            output = example.get(cst.STANDARD_OUTPUT_COLUMN, "")
+            if len(output) > 150:
+                output_preview = output[:150] + "..."
+            else:
+                output_preview = output
+            logger.info(f"  Output: {output_preview}")
+
+            # Show input if present
+            if cst.STANDARD_INPUT_COLUMN in example:
+                input_text = example.get(cst.STANDARD_INPUT_COLUMN, "")
+                if input_text and len(input_text) > 150:
+                    input_preview = input_text[:150] + "..."
+                else:
+                    input_preview = input_text
+                if input_preview:
+                    logger.info(f"  Input: {input_preview}")
 
     return result
 
@@ -510,15 +638,21 @@ async def _process_and_upload_datasets(
     logger.info(f"Should reupload train: {should_reupload_train}, test: {should_reupload_test}")
     logger.info(f"Dataset HF name: {ds_hf_name}")
 
-    dpo_augmentations = None
-    if isinstance(task, DpoRawTask):
-        max_dataset_size = max(len(train_dataset), len(test_dataset))
-        dpo_augmentations = _generate_dpo_augmentation_config(max_dataset_size)
-        logger.info(f"Generated DPO augmentation config for dataset size {max_dataset_size}")
+    augmentations = None
+    # Only apply augmentations for synthetic tasks (not organic)
+    if not task.is_organic:
+        if isinstance(task, DpoRawTask):
+            max_dataset_size = max(len(train_dataset), len(test_dataset))
+            augmentations = _generate_dpo_augmentation_config(max_dataset_size)
+            logger.info(f"Generated DPO augmentation config for synthetic dataset size {max_dataset_size}")
+        elif isinstance(task, InstructTextRawTask):
+            max_dataset_size = max(len(train_dataset), len(test_dataset))
+            augmentations = _generate_instruct_augmentation_config(max_dataset_size)
+            logger.info(f"Generated Instruct augmentation config for synthetic dataset size {max_dataset_size}")
 
     try:
         if should_reupload_train:
-            train_data_json = change_to_json_format(train_dataset, columns_to_sample, task, dpo_augmentations)
+            train_data_json = change_to_json_format(train_dataset, columns_to_sample, task, augmentations)
 
             await _validate_and_filter_grpo_reward_functions(task, train_data_json, psql_db)
 
@@ -531,7 +665,7 @@ async def _process_and_upload_datasets(
         else:
             train_json_url = train_dataset
         if should_reupload_test:
-            test_data_json = change_to_json_format(test_dataset, columns_to_sample, task, dpo_augmentations)
+            test_data_json = change_to_json_format(test_dataset, columns_to_sample, task, augmentations)
             test_json_path, test_json_size = await save_json_to_temp_file(test_data_json, prefix="test_data_")
             files_to_delete.append(test_json_path)
             await _check_file_size(test_json_size, "test_data")
@@ -539,7 +673,7 @@ async def _process_and_upload_datasets(
         else:
             test_json_url = test_dataset
         if synthetic_data:
-            synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample, task, dpo_augmentations)
+            synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample, task, augmentations)
             synth_json_path, synth_json_size = await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_")
             files_to_delete.append(synth_json_path)
             await _check_file_size(synth_json_size, "synth_data")
