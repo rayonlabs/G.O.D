@@ -82,7 +82,7 @@ EXAMPLE_PROMPTS_PATH = "validator/tasks/example_prompts.json"
 
 # synth stuff
 NUM_SYNTH_RETRIES = 3
-SYNTH_GEN_BATCH_SIZE = 30
+SYNTH_GEN_BATCH_SIZE = 2
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 
 # Multi-dataset augmentation
