@@ -379,6 +379,21 @@ class InstructTextTaskDetails(TaskDetails):
     model_config = ConfigDict(protected_namespaces=())
 
 
+class ChatTaskDetails(TaskDetails):
+    task_type: TaskType = TaskType.CHATTASK
+    base_model_repository: str
+    ds_repo: str
+
+    chat_template: str = Field(..., description="The chat template used", examples=["chatml"])
+    chat_column: str | None = Field(None, description="The column name for the chat conversations", examples=["conversations"])
+    chat_role_field: str = Field(..., description="The column name to specify the role in the conversation ", examples=["from"])
+    chat_content_field: str = Field(..., description="The column name to specify the text content", examples=["value"])
+    chat_user_reference: str | None = Field(None, description="The column name to specify the user", examples=["user"])
+    chat_assistant_reference: str | None = Field(None, description="The column name to specify the assistant", examples=["assistant"])
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
 class DpoTaskDetails(TaskDetails):
     task_type: TaskType = TaskType.DPOTASK
     base_model_repository: str
@@ -500,4 +515,4 @@ class AddRewardFunctionRequest(BaseModel):
 
 
 # Type alias for task details types
-AnyTypeTaskDetails = InstructTextTaskDetails | ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
+AnyTypeTaskDetails = InstructTextTaskDetails | ChatTaskDetails| ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails

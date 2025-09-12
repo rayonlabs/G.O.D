@@ -17,6 +17,7 @@ from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import TaskType
 from trainer import constants as cst
 from trainer.tasks import complete_task
@@ -164,7 +165,7 @@ async def run_trainer_container_text(
     tag: str,
     model: str,
     dataset: str,
-    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType,
+    dataset_type: InstructTextDatasetType | DpoDatasetType | GrpoDatasetType | ChatTemplateDatasetType,
     task_type: TaskType,
     file_format: FileFormat,
     expected_repo_name: str,
@@ -409,6 +410,8 @@ def get_task_type(request: TrainerProxyRequest) -> TaskType:
             return TaskType.DPOTASK
         elif isinstance(training_data.dataset_type, InstructTextDatasetType):
             return TaskType.INSTRUCTTEXTTASK
+        elif isinstance(training_data.dataset_type, ChatTemplateDatasetType):
+            return TaskType.CHATTASK
         elif isinstance(training_data.dataset_type, GrpoDatasetType):
             return TaskType.GRPOTASK
         else:
