@@ -19,6 +19,7 @@ from validator.core.constants import STANDARD_DPO_REJECTED_COLUMN
 from validator.core.constants import STANDARD_GRPO_PROMPT_COLUMN
 from validator.core.constants import STANDARD_INPUT_COLUMN
 from validator.core.constants import STANDARD_INSTRUCT_COLUMN
+from validator.core.constants import STANDARD_CHAT_MESSAGES_COLUMN
 from validator.core.constants import STANDARD_OUTPUT_COLUMN
 from validator.core.constants import STANDARD_SYSTEM_COLUMN
 from validator.core.constants import SYNTH_GEN_BATCH_SIZE
@@ -138,14 +139,8 @@ async def get_dataset_column_mapping(dataset_id: str, task_type: TaskType, keypa
         return column_mapping
     elif task_type == TaskType.CHATTASK:
         column_mapping = {}
-        if "field_instruction" in response:
-            column_mapping["instruction"] = response["field_instruction"]
-        if "field_output" in response:
-            column_mapping["output"] = response["field_output"]
-        if response.get("field_input"):
-            column_mapping["input"] = response["field_input"]
-        if response.get("field_system"):
-            column_mapping["system"] = response["field_system"]
+        if "chat_column" in response:
+            column_mapping["chat_column"] = response["chat_column"]
         return column_mapping
     elif task_type == TaskType.GRPOTASK:
         return {"prompt": response.get("field_prompt", "prompt")}
@@ -216,6 +211,11 @@ def standardize_dpo_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
         std_sample[STANDARD_SYSTEM_COLUMN] = sample.get(task.field_system, "")
     return std_sample
 
+def standardize_chat_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
+    """Standardize a single Chat sample to use standard column names."""
+    std_sample = {}
+    std_sample[STANDARD_CHAT_MESSAGES_COLUMN] = sample.get(task.chat_column, "")
+    return std_sample
 
 def standardize_grpo_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     """Standardize a single GRPO sample to use standard column names."""
@@ -229,6 +229,7 @@ def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[d
     from validator.core.models import DpoRawTask
     from validator.core.models import GrpoRawTask
     from validator.core.models import InstructTextRawTask
+    from validator.core.models import ChatRawTask
 
     logger.info(f"Standardizing {len(samples)} samples with task type: {type(task).__name__}")
     if hasattr(task, "__dict__"):
@@ -246,6 +247,8 @@ def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[d
 
             if isinstance(task, InstructTextRawTask):
                 result = standardize_instruct_sample(processed_sample, task)
+            elif isinstance(task, ChatRawTask):
+                result = standardize_chat_sample(processed_sample, task)
             elif isinstance(task, DpoRawTask):
                 result = standardize_dpo_sample(processed_sample, task)
             elif isinstance(task, GrpoRawTask):
@@ -259,6 +262,8 @@ def standardize_samples(samples: list[dict], task: AnyTextTypeRawTask) -> list[d
                         result = standardize_grpo_sample(processed_sample, task)
                     elif task.task_type == TaskType.DPOTASK:
                         result = standardize_dpo_sample(processed_sample, task)
+                    elif task.task_type == TaskType.CHATTASK:
+                        result = standardize_chat_sample(processed_sample, task)
                     else:
                         result = standardize_instruct_sample(processed_sample, task)
                 else:
@@ -281,6 +286,7 @@ def get_task_columns(task: AnyTextTypeRawTask) -> list[str]:
     from validator.core.models import DpoRawTask
     from validator.core.models import GrpoRawTask
     from validator.core.models import InstructTextRawTask
+    from validator.core.models import ChatRawTask
 
     if isinstance(task, InstructTextRawTask):
         columns = [task.field_instruction, task.field_output]
@@ -288,6 +294,8 @@ def get_task_columns(task: AnyTextTypeRawTask) -> list[str]:
             columns.append(task.field_input)
         if task.field_system:
             columns.append(task.field_system)
+    elif isinstance(task, ChatRawTask):
+        columns = [task.chat_column]
     elif isinstance(task, DpoRawTask):
         columns = [task.field_prompt, task.field_chosen, task.field_rejected]
         if hasattr(task, "field_system") and task.field_system:
@@ -333,6 +341,11 @@ def create_temp_task_from_mapping(column_mapping: dict[str, str], task_type):
         temp_task_dict = {"task_type": task_type}
         if "prompt" in column_mapping:
             temp_task_dict["field_prompt"] = column_mapping["prompt"]
+        return type("obj", (object,), temp_task_dict)
+    elif task_type == TaskType.CHATTASK:
+        temp_task_dict = {"task_type": task_type}
+        if "chat_column" in column_mapping:
+            temp_task_dict["chat_column"] = column_mapping["chat_column"]
         return type("obj", (object,), temp_task_dict)
 
 
@@ -546,9 +559,14 @@ def unstandardize_samples_to_task_columns(samples: list[dict], task: AnyTextType
     from validator.core.models import DpoRawTask
     from validator.core.models import GrpoRawTask
     from validator.core.models import InstructTextRawTask
+    from validator.core.models import ChatRawTask
 
     # InstructText uses standard columns throughout the pipeline
     if isinstance(task, InstructTextRawTask):
+        return samples
+    
+    # Chat uses standard columns throughout the pipeline
+    if isinstance(task, ChatRawTask):
         return samples
 
     unstandardized = []

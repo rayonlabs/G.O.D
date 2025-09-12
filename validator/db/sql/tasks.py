@@ -808,17 +808,17 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
             specific_query = f"""
                 SELECT 
                     t.*, 
-                    gt.synthetic_data, 
-                    gt.file_format,
-                    gt.chat_template,
-                    gt.chat_column,
-                    gt.chat_role_field,
-                    gt.chat_content_field,
-                    gt.chat_user_reference,
-                    gt.chat_assistant_reference
+                    ct.synthetic_data, 
+                    ct.file_format,
+                    ct.chat_template,
+                    ct.chat_column,
+                    ct.chat_role_field,
+                    ct.chat_content_field,
+                    ct.chat_user_reference,
+                    ct.chat_assistant_reference
                 FROM {cst.TASKS_TABLE} t
-                LEFT JOIN {cst.CHAT_TASKS_TABLE} gt 
-                    ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
+                LEFT JOIN {cst.CHAT_TASKS_TABLE} ct 
+                    ON t.{cst.TASK_ID} = ct.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
             """
         else:
@@ -916,18 +916,18 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                 {victorious_repo_cte}
                 SELECT 
                     tasks.*, 
-                    tt.synthetic_data, 
-                    tt.file_format,
-                    tt.chat_template,
-                    tt.chat_column,
-                    tt.chat_role_field,
-                    tt.chat_content_field,
-                    tt.chat_user_reference,
-                    tt.chat_assistant_reference,
+                    ct.synthetic_data, 
+                    ct.file_format,
+                    ct.chat_template,
+                    ct.chat_column,
+                    ct.chat_role_field,
+                    ct.chat_content_field,
+                    ct.chat_user_reference,
+                    ct.chat_assistant_reference,
                     COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
-                LEFT JOIN {cst.CHAT_TASKS_TABLE} tt 
-                    ON tasks.{cst.TASK_ID} = tt.{cst.TASK_ID}
+                LEFT JOIN {cst.CHAT_TASKS_TABLE} ct 
+                    ON tasks.{cst.TASK_ID} = ct.{cst.TASK_ID}
                 LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
                 WHERE tasks.{cst.TASK_ID} = $1
             """
