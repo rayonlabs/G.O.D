@@ -134,7 +134,7 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
             continue
 
         # Create appropriate MinerResults object
-        if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+        if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.CHATTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
             miner_result = MinerResultsText(
                 hotkey=hotkey,
                 test_loss=test_loss,

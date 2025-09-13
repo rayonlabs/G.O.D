@@ -665,6 +665,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=Fals
             TaskType.INSTRUCTTEXTTASK.value: "instruct",
             TaskType.DPOTASK.value: "dpo",
             TaskType.GRPOTASK.value: "grpo",
+            TaskType.CHATTASK.value: "chat",
             TaskType.IMAGETASK.value: "image",
         }
 
@@ -1091,6 +1092,15 @@ def _get_specific_query_for_task_type(task_type: str) -> str | None:
             LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
             WHERE t.{cst.TASK_ID} = ANY($1)
         """
+    elif task_type == TaskType.CHATTASK.value:
+        return f"""
+            SELECT t.*, ct.chat_template,
+                   ct.chat_column, ct.chat_role_field, ct.chat_content_field,
+                   ct.chat_user_reference, ct.chat_assistant_reference, ct.synthetic_data
+            FROM {cst.TASKS_TABLE} t
+            LEFT JOIN {cst.CHAT_TASKS_TABLE} ct ON t.{cst.TASK_ID} = ct.{cst.TASK_ID}
+            WHERE t.{cst.TASK_ID} = ANY($1)
+        """
     elif task_type == TaskType.IMAGETASK.value:
         return f"""
             SELECT t.*, it.model_type
@@ -1124,6 +1134,8 @@ async def _create_task_from_data(
 
     if task_type == TaskType.INSTRUCTTEXTTASK.value:
         return InstructTextRawTask(**full_task_data)
+    elif task_type == TaskType.CHATTASK.value:
+        return ChatRawTask(**full_task_data)
     elif task_type == TaskType.IMAGETASK.value:
         image_text_pairs = await get_image_text_pairs(task_id, psql_db, conn)
         return ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs)
