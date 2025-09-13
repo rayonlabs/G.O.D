@@ -45,20 +45,10 @@ logger = get_logger(__name__)
 
 def get_progressive_threshold(consecutive_wins: int) -> float:
     """
-    Calculate the progressive threshold based on consecutive wins.
-    - 1st defense after becoming champion (1 win): 10% advantage needed
-    - 2nd defense (2 wins): 7.5% advantage needed
-    - 3rd+ defense (3+ wins): 5% advantage needed
+    Calculate the progressive threshold using exponential decay.
     """
-    if consecutive_wins <= 1:
-        # First defense after becoming champion - use 10%
-        return t_cst.FIRST_DEFENSE_THRESHOLD
-    elif consecutive_wins == 2:
-        # After 1 successful defense (2 total wins) - use 7.5%
-        return t_cst.SECOND_DEFENSE_THRESHOLD
-    else:
-        # After 2+ successful defenses (3+ total wins) - use 5%
-        return t_cst.STEADY_STATE_THRESHOLD
+    current_threshold = t_cst.EXPONENTIAL_BASE_THRESHOLD * (t_cst.EXPONENTIAL_DECAY_RATE ** consecutive_wins)
+    return max(t_cst.EXPONENTIAL_MIN_THRESHOLD, current_threshold)
 
 
 async def replace_tournament_task(

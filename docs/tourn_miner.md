@@ -246,8 +246,25 @@ Tournaments run continuously with 4-7 day duration and 24-hour gaps between tour
 
 ### Boss Round
 - Tournament winner must face defending champion
-- Must win by at least 5% margin to claim title
+- Uses progressive threshold system with exponential decay based on consecutive wins
 - Defending champion retains title unless clearly outperformed
+
+#### Championship Defense Thresholds
+The advantage required to dethrone a champion decreases with each successful defense using an exponential decay formula:
+
+![Championship Defense Thresholds](./images/championship_thresholds.png)
+
+**Formula:** `threshold = max(EXPONENTIAL_MIN_THRESHOLD, EXPONENTIAL_BASE_THRESHOLD × EXPONENTIAL_DECAY_RATE^consecutive_wins)`
+
+Where constants (defined in `validator/tournament/constants.py`):
+- `EXPONENTIAL_BASE_THRESHOLD`: Starting threshold for new champions
+- `EXPONENTIAL_DECAY_RATE`: Decay factor per consecutive win  
+- `EXPONENTIAL_MIN_THRESHOLD`: Minimum threshold floor
+
+This system ensures:
+- New champions must prove themselves with a significant margin
+- Long-reigning champions become progressively more vulnerable
+- Minimum threshold prevents stagnation
 
 ### GPU Requirements
 - Determined by model size and task type
