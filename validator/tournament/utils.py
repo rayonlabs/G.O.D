@@ -47,7 +47,7 @@ def get_progressive_threshold(consecutive_wins: int) -> float:
     """
     Calculate the progressive threshold using exponential decay.
     """
-    current_threshold = t_cst.EXPONENTIAL_BASE_THRESHOLD * (t_cst.EXPONENTIAL_DECAY_RATE ** consecutive_wins)
+    current_threshold = t_cst.EXPONENTIAL_BASE_THRESHOLD * (t_cst.EXPONENTIAL_DECAY_RATE ** (consecutive_wins-1))
     return max(t_cst.EXPONENTIAL_MIN_THRESHOLD, current_threshold)
 
 
