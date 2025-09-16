@@ -408,3 +408,43 @@ class BenchmarkTimeline(BaseModel):
 class BenchmarkTimelineResponse(BaseModel):
     """Response containing benchmark timelines for all tasks"""
     timelines: list[BenchmarkTimeline]
+
+
+class HotkeyTournamentParticipation(BaseModel):
+    """Tournament participation data for a specific hotkey"""
+    hotkey: str
+    participated_in_text: bool      # participated in the most recent text tournament
+    participated_in_image: bool     # participated in the most recent image tournament
+    text_proportion: float         # 0.0, 0.6, or 1.0 based on participation
+    image_proportion: float        # 0.0, 0.4, or 1.0 based on participation
+
+
+class HotkeyTaskParticipation(BaseModel):
+    """Weekly task participation data for a specific hotkey"""
+    hotkey: str
+    text_task_proportion: float    # proportion of text tasks (0.0 to 1.0)
+    image_task_proportion: float   # proportion of image tasks (0.0 to 1.0)
+    total_tasks: int               # total number of tasks in the period
+
+
+class TournamentBurnDataSeparated(BaseModel):
+    """Separated burn data by tournament type"""
+    text_performance_diff: float | None
+    image_performance_diff: float | None
+    text_burn_proportion: float
+    image_burn_proportion: float
+    text_tournament_weight: float
+    image_tournament_weight: float
+    text_regular_weight: float
+    image_regular_weight: float
+    burn_weight: float
+
+
+class NodeWeightsResult(BaseModel):
+    """Result of node weight calculations"""
+    node_ids: list[int]
+    node_weights: list[float]
+
+    def to_tuple(self) -> tuple[list[int], list[float]]:
+        """Convert to tuple format for compatibility with existing code"""
+        return self.node_ids, self.node_weights
