@@ -972,6 +972,20 @@ def standardize_dpo_column_names(dataset: Dataset, task: DpoRawTask) -> Dataset:
 
     return dataset
 
+def standardize_chat_column_names(dataset: Dataset, task: ChatRawTask) -> Dataset:
+    column_mapping = {}
+
+    if task.chat_column in dataset.column_names:
+        column_mapping[task.chat_column] = cst.STANDARD_CHAT_MESSAGES_COLUMN
+    else:
+        raise ValueError(f"Chat column {task.chat_column} not found in dataset")
+
+    for old_name, new_name in column_mapping.items():
+        if old_name != new_name:
+            dataset = dataset.rename_column(old_name, new_name)
+
+    return dataset
+
 
 def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Dataset:
     column_mapping = {}
@@ -1031,6 +1045,8 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
 
             if isinstance(task, InstructTextRawTask):
                 dataset = standardize_column_names(dataset, task)
+            elif isinstance(task, ChatRawTask):
+                dataset = standardize_chat_column_names(dataset, task)
             elif isinstance(task, DpoRawTask):
                 dataset = standardize_dpo_column_names(dataset, task)
             elif isinstance(task, GrpoRawTask):
@@ -1063,6 +1079,9 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
             if isinstance(task, InstructTextRawTask):
                 train_ds = standardize_column_names(train_ds, task)
                 test_ds = standardize_column_names(test_ds, task)
+            elif isinstance(task, ChatRawTask):
+                train_ds = standardize_chat_column_names(train_ds, task)
+                test_ds = standardize_chat_column_names(test_ds, task)
             elif isinstance(task, DpoRawTask):
                 train_ds = standardize_dpo_column_names(train_ds, task)
                 test_ds = standardize_dpo_column_names(test_ds, task)
