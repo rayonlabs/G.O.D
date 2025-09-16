@@ -374,8 +374,6 @@ async def _create_final_text_task_by_type(
     if task_type == TaskType.INSTRUCTTEXTTASK:
         models_to_use = big_models if use_big_model else small_models
         return await create_synthetic_instruct_text_task(config, models_to_use, instruct_datasets)
-    elif task_type == TaskType.CHATTASK:
-        return await create_synthetic_chat_task(config, models_to_use, instruct_datasets)
     elif task_type == TaskType.DPOTASK:
         return await create_synthetic_dpo_task(config, small_models, dpo_datasets)
     elif task_type == TaskType.GRPOTASK:
@@ -525,16 +523,6 @@ async def _create_historical_text_boss_round_tasks(
         if task:
             tasks.append(task)
 
-    if TaskType.CHATTASK.value not in existing_task_types:
-        task = await _create_single_historical_text_task(
-            TaskType.CHATTASK,
-            tournament_id,
-            round_id,
-            pair_id,
-            config
-        )
-        if task:
-            tasks.append(task)
     
     if TaskType.DPOTASK.value not in existing_task_types:
         task = await _create_single_historical_text_task(
