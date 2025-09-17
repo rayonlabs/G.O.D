@@ -45,6 +45,7 @@ class ValidatorConfig(BaseConfig):
     refresh_nodes: bool = True
     database_url: str | None = None
     postgres_profile: str = "default"
+    discord_webhook: str | None = None
 
 
 @dataclass
