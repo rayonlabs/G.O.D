@@ -94,6 +94,7 @@ class RewardFunction(BaseModel):
     reward_weight: float = Field(..., ge=0)
     func_hash: str | None = None
     is_generic: bool | None = None
+    is_manual: bool | None = None
 
 
 class GrpoDatasetType(BaseModel):

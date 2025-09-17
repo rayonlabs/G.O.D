@@ -113,7 +113,7 @@ async def get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: int
         List of generic RewardFunction objects
     """
     query = f"""
-        SELECT {cst.REWARD_ID}, {cst.FUNC_HASH}, {cst.REWARD_FUNC}, {cst.IS_GENERIC}
+        SELECT {cst.REWARD_ID}, {cst.FUNC_HASH}, {cst.REWARD_FUNC}, {cst.IS_GENERIC}, {cst.IS_MANUAL}
         FROM {cst.REWARD_FUNCTIONS_TABLE}
         WHERE {cst.IS_GENERIC} = true
         AND {cst.IS_MANUAL} = true
@@ -129,6 +129,7 @@ async def get_generic_reward_functions_from_db(psql_db: PSQLDB, num_rewards: int
                 reward_func=row[cst.REWARD_FUNC],
                 func_hash=row[cst.FUNC_HASH],
                 is_generic=row[cst.IS_GENERIC],
+                is_manual=row[cst.IS_MANUAL],
                 reward_weight=1.0,
             )
             for row in rows
