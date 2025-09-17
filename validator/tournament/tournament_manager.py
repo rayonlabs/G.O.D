@@ -1,6 +1,5 @@
 import asyncio
 import random
-import os
 from datetime import datetime
 from datetime import timezone
 
