@@ -64,3 +64,6 @@ OBFUSCATION_DETECTION_PATH = "./validator/obfuscation_detection/anti_obfuscation
 # GitHub repository constants
 WINNER_REPO_GITHUB_ORG = "gradients-opensource"
 WINNER_REPO_POSITION_PREFIX = "position"
+
+# Round Sanity Check
+PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS = 0.5

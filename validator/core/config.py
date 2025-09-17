@@ -36,6 +36,7 @@ class Config:
     set_metagraph_weights_with_high_updated_to_not_dereg: bool
     github_token: str | None = None
     github_username: str | None = None
+    discord_url: str | None = None
     testnet: bool = os.getenv("SUBTENSOR_NETWORK", "").lower() == "test"
     debug: bool = os.getenv("ENV", "prod").lower() != "prod"
 
@@ -94,6 +95,7 @@ def load_config() -> Config:
 
         github_token = os.getenv("GITHUB_TOKEN")
         github_username = os.getenv("GITHUB_USERNAME")
+        discord_url = os.getenv("DISCORD_WEBHOOK", None)
 
         _config = Config(
             substrate=substrate,
@@ -109,5 +111,6 @@ def load_config() -> Config:
             set_metagraph_weights_with_high_updated_to_not_dereg=set_metagraph_weights_with_high_updated_to_not_dereg,
             github_token=github_token,
             github_username=github_username,
+            discord_url=discord_url,
         )
     return _config

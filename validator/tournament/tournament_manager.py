@@ -886,12 +886,12 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
             break
-    if statuses.count(TaskStatus.SUCCESS.value) <  len(statuses) / 2:
+    if (statuses.count(TaskStatus.SUCCESS.value) / len(statuses or [1])) < t_cst.PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS:
         logger.info(f"Task {task.task_id} has more than half failures")
-        discord_url = os.getenv("DISCORD_WEBHOOK")
+        discord_url = config.discord_url
         if discord_url:
             try:
-                _ = await send_to_discord(
+                await send_to_discord(
                     webhook=discord_url,
                     content=f"Warning: Tournament Round {round_data.round_id} has more than half tasks failed, please investigate.",
                 )
