@@ -26,8 +26,8 @@ from validator.augmentation.augmentation import generate_augmented_text_dataset
 from validator.augmentation.augmentation import generate_dpo_reformulation
 from validator.augmentation.augmentation import load_and_merge_multiple_datasets
 from validator.augmentation.augmentation import load_prompts
-from validator.augmentation.word_honeypots import generate_word_honeypot_config
 from validator.augmentation.word_honeypots import apply_word_honeypot_to_text
+from validator.augmentation.word_honeypots import generate_word_honeypot_config
 from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
@@ -334,6 +334,332 @@ def _generate_grpo_augmentation_config(dataset_size: int) -> dict:
         return {}
 
 
+def _apply_dpo_augmentations(row_dict: dict, augmentations: dict, idx: int) -> dict:
+    """Apply DPO-specific augmentations to a row."""
+    try:
+        # 1. Rearrange prompt sentences (applies to ALL rows if enabled)
+        if augmentations.get("rearrange_sentences") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
+            row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_DPO_PROMPT_COLUMN])
+    except Exception as e:
+        logger.error(f"Error in rearrange_sentences: {e}")
+
+    try:
+        # 2. Add prompt honeypot (applies to ALL rows if enabled)
+        if augmentations.get("add_prompt_honeypot") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
+            row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _insert_uid_randomly(
+                row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], augmentations["prompt_uid"]
+            )
+    except Exception as e:
+        logger.error(f"Error in prompt honeypot: {e}")
+
+    try:
+        # 3. Add response honeypot (applies to percentage of rows if enabled)
+        response_honeypot_indices = augmentations.get("response_honeypot_indices", set())
+        if augmentations.get("add_response_honeypot") and idx in response_honeypot_indices:
+            response_uid = augmentations["response_uid"]
+
+            if augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
+                if augmentations["honeypot_at_start"]:
+                    row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
+                        f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
+                    )
+                else:
+                    row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
+                        f"{row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]} {response_uid}"
+                    )
+            elif not augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
+                if augmentations["honeypot_at_start"]:
+                    row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
+                        f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
+                    )
+                else:
+                    row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
+                        f"{row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]} {response_uid}"
+                    )
+    except Exception as e:
+        logger.error(f"Error in response honeypot: {e}")
+
+    try:
+        # 4. Swap chosen and rejected (applies to ALL rows if enabled)
+        if augmentations.get("swap_chosen_rejected"):
+            if cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
+                row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN], row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
+                    row_dict[cst.STANDARD_DPO_REJECTED_COLUMN],
+                    row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN],
+                )
+    except Exception as e:
+        logger.error(f"Error in swap chosen/rejected: {e}")
+
+    return row_dict
+
+
+def _apply_instruct_augmentations(row_dict: dict, augmentations: dict, idx: int) -> dict:
+    """Apply Instruct-specific augmentations to a row."""
+    try:
+        # 1. Rearrange input/instruction (applies to ALL rows if enabled)
+        if augmentations.get("rearrange_input") and cst.STANDARD_INSTRUCT_COLUMN in row_dict:
+            row_dict[cst.STANDARD_INSTRUCT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_INSTRUCT_COLUMN])
+    except Exception as e:
+        logger.error(f"Error in rearrange_input: {e}")
+
+    try:
+        # 2. Rearrange output (applies to ALL rows if enabled)
+        if augmentations.get("rearrange_output") and cst.STANDARD_OUTPUT_COLUMN in row_dict:
+            row_dict[cst.STANDARD_OUTPUT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_OUTPUT_COLUMN])
+    except Exception as e:
+        logger.error(f"Error in rearrange_output: {e}")
+
+    try:
+        # 3. Add input honeypot (applies to ALL rows if enabled)
+        if augmentations.get("add_input_honeypot") and cst.STANDARD_INSTRUCT_COLUMN in row_dict:
+            input_uid = augmentations["input_uid"]
+            if augmentations.get("input_honeypot_at_start"):
+                row_dict[cst.STANDARD_INSTRUCT_COLUMN] = f"{input_uid} {row_dict[cst.STANDARD_INSTRUCT_COLUMN]}"
+            else:
+                row_dict[cst.STANDARD_INSTRUCT_COLUMN] = _insert_uid_randomly(
+                    row_dict[cst.STANDARD_INSTRUCT_COLUMN], input_uid
+                )
+    except Exception as e:
+        logger.error(f"Error in input honeypot: {e}")
+
+    try:
+        # 4. Add output honeypot (applies to percentage of rows if enabled)
+        output_honeypot_indices = augmentations.get("output_honeypot_indices", set())
+        if augmentations.get("add_output_honeypot") and idx in output_honeypot_indices:
+            output_uid = augmentations["output_uid"]
+            if augmentations.get("output_honeypot_at_start"):
+                row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{output_uid} {row_dict[cst.STANDARD_OUTPUT_COLUMN]}"
+            else:
+                row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{row_dict[cst.STANDARD_OUTPUT_COLUMN]} {output_uid}"
+    except Exception as e:
+        logger.error(f"Error in output honeypot: {e}")
+
+    try:
+        # 5. Apply word transformations to input (applies to ALL rows if enabled)
+        if cst.STANDARD_INSTRUCT_COLUMN in row_dict:
+            transformed_input = apply_word_honeypot_to_text(
+                text=row_dict[cst.STANDARD_INSTRUCT_COLUMN],
+                config=augmentations,
+                is_input=True
+            )
+            if transformed_input != row_dict[cst.STANDARD_INSTRUCT_COLUMN]:
+                row_dict[cst.STANDARD_INSTRUCT_COLUMN] = transformed_input
+    except Exception as e:
+        logger.error(f"Error in word transformations (input): {e}")
+
+    try:
+        # 6. Apply word transformations to output (applies conditionally if enabled)
+        if cst.STANDARD_OUTPUT_COLUMN in row_dict:
+            transformed_output = apply_word_honeypot_to_text(
+                text=row_dict[cst.STANDARD_OUTPUT_COLUMN],
+                config=augmentations,
+                is_input=False
+            )
+            if transformed_output != row_dict[cst.STANDARD_OUTPUT_COLUMN]:
+                row_dict[cst.STANDARD_OUTPUT_COLUMN] = transformed_output
+    except Exception as e:
+        logger.error(f"Error in word transformations (output): {e}")
+
+    return row_dict
+
+
+def _apply_grpo_augmentations(row_dict: dict, augmentations: dict, idx: int) -> dict:
+    """Apply GRPO-specific augmentations to a row."""
+    try:
+        # 1. Add prompt honeypot (applies to ALL rows if enabled)
+        if augmentations.get("add_prompt_honeypot") and cst.STANDARD_GRPO_PROMPT_COLUMN in row_dict:
+            row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN] = _insert_uid_randomly(
+                row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN], augmentations["prompt_uid"]
+            )
+    except Exception as e:
+        logger.error(f"Error in GRPO prompt honeypot: {e}")
+
+    try:
+        # 2. Apply word transformations to GRPO prompts (treat prompts as input)
+        if cst.STANDARD_GRPO_PROMPT_COLUMN in row_dict:
+            transformed_prompt = apply_word_honeypot_to_text(
+                text=row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN],
+                config=augmentations,
+                is_input=True  # GRPO prompts are treated as input
+            )
+            if transformed_prompt != row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN]:
+                row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN] = transformed_prompt
+    except Exception as e:
+        logger.error(f"Error in GRPO word transformations: {e}")
+
+    return row_dict
+
+
+def _log_dpo_augmentations(augmentations: dict, dataset) -> None:
+    """Log DPO augmentation configuration details."""
+    logger.info(
+        f"DPO Augmentations: rearrange={augmentations.get('rearrange_sentences')}, "
+        f"prompt_honeypot={augmentations.get('add_prompt_honeypot')}, "
+        f"response_honeypot={augmentations.get('add_response_honeypot')}, "
+        f"swap={augmentations.get('swap_chosen_rejected')}"
+    )
+
+    if augmentations.get("add_prompt_honeypot"):
+        logger.info(f"Prompt honeypot UID: {augmentations['prompt_uid']} (added to all prompts)")
+
+    if augmentations.get("add_response_honeypot"):
+        response_honeypot_indices = augmentations.get("response_honeypot_indices", set())
+        logger.info(
+            f"Response honeypot UID: {augmentations['response_uid']} "
+            f"(in {'chosen' if augmentations['honeypot_in_chosen'] else 'rejected'} "
+            f"at {'start' if augmentations['honeypot_at_start'] else 'end'} "
+            f"for {len(response_honeypot_indices)}/{len(dataset)} rows)"
+        )
+
+
+def _log_instruct_augmentations(augmentations: dict, dataset) -> None:
+    """Log Instruct augmentation configuration details."""
+    logger.info(
+        f"Instruct Augmentations: rearrange_input={augmentations.get('rearrange_input')}, "
+        f"rearrange_output={augmentations.get('rearrange_output')}, "
+        f"input_honeypot={augmentations.get('add_input_honeypot')}, "
+        f"output_honeypot={augmentations.get('add_output_honeypot')}"
+    )
+
+    # Log word honeypot transformations
+    input_word_transforms = augmentations.get('input_apply_word_transforms', False)
+    output_word_transforms = augmentations.get('output_apply_word_transforms', False)
+    if input_word_transforms or output_word_transforms:
+        logger.info(f"Word Honeypots: input_transforms={input_word_transforms}, output_transforms={output_word_transforms}")
+
+        if input_word_transforms:
+            input_transform_type = augmentations.get('input_text_transform_type', 'none')
+            logger.info(f"  Input word transform: {input_transform_type}")
+
+        if output_word_transforms:
+            output_transform_type = augmentations.get('output_text_transform_type', 'none')
+            logger.info(f"  Output word transform: {output_transform_type}")
+
+    if augmentations.get("add_input_honeypot"):
+        logger.info(
+            f"Input honeypot UID: {augmentations['input_uid']} "
+            f"(at {'start' if augmentations.get('input_honeypot_at_start') else 'end'} of all instructions)"
+        )
+
+    if augmentations.get("add_output_honeypot"):
+        output_honeypot_indices = augmentations.get("output_honeypot_indices", set())
+        logger.info(
+            f"Output honeypot UID: {augmentations['output_uid']} "
+            f"(at {'start' if augmentations.get('output_honeypot_at_start') else 'end'} "
+            f"for {len(output_honeypot_indices)}/{len(dataset)} rows)"
+        )
+
+
+def _log_grpo_augmentations(augmentations: dict) -> None:
+    """Log GRPO augmentation configuration details."""
+    logger.info("GRPO Augmentations: applying honeypots to prompts only")
+
+    if augmentations.get("add_prompt_honeypot"):
+        logger.info(f"  Prompt UID honeypot: {augmentations['prompt_uid']} (added to all prompts)")
+
+    if augmentations.get('apply_word_transforms'):
+        transform_type = augmentations.get('transform_type', 'none')
+        logger.info(f"  GRPO word transforms: {transform_type}")
+
+
+def _log_dpo_examples(result: list[dict]) -> None:
+    """Log examples of augmented DPO data."""
+    logger.info("[DPO_AUGMENTATION] Showing 2 examples of augmented data:")
+
+    # Show first 2 examples to see the augmentations
+    for i in range(min(2, len(result))):
+        example = result[i]
+        logger.info(f"[DPO_EXAMPLE_{i + 1}]:")
+
+        # Show prompt (truncate if too long)
+        prompt = example.get(cst.STANDARD_DPO_PROMPT_COLUMN, "")
+        if len(prompt) > 150:
+            prompt_preview = prompt[:150] + "..."
+        else:
+            prompt_preview = prompt
+        logger.info(f"  Prompt: {prompt_preview}")
+
+        # Show chosen (truncate if too long)
+        chosen = example.get(cst.STANDARD_DPO_CHOSEN_COLUMN, "")
+        if len(chosen) > 150:
+            chosen_preview = chosen[:150] + "..."
+        else:
+            chosen_preview = chosen
+        logger.info(f"  Chosen: {chosen_preview}")
+
+        # Show rejected (truncate if too long)
+        rejected = example.get(cst.STANDARD_DPO_REJECTED_COLUMN, "")
+        if len(rejected) > 150:
+            rejected_preview = rejected[:150] + "..."
+        else:
+            rejected_preview = rejected
+        logger.info(f"  Rejected: {rejected_preview}")
+
+
+def _log_instruct_examples(result: list[dict]) -> None:
+    """Log examples of augmented Instruct data."""
+    logger.info("[INSTRUCT_AUGMENTATION] Showing 2 examples of augmented data:")
+
+    # Show first 2 examples to see the augmentations
+    for i in range(min(2, len(result))):
+        example = result[i]
+        logger.info(f"[INSTRUCT_EXAMPLE_{i + 1}]:")
+
+        # Show instruction (truncate if too long)
+        instruction = example.get(cst.STANDARD_INSTRUCT_COLUMN, "")
+        if len(instruction) > 150:
+            instruction_preview = instruction[:150] + "..."
+        else:
+            instruction_preview = instruction
+        logger.info(f"  Instruction: {instruction_preview}")
+
+        # Show output (truncate if too long)
+        output = example.get(cst.STANDARD_OUTPUT_COLUMN, "")
+        if len(output) > 150:
+            output_preview = output[:150] + "..."
+        else:
+            output_preview = output
+        logger.info(f"  Output: {output_preview}")
+
+        # Show input if present
+        if cst.STANDARD_INPUT_COLUMN in example:
+            input_text = example.get(cst.STANDARD_INPUT_COLUMN, "")
+            if input_text and len(input_text) > 150:
+                input_preview = input_text[:150] + "..."
+            else:
+                input_preview = input_text
+            if input_preview:
+                logger.info(f"  Input: {input_preview}")
+
+
+def _log_grpo_examples(result: list[dict]) -> None:
+    """Log examples of augmented GRPO data."""
+    logger.info("[GRPO_AUGMENTATION] Showing 2 examples of augmented data:")
+
+    # Show first 2 examples to see the augmentations
+    for i in range(min(2, len(result))):
+        example = result[i]
+        logger.info(f"[GRPO_EXAMPLE_{i + 1}]:")
+
+        # Show prompt (truncate if too long)
+        prompt = example.get(cst.STANDARD_GRPO_PROMPT_COLUMN, "")
+        if len(prompt) > 150:
+            prompt_preview = prompt[:150] + "..."
+        else:
+            prompt_preview = prompt
+        logger.info(f"  Prompt: {prompt_preview}")
+
+        # Show extra column if present
+        if cst.STANDARD_GRPO_EXTRA_COLUMN in example:
+            extra = example.get(cst.STANDARD_GRPO_EXTRA_COLUMN, "")
+            if extra and len(extra) > 150:
+                extra_preview = extra[:150] + "..."
+            else:
+                extra_preview = extra
+            if extra_preview:
+                logger.info(f"  Extra: {extra_preview}")
+
+
 def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None, augmentations: dict = None):
     result = []
     total_rows = 0
@@ -342,68 +668,11 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
     if augmentations:
         if isinstance(task, DpoRawTask):
-            logger.info(
-                f"DPO Augmentations: rearrange={augmentations.get('rearrange_sentences')}, "
-                f"prompt_honeypot={augmentations.get('add_prompt_honeypot')}, "
-                f"response_honeypot={augmentations.get('add_response_honeypot')}, "
-                f"swap={augmentations.get('swap_chosen_rejected')}"
-            )
-
-            if augmentations.get("add_prompt_honeypot"):
-                logger.info(f"Prompt honeypot UID: {augmentations['prompt_uid']} (added to all prompts)")
-
-            if augmentations.get("add_response_honeypot"):
-                response_honeypot_indices = augmentations.get("response_honeypot_indices", set())
-                logger.info(
-                    f"Response honeypot UID: {augmentations['response_uid']} "
-                    f"(in {'chosen' if augmentations['honeypot_in_chosen'] else 'rejected'} "
-                    f"at {'start' if augmentations['honeypot_at_start'] else 'end'} "
-                    f"for {len(response_honeypot_indices)}/{len(dataset)} rows)"
-                )
+            _log_dpo_augmentations(augmentations, dataset)
         elif isinstance(task, InstructTextRawTask):
-            logger.info(
-                f"Instruct Augmentations: rearrange_input={augmentations.get('rearrange_input')}, "
-                f"rearrange_output={augmentations.get('rearrange_output')}, "
-                f"input_honeypot={augmentations.get('add_input_honeypot')}, "
-                f"output_honeypot={augmentations.get('add_output_honeypot')}"
-            )
-            
-            # Log word honeypot transformations
-            input_word_transforms = augmentations.get('input_apply_word_transforms', False)
-            output_word_transforms = augmentations.get('output_apply_word_transforms', False)
-            if input_word_transforms or output_word_transforms:
-                logger.info(f"Word Honeypots: input_transforms={input_word_transforms}, output_transforms={output_word_transforms}")
-                
-                if input_word_transforms:
-                    input_transform_type = augmentations.get('input_text_transform_type', 'none')
-                    logger.info(f"  Input word transform: {input_transform_type}")
-                    
-                if output_word_transforms:
-                    output_transform_type = augmentations.get('output_text_transform_type', 'none')
-                    logger.info(f"  Output word transform: {output_transform_type}")
-
-            if augmentations.get("add_input_honeypot"):
-                logger.info(
-                    f"Input honeypot UID: {augmentations['input_uid']} "
-                    f"(at {'start' if augmentations.get('input_honeypot_at_start') else 'end'} of all instructions)"
-                )
-
-            if augmentations.get("add_output_honeypot"):
-                output_honeypot_indices = augmentations.get("output_honeypot_indices", set())
-                logger.info(
-                    f"Output honeypot UID: {augmentations['output_uid']} "
-                    f"(at {'start' if augmentations.get('output_honeypot_at_start') else 'end'} "
-                    f"for {len(output_honeypot_indices)}/{len(dataset)} rows)"
-                )
+            _log_instruct_augmentations(augmentations, dataset)
         elif isinstance(task, GrpoRawTask):
-            logger.info("GRPO Augmentations: applying honeypots to prompts only")
-
-            if augmentations.get("add_prompt_honeypot"):
-                logger.info(f"  Prompt UID honeypot: {augmentations['prompt_uid']} (added to all prompts)")
-
-            if augmentations.get('apply_word_transforms'):
-                transform_type = augmentations.get('transform_type', 'none')
-                logger.info(f"  GRPO word transforms: {transform_type}")
+            _log_grpo_augmentations(augmentations)
 
     for idx, row in enumerate(dataset):
         row_dict = {}
@@ -431,150 +700,15 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
         # Apply DPO augmentations
         if isinstance(task, DpoRawTask) and augmentations:
-            try:
-                # 1. Rearrange prompt sentences (applies to ALL rows if enabled)
-                if augmentations.get("rearrange_sentences") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_DPO_PROMPT_COLUMN])
-            except Exception as e:
-                logger.error(f"Error in rearrange_sentences: {e}")
-
-            try:
-                # 2. Add prompt honeypot (applies to ALL rows if enabled)
-                if augmentations.get("add_prompt_honeypot") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _insert_uid_randomly(
-                        row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], augmentations["prompt_uid"]
-                    )
-            except Exception as e:
-                logger.error(f"Error in prompt honeypot: {e}")
-
-            try:
-                # 3. Add response honeypot (applies to percentage of rows if enabled)
-                response_honeypot_indices = augmentations.get("response_honeypot_indices", set())
-                if augmentations.get("add_response_honeypot") and idx in response_honeypot_indices:
-                    response_uid = augmentations["response_uid"]
-
-                    if augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
-                        if augmentations["honeypot_at_start"]:
-                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
-                                f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
-                            )
-                        else:
-                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
-                                f"{row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]} {response_uid}"
-                            )
-                    elif not augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                        if augmentations["honeypot_at_start"]:
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
-                                f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
-                            )
-                        else:
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
-                                f"{row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]} {response_uid}"
-                            )
-            except Exception as e:
-                logger.error(f"Error in response honeypot: {e}")
-
-            try:
-                # 4. Swap chosen and rejected (applies to ALL rows if enabled)
-                if augmentations.get("swap_chosen_rejected"):
-                    if cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                        row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN], row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN],
-                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN],
-                        )
-            except Exception as e:
-                logger.error(f"Error in swap chosen/rejected: {e}")
+            row_dict = _apply_dpo_augmentations(row_dict, augmentations, idx)
 
         # Apply Instruct augmentations
         if isinstance(task, InstructTextRawTask) and augmentations:
-            try:
-                # 1. Rearrange input/instruction (applies to ALL rows if enabled)
-                if augmentations.get("rearrange_input") and cst.STANDARD_INSTRUCT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_INSTRUCT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_INSTRUCT_COLUMN])
-            except Exception as e:
-                logger.error(f"Error in rearrange_input: {e}")
-
-            try:
-                # 2. Rearrange output (applies to ALL rows if enabled)
-                if augmentations.get("rearrange_output") and cst.STANDARD_OUTPUT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_OUTPUT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_OUTPUT_COLUMN])
-            except Exception as e:
-                logger.error(f"Error in rearrange_output: {e}")
-
-            try:
-                # 3. Add input honeypot (applies to ALL rows if enabled)
-                if augmentations.get("add_input_honeypot") and cst.STANDARD_INSTRUCT_COLUMN in row_dict:
-                    input_uid = augmentations["input_uid"]
-                    if augmentations.get("input_honeypot_at_start"):
-                        row_dict[cst.STANDARD_INSTRUCT_COLUMN] = f"{input_uid} {row_dict[cst.STANDARD_INSTRUCT_COLUMN]}"
-                    else:
-                        row_dict[cst.STANDARD_INSTRUCT_COLUMN] = _insert_uid_randomly(
-                            row_dict[cst.STANDARD_INSTRUCT_COLUMN], input_uid
-                        )
-            except Exception as e:
-                logger.error(f"Error in input honeypot: {e}")
-
-            try:
-                # 4. Add output honeypot (applies to percentage of rows if enabled)
-                output_honeypot_indices = augmentations.get("output_honeypot_indices", set())
-                if augmentations.get("add_output_honeypot") and idx in output_honeypot_indices:
-                    output_uid = augmentations["output_uid"]
-                    if augmentations.get("output_honeypot_at_start"):
-                        row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{output_uid} {row_dict[cst.STANDARD_OUTPUT_COLUMN]}"
-                    else:
-                        row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{row_dict[cst.STANDARD_OUTPUT_COLUMN]} {output_uid}"
-            except Exception as e:
-                logger.error(f"Error in output honeypot: {e}")
-
-            try:
-                # 5. Apply word transformations to input (applies to ALL rows if enabled)
-                if cst.STANDARD_INSTRUCT_COLUMN in row_dict:
-                    transformed_input = apply_word_honeypot_to_text(
-                        text=row_dict[cst.STANDARD_INSTRUCT_COLUMN],
-                        config=augmentations,
-                        is_input=True
-                    )
-                    if transformed_input != row_dict[cst.STANDARD_INSTRUCT_COLUMN]:
-                        row_dict[cst.STANDARD_INSTRUCT_COLUMN] = transformed_input
-            except Exception as e:
-                logger.error(f"Error in word transformations (input): {e}")
-
-            try:
-                # 6. Apply word transformations to output (applies conditionally if enabled)
-                if cst.STANDARD_OUTPUT_COLUMN in row_dict:
-                    transformed_output = apply_word_honeypot_to_text(
-                        text=row_dict[cst.STANDARD_OUTPUT_COLUMN],
-                        config=augmentations,
-                        is_input=False
-                    )
-                    if transformed_output != row_dict[cst.STANDARD_OUTPUT_COLUMN]:
-                        row_dict[cst.STANDARD_OUTPUT_COLUMN] = transformed_output
-            except Exception as e:
-                logger.error(f"Error in word transformations (output): {e}")
+            row_dict = _apply_instruct_augmentations(row_dict, augmentations, idx)
 
         # Apply GRPO augmentations
         if isinstance(task, GrpoRawTask) and augmentations:
-            try:
-                # 1. Add prompt honeypot (applies to ALL rows if enabled)
-                if augmentations.get("add_prompt_honeypot") and cst.STANDARD_GRPO_PROMPT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN] = _insert_uid_randomly(
-                        row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN], augmentations["prompt_uid"]
-                    )
-            except Exception as e:
-                logger.error(f"Error in GRPO prompt honeypot: {e}")
-
-            try:
-                # 2. Apply word transformations to GRPO prompts (treat prompts as input)
-                if cst.STANDARD_GRPO_PROMPT_COLUMN in row_dict:
-                    transformed_prompt = apply_word_honeypot_to_text(
-                        text=row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN],
-                        config=augmentations,
-                        is_input=True  # GRPO prompts are treated as input
-                    )
-                    if transformed_prompt != row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN]:
-                        row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN] = transformed_prompt
-            except Exception as e:
-                logger.error(f"Error in GRPO word transformations: {e}")
+            row_dict = _apply_grpo_augmentations(row_dict, augmentations, idx)
 
         result.append(row_dict)
         total_rows += 1
@@ -586,100 +720,13 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
     result = _validate_dpo_data(result, task)
 
-    # Log examples of augmented data for DPO tasks
+    # Log examples of augmented data
     if isinstance(task, DpoRawTask) and result:
-        logger.info("[DPO_AUGMENTATION] Showing 2 examples of augmented data:")
-
-        # Show first 2 examples to see the augmentations
-        for i in range(min(2, len(result))):
-            example = result[i]
-            logger.info(f"[DPO_EXAMPLE_{i + 1}]:")
-
-            # Show prompt (truncate if too long)
-            prompt = example.get(cst.STANDARD_DPO_PROMPT_COLUMN, "")
-            if len(prompt) > 150:
-                prompt_preview = prompt[:150] + "..."
-            else:
-                prompt_preview = prompt
-            logger.info(f"  Prompt: {prompt_preview}")
-
-            # Show chosen (truncate if too long)
-            chosen = example.get(cst.STANDARD_DPO_CHOSEN_COLUMN, "")
-            if len(chosen) > 150:
-                chosen_preview = chosen[:150] + "..."
-            else:
-                chosen_preview = chosen
-            logger.info(f"  Chosen: {chosen_preview}")
-
-            # Show rejected (truncate if too long)
-            rejected = example.get(cst.STANDARD_DPO_REJECTED_COLUMN, "")
-            if len(rejected) > 150:
-                rejected_preview = rejected[:150] + "..."
-            else:
-                rejected_preview = rejected
-            logger.info(f"  Rejected: {rejected_preview}")
-
-    # Log examples of augmented data for Instruct tasks
-    if isinstance(task, InstructTextRawTask) and augmentations and result:
-        logger.info("[INSTRUCT_AUGMENTATION] Showing 2 examples of augmented data:")
-
-        # Show first 2 examples to see the augmentations
-        for i in range(min(2, len(result))):
-            example = result[i]
-            logger.info(f"[INSTRUCT_EXAMPLE_{i + 1}]:")
-
-            # Show instruction (truncate if too long)
-            instruction = example.get(cst.STANDARD_INSTRUCT_COLUMN, "")
-            if len(instruction) > 150:
-                instruction_preview = instruction[:150] + "..."
-            else:
-                instruction_preview = instruction
-            logger.info(f"  Instruction: {instruction_preview}")
-
-            # Show output (truncate if too long)
-            output = example.get(cst.STANDARD_OUTPUT_COLUMN, "")
-            if len(output) > 150:
-                output_preview = output[:150] + "..."
-            else:
-                output_preview = output
-            logger.info(f"  Output: {output_preview}")
-
-            # Show input if present
-            if cst.STANDARD_INPUT_COLUMN in example:
-                input_text = example.get(cst.STANDARD_INPUT_COLUMN, "")
-                if input_text and len(input_text) > 150:
-                    input_preview = input_text[:150] + "..."
-                else:
-                    input_preview = input_text
-                if input_preview:
-                    logger.info(f"  Input: {input_preview}")
-
-    # Log examples of augmented data for GRPO tasks
-    if isinstance(task, GrpoRawTask) and augmentations and result:
-        logger.info("[GRPO_AUGMENTATION] Showing 2 examples of augmented data:")
-
-        # Show first 2 examples to see the augmentations
-        for i in range(min(2, len(result))):
-            example = result[i]
-            logger.info(f"[GRPO_EXAMPLE_{i + 1}]:")
-
-            # Show prompt (truncate if too long)
-            prompt = example.get(cst.STANDARD_GRPO_PROMPT_COLUMN, "")
-            if len(prompt) > 150:
-                prompt_preview = prompt[:150] + "..."
-            else:
-                prompt_preview = prompt
-            logger.info(f"  Prompt: {prompt_preview}")
-
-            # Show extra column if present
-            if cst.STANDARD_GRPO_EXTRA_COLUMN in example:
-                extra = example.get(cst.STANDARD_GRPO_EXTRA_COLUMN, "")
-                if extra and len(extra) > 150:
-                    extra_preview = extra[:150] + "..."
-                else:
-                    extra_preview = extra
-                if extra_preview:
-                    logger.info(f"  Extra: {extra_preview}")
+        _log_dpo_examples(result)
+    elif isinstance(task, InstructTextRawTask) and augmentations and result:
+        _log_instruct_examples(result)
+    elif isinstance(task, GrpoRawTask) and augmentations and result:
+        _log_grpo_examples(result)
 
     return result
 
