@@ -763,13 +763,11 @@ def apply_tournament_weights_separated(
             image_contribution = weight * scaled_image_tournament_weight
             all_node_weights[node_id] = all_node_weights[node_id] + image_contribution
 
-
             logger.info(f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
                        f"IMAGE TOURNAMENT - weight={weight:.6f}, "
                        f"scaled_image_weight={scaled_image_tournament_weight:.6f}, "
                        f"image_contribution={image_contribution:.6f}, "
                        f"total_weight={all_node_weights[node_id]:.6f}")
-
 
 
 async def get_node_weights_from_period_scores_separated(
