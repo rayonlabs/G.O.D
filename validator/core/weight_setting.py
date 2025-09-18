@@ -709,6 +709,12 @@ def apply_regular_weights_separated(
                     text_regular_contribution: float = (burn_data.text_regular_weight * weekly_part.text_task_proportion) * scale_factor
                     image_regular_contribution: float = (burn_data.image_regular_weight * weekly_part.image_task_proportion) * scale_factor
                     total_regular_weight: float = text_regular_contribution + image_regular_contribution
+
+                    logger.info(f"Node ID {node_id} (hotkey: {node_result.hotkey[:8]}...): "
+                               f"LEGACY MINER - text_prop={weekly_part.text_task_proportion:.2f}, "
+                               f"image_prop={weekly_part.image_task_proportion:.2f}, "
+                               f"text_regular={text_regular_contribution:.6f}, "
+                               f"image_regular={image_regular_contribution:.6f}")
                 else:
                     # No weekly participation - use base regular weight
                     total_regular_weight = cts.BASE_REGULAR_WEIGHT * scale_factor
@@ -755,6 +761,8 @@ def apply_tournament_weights_separated(
 
                 if tournament_part:
                     logger.info(f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
+                               f"TOURNAMENT MINER - text_prop={tournament_part.text_proportion:.2f}, "
+                               f"image_prop={tournament_part.image_proportion:.2f}, "
                                f"tournament_weight={weight:.6f}, "
                                f"text_contribution={text_contribution:.6f}, "
                                f"image_contribution={image_contribution:.6f}, "
@@ -785,6 +793,15 @@ async def get_node_weights_from_period_scores_separated(
 
     # Get separated burn data
     burn_data: TournamentBurnDataSeparated = await get_tournament_burn_details_separated(psql_db)
+
+    logger.info(f"=== SEPARATED BURN DATA ===")
+    logger.info(f"Text performance diff: {burn_data.text_performance_diff:.2%}")
+    logger.info(f"Image performance diff: {burn_data.image_performance_diff:.2%}")
+    logger.info(f"Text tournament weight: {burn_data.text_tournament_weight:.6f}")
+    logger.info(f"Image tournament weight: {burn_data.image_tournament_weight:.6f}")
+    logger.info(f"Text regular weight: {burn_data.text_regular_weight:.6f}")
+    logger.info(f"Image regular weight: {burn_data.image_regular_weight:.6f}")
+    logger.info(f"Total burn weight: {burn_data.burn_weight:.6f}")
 
     # Get participation data
     tournament_participation: list[HotkeyTournamentParticipation] = await get_tournament_participation_data(psql_db)
@@ -1195,9 +1212,11 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
     tournament_audit_data.regular_weight_multiplier = burn_data.regular_weight
     tournament_audit_data.burn_weight = burn_data.burn_weight
 
-    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(
+    result = await get_node_weights_from_period_scores_separated(
         config.substrate, config.netuid, node_results, config.psql_db
     )
+    all_node_ids = result.node_ids
+    all_node_weights = result.node_weights
     logger.info("Weights calculated, about to set...")
 
     success = await set_weights(config, all_node_ids, all_node_weights, validator_node_id)
