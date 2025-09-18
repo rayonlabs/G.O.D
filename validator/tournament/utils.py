@@ -5,6 +5,7 @@ from collections import Counter
 
 import aiohttp
 import numpy as np
+import httpx
 
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentParticipant
@@ -597,3 +598,10 @@ async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLD
         logger.info(f"Unique winners: {unique_winners}")
 
     return unique_winners
+
+async def send_to_discord(webhook: str, message: str):
+    async with httpx.AsyncClient() as client:
+        payload = {"content": message}
+        response = await client.post(webhook, json=payload)
+        return response
+
