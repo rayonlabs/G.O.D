@@ -291,6 +291,40 @@ class NewTaskRequestGrpo(NewTaskRequest):
         return self
 
 
+class NewTaskRequestInstructToChat(NewTaskRequest):
+    """Request model for creating a chat task from instruct-style dataset parameters"""
+
+    ds_repo: str = Field(..., description="The repository for the dataset", examples=["yahma/alpaca-cleaned"])
+    file_format: FileFormat = Field(
+        FileFormat.HF, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
+    model_repo: str = Field(..., description="Model repository on Hugging Face", examples=["Qwen/Qwen2.5-Coder-32B-Instruct"])
+    field_input: str = Field(
+        ...,
+        description="Name of the input column. It will be converted to the chat format as the user's message",
+        examples=["input"],
+    )
+    field_output: str = Field(
+        ...,
+        description="Name of the output column. It will be converted to the chat format as the assistant's message",
+        examples=["output"],
+    )
+
+    # Turn off protected namespace for model
+    model_config = ConfigDict(protected_namespaces=())
+
+    @model_validator(mode="before")
+    def convert_empty_strings(cls, values):
+        string_fields = [
+            "field_input",
+            "field_output",
+        ]
+        for field in string_fields:
+            if field in values and isinstance(values[field], str):
+                values[field] = values[field].strip() or None
+        return values
+
+
 class NewTaskRequestImage(NewTaskRequest):
     model_config = ConfigDict(protected_namespaces=())
     model_repo: str = Field(..., description="The model repository to use")
@@ -389,10 +423,13 @@ class ChatTaskDetails(TaskDetails):
     chat_role_field: str = Field(..., description="The column name to specify the role in the conversation ", examples=["from"])
     chat_content_field: str = Field(..., description="The column name to specify the text content", examples=["value"])
     chat_user_reference: str | None = Field(None, description="The column name to specify the user", examples=["user"])
-    chat_assistant_reference: str | None = Field(None, description="The column name to specify the assistant", examples=["assistant"])
+    chat_assistant_reference: str | None = Field(
+        None, description="The column name to specify the assistant", examples=["assistant"]
+    )
 
     # Turn off protected namespace for model
     model_config = ConfigDict(protected_namespaces=())
+
 
 class DpoTaskDetails(TaskDetails):
     task_type: TaskType = TaskType.DPOTASK
@@ -515,4 +552,4 @@ class AddRewardFunctionRequest(BaseModel):
 
 
 # Type alias for task details types
-AnyTypeTaskDetails = InstructTextTaskDetails | ChatTaskDetails| ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
+AnyTypeTaskDetails = InstructTextTaskDetails | ChatTaskDetails | ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
