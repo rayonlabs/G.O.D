@@ -819,16 +819,14 @@ async def _process_and_upload_datasets(
     augmentations = None
     # Only apply augmentations for synthetic tasks (not organic)
     if not task.is_organic:
+        max_dataset_size = max(len(train_dataset), len(test_dataset))
         if isinstance(task, DpoRawTask):
-            max_dataset_size = max(len(train_dataset), len(test_dataset))
             augmentations = _generate_dpo_augmentation_config(max_dataset_size)
             logger.info(f"Generated DPO augmentation config for synthetic dataset size {max_dataset_size}")
         elif isinstance(task, InstructTextRawTask):
-            max_dataset_size = max(len(train_dataset), len(test_dataset))
             augmentations = _generate_instruct_augmentation_config(max_dataset_size)
             logger.info(f"Generated Instruct augmentation config for synthetic dataset size {max_dataset_size}")
         elif isinstance(task, GrpoRawTask):
-            max_dataset_size = max(len(train_dataset), len(test_dataset))
             augmentations = _generate_grpo_augmentation_config(max_dataset_size)
             logger.info(f"Generated GRPO augmentation config for synthetic dataset size {max_dataset_size}")
 
