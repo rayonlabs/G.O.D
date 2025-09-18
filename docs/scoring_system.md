@@ -8,6 +8,8 @@ The scoring system uses these key constants (see [`validator/core/constants.py`]
 - `LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT` - Legacy boost multiplier
 - `TOURNAMENT_TEXT_WEIGHT` - Base text tournament weight
 - `TOURNAMENT_IMAGE_WEIGHT` - Base image tournament weight
+- `BASE_TOURNAMENT_WEIGHT` - Base tournament weight allocation
+- `BASE_REGULAR_WEIGHT` - Base regular weight allocation
 - `EMISSION_BURN_HOTKEY` - Address that receives burned emissions
 - `MAX_BURN_PROPORTION` - Maximum proportion of weight that can be burned
 
@@ -93,13 +95,23 @@ text_burn_proportion = min(0.75, 0.14 * 5.0) = 0.70
 image_burn_proportion = min(0.75, 0.04 * 5.0) = 0.20
 ```
 
-**Weight Redistribution (using TOURNAMENT_TEXT_WEIGHT = 0.6, TOURNAMENT_IMAGE_WEIGHT = 0.4):**
+**Weight Redistribution (using BASE_TOURNAMENT_WEIGHT = 0.525, TOURNAMENT_TEXT_WEIGHT = 0.55, TOURNAMENT_IMAGE_WEIGHT = 0.45, BASE_REGULAR_WEIGHT = 0.15, LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25):**
 ```
-text_tournament_weight = 0.6 * (1 - 0.70) = 0.18
-image_tournament_weight = 0.4 * (1 - 0.20) = 0.32
-text_regular_weight = 0.6  # stays at base
-image_regular_weight = 0.4  # stays at base
-burn_weight = (0.6 * 0.70) + (0.4 * 0.20) = 0.50
+# Calculate tournament burn amounts
+text_tournament_burn = 0.525 * 0.55 * 0.70 = 0.202
+image_tournament_burn = 0.525 * 0.45 * 0.20 = 0.047
+
+# Tournament weights after burn
+text_tournament_weight = (0.525 * 0.55) - 0.202 = 0.087
+image_tournament_weight = (0.525 * 0.45) - 0.047 = 0.189
+
+# Regular weights get base + portion of tournament burn
+text_regular_weight = 0.15 + (0.202 * 0.25) = 0.201
+image_regular_weight = 0.15 + (0.047 * 0.25) = 0.162
+
+# Burn weight gets remainder
+total_tournament_burn = 0.202 + 0.047 = 0.249
+burn_weight = (1 - 0.15 - 0.525) + (0.249 * (1 - 0.25)) = 0.512
 ```
 
 **Legacy Boosts (using LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25):**
@@ -109,12 +121,14 @@ image_legacy_boost = -0.04 * 0.25 = -0.01 (1% boost applied to individual legacy
 ```
 
 **Results:**
-- Text tournament miners face 70% weight reduction
-- Image tournament miners face 20% weight reduction
+- Text tournament weight reduced from 0.289 to 0.087 (70% reduction)
+- Image tournament weight reduced from 0.236 to 0.189 (20% reduction)
+- Text regular weight boosted from 0.15 to 0.201 (34% increase)
+- Image regular weight boosted from 0.15 to 0.162 (8% increase)
 - Legacy miners doing text tasks get 3.5% boost to their individual scores
 - Legacy miners doing image tasks get 1% boost to their individual scores
 - Miners doing both get proportional boosts based on their 7-day task mix
-- 50% of total weight goes to `EMISSION_BURN_HOTKEY`
+- 51.2% of total weight goes to `EMISSION_BURN_HOTKEY`
 
 ## Key Benefits
 
