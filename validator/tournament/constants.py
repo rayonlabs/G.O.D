@@ -54,9 +54,9 @@ MODEL_SIZE_RANGE_MULTIPLIER_MAX = 1.2
 MODEL_PARAMS_TO_BILLIONS = 1e9
 
 # Progressive championship threshold constants
-FIRST_DEFENSE_THRESHOLD = 0.10  # 10% advantage needed on first defense after becoming champion
-SECOND_DEFENSE_THRESHOLD = 0.075  # 7.5% advantage needed on second defense
-STEADY_STATE_THRESHOLD = 0.05  # 5% advantage needed from third defense onwards
+EXPONENTIAL_BASE_THRESHOLD = 0.20  # Starting threshold for new champions
+EXPONENTIAL_DECAY_RATE = 0.8  # Decay factor per consecutive win
+EXPONENTIAL_MIN_THRESHOLD = 0.03  # Minimum threshold floor
 
 # Obfuscation detection constants
 OBFUSCATION_DETECTION_PATH = "./validator/obfuscation_detection/anti_obfuscation"
@@ -64,3 +64,6 @@ OBFUSCATION_DETECTION_PATH = "./validator/obfuscation_detection/anti_obfuscation
 # GitHub repository constants
 WINNER_REPO_GITHUB_ORG = "gradients-opensource"
 WINNER_REPO_POSITION_PREFIX = "position"
+
+# Round Sanity Check
+PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS = 0.5

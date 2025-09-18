@@ -61,6 +61,7 @@ async def build_miner_details_response(
     
     task_type_map = {
         str(TaskType.INSTRUCTTEXTTASK): ("instruct_text", TaskType.INSTRUCTTEXTTASK),
+        str(TaskType.CHATTASK): ("chat", TaskType.CHATTASK),
         str(TaskType.DPOTASK): ("dpo", TaskType.DPOTASK),
         str(TaskType.IMAGETASK): ("image", TaskType.IMAGETASK),
         str(TaskType.GRPOTASK): ("grpo", TaskType.GRPOTASK)

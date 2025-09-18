@@ -68,6 +68,7 @@ from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_latest_tournament_winner_participant
 from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import replace_tournament_task
+from validator.tournament.utils import send_to_discord
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import LogContext
 from validator.utils.logging import get_logger
@@ -839,7 +840,6 @@ async def process_active_tournaments(config: Config):
                         await create_first_round_for_active_tournament(tournament.tournament_id, config, config.psql_db)
                     else:
                         current_round = rounds[-1]
-
                         if current_round.status == RoundStatus.ACTIVE:
                             if await check_if_round_is_completed(current_round, config):
                                 await update_round_status(current_round.round_id, RoundStatus.COMPLETED, config.psql_db)
@@ -873,8 +873,10 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
         return False
 
     all_tasks_completed = True
+    statuses = []
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
+        statuses.append(task_obj.status)
         if task_obj and task_obj.status not in [
             TaskStatus.SUCCESS.value,
             TaskStatus.FAILURE.value,
@@ -883,6 +885,18 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
             break
+    if (statuses.count(TaskStatus.SUCCESS.value) / len(statuses or [1])) < t_cst.PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS:
+        logger.info(f"Task {task.task_id} has more than half failures")
+        discord_url = config.discord_url
+        if discord_url:
+            try:
+                await send_to_discord(
+                    webhook=discord_url,
+                    content=f"Warning: Tournament Round {round_data.round_id} has more than half tasks failed, please investigate.",
+                )
+            except Exception as e:
+                logger.error(f"Failed to send Discord notification: {e}")
+        return False
 
     waiting_for_synced_tasks = False
     if not all_tasks_completed:

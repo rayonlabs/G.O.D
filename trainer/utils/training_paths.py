@@ -4,6 +4,7 @@ import trainer.constants as train_cst
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 
 def get_checkpoints_output_path(task_id: str, repo_name: str) -> str:
@@ -41,7 +42,7 @@ def get_axolotl_dataset_paths(dataset_filename: str) -> tuple[str, str]:
 
 def get_axolotl_base_config_path(dataset_type) -> str:
     root_dir = Path(train_cst.AXOLOTL_DIRECTORIES["root"])
-    if isinstance(dataset_type, (InstructTextDatasetType, DpoDatasetType)):
+    if isinstance(dataset_type, (InstructTextDatasetType, DpoDatasetType, ChatTemplateDatasetType)):
         return str(root_dir / "base.yml")
     elif isinstance(dataset_type, GrpoDatasetType):
         return str(root_dir / "base_grpo.yml")

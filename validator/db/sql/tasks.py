@@ -327,9 +327,9 @@ async def get_tasks_with_status(
                 """
             elif task_type == TaskType.CHATTASK.value:
                 specific_query = f"""
-                    SELECT 
-                        t.*, 
-                        gt.synthetic_data, 
+                    SELECT
+                        t.*,
+                        gt.synthetic_data,
                         gt.file_format,
                         gt.chat_template,
                         gt.chat_column,
@@ -338,7 +338,7 @@ async def get_tasks_with_status(
                         gt.chat_user_reference,
                         gt.chat_assistant_reference
                     FROM {cst.TASKS_TABLE} t
-                    LEFT JOIN {cst.CHAT_TASKS_TABLE} gt 
+                    LEFT JOIN {cst.CHAT_TASKS_TABLE} gt
                         ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
                 """
@@ -665,6 +665,7 @@ async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=Fals
             TaskType.INSTRUCTTEXTTASK.value: "instruct",
             TaskType.DPOTASK.value: "dpo",
             TaskType.GRPOTASK.value: "grpo",
+            TaskType.CHATTASK.value: "chat",
             TaskType.IMAGETASK.value: "image",
         }
 
@@ -805,9 +806,9 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
             """
         elif task_type == TaskType.CHATTASK.value:
             specific_query = f"""
-                SELECT 
-                    t.*, 
-                    gt.synthetic_data, 
+                SELECT
+                    t.*,
+                    gt.synthetic_data,
                     gt.file_format,
                     gt.chat_template,
                     gt.chat_column,
@@ -816,7 +817,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
                     gt.chat_user_reference,
                     gt.chat_assistant_reference
                 FROM {cst.TASKS_TABLE} t
-                LEFT JOIN {cst.CHAT_TASKS_TABLE} gt 
+                LEFT JOIN {cst.CHAT_TASKS_TABLE} gt
                     ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
             """
@@ -913,9 +914,9 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
         elif task_type == TaskType.CHATTASK.value:
             specific_query = f"""
                 {victorious_repo_cte}
-                SELECT 
-                    tasks.*, 
-                    tt.synthetic_data, 
+                SELECT
+                    tasks.*,
+                    tt.synthetic_data,
                     tt.file_format,
                     tt.chat_template,
                     tt.chat_column,
@@ -925,7 +926,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                     tt.chat_assistant_reference,
                     COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
-                LEFT JOIN {cst.CHAT_TASKS_TABLE} tt 
+                LEFT JOIN {cst.CHAT_TASKS_TABLE} tt
                     ON tasks.{cst.TASK_ID} = tt.{cst.TASK_ID}
                 LEFT JOIN victorious_repo ON tasks.task_id = victorious_repo.task_id
                 WHERE tasks.{cst.TASK_ID} = $1
@@ -1091,6 +1092,15 @@ def _get_specific_query_for_task_type(task_type: str) -> str | None:
             LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
             WHERE t.{cst.TASK_ID} = ANY($1)
         """
+    elif task_type == TaskType.CHATTASK.value:
+        return f"""
+            SELECT t.*, ct.chat_template,
+                   ct.chat_column, ct.chat_role_field, ct.chat_content_field,
+                   ct.chat_user_reference, ct.chat_assistant_reference, ct.synthetic_data
+            FROM {cst.TASKS_TABLE} t
+            LEFT JOIN {cst.CHAT_TASKS_TABLE} ct ON t.{cst.TASK_ID} = ct.{cst.TASK_ID}
+            WHERE t.{cst.TASK_ID} = ANY($1)
+        """
     elif task_type == TaskType.IMAGETASK.value:
         return f"""
             SELECT t.*, it.model_type
@@ -1124,6 +1134,8 @@ async def _create_task_from_data(
 
     if task_type == TaskType.INSTRUCTTEXTTASK.value:
         return InstructTextRawTask(**full_task_data)
+    elif task_type == TaskType.CHATTASK.value:
+        return ChatRawTask(**full_task_data)
     elif task_type == TaskType.IMAGETASK.value:
         image_text_pairs = await get_image_text_pairs(task_id, psql_db, conn)
         return ImageRawTask(**full_task_data, image_text_pairs=image_text_pairs)
@@ -1480,7 +1492,7 @@ async def add_reward_functions(task_id: UUID, reward_functions: list[RewardFunct
 async def get_reward_functions(task_id: UUID, psql_db: PSQLDB, connection: Connection | None = None) -> list[RewardFunction]:
     async def _get_reward_functions(conn: Connection) -> list[RewardFunction]:
         query = f"""
-            SELECT rf.{cst.REWARD_ID}, rf.{cst.REWARD_FUNC}, rf.{cst.FUNC_HASH}, rf.{cst.IS_GENERIC}, gtf.{cst.REWARD_WEIGHT}
+            SELECT rf.{cst.REWARD_ID}, rf.{cst.REWARD_FUNC}, rf.{cst.FUNC_HASH}, rf.{cst.IS_GENERIC}, rf.{cst.IS_MANUAL}, gtf.{cst.REWARD_WEIGHT}
             FROM {cst.REWARD_FUNCTIONS_TABLE} rf
             JOIN {cst.GRPO_TASK_FUNCTIONS_TABLE} gtf ON rf.{cst.REWARD_ID} = gtf.{cst.REWARD_ID}
             WHERE gtf.{cst.TASK_ID} = $1
@@ -1492,6 +1504,7 @@ async def get_reward_functions(task_id: UUID, psql_db: PSQLDB, connection: Conne
                 reward_func=row[cst.REWARD_FUNC],
                 func_hash=row[cst.FUNC_HASH],
                 is_generic=row[cst.IS_GENERIC],
+                is_manual=row[cst.IS_MANUAL],
                 reward_weight=row[cst.REWARD_WEIGHT],
             )
             for row in rows

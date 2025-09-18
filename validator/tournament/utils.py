@@ -5,6 +5,7 @@ from collections import Counter
 
 import aiohttp
 import numpy as np
+import httpx
 
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentParticipant
@@ -45,20 +46,10 @@ logger = get_logger(__name__)
 
 def get_progressive_threshold(consecutive_wins: int) -> float:
     """
-    Calculate the progressive threshold based on consecutive wins.
-    - 1st defense after becoming champion (1 win): 10% advantage needed
-    - 2nd defense (2 wins): 7.5% advantage needed
-    - 3rd+ defense (3+ wins): 5% advantage needed
+    Calculate the progressive threshold using exponential decay.
     """
-    if consecutive_wins <= 1:
-        # First defense after becoming champion - use 10%
-        return t_cst.FIRST_DEFENSE_THRESHOLD
-    elif consecutive_wins == 2:
-        # After 1 successful defense (2 total wins) - use 7.5%
-        return t_cst.SECOND_DEFENSE_THRESHOLD
-    else:
-        # After 2+ successful defenses (3+ total wins) - use 5%
-        return t_cst.STEADY_STATE_THRESHOLD
+    current_threshold = t_cst.EXPONENTIAL_BASE_THRESHOLD * (t_cst.EXPONENTIAL_DECAY_RATE ** (consecutive_wins-1))
+    return max(t_cst.EXPONENTIAL_MIN_THRESHOLD, current_threshold)
 
 
 async def replace_tournament_task(
@@ -144,7 +135,7 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
             continue
 
         # Create appropriate MinerResults object
-        if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+        if task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.CHATTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
             miner_result = MinerResultsText(
                 hotkey=hotkey,
                 test_loss=test_loss,
@@ -607,3 +598,10 @@ async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLD
         logger.info(f"Unique winners: {unique_winners}")
 
     return unique_winners
+
+async def send_to_discord(webhook: str, message: str):
+    async with httpx.AsyncClient() as client:
+        payload = {"content": message}
+        response = await client.post(webhook, json=payload)
+        return response
+

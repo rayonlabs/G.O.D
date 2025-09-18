@@ -88,16 +88,13 @@ async def load_dataset_from_s3(dataset_url: str, max_file_size_bytes: int = None
     """Load a dataset from S3 storage."""
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
-            local_file_path = await download_s3_file(dataset_url)
+            local_file_path = await download_s3_file(dataset_url, save_path=temp_dir)
             if max_file_size_bytes:
                 file_size = os.path.getsize(local_file_path)
                 if file_size > max_file_size_bytes:
                     raise ValueError(f"File size {file_size} exceeds max file size {max_file_size_bytes}")
-            filename = os.path.basename(local_file_path)
-            new_path = os.path.join(temp_dir, filename)
 
-            os.rename(local_file_path, new_path)
-            dataset = load_dataset("json", data_files=new_path, split="train", trust_remote_code=False)
+            dataset = load_dataset("json", data_files=local_file_path, split="train", trust_remote_code=False)
 
             return dataset
     except Exception as e:
