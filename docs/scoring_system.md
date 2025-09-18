@@ -98,6 +98,7 @@ image_burn_proportion = min(0.75, 0.04 * 5.0) = 0.20
 ```
 
 **Weight Redistribution (using BASE_TOURNAMENT_WEIGHT = 0.525, TOURNAMENT_TEXT_WEIGHT = 0.55, TOURNAMENT_IMAGE_WEIGHT = 0.45, BASE_REGULAR_WEIGHT = 0.15, LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25):**
+
 ```
 # Calculate tournament burn amounts
 text_tournament_burn = 0.525 * 0.55 * 0.70 = 0.202
@@ -114,9 +115,10 @@ image_regular_weight = 0.15 + (0.047 * 0.25) = 0.162
 # Burn weight gets remainder
 total_tournament_burn = 0.202 + 0.047 = 0.249
 burn_weight = (1 - 0.15 - 0.525) + (0.249 * (1 - 0.25)) = 0.512
-
+```
 
 **Legacy Boosts (using LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25):**
+
 ```
 text_legacy_boost = -0.14 * 0.25 = -0.035 (3.5% boost applied to individual legacy miners' scores)
 image_legacy_boost = -0.04 * 0.25 = -0.01 (1% boost applied to individual legacy miners' scores)
