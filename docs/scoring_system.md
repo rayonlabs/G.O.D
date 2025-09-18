@@ -27,7 +27,7 @@ Miners get classified based on which tournaments they participate in (see [`get_
 - **Both**: Participated in both tournament types (weighted by `TOURNAMENT_TEXT_WEIGHT` and `TOURNAMENT_IMAGE_WEIGHT`)
 
 ### Legacy Miners
-Miners who do regular tasks but don't participate in tournaments. They're classified by their task completion history over the past 7 days - what proportion of their tasks were text vs image (see [`get_weekly_task_participation_data`](../validator/db/sql/tournaments.py)).
+Miners who do real time tasks separate from the tournaments. They're classified by their task completion history over the past 7 days - what proportion of their tasks were text vs image (see [`get_weekly_task_participation_data`](../validator/db/sql/tournaments.py)).
 
 ## Tournament Performance Tracking
 
