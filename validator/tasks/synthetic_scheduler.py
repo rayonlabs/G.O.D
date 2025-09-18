@@ -601,7 +601,7 @@ async def create_synthetic_chat_task(
     model_id = await anext(models)
 
     logger.info("CHAT_TASK: Starting dataset selection...")
-    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.CHATTASK, keypair=config.keypair)
+    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
     logger.info(f"CHAT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
 
     primary_dataset = selected_datasets[0]
