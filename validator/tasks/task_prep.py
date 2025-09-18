@@ -1178,6 +1178,95 @@ def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Datase
     return dataset
 
 
+async def _generate_dpo_synthetic_data(train_ds, keypair, task) -> tuple:
+    """Generate synthetic data for DPO tasks."""
+    logger.info("DPO task: Generating synthetic dataset using TEXT_SYNTH_MODEL and TEXT_SYNTH_WEAKER_MODEL")
+    synthetic_data_list = await asyncio.wait_for(generate_synthetic_dpo_data(train_ds, keypair, task), timeout=300)
+
+    if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_GENERATION_TOTAL:
+        synth_for_training = synthetic_data_list[: cst.SYNTHETIC_FOR_TRAINING]
+        synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING :]
+
+        synth_train_dataset = Dataset.from_list(synth_for_training)
+        updated_train_ds = concatenate_datasets([train_ds, synth_train_dataset])
+        logger.info(
+            f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(updated_train_ds)}"
+        )
+
+        train_samples = updated_train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
+        train_samples_list = [sample for sample in train_samples]
+
+        synthetic_ds = synth_for_eval + train_samples_list
+        logger.info(
+            f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples "
+            f"and {len(train_samples_list)} examples from training data"
+        )
+        return updated_train_ds, synthetic_ds
+    else:
+        logger.info("Not enough synthetic data generated, falling back to sampling from train")
+        _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
+        return train_ds, synthetic_ds
+
+
+async def _generate_instruct_synthetic_data(train_ds, test_ds, columns_to_sample, keypair, task) -> tuple:
+    """Generate synthetic data for Instruct tasks."""
+    logger.info("INSTRUCT TEXT task: Using same approach as DPO for synthetic data")
+    logger.info("Generating synthetic data for instruct text task")
+    synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
+
+    # Print an example from synthetic data for inspection
+    if synthetic_ds and len(synthetic_ds) > 0:
+        example = synthetic_ds[0]
+        logger.info(f"Example synthetic data point for INSTRUCT task: {example}")
+
+    # Always mix training data into synthetic evaluation and put some synth in training
+    if synthetic_ds and len(synthetic_ds) > 0:
+        if len(synthetic_ds) >= cst.SYNTHETIC_GENERATION_TOTAL:
+            # Original logic for large synthetic datasets
+            synth_for_training = synthetic_ds[: cst.SYNTHETIC_FOR_TRAINING]
+            synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING :]
+        else:
+            # For smaller datasets, use 1/3 for training, 2/3 for evaluation
+            split_point = len(synthetic_ds) // 3
+            synth_for_training = synthetic_ds[:split_point]
+            synth_for_eval = synthetic_ds[split_point:]
+
+        # Add synthetic data to training set
+        updated_train_ds = train_ds
+        if len(synth_for_training) > 0:
+            synth_train_dataset = Dataset.from_list(synth_for_training)
+            updated_train_ds = concatenate_datasets([train_ds, synth_train_dataset])
+            logger.info(
+                f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(updated_train_ds)}"
+            )
+
+        # Always sample from training data for synthetic evaluation to prevent gaming
+        train_samples = updated_train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(updated_train_ds))))
+        train_samples_list = [sample for sample in train_samples]
+
+        final_synthetic_ds = synth_for_eval + train_samples_list
+        logger.info(
+            f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples "
+            f"and {len(train_samples_list)} examples from training data"
+        )
+        return updated_train_ds, final_synthetic_ds
+    else:
+        # Fallback: if no synthetic data, sample from training data
+        logger.info("No synthetic data available, sampling from training data for evaluation")
+        train_samples = train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(train_ds))))
+        synthetic_ds = [sample for sample in train_samples]
+        return train_ds, synthetic_ds
+
+
+async def _generate_other_synthetic_data(test_ds, columns_to_sample, keypair, task) -> list:
+    """Generate synthetic data for other task types (GRPO, etc.)."""
+    synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
+    if synthetic_ds and len(synthetic_ds) > 0:
+        example = synthetic_ds[0]
+        logger.info(f"Example synthetic data point for the task: {example}")
+    return synthetic_ds
+
+
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
@@ -1274,77 +1363,13 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
             if isinstance(task, DpoRawTask):
-                logger.info("DPO task: Generating synthetic dataset using TEXT_SYNTH_MODEL and TEXT_SYNTH_WEAKER_MODEL")
-                synthetic_data_list = await asyncio.wait_for(generate_synthetic_dpo_data(train_ds, keypair, task), timeout=300)
-                if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_GENERATION_TOTAL:
-                    synth_for_training = synthetic_data_list[: cst.SYNTHETIC_FOR_TRAINING]
-                    synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING :]
-
-                    synth_train_dataset = Dataset.from_list(synth_for_training)
-                    train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-                    logger.info(
-                        f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}"
-                    )
-
-                    train_samples = train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
-                    train_samples_list = [sample for sample in train_samples]
-
-                    synthetic_ds = synth_for_eval + train_samples_list
-                    logger.info(
-                        f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data"
-                    )
-                else:
-                    logger.info("Not enough synthetic data generated, falling back to sampling from train")
-                    _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
+                train_ds, synthetic_ds = await _generate_dpo_synthetic_data(train_ds, keypair, task)
             elif isinstance(task, InstructTextRawTask):
-                logger.info("INSTRUCT TEXT task: Using same approach as DPO for synthetic data")
-                # For instruct text tasks, use the same pattern as DPO tasks
-                logger.info("Generating synthetic data for instruct text task")
-                synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
-
-                # Print an example from synthetic data for inspection
-                if synthetic_ds and len(synthetic_ds) > 0:
-                    example = synthetic_ds[0]
-                    logger.info(f"Example synthetic data point for INSTRUCT task: {example}")
-
-                # Always mix training data into synthetic evaluation and put some synth in training
-                if synthetic_ds and len(synthetic_ds) > 0:
-                    if len(synthetic_ds) >= cst.SYNTHETIC_GENERATION_TOTAL:
-                        # Original logic for large synthetic datasets
-                        synth_for_training = synthetic_ds[: cst.SYNTHETIC_FOR_TRAINING]
-                        synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING :]
-                    else:
-                        # For smaller datasets, use 1/3 for training, 2/3 for evaluation
-                        split_point = len(synthetic_ds) // 3
-                        synth_for_training = synthetic_ds[:split_point]
-                        synth_for_eval = synthetic_ds[split_point:]
-
-                    # Add synthetic data to training set
-                    if len(synth_for_training) > 0:
-                        synth_train_dataset = Dataset.from_list(synth_for_training)
-                        train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-                        logger.info(
-                            f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}"
-                        )
-
-                    # Always sample from training data for synthetic evaluation to prevent gaming
-                    train_samples = train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(train_ds))))
-                    train_samples_list = [sample for sample in train_samples]
-
-                    synthetic_ds = synth_for_eval + train_samples_list
-                    logger.info(
-                        f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data"
-                    )
-                else:
-                    # Fallback: if no synthetic data, sample from training data
-                    logger.info("No synthetic data available, sampling from training data for evaluation")
-                    train_samples = train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(train_ds))))
-                    synthetic_ds = [sample for sample in train_samples]
+                train_ds, synthetic_ds = await _generate_instruct_synthetic_data(
+                    train_ds, test_ds, columns_to_sample, keypair, task
+                )
             else:
-                synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
-                if synthetic_ds and len(synthetic_ds) > 0:
-                    example = synthetic_ds[0]
-                    logger.info(f"Example synthetic data point for the task: {example}")
+                synthetic_ds = await _generate_other_synthetic_data(test_ds, columns_to_sample, keypair, task)
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:
