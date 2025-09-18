@@ -33,7 +33,7 @@ from validator.db.sql.tournaments import get_tournament_full_results
 from validator.db.sql.tournaments import get_tournament_participation_data
 from validator.db.sql.tournaments import get_weekly_task_participation_data
 from validator.db.database import PSQLDB
-from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
+from validator.evaluation.tournament_scoring import get_tournament_weights_from_data, get_tournament_weights_from_data_separated
 from validator.tournament.performance_calculator import calculate_performance_difference
 
 
@@ -731,43 +731,43 @@ def apply_regular_weights_separated(
 
 
 def apply_tournament_weights_separated(
-    tournament_weights: dict[str, float],
+    text_tournament_weights: dict[str, float],
+    image_tournament_weights: dict[str, float],
     hotkey_to_node_id: dict[str, int],
     all_node_weights: list[float],
-    tournament_participation_map: dict[str, HotkeyTournamentParticipation],
     scaled_text_tournament_weight: float,
     scaled_image_tournament_weight: float
 ) -> None:
-    """Apply tournament weights with type-specific participation scaling."""
-    logger.info("=== TOURNAMENT WEIGHT CALCULATIONS ===")
+    """Apply tournament weights with truly separated text and image weights."""
+    logger.info("=== TOURNAMENT WEIGHT CALCULATIONS (SEPARATED) ===")
 
-    if tournament_weights:
-        for hotkey, weight in tournament_weights.items():
-            node_id = hotkey_to_node_id.get(hotkey)
-            if node_id is not None:
-                # Get tournament participation for this hotkey to determine weights
-                tournament_part: HotkeyTournamentParticipation | None = tournament_participation_map.get(hotkey)
+    # Process text tournament weights
+    logger.info(f"Processing {len(text_tournament_weights)} text tournament winners")
+    for hotkey, weight in text_tournament_weights.items():
+        node_id = hotkey_to_node_id.get(hotkey)
+        if node_id is not None:
+            text_contribution = weight * scaled_text_tournament_weight
+            all_node_weights[node_id] = all_node_weights[node_id] + text_contribution
 
-                if tournament_part:
-                    # Apply proportional tournament weights based on participation
-                    text_contribution: float = weight * tournament_part.text_proportion * scaled_text_tournament_weight
-                    image_contribution: float = weight * tournament_part.image_proportion * scaled_image_tournament_weight
-                    total_tournament_contribution: float = text_contribution + image_contribution
-                else:
-                    # No tournament participation data - apply combined weight
-                    total_tournament_contribution = weight * (scaled_text_tournament_weight + scaled_image_tournament_weight)
+            logger.info(f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
+                       f"TEXT TOURNAMENT - weight={weight:.6f}, "
+                       f"scaled_text_weight={scaled_text_tournament_weight:.6f}, "
+                       f"text_contribution={text_contribution:.6f}, "
+                       f"total_weight={all_node_weights[node_id]:.6f}")
 
-                all_node_weights[node_id] = all_node_weights[node_id] + total_tournament_contribution
+    # Process image tournament weights
+    logger.info(f"Processing {len(image_tournament_weights)} image tournament winners")
+    for hotkey, weight in image_tournament_weights.items():
+        node_id = hotkey_to_node_id.get(hotkey)
+        if node_id is not None:
+            image_contribution = weight * scaled_image_tournament_weight
+            all_node_weights[node_id] = all_node_weights[node_id] + image_contribution
 
-                if tournament_part:
-                    logger.info(f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
-                               f"TOURNAMENT MINER - text_prop={tournament_part.text_proportion:.2f}, "
-                               f"image_prop={tournament_part.image_proportion:.2f}, "
-                               f"tournament_weight={weight:.6f}, "
-                               f"text_contribution={text_contribution:.6f}, "
-                               f"image_contribution={image_contribution:.6f}, "
-                               f"total_tournament_contribution={total_tournament_contribution:.6f}, "
-                               f"total_weight={all_node_weights[node_id]:.6f}")
+            logger.info(f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
+                       f"IMAGE TOURNAMENT - weight={weight:.6f}, "
+                       f"scaled_image_weight={scaled_image_tournament_weight:.6f}, "
+                       f"image_contribution={image_contribution:.6f}, "
+                       f"total_weight={all_node_weights[node_id]:.6f}")
 
 
 async def get_node_weights_from_period_scores_separated(
@@ -854,11 +854,12 @@ async def get_node_weights_from_period_scores_separated(
             winner_hotkey=image_tournament.winner_hotkey,
         )
 
-    tournament_weights: dict[str, float] = get_tournament_weights_from_data(text_tournament_data, image_tournament_data)
+    # Get separated tournament weights
+    text_tournament_weights, image_tournament_weights = get_tournament_weights_from_data_separated(text_tournament_data, image_tournament_data)
 
     apply_tournament_weights_separated(
-        tournament_weights, hotkey_to_node_id, all_node_weights,
-        tournament_participation_map, scaled_text_tournament_weight, scaled_image_tournament_weight
+        text_tournament_weights, image_tournament_weights, hotkey_to_node_id, all_node_weights,
+        scaled_text_tournament_weight, scaled_image_tournament_weight
     )
 
     # Apply participation weights
