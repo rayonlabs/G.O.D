@@ -309,6 +309,31 @@ def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
         return {}
 
 
+def _generate_grpo_augmentation_config(dataset_size: int) -> dict:
+    """Generate augmentation configuration for GRPO tasks - only apply to prompts."""
+    if random.random() < cst.WORD_HONEYPOT_CHANCE:
+        config = {
+            "add_prompt_honeypot": random.random() < cst.WORD_HONEYPOT_CHANCE,
+        }
+
+        # Configure prompt honeypot (applies to ALL prompts if enabled)
+        if config["add_prompt_honeypot"]:
+            config["prompt_uid"] = uuid.uuid4().hex[:8]
+
+        # Generate word honeypot configuration
+        word_honeypot_config = generate_word_honeypot_config(dataset_size)
+
+        # For GRPO, filter out output-specific configurations since GRPO only has prompts
+        for key, value in word_honeypot_config.items():
+            if key.startswith('output_') or 'OUTPUT' in key.upper():
+                continue
+            config[key] = value
+
+        return config
+    else:
+        return {}
+
+
 def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None, augmentations: dict = None):
     result = []
     total_rows = 0
@@ -370,6 +395,15 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                     f"(at {'start' if augmentations.get('output_honeypot_at_start') else 'end'} "
                     f"for {len(output_honeypot_indices)}/{len(dataset)} rows)"
                 )
+        elif isinstance(task, GrpoRawTask):
+            logger.info("GRPO Augmentations: applying honeypots to prompts only")
+
+            if augmentations.get("add_prompt_honeypot"):
+                logger.info(f"  Prompt UID honeypot: {augmentations['prompt_uid']} (added to all prompts)")
+
+            if augmentations.get('apply_word_transforms'):
+                transform_type = augmentations.get('transform_type', 'none')
+                logger.info(f"  GRPO word transforms: {transform_type}")
 
     for idx, row in enumerate(dataset):
         row_dict = {}
@@ -518,6 +552,30 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
             except Exception as e:
                 logger.error(f"Error in word transformations (output): {e}")
 
+        # Apply GRPO augmentations
+        if isinstance(task, GrpoRawTask) and augmentations:
+            try:
+                # 1. Add prompt honeypot (applies to ALL rows if enabled)
+                if augmentations.get("add_prompt_honeypot") and cst.STANDARD_GRPO_PROMPT_COLUMN in row_dict:
+                    row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN] = _insert_uid_randomly(
+                        row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN], augmentations["prompt_uid"]
+                    )
+            except Exception as e:
+                logger.error(f"Error in GRPO prompt honeypot: {e}")
+
+            try:
+                # 2. Apply word transformations to GRPO prompts (treat prompts as input)
+                if cst.STANDARD_GRPO_PROMPT_COLUMN in row_dict:
+                    transformed_prompt = apply_word_honeypot_to_text(
+                        text=row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN],
+                        config=augmentations,
+                        is_input=True  # GRPO prompts are treated as input
+                    )
+                    if transformed_prompt != row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN]:
+                        row_dict[cst.STANDARD_GRPO_PROMPT_COLUMN] = transformed_prompt
+            except Exception as e:
+                logger.error(f"Error in GRPO word transformations: {e}")
+
         result.append(row_dict)
         total_rows += 1
         if is_row_empty:
@@ -595,6 +653,33 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                     input_preview = input_text
                 if input_preview:
                     logger.info(f"  Input: {input_preview}")
+
+    # Log examples of augmented data for GRPO tasks
+    if isinstance(task, GrpoRawTask) and augmentations and result:
+        logger.info("[GRPO_AUGMENTATION] Showing 2 examples of augmented data:")
+
+        # Show first 2 examples to see the augmentations
+        for i in range(min(2, len(result))):
+            example = result[i]
+            logger.info(f"[GRPO_EXAMPLE_{i + 1}]:")
+
+            # Show prompt (truncate if too long)
+            prompt = example.get(cst.STANDARD_GRPO_PROMPT_COLUMN, "")
+            if len(prompt) > 150:
+                prompt_preview = prompt[:150] + "..."
+            else:
+                prompt_preview = prompt
+            logger.info(f"  Prompt: {prompt_preview}")
+
+            # Show extra column if present
+            if cst.STANDARD_GRPO_EXTRA_COLUMN in example:
+                extra = example.get(cst.STANDARD_GRPO_EXTRA_COLUMN, "")
+                if extra and len(extra) > 150:
+                    extra_preview = extra[:150] + "..."
+                else:
+                    extra_preview = extra
+                if extra_preview:
+                    logger.info(f"  Extra: {extra_preview}")
 
     return result
 
@@ -695,6 +780,10 @@ async def _process_and_upload_datasets(
             max_dataset_size = max(len(train_dataset), len(test_dataset))
             augmentations = _generate_instruct_augmentation_config(max_dataset_size)
             logger.info(f"Generated Instruct augmentation config for synthetic dataset size {max_dataset_size}")
+        elif isinstance(task, GrpoRawTask):
+            max_dataset_size = max(len(train_dataset), len(test_dataset))
+            augmentations = _generate_grpo_augmentation_config(max_dataset_size)
+            logger.info(f"Generated GRPO augmentation config for synthetic dataset size {max_dataset_size}")
 
     try:
         if should_reupload_train:
