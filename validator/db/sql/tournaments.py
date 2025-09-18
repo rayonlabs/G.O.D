@@ -7,6 +7,8 @@ from fiber.chain.models import Node
 import validator.core.constants
 import validator.db.constants as cst
 from core.models.tournament_models import GroupRound
+from core.models.tournament_models import HotkeyTaskParticipation
+from core.models.tournament_models import HotkeyTournamentParticipation
 from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentGroupData
 from core.models.tournament_models import TournamentPairData
@@ -1278,3 +1280,136 @@ async def get_all_benchmark_results(psql_db: PSQLDB) -> list[dict]:
 
         logger.info(f"Retrieved benchmark results for {len(results_by_root)} root tasks")
         return results_by_root
+
+
+async def get_tournament_participation_data(psql_db: PSQLDB) -> list[HotkeyTournamentParticipation]:
+    """
+    Get tournament participation for the exact same tournaments used in burn calculations.
+    Returns list of HotkeyTournamentParticipation objects.
+    """
+    # Use existing functions to get the same tournaments as burn calculation
+    text_tournament = await get_latest_completed_tournament(psql_db, TournamentType.TEXT)
+    image_tournament = await get_latest_completed_tournament(psql_db, TournamentType.IMAGE)
+
+    text_tournament_id = text_tournament.tournament_id if text_tournament else None
+    image_tournament_id = image_tournament.tournament_id if image_tournament else None
+
+    async with await psql_db.connection() as connection:
+
+        # Get participants from both tournaments
+        participants = {}
+
+        if text_tournament_id:
+            text_participants_query = f"""
+                SELECT DISTINCT tn.{cst.HOTKEY}
+                FROM {cst.TOURNAMENT_TASKS_TABLE} tt
+                JOIN {cst.TASK_NODES_TABLE} tn ON tt.{cst.TASK_ID} = tn.{cst.TASK_ID}
+                WHERE tt.{cst.TOURNAMENT_ID} = $1
+                AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+            """
+            text_participants = await connection.fetch(text_participants_query, text_tournament_id)
+
+            for row in text_participants:
+                hotkey = row[cst.HOTKEY]
+                if hotkey not in participants:
+                    participants[hotkey] = {'text': False, 'image': False}
+                participants[hotkey]['text'] = True
+
+        if image_tournament_id:
+            image_participants_query = f"""
+                SELECT DISTINCT tn.{cst.HOTKEY}
+                FROM {cst.TOURNAMENT_TASKS_TABLE} tt
+                JOIN {cst.TASK_NODES_TABLE} tn ON tt.{cst.TASK_ID} = tn.{cst.TASK_ID}
+                WHERE tt.{cst.TOURNAMENT_ID} = $1
+                AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+            """
+            image_participants = await connection.fetch(image_participants_query, image_tournament_id)
+
+            for row in image_participants:
+                hotkey = row[cst.HOTKEY]
+                if hotkey not in participants:
+                    participants[hotkey] = {'text': False, 'image': False}
+                participants[hotkey]['image'] = True
+
+        # Convert to proper objects with proportions
+        result = []
+        for hotkey, participation in participants.items():
+            if participation['text'] and participation['image']:
+                # Participated in both - use tournament type weights
+                text_prop = validator.core.constants.TOURNAMENT_TEXT_WEIGHT
+                image_prop = validator.core.constants.TOURNAMENT_IMAGE_WEIGHT
+            elif participation['text']:
+                # Only text
+                text_prop = 1.0
+                image_prop = 0.0
+            elif participation['image']:
+                # Only image
+                text_prop = 0.0
+                image_prop = 1.0
+            else:
+                # This shouldn't happen but just in case
+                continue
+
+            result.append(HotkeyTournamentParticipation(
+                hotkey=hotkey,
+                participated_in_text=participation['text'],
+                participated_in_image=participation['image'],
+                text_proportion=text_prop,
+                image_proportion=image_prop
+            ))
+
+        logger.info(f"Found tournament participation for {len(result)} hotkeys "
+                   f"(text_tournament: {text_tournament_id}, image_tournament: {image_tournament_id})")
+        return result
+
+
+async def get_weekly_task_participation_data(psql_db: PSQLDB, days: int = 7) -> list[HotkeyTaskParticipation]:
+    """
+    Get weekly task participation proportions by type.
+    Returns list of HotkeyTaskParticipation objects.
+    """
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT
+                tn.{cst.HOTKEY},
+                t.{cst.TASK_TYPE},
+                COUNT(*) as task_count
+            FROM {cst.TASK_NODES_TABLE} tn
+            JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
+            WHERE t.{cst.CREATED_AT} > NOW() - INTERVAL '{days} days'
+            AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
+            GROUP BY tn.{cst.HOTKEY}, t.{cst.TASK_TYPE}
+        """
+        results = await connection.fetch(query)
+
+        # Aggregate task counts by hotkey and category
+        hotkey_counts = {}
+        for row in results:
+            hotkey = row[cst.HOTKEY]
+            task_type = row[cst.TASK_TYPE]
+            count = row['task_count']
+
+            if hotkey not in hotkey_counts:
+                hotkey_counts[hotkey] = {'text': 0, 'image': 0}
+
+            # Categorize task types (TEXT = DPO, GRPO, INSTRUCT; IMAGE = IMAGE)
+            if task_type in [TaskType.DPOTASK.value, TaskType.GRPOTASK.value,
+                           TaskType.INSTRUCTTEXTTASK.value, TaskType.CHATTASK.value]:
+                hotkey_counts[hotkey]['text'] += count
+            elif task_type == TaskType.IMAGETASK.value:
+                hotkey_counts[hotkey]['image'] += count
+
+        # Convert to proper objects with proportions
+        result = []
+        for hotkey, counts in hotkey_counts.items():
+            total_tasks = counts['text'] + counts['image']
+            if total_tasks > 0:
+                result.append(HotkeyTaskParticipation(
+                    hotkey=hotkey,
+                    text_task_proportion=counts['text'] / total_tasks,
+                    image_task_proportion=counts['image'] / total_tasks,
+                    total_tasks=total_tasks
+                ))
+
+        logger.info(f"Found weekly task participation for {len(result)} hotkeys over {days} days")
+        return result
