@@ -1195,7 +1195,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
     tournament_audit_data.regular_weight_multiplier = burn_data.regular_weight
     tournament_audit_data.burn_weight = burn_data.burn_weight
 
-    all_node_ids, all_node_weights = await get_node_weights_from_period_scores(
+    all_node_ids, all_node_weights = await get_node_weights_from_period_scores_separated(
         config.substrate, config.netuid, node_results, config.psql_db
     )
     logger.info("Weights calculated, about to set...")
