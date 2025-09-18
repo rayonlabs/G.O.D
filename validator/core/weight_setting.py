@@ -663,8 +663,17 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
 
     # Regular weight gets the burned tournament allocation based on participation proportions
     total_tournament_burn = text_tournament_burn + image_tournament_burn
-    text_regular_weight = cts.BASE_REGULAR_WEIGHT + (text_tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT)
-    image_regular_weight = cts.BASE_REGULAR_WEIGHT + (image_tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT)
+    total_burn_gain = total_tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT
+    boosted_regular_weight = cts.BASE_REGULAR_WEIGHT + total_burn_gain
+
+    # Split the boosted regular weight proportionally based on tournament burn amounts
+    if total_tournament_burn > 0:
+        text_regular_weight = boosted_regular_weight * (text_tournament_burn / total_tournament_burn)
+        image_regular_weight = boosted_regular_weight * (image_tournament_burn / total_tournament_burn)
+    else:
+        # No burn, split equally
+        text_regular_weight = boosted_regular_weight * cts.TOURNAMENT_TEXT_WEIGHT
+        image_regular_weight = boosted_regular_weight * cts.TOURNAMENT_IMAGE_WEIGHT
 
     # Total burn weight (what goes to burn address)
     burn_weight = (1 - cts.BASE_REGULAR_WEIGHT - cts.BASE_TOURNAMENT_WEIGHT) + (total_tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
