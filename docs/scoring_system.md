@@ -130,9 +130,6 @@ image_legacy_boost = -0.04 * 0.25 = -0.01 (1% boost applied to individual legacy
 - Image tournament weight reduced from 0.236 to 0.189 (20% reduction)
 - Text regular weight boosted from 0.15 to 0.201 (34% increase)
 - Image regular weight boosted from 0.15 to 0.162 (8% increase)
-- Legacy miners doing text tasks get 3.5% boost to their individual scores
-- Legacy miners doing image tasks get 1% boost to their individual scores
-- Miners doing both get proportional boosts based on their 7-day task mix
 - 51.2% of total weight goes to `EMISSION_BURN_HOTKEY`
 
 
