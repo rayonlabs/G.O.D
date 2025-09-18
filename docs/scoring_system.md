@@ -27,7 +27,9 @@ Miners get classified based on which tournaments they participate in (see [`get_
 - **Both**: Participated in both tournament types (weighted by `TOURNAMENT_TEXT_WEIGHT` and `TOURNAMENT_IMAGE_WEIGHT`)
 
 ### Legacy Miners
-Miners who do regular tasks but don't participate in tournaments. They're classified by their task completion history over the past 7 days - what proportion of their tasks were text vs image (see [`get_weekly_task_participation_data`](../validator/db/sql/tournaments.py)).
+
+Miners who do real time tasks separate from the tournaments. They're classified by their task completion history over the past 7 days - what proportion of their tasks were text vs image (see [`get_weekly_task_participation_data`](../validator/db/sql/tournaments.py)).
+
 
 ## Tournament Performance Tracking
 
@@ -112,7 +114,7 @@ image_regular_weight = 0.15 + (0.047 * 0.25) = 0.162
 # Burn weight gets remainder
 total_tournament_burn = 0.202 + 0.047 = 0.249
 burn_weight = (1 - 0.15 - 0.525) + (0.249 * (1 - 0.25)) = 0.512
-```
+
 
 **Legacy Boosts (using LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25):**
 ```
@@ -121,6 +123,7 @@ image_legacy_boost = -0.04 * 0.25 = -0.01 (1% boost applied to individual legacy
 ```
 
 **Results:**
+
 - Text tournament weight reduced from 0.289 to 0.087 (70% reduction)
 - Image tournament weight reduced from 0.236 to 0.189 (20% reduction)
 - Text regular weight boosted from 0.15 to 0.201 (34% increase)
@@ -129,6 +132,7 @@ image_legacy_boost = -0.04 * 0.25 = -0.01 (1% boost applied to individual legacy
 - Legacy miners doing image tasks get 1% boost to their individual scores
 - Miners doing both get proportional boosts based on their 7-day task mix
 - 51.2% of total weight goes to `EMISSION_BURN_HOTKEY`
+
 
 ## Key Benefits
 
@@ -151,3 +155,4 @@ The main entry point is [`get_node_weights_from_period_scores_separated`](../val
 - [`get_tournament_weights_from_data_separated`](../validator/evaluation/tournament_scoring.py) - Calculates separate text/image tournament weights
 - [`tournament_scores_to_weights`](../validator/evaluation/tournament_scoring.py) - Converts tournament scores to weight distributions
 - [`calculate_final_round_winner`](../validator/evaluation/tournament_scoring.py) - Determines tournament winners
+
