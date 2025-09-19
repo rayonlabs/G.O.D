@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": null,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -33,9 +33,9 @@
           },
           "custom": {
             "hideFrom": {
+              "legend": false,
               "tooltip": false,
-              "viz": false,
-              "legend": false
+              "viz": false
             }
           },
           "mappings": []
@@ -50,25 +50,31 @@
       },
       "id": 1,
       "options": {
+        "displayLabels": [
+          "name"
+        ],
         "legend": {
+          "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true,
-          "values": [],
-          "calcs": []
+          "values": []
         },
         "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
-        },
-        "displayLabels": ["name"],
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
         }
       },
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -76,12 +82,11 @@
             "uid": "${datasource}"
           },
           "expr": "sum by(task_type) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[10m]))",
-          "refId": "A",
           "instant": false,
-          "legendFormat": "{{task_type}}"
+          "legendFormat": "{{task_type}}",
+          "refId": "A"
         }
       ],
-      "transformations": [],
       "title": "Task Types Activity",
       "type": "piechart"
     },
@@ -94,15 +99,17 @@
         "defaults": {
           "custom": {
             "align": "left",
-            "displayMode": "auto"
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           }
@@ -158,10 +165,18 @@
       },
       "id": 2,
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
       },
-      "pluginVersion": "10.0.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -169,9 +184,9 @@
             "uid": "${datasource}"
           },
           "expr": "sum by (task_id) (count_over_time({job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"}[10m]))",
-          "refId": "A",
           "instant": true,
-          "legendFormat": "{{task_id}}"
+          "legendFormat": "{{task_id}}",
+          "refId": "A"
         }
       ],
       "title": "Active Training Tasks",
@@ -182,6 +197,10 @@
         "type": "loki",
         "uid": "${datasource}"
       },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "gridPos": {
         "h": 12,
         "w": 24,
@@ -191,6 +210,7 @@
       "id": 3,
       "options": {
         "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
         "enableLogDetails": true,
         "prettifyLogMessage": false,
         "showCommonLabels": false,
@@ -199,13 +219,17 @@
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "{job=\"docker-training-containers\", task_id=~\".*${task_id_search}.*\", hotkey=~\".*${hotkey_search}.*\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"} |~ \"${search}\"",
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"docker-training-containers\", task_id=~\"${task_id_search}\", hotkey=~\"${hotkey_search}\", model=~\"${model:pipe}\", task_type=~\"${task_type:pipe}\"} |~ \"${search}\"",
+          "queryType": "range",
           "refId": "A"
         }
       ],
@@ -229,13 +253,14 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
             "hideFrom": {
+              "legend": false,
               "tooltip": false,
-              "viz": false,
-              "legend": false
+              "viz": false
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
@@ -259,8 +284,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -287,10 +311,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
       },
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -309,6 +335,10 @@
         "type": "loki",
         "uid": "${datasource}"
       },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 24,
@@ -318,6 +348,7 @@
       "id": 5,
       "options": {
         "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
         "enableLogDetails": true,
         "prettifyLogMessage": false,
         "showCommonLabels": false,
@@ -326,6 +357,7 @@
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -340,37 +372,34 @@
       "type": "logs"
     }
   ],
-  "refresh": "10s",
-  "schemaVersion": 38,
-  "tags": ["training", "logs"],
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 41,
+  "tags": [
+    "training",
+    "logs"
+  ],
   "templating": {
     "list": [
       {
         "current": {
-          "selected": false,
           "text": "Loki Training",
-          "value": "Loki Training"
+          "value": "PABAB4B93E00F8D83"
         },
-        "hide": 0,
         "includeAll": false,
         "label": "Datasource",
-        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "loki",
-        "queryValue": "",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "type": "datasource"
       },
       {
         "current": {
-          "selected": false,
           "text": "",
           "value": ""
         },
-        "hide": 0,
         "label": "Search",
         "name": "search",
         "options": [
@@ -381,49 +410,54 @@
           }
         ],
         "query": "",
-        "skipUrlSync": false,
         "type": "textbox"
       },
       {
         "current": {
-          "selected": false,
-          "text": "",
-          "value": ""
+          "text": ".*",
+          "value": ".*"
         },
-        "hide": 0,
         "label": "Task ID Search",
         "name": "task_id_search",
-        "options": [],
-        "query": "",
-        "skipUrlSync": false,
+        "options": [
+          {
+            "selected": true,
+            "text": ".*",
+            "value": ".*"
+          }
+        ],
+        "query": ".*",
         "type": "textbox"
       },
       {
         "current": {
-          "selected": false,
-          "text": "",
-          "value": ""
+          "text": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF",
+          "value": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF"
         },
-        "hide": 0,
         "label": "Hotkey Search",
         "name": "hotkey_search",
-        "options": [],
-        "query": "",
-        "skipUrlSync": false,
+        "options": [
+          {
+            "selected": true,
+            "text": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF",
+            "value": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF"
+          }
+        ],
+        "query": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF",
         "type": "textbox"
       },
       {
         "current": {
-          "selected": true,
-          "text": ["All"],
-          "value": ["$__all"]
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": {
           "type": "loki",
           "uid": "${datasource}"
         },
         "definition": "label_values(model)",
-        "hide": 0,
         "includeAll": true,
         "label": "Model",
         "multi": true,
@@ -432,22 +466,21 @@
         "query": "label_values(model)",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       },
       {
         "current": {
-          "selected": true,
-          "text": ["All"],
-          "value": ["$__all"]
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": {
           "type": "loki",
           "uid": "${datasource}"
         },
         "definition": "label_values(task_type)",
-        "hide": 0,
         "includeAll": true,
         "label": "Task Type",
         "multi": true,
@@ -456,20 +489,18 @@
         "query": "label_values(task_type)",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       }
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-7d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Training Runs Dashboard",
   "uid": "training-runs",
-  "version": 1,
-  "weekStart": ""
+  "version": 16
 }
