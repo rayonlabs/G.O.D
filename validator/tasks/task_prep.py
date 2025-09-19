@@ -3,7 +3,6 @@ import asyncio
 import json
 import os
 import random
-import re
 import shutil
 import tempfile
 import uuid
@@ -33,7 +32,19 @@ from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.db.sql.tasks import update_task
 from validator.evaluation.utils import get_default_dataset_config
+from validator.utils.augmentation import _apply_dpo_augmentations
+from validator.utils.augmentation import _apply_grpo_augmentations
+from validator.utils.augmentation import _apply_instruct_augmentations
+from validator.utils.augmentation import _generate_dpo_augmentation_config
+from validator.utils.augmentation import _generate_grpo_augmentation_config
+from validator.utils.augmentation import _generate_instruct_augmentation_config
 from validator.utils.cache_clear import delete_dataset_from_cache
+from validator.utils.logging import _log_dpo_augmentations
+from validator.utils.logging import _log_dpo_examples
+from validator.utils.logging import _log_grpo_augmentations
+from validator.utils.logging import _log_grpo_examples
+from validator.utils.logging import _log_instruct_augmentations
+from validator.utils.logging import _log_instruct_examples
 from validator.utils.logging import get_logger
 from validator.utils.reward_functions import validate_reward_function
 from validator.utils.util import save_json_to_temp_file
@@ -209,93 +220,6 @@ async def download_and_load_dataset(
     return combined_dataset
 
 
-def _rearrange_sentences(text: str) -> str:
-    """Split text by sentences and rearrange with some at front, some at end."""
-    # Split by sentence endings while keeping the punctuation
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    sentences = [s.strip() for s in sentences if s.strip()]
-
-    if len(sentences) <= 2:
-        return text
-
-    # Randomly split sentences into front and back portions
-    split_point = random.randint(1, len(sentences) - 1)
-    front_sentences = sentences[:split_point]
-    back_sentences = sentences[split_point:]
-
-    # Rearrange: back + front
-    rearranged = back_sentences + front_sentences
-    return " ".join(rearranged)
-
-
-def _insert_uid_randomly(text: str, uid: str) -> str:
-    """Insert UID at a random position in the text."""
-    if not text or len(text) < 20:
-        return text + f" {uid}"
-
-    words = text.split()
-    if len(words) > 2:
-        insert_pos = random.randint(1, len(words) - 1)
-        words.insert(insert_pos, uid)
-        return " ".join(words)
-    return text + f" {uid}"
-
-
-def _generate_dpo_augmentation_config(dataset_size: int) -> dict:
-    if random.random() < cst.DPO_AUGMENTATION_CHANCE:
-        config = {
-            "rearrange_sentences": random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            "add_prompt_honeypot": random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            "add_response_honeypot": random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            "swap_chosen_rejected": random.random() < cst.DPO_AUGMENTATION_CHANCE,
-        }
-
-        # Configure prompt honeypot (applies to ALL prompts if enabled)
-        if config["add_prompt_honeypot"]:
-            config["prompt_uid"] = uuid.uuid4().hex[:8]
-
-        # Configure response honeypot (applies to a percentage of chosen OR rejected)
-        if config["add_response_honeypot"]:
-            config["response_uid"] = uuid.uuid4().hex[:8]
-            config["honeypot_in_chosen"] = random.random() < 0.5
-            config["honeypot_at_start"] = random.random() < 0.5
-            # Select percentage of rows for response honeypot
-            num_response_honeypot = int(dataset_size * cst.DPO_RESPONSE_HONEYPOT_PERCENTAGE)
-            config["response_honeypot_indices"] = set(
-                random.sample(range(dataset_size), min(num_response_honeypot, dataset_size))
-            )
-
-        return config
-    else:
-        return {}
-
-
-def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
-    """Generate augmentation configuration for instruct tasks."""
-    if random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE:
-        config = {
-            "rearrange_input": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
-            "rearrange_output": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
-            "add_input_honeypot": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
-            "add_output_honeypot": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
-        }
-
-        # Configure input honeypot (applies to ALL instructions if enabled)
-        if config["add_input_honeypot"]:
-            config["input_uid"] = uuid.uuid4().hex[:8]
-            config["input_honeypot_at_start"] = random.random() < 0.5
-
-        # Configure output honeypot (applies to a percentage of outputs)
-        if config["add_output_honeypot"]:
-            config["output_uid"] = uuid.uuid4().hex[:8]
-            config["output_honeypot_at_start"] = random.random() < 0.5
-            # Select percentage of rows for output honeypot
-            num_output_honeypot = int(dataset_size * cst.INSTRUCT_RESPONSE_HONEYPOT_PERCENTAGE)
-            config["output_honeypot_indices"] = set(random.sample(range(dataset_size), min(num_output_honeypot, dataset_size)))
-
-        return config
-    else:
-        return {}
 
 
 def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None, augmentations: dict = None):
@@ -306,45 +230,11 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
     if augmentations:
         if isinstance(task, DpoRawTask):
-            logger.info(
-                f"DPO Augmentations: rearrange={augmentations.get('rearrange_sentences')}, "
-                f"prompt_honeypot={augmentations.get('add_prompt_honeypot')}, "
-                f"response_honeypot={augmentations.get('add_response_honeypot')}, "
-                f"swap={augmentations.get('swap_chosen_rejected')}"
-            )
-
-            if augmentations.get("add_prompt_honeypot"):
-                logger.info(f"Prompt honeypot UID: {augmentations['prompt_uid']} (added to all prompts)")
-
-            if augmentations.get("add_response_honeypot"):
-                response_honeypot_indices = augmentations.get("response_honeypot_indices", set())
-                logger.info(
-                    f"Response honeypot UID: {augmentations['response_uid']} "
-                    f"(in {'chosen' if augmentations['honeypot_in_chosen'] else 'rejected'} "
-                    f"at {'start' if augmentations['honeypot_at_start'] else 'end'} "
-                    f"for {len(response_honeypot_indices)}/{len(dataset)} rows)"
-                )
+            _log_dpo_augmentations(augmentations, dataset)
         elif isinstance(task, InstructTextRawTask):
-            logger.info(
-                f"Instruct Augmentations: rearrange_input={augmentations.get('rearrange_input')}, "
-                f"rearrange_output={augmentations.get('rearrange_output')}, "
-                f"input_honeypot={augmentations.get('add_input_honeypot')}, "
-                f"output_honeypot={augmentations.get('add_output_honeypot')}"
-            )
-
-            if augmentations.get("add_input_honeypot"):
-                logger.info(
-                    f"Input honeypot UID: {augmentations['input_uid']} "
-                    f"(at {'start' if augmentations.get('input_honeypot_at_start') else 'end'} of all instructions)"
-                )
-
-            if augmentations.get("add_output_honeypot"):
-                output_honeypot_indices = augmentations.get("output_honeypot_indices", set())
-                logger.info(
-                    f"Output honeypot UID: {augmentations['output_uid']} "
-                    f"(at {'start' if augmentations.get('output_honeypot_at_start') else 'end'} "
-                    f"for {len(output_honeypot_indices)}/{len(dataset)} rows)"
-                )
+            _log_instruct_augmentations(augmentations, dataset)
+        elif isinstance(task, GrpoRawTask):
+            _log_grpo_augmentations(augmentations)
 
     for idx, row in enumerate(dataset):
         row_dict = {}
@@ -372,100 +262,15 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
         # Apply DPO augmentations
         if isinstance(task, DpoRawTask) and augmentations:
-            try:
-                # 1. Rearrange prompt sentences (applies to ALL rows if enabled)
-                if augmentations.get("rearrange_sentences") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_DPO_PROMPT_COLUMN])
-            except Exception as e:
-                logger.error(f"Error in rearrange_sentences: {e}")
-
-            try:
-                # 2. Add prompt honeypot (applies to ALL rows if enabled)
-                if augmentations.get("add_prompt_honeypot") and cst.STANDARD_DPO_PROMPT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_DPO_PROMPT_COLUMN] = _insert_uid_randomly(
-                        row_dict[cst.STANDARD_DPO_PROMPT_COLUMN], augmentations["prompt_uid"]
-                    )
-            except Exception as e:
-                logger.error(f"Error in prompt honeypot: {e}")
-
-            try:
-                # 3. Add response honeypot (applies to percentage of rows if enabled)
-                response_honeypot_indices = augmentations.get("response_honeypot_indices", set())
-                if augmentations.get("add_response_honeypot") and idx in response_honeypot_indices:
-                    response_uid = augmentations["response_uid"]
-
-                    if augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict:
-                        if augmentations["honeypot_at_start"]:
-                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
-                                f"{response_uid} {row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]}"
-                            )
-                        else:
-                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN] = (
-                                f"{row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN]} {response_uid}"
-                            )
-                    elif not augmentations["honeypot_in_chosen"] and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                        if augmentations["honeypot_at_start"]:
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
-                                f"{response_uid} {row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]}"
-                            )
-                        else:
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
-                                f"{row_dict[cst.STANDARD_DPO_REJECTED_COLUMN]} {response_uid}"
-                            )
-            except Exception as e:
-                logger.error(f"Error in response honeypot: {e}")
-
-            try:
-                # 4. Swap chosen and rejected (applies to ALL rows if enabled)
-                if augmentations.get("swap_chosen_rejected"):
-                    if cst.STANDARD_DPO_CHOSEN_COLUMN in row_dict and cst.STANDARD_DPO_REJECTED_COLUMN in row_dict:
-                        row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN], row_dict[cst.STANDARD_DPO_REJECTED_COLUMN] = (
-                            row_dict[cst.STANDARD_DPO_REJECTED_COLUMN],
-                            row_dict[cst.STANDARD_DPO_CHOSEN_COLUMN],
-                        )
-            except Exception as e:
-                logger.error(f"Error in swap chosen/rejected: {e}")
+            row_dict = _apply_dpo_augmentations(row_dict, augmentations, idx)
 
         # Apply Instruct augmentations
         if isinstance(task, InstructTextRawTask) and augmentations:
-            try:
-                # 1. Rearrange input/instruction (applies to ALL rows if enabled)
-                if augmentations.get("rearrange_input") and cst.STANDARD_INSTRUCT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_INSTRUCT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_INSTRUCT_COLUMN])
-            except Exception as e:
-                logger.error(f"Error in rearrange_input: {e}")
+            row_dict = _apply_instruct_augmentations(row_dict, augmentations, idx)
 
-            try:
-                # 2. Rearrange output (applies to ALL rows if enabled)
-                if augmentations.get("rearrange_output") and cst.STANDARD_OUTPUT_COLUMN in row_dict:
-                    row_dict[cst.STANDARD_OUTPUT_COLUMN] = _rearrange_sentences(row_dict[cst.STANDARD_OUTPUT_COLUMN])
-            except Exception as e:
-                logger.error(f"Error in rearrange_output: {e}")
-
-            try:
-                # 3. Add input honeypot (applies to ALL rows if enabled)
-                if augmentations.get("add_input_honeypot") and cst.STANDARD_INSTRUCT_COLUMN in row_dict:
-                    input_uid = augmentations["input_uid"]
-                    if augmentations.get("input_honeypot_at_start"):
-                        row_dict[cst.STANDARD_INSTRUCT_COLUMN] = f"{input_uid} {row_dict[cst.STANDARD_INSTRUCT_COLUMN]}"
-                    else:
-                        row_dict[cst.STANDARD_INSTRUCT_COLUMN] = _insert_uid_randomly(
-                            row_dict[cst.STANDARD_INSTRUCT_COLUMN], input_uid
-                        )
-            except Exception as e:
-                logger.error(f"Error in input honeypot: {e}")
-
-            try:
-                # 4. Add output honeypot (applies to percentage of rows if enabled)
-                output_honeypot_indices = augmentations.get("output_honeypot_indices", set())
-                if augmentations.get("add_output_honeypot") and idx in output_honeypot_indices:
-                    output_uid = augmentations["output_uid"]
-                    if augmentations.get("output_honeypot_at_start"):
-                        row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{output_uid} {row_dict[cst.STANDARD_OUTPUT_COLUMN]}"
-                    else:
-                        row_dict[cst.STANDARD_OUTPUT_COLUMN] = f"{row_dict[cst.STANDARD_OUTPUT_COLUMN]} {output_uid}"
-            except Exception as e:
-                logger.error(f"Error in output honeypot: {e}")
+        # Apply GRPO augmentations
+        if isinstance(task, GrpoRawTask) and augmentations:
+            row_dict = _apply_grpo_augmentations(row_dict, augmentations, idx)
 
         result.append(row_dict)
         total_rows += 1
@@ -477,73 +282,13 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
 
     result = _validate_dpo_data(result, task)
 
-    # Log examples of augmented data for DPO tasks
+    # Log examples of augmented data
     if isinstance(task, DpoRawTask) and result:
-        logger.info("[DPO_AUGMENTATION] Showing 2 examples of augmented data:")
-
-        # Show first 2 examples to see the augmentations
-        for i in range(min(2, len(result))):
-            example = result[i]
-            logger.info(f"[DPO_EXAMPLE_{i + 1}]:")
-
-            # Show prompt (truncate if too long)
-            prompt = example.get(cst.STANDARD_DPO_PROMPT_COLUMN, "")
-            if len(prompt) > 150:
-                prompt_preview = prompt[:150] + "..."
-            else:
-                prompt_preview = prompt
-            logger.info(f"  Prompt: {prompt_preview}")
-
-            # Show chosen (truncate if too long)
-            chosen = example.get(cst.STANDARD_DPO_CHOSEN_COLUMN, "")
-            if len(chosen) > 150:
-                chosen_preview = chosen[:150] + "..."
-            else:
-                chosen_preview = chosen
-            logger.info(f"  Chosen: {chosen_preview}")
-
-            # Show rejected (truncate if too long)
-            rejected = example.get(cst.STANDARD_DPO_REJECTED_COLUMN, "")
-            if len(rejected) > 150:
-                rejected_preview = rejected[:150] + "..."
-            else:
-                rejected_preview = rejected
-            logger.info(f"  Rejected: {rejected_preview}")
-
-    # Log examples of augmented data for Instruct tasks
-    if isinstance(task, InstructTextRawTask) and augmentations and result:
-        logger.info("[INSTRUCT_AUGMENTATION] Showing 2 examples of augmented data:")
-
-        # Show first 2 examples to see the augmentations
-        for i in range(min(2, len(result))):
-            example = result[i]
-            logger.info(f"[INSTRUCT_EXAMPLE_{i + 1}]:")
-
-            # Show instruction (truncate if too long)
-            instruction = example.get(cst.STANDARD_INSTRUCT_COLUMN, "")
-            if len(instruction) > 150:
-                instruction_preview = instruction[:150] + "..."
-            else:
-                instruction_preview = instruction
-            logger.info(f"  Instruction: {instruction_preview}")
-
-            # Show output (truncate if too long)
-            output = example.get(cst.STANDARD_OUTPUT_COLUMN, "")
-            if len(output) > 150:
-                output_preview = output[:150] + "..."
-            else:
-                output_preview = output
-            logger.info(f"  Output: {output_preview}")
-
-            # Show input if present
-            if cst.STANDARD_INPUT_COLUMN in example:
-                input_text = example.get(cst.STANDARD_INPUT_COLUMN, "")
-                if input_text and len(input_text) > 150:
-                    input_preview = input_text[:150] + "..."
-                else:
-                    input_preview = input_text
-                if input_preview:
-                    logger.info(f"  Input: {input_preview}")
+        _log_dpo_examples(result)
+    elif isinstance(task, InstructTextRawTask) and augmentations and result:
+        _log_instruct_examples(result)
+    elif isinstance(task, GrpoRawTask) and augmentations and result:
+        _log_grpo_examples(result)
 
     return result
 
@@ -636,14 +381,16 @@ async def _process_and_upload_datasets(
     augmentations = None
     # Only apply augmentations for synthetic tasks (not organic)
     if not task.is_organic:
+        max_dataset_size = max(len(train_dataset), len(test_dataset))
         if isinstance(task, DpoRawTask):
-            max_dataset_size = max(len(train_dataset), len(test_dataset))
             augmentations = _generate_dpo_augmentation_config(max_dataset_size)
             logger.info(f"Generated DPO augmentation config for synthetic dataset size {max_dataset_size}")
         elif isinstance(task, InstructTextRawTask):
-            max_dataset_size = max(len(train_dataset), len(test_dataset))
             augmentations = _generate_instruct_augmentation_config(max_dataset_size)
             logger.info(f"Generated Instruct augmentation config for synthetic dataset size {max_dataset_size}")
+        elif isinstance(task, GrpoRawTask):
+            augmentations = _generate_grpo_augmentation_config(max_dataset_size)
+            logger.info(f"Generated GRPO augmentation config for synthetic dataset size {max_dataset_size}")
 
     try:
         if should_reupload_train:
@@ -991,6 +738,95 @@ def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Datase
     return dataset
 
 
+async def _generate_dpo_synthetic_data(train_ds, keypair, task) -> tuple:
+    """Generate synthetic data for DPO tasks."""
+    logger.info("DPO task: Generating synthetic dataset using TEXT_SYNTH_MODEL and TEXT_SYNTH_WEAKER_MODEL")
+    synthetic_data_list = await asyncio.wait_for(generate_synthetic_dpo_data(train_ds, keypair, task), timeout=300)
+
+    if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_GENERATION_TOTAL:
+        synth_for_training = synthetic_data_list[: cst.SYNTHETIC_FOR_TRAINING]
+        synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING :]
+
+        synth_train_dataset = Dataset.from_list(synth_for_training)
+        updated_train_ds = concatenate_datasets([train_ds, synth_train_dataset])
+        logger.info(
+            f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(updated_train_ds)}"
+        )
+
+        train_samples = updated_train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
+        train_samples_list = [sample for sample in train_samples]
+
+        synthetic_ds = synth_for_eval + train_samples_list
+        logger.info(
+            f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples "
+            f"and {len(train_samples_list)} examples from training data"
+        )
+        return updated_train_ds, synthetic_ds
+    else:
+        logger.info("Not enough synthetic data generated, falling back to sampling from train")
+        _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
+        return train_ds, synthetic_ds
+
+
+async def _generate_instruct_synthetic_data(train_ds, test_ds, columns_to_sample, keypair, task) -> tuple:
+    """Generate synthetic data for Instruct tasks."""
+    logger.info("INSTRUCT TEXT task: Using same approach as DPO for synthetic data")
+    logger.info("Generating synthetic data for instruct text task")
+    synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
+
+    # Print an example from synthetic data for inspection
+    if synthetic_ds and len(synthetic_ds) > 0:
+        example = synthetic_ds[0]
+        logger.info(f"Example synthetic data point for INSTRUCT task: {example}")
+
+    # Always mix training data into synthetic evaluation and put some synth in training
+    if synthetic_ds and len(synthetic_ds) > 0:
+        if len(synthetic_ds) >= cst.SYNTHETIC_GENERATION_TOTAL:
+            # Original logic for large synthetic datasets
+            synth_for_training = synthetic_ds[: cst.SYNTHETIC_FOR_TRAINING]
+            synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING :]
+        else:
+            # For smaller datasets, use 1/3 for training, 2/3 for evaluation
+            split_point = len(synthetic_ds) // 3
+            synth_for_training = synthetic_ds[:split_point]
+            synth_for_eval = synthetic_ds[split_point:]
+
+        # Add synthetic data to training set
+        updated_train_ds = train_ds
+        if len(synth_for_training) > 0:
+            synth_train_dataset = Dataset.from_list(synth_for_training)
+            updated_train_ds = concatenate_datasets([train_ds, synth_train_dataset])
+            logger.info(
+                f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(updated_train_ds)}"
+            )
+
+        # Always sample from training data for synthetic evaluation to prevent gaming
+        train_samples = updated_train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(updated_train_ds))))
+        train_samples_list = [sample for sample in train_samples]
+
+        final_synthetic_ds = synth_for_eval + train_samples_list
+        logger.info(
+            f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples "
+            f"and {len(train_samples_list)} examples from training data"
+        )
+        return updated_train_ds, final_synthetic_ds
+    else:
+        # Fallback: if no synthetic data, sample from training data
+        logger.info("No synthetic data available, sampling from training data for evaluation")
+        train_samples = train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(train_ds))))
+        synthetic_ds = [sample for sample in train_samples]
+        return train_ds, synthetic_ds
+
+
+async def _generate_other_synthetic_data(test_ds, columns_to_sample, keypair, task) -> list:
+    """Generate synthetic data for other task types (GRPO, etc.)."""
+    synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
+    if synthetic_ds and len(synthetic_ds) > 0:
+        example = synthetic_ds[0]
+        logger.info(f"Example synthetic data point for the task: {example}")
+    return synthetic_ds
+
+
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
@@ -1087,77 +923,13 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
         if cst.GET_SYNTH_DATA:
             logger.info("Generating additional synthetic data")
             if isinstance(task, DpoRawTask):
-                logger.info("DPO task: Generating synthetic dataset using TEXT_SYNTH_MODEL and TEXT_SYNTH_WEAKER_MODEL")
-                synthetic_data_list = await asyncio.wait_for(generate_synthetic_dpo_data(train_ds, keypair, task), timeout=300)
-                if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_GENERATION_TOTAL:
-                    synth_for_training = synthetic_data_list[: cst.SYNTHETIC_FOR_TRAINING]
-                    synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING :]
-
-                    synth_train_dataset = Dataset.from_list(synth_for_training)
-                    train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-                    logger.info(
-                        f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}"
-                    )
-
-                    train_samples = train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
-                    train_samples_list = [sample for sample in train_samples]
-
-                    synthetic_ds = synth_for_eval + train_samples_list
-                    logger.info(
-                        f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data"
-                    )
-                else:
-                    logger.info("Not enough synthetic data generated, falling back to sampling from train")
-                    _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
+                train_ds, synthetic_ds = await _generate_dpo_synthetic_data(train_ds, keypair, task)
             elif isinstance(task, InstructTextRawTask):
-                logger.info("INSTRUCT TEXT task: Using same approach as DPO for synthetic data")
-                # For instruct text tasks, use the same pattern as DPO tasks
-                logger.info("Generating synthetic data for instruct text task")
-                synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
-
-                # Print an example from synthetic data for inspection
-                if synthetic_ds and len(synthetic_ds) > 0:
-                    example = synthetic_ds[0]
-                    logger.info(f"Example synthetic data point for INSTRUCT task: {example}")
-
-                # Always mix training data into synthetic evaluation and put some synth in training
-                if synthetic_ds and len(synthetic_ds) > 0:
-                    if len(synthetic_ds) >= cst.SYNTHETIC_GENERATION_TOTAL:
-                        # Original logic for large synthetic datasets
-                        synth_for_training = synthetic_ds[: cst.SYNTHETIC_FOR_TRAINING]
-                        synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING :]
-                    else:
-                        # For smaller datasets, use 1/3 for training, 2/3 for evaluation
-                        split_point = len(synthetic_ds) // 3
-                        synth_for_training = synthetic_ds[:split_point]
-                        synth_for_eval = synthetic_ds[split_point:]
-
-                    # Add synthetic data to training set
-                    if len(synth_for_training) > 0:
-                        synth_train_dataset = Dataset.from_list(synth_for_training)
-                        train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-                        logger.info(
-                            f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(train_ds)}"
-                        )
-
-                    # Always sample from training data for synthetic evaluation to prevent gaming
-                    train_samples = train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(train_ds))))
-                    train_samples_list = [sample for sample in train_samples]
-
-                    synthetic_ds = synth_for_eval + train_samples_list
-                    logger.info(
-                        f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples and {len(train_samples_list)} examples from training data"
-                    )
-                else:
-                    # Fallback: if no synthetic data, sample from training data
-                    logger.info("No synthetic data available, sampling from training data for evaluation")
-                    train_samples = train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(train_ds))))
-                    synthetic_ds = [sample for sample in train_samples]
+                train_ds, synthetic_ds = await _generate_instruct_synthetic_data(
+                    train_ds, test_ds, columns_to_sample, keypair, task
+                )
             else:
-                synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
-                if synthetic_ds and len(synthetic_ds) > 0:
-                    example = synthetic_ds[0]
-                    logger.info(f"Example synthetic data point for the task: {example}")
+                synthetic_ds = await _generate_other_synthetic_data(test_ds, columns_to_sample, keypair, task)
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:
