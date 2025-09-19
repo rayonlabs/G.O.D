@@ -290,7 +290,7 @@ def test_separate_input_output_transformations():
         print("=" * 70)
         
         # Generate configuration with separate input/output transforms
-        if random.random() >= cst.TEXT_TRANSFORM_PROBABILITY:
+        if random.random() >= cst.TEXT_TRANSFORM_PROB:
             print("No text transforms generated (random chance)")
             continue
 
