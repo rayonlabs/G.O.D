@@ -1192,7 +1192,7 @@ async def add_benchmark_task_copy(
                 INSERT INTO {cst.BENCHMARK_TASK_COPIES_TABLE}
                 ({cst.COPY_TASK_ID}, {cst.ROOT_TASK_ID}, {cst.PARTICIPANT_HOTKEY}, {cst.TOURNAMENT_ID}, {cst.CREATED_AT})
                 VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-                ON CONFLICT ({cst.ROOT_TASK_ID}, {cst.PARTICIPANT_HOTKEY}) DO NOTHING
+                ON CONFLICT ({cst.ROOT_TASK_ID}, {cst.PARTICIPANT_HOTKEY}, {cst.TOURNAMENT_ID}) DO NOTHING
             """
             await connection.execute(query, copy_task_id, root_task_id, participant_hotkey, tournament_id)
             logger.info(
@@ -1295,7 +1295,6 @@ async def get_tournament_participation_data(psql_db: PSQLDB) -> list[HotkeyTourn
     image_tournament_id = image_tournament.tournament_id if image_tournament else None
 
     async with await psql_db.connection() as connection:
-
         # Get participants from both tournaments
         participants = {}
 
@@ -1312,8 +1311,8 @@ async def get_tournament_participation_data(psql_db: PSQLDB) -> list[HotkeyTourn
             for row in text_participants:
                 hotkey = row[cst.HOTKEY]
                 if hotkey not in participants:
-                    participants[hotkey] = {'text': False, 'image': False}
-                participants[hotkey]['text'] = True
+                    participants[hotkey] = {"text": False, "image": False}
+                participants[hotkey]["text"] = True
 
         if image_tournament_id:
             image_participants_query = f"""
@@ -1328,21 +1327,21 @@ async def get_tournament_participation_data(psql_db: PSQLDB) -> list[HotkeyTourn
             for row in image_participants:
                 hotkey = row[cst.HOTKEY]
                 if hotkey not in participants:
-                    participants[hotkey] = {'text': False, 'image': False}
-                participants[hotkey]['image'] = True
+                    participants[hotkey] = {"text": False, "image": False}
+                participants[hotkey]["image"] = True
 
         # Convert to proper objects with proportions
         result = []
         for hotkey, participation in participants.items():
-            if participation['text'] and participation['image']:
+            if participation["text"] and participation["image"]:
                 # Participated in both - use tournament type weights
                 text_prop = validator.core.constants.TOURNAMENT_TEXT_WEIGHT
                 image_prop = validator.core.constants.TOURNAMENT_IMAGE_WEIGHT
-            elif participation['text']:
+            elif participation["text"]:
                 # Only text
                 text_prop = 1.0
                 image_prop = 0.0
-            elif participation['image']:
+            elif participation["image"]:
                 # Only image
                 text_prop = 0.0
                 image_prop = 1.0
@@ -1350,16 +1349,20 @@ async def get_tournament_participation_data(psql_db: PSQLDB) -> list[HotkeyTourn
                 # This shouldn't happen but just in case
                 continue
 
-            result.append(HotkeyTournamentParticipation(
-                hotkey=hotkey,
-                participated_in_text=participation['text'],
-                participated_in_image=participation['image'],
-                text_proportion=text_prop,
-                image_proportion=image_prop
-            ))
+            result.append(
+                HotkeyTournamentParticipation(
+                    hotkey=hotkey,
+                    participated_in_text=participation["text"],
+                    participated_in_image=participation["image"],
+                    text_proportion=text_prop,
+                    image_proportion=image_prop,
+                )
+            )
 
-        logger.info(f"Found tournament participation for {len(result)} hotkeys "
-                   f"(text_tournament: {text_tournament_id}, image_tournament: {image_tournament_id})")
+        logger.info(
+            f"Found tournament participation for {len(result)} hotkeys "
+            f"(text_tournament: {text_tournament_id}, image_tournament: {image_tournament_id})"
+        )
         return result
 
 
@@ -1387,29 +1390,35 @@ async def get_weekly_task_participation_data(psql_db: PSQLDB, days: int = 7) -> 
         for row in results:
             hotkey = row[cst.HOTKEY]
             task_type = row[cst.TASK_TYPE]
-            count = row['task_count']
+            count = row["task_count"]
 
             if hotkey not in hotkey_counts:
-                hotkey_counts[hotkey] = {'text': 0, 'image': 0}
+                hotkey_counts[hotkey] = {"text": 0, "image": 0}
 
             # Categorize task types (TEXT = DPO, GRPO, INSTRUCT; IMAGE = IMAGE)
-            if task_type in [TaskType.DPOTASK.value, TaskType.GRPOTASK.value,
-                           TaskType.INSTRUCTTEXTTASK.value, TaskType.CHATTASK.value]:
-                hotkey_counts[hotkey]['text'] += count
+            if task_type in [
+                TaskType.DPOTASK.value,
+                TaskType.GRPOTASK.value,
+                TaskType.INSTRUCTTEXTTASK.value,
+                TaskType.CHATTASK.value,
+            ]:
+                hotkey_counts[hotkey]["text"] += count
             elif task_type == TaskType.IMAGETASK.value:
-                hotkey_counts[hotkey]['image'] += count
+                hotkey_counts[hotkey]["image"] += count
 
         # Convert to proper objects with proportions
         result = []
         for hotkey, counts in hotkey_counts.items():
-            total_tasks = counts['text'] + counts['image']
+            total_tasks = counts["text"] + counts["image"]
             if total_tasks > 0:
-                result.append(HotkeyTaskParticipation(
-                    hotkey=hotkey,
-                    text_task_proportion=counts['text'] / total_tasks,
-                    image_task_proportion=counts['image'] / total_tasks,
-                    total_tasks=total_tasks
-                ))
+                result.append(
+                    HotkeyTaskParticipation(
+                        hotkey=hotkey,
+                        text_task_proportion=counts["text"] / total_tasks,
+                        image_task_proportion=counts["image"] / total_tasks,
+                        total_tasks=total_tasks,
+                    )
+                )
 
         logger.info(f"Found weekly task participation for {len(result)} hotkeys over {days} days")
         return result
