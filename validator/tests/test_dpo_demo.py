@@ -5,7 +5,7 @@ import uuid
 import re
 
 # Constants (matching validator/core/constants.py)
-DPO_AUGMENTATION_CHANCE = 0.4
+DPO_AUGMENTATION_PROBABILITY = 0.4
 DPO_RESPONSE_HONEYPOT_PERCENTAGE = 0.25
 
 # Test functions
@@ -33,10 +33,10 @@ def simulate_augmentation(prompt, chosen, rejected, dataset_size=100):
     """Simulate the full augmentation pipeline for a dataset"""
     # Roll dice for each augmentation type
     augmentations = {
-        'rearrange': random.random() < DPO_AUGMENTATION_CHANCE,
-        'prompt_honeypot': random.random() < DPO_AUGMENTATION_CHANCE,
-        'response_honeypot': random.random() < DPO_AUGMENTATION_CHANCE,
-        'swap': random.random() < DPO_AUGMENTATION_CHANCE,
+        'rearrange': random.random() < DPO_AUGMENTATION_PROBABILITY,
+        'prompt_honeypot': random.random() < DPO_AUGMENTATION_PROBABILITY,
+        'response_honeypot': random.random() < DPO_AUGMENTATION_PROBABILITY,
+        'swap': random.random() < DPO_AUGMENTATION_PROBABILITY,
     }
     
     result = {
@@ -100,7 +100,7 @@ rejected = 'This is the rejected response that is considered worse quality.'
 
 print('DPO AUGMENTATION DEMONSTRATION')
 print('=' * 70)
-print(f'Configuration: {DPO_AUGMENTATION_CHANCE:.0%} chance per augmentation')
+print(f'Configuration: {DPO_AUGMENTATION_PROBABILITY:.0%} chance per augmentation')
 print(f'Response honeypots apply to {DPO_RESPONSE_HONEYPOT_PERCENTAGE:.0%} of rows')
 print('=' * 70)
 

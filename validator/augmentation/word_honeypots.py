@@ -163,11 +163,8 @@ def check_conditional_rule(instruction: str, config: dict) -> bool:
     return False
 
 
-def generate_word_honeypot_config(dataset_size: int, instructions: list[str] = None) -> dict:
+def generate_text_transform_config(dataset_size: int, instructions: list[str] = None) -> dict:
     """Generate configuration for word-based honeypot augmentations with separate input/output transforms."""
-    if random.random() >= cst.WORD_HONEYPOT_CHANCE:
-        return {}
-    
     # Pick ONE transformation type for inputs and ONE for outputs (can be different)
     transformation_types = [
         AugmentationConfigKey.APPLY_WORD_TRANSFORMS,
@@ -208,17 +205,17 @@ def generate_word_honeypot_config(dataset_size: int, instructions: list[str] = N
         
         config[AugmentationConfigKey.TRANSFORM_TYPE] = random.choices(
             [WordTransformType.REVERSE, WordTransformType.REPEAT, WordTransformType.TRUNCATE],
-            weights=[cst.WORD_TRANSFORM_REVERSE_CHANCE, 
-                    cst.WORD_TRANSFORM_REPEAT_CHANCE, 
-                    cst.WORD_TRANSFORM_TRUNCATE_CHANCE]
+            weights=[cst.WORD_TRANSFORM_REVERSE_PROB,
+                    cst.WORD_TRANSFORM_REPEAT_PROB,
+                    cst.WORD_TRANSFORM_TRUNCATE_PROB]
         )[0]
-        
+
         config[AugmentationConfigKey.POSITION_TYPE] = random.choices(
             [WordPositionType.BEFORE, WordPositionType.AFTER],
-            weights=[cst.WORD_POSITION_BEFORE_CHANCE, cst.WORD_POSITION_AFTER_CHANCE]
+            weights=[cst.WORD_POSITION_BEFORE_PROB, cst.WORD_POSITION_AFTER_PROB]
         )[0]
-        
-        config[AugmentationConfigKey.USE_SPACING] = random.random() < cst.WORD_POSITION_WITH_SPACE_CHANCE
+
+        config[AugmentationConfigKey.USE_SPACING] = random.random() < cst.WORD_POSITION_WITH_SPACE_PROB
         
         num_input_honeypot = int(dataset_size * cst.WORD_HONEYPOT_INPUT_PERCENTAGE)
         config[AugmentationConfigKey.INPUT_HONEYPOT_INDICES] = set(
@@ -229,7 +226,7 @@ def generate_word_honeypot_config(dataset_size: int, instructions: list[str] = N
     if config[f"input_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"] or config[AugmentationConfigKey.APPLY_CASE_MODIFICATIONS]:
         config[AugmentationConfigKey.INPUT_CASE_MOD_TYPE] = random.choices(
             [CaseModificationType.NTH_WORD_UPPERCASE, CaseModificationType.NTH_LETTER_UPPERCASE, CaseModificationType.ALL_UPPERCASE],
-            weights=[cst.CASE_MOD_NTH_WORD_UPPERCASE_CHANCE, cst.CASE_MOD_NTH_LETTER_UPPERCASE_CHANCE, cst.CASE_MOD_ALL_UPPERCASE_CHANCE]
+            weights=[cst.CASE_MOD_NTH_WORD_UPPERCASE_PROB, cst.CASE_MOD_NTH_LETTER_UPPERCASE_PROB, cst.CASE_MOD_ALL_UPPERCASE_PROB]
         )[0]
         if config[AugmentationConfigKey.INPUT_CASE_MOD_TYPE] != CaseModificationType.ALL_UPPERCASE:
             config[AugmentationConfigKey.INPUT_CASE_MOD_NTH] = random.choice([2, 3, 4])
@@ -237,7 +234,7 @@ def generate_word_honeypot_config(dataset_size: int, instructions: list[str] = N
     if config[f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"]:
         config[AugmentationConfigKey.OUTPUT_CASE_MOD_TYPE] = random.choices(
             [CaseModificationType.NTH_WORD_UPPERCASE, CaseModificationType.NTH_LETTER_UPPERCASE, CaseModificationType.ALL_UPPERCASE],
-            weights=[cst.CASE_MOD_NTH_WORD_UPPERCASE_CHANCE, cst.CASE_MOD_NTH_LETTER_UPPERCASE_CHANCE, cst.CASE_MOD_ALL_UPPERCASE_CHANCE]
+            weights=[cst.CASE_MOD_NTH_WORD_UPPERCASE_PROB, cst.CASE_MOD_NTH_LETTER_UPPERCASE_PROB, cst.CASE_MOD_ALL_UPPERCASE_PROB]
         )[0]
         if config[AugmentationConfigKey.OUTPUT_CASE_MOD_TYPE] != CaseModificationType.ALL_UPPERCASE:
             config[AugmentationConfigKey.OUTPUT_CASE_MOD_NTH] = random.choice([2, 3, 4])

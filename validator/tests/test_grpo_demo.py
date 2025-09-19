@@ -6,7 +6,7 @@ import uuid
 
 
 # Constants (matching validator/core/constants.py)
-GRPO_AUGMENTATION_CHANCE = 0.3
+GRPO_AUGMENTATION_PROBABILITY = 0.3
 GRPO_HONEYPOT_PERCENTAGE = 0.2
 
 # Test functions for GRPO-specific honeypots
@@ -59,10 +59,10 @@ def simulate_grpo_augmentation(prompt, response, dataset_size=100):
     """Simulate the full GRPO augmentation pipeline"""
     # Roll dice for each GRPO augmentation type
     augmentations = {
-        'prompt_honeypot': random.random() < GRPO_AUGMENTATION_CHANCE,
-        'code_augmentation': random.random() < GRPO_AUGMENTATION_CHANCE,
-        'reasoning_honeypot': random.random() < GRPO_AUGMENTATION_CHANCE,
-        'quality_marker': random.random() < GRPO_AUGMENTATION_CHANCE,
+        'prompt_honeypot': random.random() < GRPO_AUGMENTATION_PROBABILITY,
+        'code_augmentation': random.random() < GRPO_AUGMENTATION_PROBABILITY,
+        'reasoning_honeypot': random.random() < GRPO_AUGMENTATION_PROBABILITY,
+        'quality_marker': random.random() < GRPO_AUGMENTATION_PROBABILITY,
     }
 
     result = {
@@ -103,7 +103,7 @@ grpo_response = 'Here is a Python implementation of gradient preference optimiza
 
 print('GRPO AUGMENTATION DEMONSTRATION')
 print('=' * 70)
-print(f'Configuration: {GRPO_AUGMENTATION_CHANCE:.0%} chance per augmentation')
+print(f'Configuration: {GRPO_AUGMENTATION_PROBABILITY:.0%} chance per augmentation')
 print(f'GRPO honeypots apply to {GRPO_HONEYPOT_PERCENTAGE:.0%} of samples')
 print('=' * 70)
 

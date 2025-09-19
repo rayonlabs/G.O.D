@@ -12,6 +12,7 @@ This test suite validates all aspects of the word honeypot system including:
 import random
 from typing import Dict, List
 
+import validator.core.constants as cst
 from core.models.utility_models import (
     AugmentationConfigKey,
     CaseModificationType,
@@ -28,7 +29,7 @@ from validator.augmentation.word_honeypots import (
     apply_word_honeypot_to_text,
     check_conditional_rule,
     generate_conditional_rule_config,
-    generate_word_honeypot_config,
+    generate_text_transform_config,
     get_words_from_text,
     insert_transformed_word,
     remove_punctuation,
@@ -289,11 +290,11 @@ def test_separate_input_output_transformations():
         print("=" * 70)
         
         # Generate configuration with separate input/output transforms
-        word_config = generate_word_honeypot_config(len(instructions), instructions)
-        
-        if not word_config:
-            print("No word augmentations generated (random chance)")
+        if random.random() >= cst.TEXT_TRANSFORM_PROBABILITY:
+            print("No text transforms generated (random chance)")
             continue
+
+        text_transform_config = generate_text_transform_config(len(instructions), instructions)
         
         successful_examples += 1
             
@@ -304,23 +305,23 @@ def test_separate_input_output_transformations():
         print("\n📥 INPUT TRANSFORMATIONS:")
         input_applied = False
         
-        if word_config.get("input_apply_word_transforms") or word_config.get("apply_word_transforms"):
-            transform_type = word_config.get('transform_type', 'N/A')
-            position_type = word_config.get('position_type', 'N/A')
-            spacing = "WITH spacing" if word_config.get('use_spacing') else "WITHOUT spacing"
+        if text_transform_config.get("input_apply_word_transforms") or text_transform_config.get("apply_word_transforms"):
+            transform_type = text_transform_config.get('transform_type', 'N/A')
+            position_type = text_transform_config.get('position_type', 'N/A')
+            spacing = "WITH spacing" if text_transform_config.get('use_spacing') else "WITHOUT spacing"
             if hasattr(transform_type, 'value'):
                 transform_type = transform_type.value
             if hasattr(position_type, 'value'):
                 position_type = position_type.value
             print(f"   🔤 Word Transform: {transform_type.upper()} at {position_type.upper()}, {spacing}")
-            if word_config.get('input_honeypot_indices'):
-                input_rows = sorted(list(word_config['input_honeypot_indices']))
+            if text_transform_config.get('input_honeypot_indices'):
+                input_rows = sorted(list(text_transform_config['input_honeypot_indices']))
                 print(f"      → Applied to rows: {input_rows}")
             input_applied = True
             
-        if word_config.get("input_apply_case_modifications") or word_config.get("apply_case_modifications"):
-            case_type = word_config.get('input_case_mod_type', word_config.get('case_mod_type', 'N/A'))
-            nth = word_config.get('input_case_mod_nth', word_config.get('case_mod_nth', 'N/A'))
+        if text_transform_config.get("input_apply_case_modifications") or text_transform_config.get("apply_case_modifications"):
+            case_type = text_transform_config.get('input_case_mod_type', text_transform_config.get('case_mod_type', 'N/A'))
+            nth = text_transform_config.get('input_case_mod_nth', text_transform_config.get('case_mod_nth', 'N/A'))
             if hasattr(case_type, 'value'):
                 case_type_str = case_type.value
             else:
@@ -334,24 +335,24 @@ def test_separate_input_output_transformations():
             print(f"      → Applied to ALL input rows")
             input_applied = True
             
-        if word_config.get("input_apply_punctuation_removal") or word_config.get("apply_punctuation_removal"):
+        if text_transform_config.get("input_apply_punctuation_removal") or text_transform_config.get("apply_punctuation_removal"):
             print(f"   🚫 Punctuation Removal: ENABLED")
             print(f"      → Applied to ALL input rows")
             input_applied = True
             
-        if word_config.get("input_apply_text_transforms") or word_config.get("apply_text_transforms"):
-            transform_type = word_config.get('input_text_transform_type', word_config.get('text_transform_type', 'N/A'))
+        if text_transform_config.get("input_apply_text_transforms") or text_transform_config.get("apply_text_transforms"):
+            transform_type = text_transform_config.get('input_text_transform_type', text_transform_config.get('text_transform_type', 'N/A'))
             if hasattr(transform_type, 'value'):
                 transform_type_str = transform_type.value
             else:
                 transform_type_str = str(transform_type)
             print(f"   📝 Text Transform: {transform_type_str.upper()}")
             if transform_type_str == 'modify_spacing':
-                multiplier = word_config.get('input_spacing_multiplier', word_config.get('spacing_multiplier', 2))
+                multiplier = text_transform_config.get('input_spacing_multiplier', text_transform_config.get('spacing_multiplier', 2))
                 print(f"      → Spacing multiplier: {multiplier}x")
             elif transform_type_str == 'substitute_characters':
-                target = word_config.get('input_target_character', word_config.get('target_character', 'N/A'))
-                replacement = word_config.get('input_replacement_character', word_config.get('replacement_character', 'N/A'))
+                target = text_transform_config.get('input_target_character', text_transform_config.get('target_character', 'N/A'))
+                replacement = text_transform_config.get('input_replacement_character', text_transform_config.get('replacement_character', 'N/A'))
                 print(f"      → Replace '{target}' with '{replacement}'")
             print(f"      → Applied to ALL input rows")
             input_applied = True
@@ -363,10 +364,10 @@ def test_separate_input_output_transformations():
         print("\n📤 OUTPUT TRANSFORMATIONS:")
         output_applied = False
         
-        if word_config.get("output_apply_word_transforms") or word_config.get(f"output_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}"):
-            transform_type = word_config.get('transform_type', 'N/A')
-            position_type = word_config.get('position_type', 'N/A')
-            spacing = "WITH spacing" if word_config.get('use_spacing') else "WITHOUT spacing"
+        if text_transform_config.get("output_apply_word_transforms") or text_transform_config.get(f"output_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}"):
+            transform_type = text_transform_config.get('transform_type', 'N/A')
+            position_type = text_transform_config.get('position_type', 'N/A')
+            spacing = "WITH spacing" if text_transform_config.get('use_spacing') else "WITHOUT spacing"
             if hasattr(transform_type, 'value'):
                 transform_type = transform_type.value
             if hasattr(position_type, 'value'):
@@ -374,9 +375,9 @@ def test_separate_input_output_transformations():
             print(f"   🔤 Word Transform: {transform_type.upper()} at {position_type.upper()}, {spacing}")
             output_applied = True
             
-        if word_config.get("output_apply_case_modifications") or word_config.get(f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"):
-            case_type = word_config.get('output_case_mod_type', 'N/A')
-            nth = word_config.get('output_case_mod_nth', 'N/A')
+        if text_transform_config.get("output_apply_case_modifications") or text_transform_config.get(f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"):
+            case_type = text_transform_config.get('output_case_mod_type', 'N/A')
+            nth = text_transform_config.get('output_case_mod_nth', 'N/A')
             if hasattr(case_type, 'value'):
                 case_type_str = case_type.value
             else:
@@ -389,26 +390,26 @@ def test_separate_input_output_transformations():
                 print(f"   🔠 Case Modification: {case_type_str.upper()} every {nth} {unit}")
             output_applied = True
             
-        if word_config.get("output_apply_punctuation_removal") or word_config.get(f"output_{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL}"):
+        if text_transform_config.get("output_apply_punctuation_removal") or text_transform_config.get(f"output_{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL}"):
             print(f"   🚫 Punctuation Removal: ENABLED")
             output_applied = True
             
-        if word_config.get("output_apply_text_transforms") or word_config.get(f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}"):
-            transform_type = word_config.get('output_text_transform_type', 'N/A')
+        if text_transform_config.get("output_apply_text_transforms") or text_transform_config.get(f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}"):
+            transform_type = text_transform_config.get('output_text_transform_type', 'N/A')
             if hasattr(transform_type, 'value'):
                 transform_type_str = transform_type.value
             else:
                 transform_type_str = str(transform_type)
             print(f"   📝 Text Transform: {transform_type_str.upper()}")
             if transform_type_str == 'modify_spacing':
-                multiplier = word_config.get('output_spacing_multiplier', 2)
+                multiplier = text_transform_config.get('output_spacing_multiplier', 2)
                 print(f"      → Spacing multiplier: {multiplier}x")
             elif transform_type_str == 'substitute_characters':
-                target = word_config.get('output_target_character', 'N/A')
-                replacement = word_config.get('output_replacement_character', 'N/A')
+                target = text_transform_config.get('output_target_character', 'N/A')
+                replacement = text_transform_config.get('output_replacement_character', 'N/A')
                 print(f"      → Replace '{target}' with '{replacement}'")
             elif transform_type_str == 'insert_fixed_letter':
-                letter = word_config.get('output_fixed_letter', 'N/A')
+                letter = text_transform_config.get('output_fixed_letter', 'N/A')
                 print(f"      → Insert fixed letter: '{letter}'")
             output_applied = True
         
@@ -417,46 +418,46 @@ def test_separate_input_output_transformations():
         
         # Show conditional rule
         print("\n🔍 OUTPUT CONDITIONAL RULE:")
-        if word_config.get('output_conditional_rule'):
-            rule_type = word_config.get('output_rule_type')
+        if text_transform_config.get('output_conditional_rule'):
+            rule_type = text_transform_config.get('output_rule_type')
             if rule_type == ConditionalRuleType.LENGTH_THRESHOLD:
-                threshold = word_config.get('output_rule_threshold')
+                threshold = text_transform_config.get('output_rule_threshold')
                 print(f"   📏 Length Threshold: Apply if input length > {threshold} characters")
             elif rule_type == ConditionalRuleType.WORD_COUNT_THRESHOLD:
-                threshold = word_config.get('output_rule_threshold')
+                threshold = text_transform_config.get('output_rule_threshold')
                 print(f"   📊 Word Count: Apply if input has > {threshold} words")
             elif rule_type == ConditionalRuleType.CONTAINS_KEYWORDS:
-                keywords = word_config.get('output_rule_keywords', [])
+                keywords = text_transform_config.get('output_rule_keywords', [])
                 print(f"   🔑 Keywords: Apply if input contains any of: {keywords}")
             elif rule_type == ConditionalRuleType.CHAR_FREQUENCY:
-                char = word_config.get('output_rule_target_char')
-                threshold = word_config.get('output_rule_threshold')
+                char = text_transform_config.get('output_rule_target_char')
+                threshold = text_transform_config.get('output_rule_threshold')
                 print(f"   🔤 Character Frequency: Apply if input has ≥{threshold} occurrences of '{char}'")
             elif rule_type == ConditionalRuleType.SENTENCE_COUNT:
-                threshold = word_config.get('output_rule_threshold')
+                threshold = text_transform_config.get('output_rule_threshold')
                 print(f"   📄 Sentence Count: Apply if input has > {threshold} sentences")
             elif rule_type == ConditionalRuleType.STARTS_WITH_PATTERN:
-                pattern = word_config.get('output_rule_pattern')
+                pattern = text_transform_config.get('output_rule_pattern')
                 print(f"   🎯 Starts With: Apply if input starts with '{pattern}'")
             elif rule_type == ConditionalRuleType.ENDS_WITH_PATTERN:
-                pattern = word_config.get('output_rule_pattern')
+                pattern = text_transform_config.get('output_rule_pattern')
                 print(f"   🎯 Ends With: Apply if input ends with '{pattern}'")
             elif rule_type == ConditionalRuleType.PUNCTUATION_PATTERN:
-                pattern = word_config.get('output_rule_pattern')
+                pattern = text_transform_config.get('output_rule_pattern')
                 print(f"   ❓ Punctuation: Apply if input contains '{pattern}'")
             else:
                 print(f"   ❓ Unknown rule: {rule_type.value if rule_type else 'NONE'}")
         else:
             # Check if there are output transformations configured
             has_output_transforms = any([
-                word_config.get("output_apply_word_transforms"),
-                word_config.get(f"output_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}"),
-                word_config.get("output_apply_case_modifications"), 
-                word_config.get(f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"),
-                word_config.get("output_apply_punctuation_removal"),
-                word_config.get(f"output_{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL}"),
-                word_config.get("output_apply_text_transforms"),
-                word_config.get(f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}")
+                text_transform_config.get("output_apply_word_transforms"),
+                text_transform_config.get(f"output_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}"),
+                text_transform_config.get("output_apply_case_modifications"), 
+                text_transform_config.get(f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"),
+                text_transform_config.get("output_apply_punctuation_removal"),
+                text_transform_config.get(f"output_{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL}"),
+                text_transform_config.get("output_apply_text_transforms"),
+                text_transform_config.get(f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}")
             ])
             
             if has_output_transforms:
@@ -474,7 +475,7 @@ def test_separate_input_output_transformations():
                 
             # Apply transformations
             modified_instruction, modified_output = apply_instruct_word_honeypots(
-                instruction, output, word_config, i
+                instruction, output, text_transform_config, i
             )
             
             # Determine what happened
@@ -512,8 +513,8 @@ def test_separate_input_output_transformations():
                 print(f"   💬 Output: {output}")
             
             # Check conditional rule
-            if word_config.get('output_conditional_rule'):
-                rule_matched = check_conditional_rule(instruction, word_config)
+            if text_transform_config.get('output_conditional_rule'):
+                rule_matched = check_conditional_rule(instruction, text_transform_config)
                 if rule_matched:
                     print(f"   🎯 Conditional rule: ✅ MATCHED")
                 else:
