@@ -385,12 +385,15 @@ async def _process_and_upload_datasets(
         if isinstance(task, DpoRawTask):
             augmentations = _generate_dpo_augmentation_config(max_dataset_size)
             logger.info(f"Generated DPO augmentation config for synthetic dataset size {max_dataset_size}")
+            logger.info(f"DPO obfuscation config: {augmentations}")
         elif isinstance(task, InstructTextRawTask):
             augmentations = _generate_instruct_augmentation_config(max_dataset_size)
             logger.info(f"Generated Instruct augmentation config for synthetic dataset size {max_dataset_size}")
+            logger.info(f"Instruct obfuscation config: {augmentations}")
         elif isinstance(task, GrpoRawTask):
             augmentations = _generate_grpo_augmentation_config(max_dataset_size)
             logger.info(f"Generated GRPO augmentation config for synthetic dataset size {max_dataset_size}")
+            logger.info(f"GRPO obfuscation config: {augmentations}")
 
     try:
         if should_reupload_train:
