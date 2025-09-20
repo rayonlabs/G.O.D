@@ -247,7 +247,10 @@ Tournaments run continuously with 4-7 day duration and 24-hour gaps between tour
 ### Boss Round
 - Tournament winner must face defending champion
 - Uses progressive threshold system with exponential decay based on consecutive wins
-- Defending champion retains title unless clearly outperformed
+- **Tournament-Specific Winning Requirements**:
+  - **Text tournaments**: Challenger wins by majority rule (2/3 or 3/3 tasks)
+  - **Image tournaments**: Challenger must win ALL 3 tasks (perfect sweep) to dethrone the champion
+- Defending champion retains title unless challenger meets the tournament-specific winning requirement
 
 #### Championship Defense Thresholds
 The advantage required to dethrone a champion decreases with each successful defense using an exponential decay formula:
