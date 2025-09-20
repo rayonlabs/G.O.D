@@ -873,10 +873,9 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
         return False
 
     all_tasks_completed = True
-    statuses = []
+    total_round_tasks = len(round_tasks)
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-        statuses.append(task_obj.status)
         if task_obj and task_obj.status not in [
             TaskStatus.SUCCESS.value,
             TaskStatus.FAILURE.value,
@@ -885,19 +884,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
             break
-    if (statuses.count(TaskStatus.SUCCESS.value) / len(statuses or [1])) < t_cst.PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS:
-        logger.info(f"Task {task.task_id} has more than half failures")
-        discord_url = config.discord_url
-        if discord_url:
-            try:
-                await send_to_discord(
-                    webhook=discord_url,
-                    content=f"Warning: Tournament Round {round_data.round_id} has more than half tasks failed, please investigate.",
-                )
-            except Exception as e:
-                logger.error(f"Failed to send Discord notification: {e}")
-        return False
-
+        
     waiting_for_synced_tasks = False
     if not all_tasks_completed:
         logger.info(f"Round {round_data.round_id} not ready for completion yet")
@@ -927,6 +914,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                     return False
 
         # Check for failed tasks that need syncing (for all rounds)
+        failed_tasks_that_succeeded_sync = 0
         for task in round_tasks:
             synced_task_id = await get_synced_task_id(task.task_id, config.psql_db)
             if synced_task_id:
@@ -934,6 +922,7 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                 if synced_task_obj:
                     if synced_task_obj.status == TaskStatus.SUCCESS.value:
                         logger.info(f"Synced task {synced_task_id} completed successfully")
+                        failed_tasks_that_succeeded_sync += 1
                         continue
                     elif (
                         synced_task_obj.status == TaskStatus.FAILURE.value
@@ -1011,6 +1000,20 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                         # Fall back to copying to general cycle if replacement fails
                         await copy_tournament_task_into_general_miner_pool(task.task_id, config.psql_db)
                         waiting_for_synced_tasks = True
+
+        percentage_of_failed_tasks  = failed_tasks_that_succeeded_sync / total_round_tasks
+        if percentage_of_failed_tasks > t_cst.PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS:
+            logger.info(f"Round {round_data.round_id} has more than half failures, alerting on discord and pausing advancement")
+            discord_url = config.discord_url
+            if discord_url:
+                try:
+                    await send_to_discord(
+                        webhook=discord_url,
+                        message=f"Warning: Tournament Round {round_data.round_id} has more than half tasks failed, please investigate.",
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send Discord notification: {e}")
+            return False
 
     if waiting_for_synced_tasks:
         logger.info(f"Waiting for synced tasks to complete in round {round_data.round_id}")
