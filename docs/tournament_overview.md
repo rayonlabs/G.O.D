@@ -123,12 +123,15 @@ PENDING → ACTIVE → COMPLETED
 When tournament reaches final round with single winner:
 
 1. **Historical Task Selection**: Boss round uses proven historical tasks from the database with at least 2 successful quality scores
-   - Text tournaments: 1 of each type (InstructText, DPO, GRPO) 
+   - Text tournaments: 1 of each type (InstructText, DPO, GRPO)
    - Image tournaments: 3 random image tasks
    - Tasks are copied with new IDs while preserving original training data
 2. **Score Comparison**: Tournament miners' results are compared against the best historical scores from general miners
 3. **Winner Determination**: Based on `calculate_final_round_winner()` with 5% margin requirement
-4. **Champion Defense**: Previous winner retains title unless clearly outperformed
+4. **Tournament-Specific Winning Requirements**:
+   - **Text tournaments**: Challenger wins by majority rule (2/3 or 3/3 tasks)
+   - **Image tournaments**: Challenger must win **ALL 3 tasks** (perfect sweep) to dethrone the defending champion
+5. **Champion Defense**: Previous winner retains title unless challenger meets the tournament-specific winning requirement
 
 ## Scoring & Weight Distribution
 
