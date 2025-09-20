@@ -4,7 +4,7 @@ import uuid
 
 import validator.core.constants as cst
 from validator.augmentation.word_honeypots import apply_word_honeypot_to_text
-from validator.augmentation.word_honeypots import generate_word_honeypot_config
+from validator.augmentation.word_honeypots import generate_text_transform_config
 from validator.utils.logging import get_logger
 
 
@@ -44,12 +44,12 @@ def _insert_uid_randomly(text: str, uid: str) -> str:
 
 
 def _generate_dpo_augmentation_config(dataset_size: int) -> dict:
-    if random.random() < cst.DPO_AUGMENTATION_CHANCE:
+    if random.random() < cst.DPO_AUGMENTATION_PROB:
         config = {
-            "rearrange_sentences": random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            "add_prompt_honeypot": random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            "add_response_honeypot": random.random() < cst.DPO_AUGMENTATION_CHANCE,
-            "swap_chosen_rejected": random.random() < cst.DPO_AUGMENTATION_CHANCE,
+            "rearrange_sentences": random.random() < cst.DPO_AUGMENTATION_PROB,
+            "add_prompt_honeypot": random.random() < cst.DPO_AUGMENTATION_PROB,
+            "add_response_honeypot": random.random() < cst.DPO_AUGMENTATION_PROB,
+            "swap_chosen_rejected": random.random() < cst.DPO_AUGMENTATION_PROB,
         }
 
         # Configure prompt honeypot (applies to ALL prompts if enabled)
@@ -74,12 +74,12 @@ def _generate_dpo_augmentation_config(dataset_size: int) -> dict:
 
 def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
     """Generate augmentation configuration for instruct tasks."""
-    if random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE:
+    if random.random() < cst.INSTRUCT_AUGMENTATION_PROB:
         config = {
-            "rearrange_input": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
-            "rearrange_output": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
-            "add_input_honeypot": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
-            "add_output_honeypot": random.random() < cst.INSTRUCT_AUGMENTATION_CHANCE,
+            "rearrange_input": random.random() < cst.INSTRUCT_AUGMENTATION_PROB,
+            "rearrange_output": random.random() < cst.INSTRUCT_AUGMENTATION_PROB,
+            "add_input_honeypot": random.random() < cst.INSTRUCT_AUGMENTATION_PROB,
+            "add_output_honeypot": random.random() < cst.INSTRUCT_AUGMENTATION_PROB,
         }
 
         # Configure input honeypot (applies to ALL instructions if enabled)
@@ -97,9 +97,10 @@ def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
                 random.sample(range(dataset_size), min(num_output_honeypot, dataset_size))
             )
 
-        # Generate word honeypot configuration
-        word_honeypot_config = generate_word_honeypot_config(dataset_size)
-        config.update(word_honeypot_config)
+        # Generate text transform configuration
+        if random.random() < cst.TEXT_TRANSFORM_PROB:
+            text_transform_config = generate_text_transform_config(dataset_size)
+            config.update(text_transform_config)
 
         return config
     else:
@@ -108,23 +109,24 @@ def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
 
 def _generate_grpo_augmentation_config(dataset_size: int) -> dict:
     """Generate augmentation configuration for GRPO tasks - only apply to prompts."""
-    if random.random() < cst.WORD_HONEYPOT_CHANCE:
+    if random.random() < cst.GRPO_AUGMENTATION_PROB:
         config = {
-            "add_prompt_honeypot": random.random() < cst.WORD_HONEYPOT_CHANCE,
+            "add_prompt_honeypot": random.random() < cst.GRPO_PROMPT_HONEYPOT_PROB,
         }
 
         # Configure prompt honeypot (applies to ALL prompts if enabled)
         if config["add_prompt_honeypot"]:
             config["prompt_uid"] = uuid.uuid4().hex[:8]
 
-        # Generate word honeypot configuration
-        word_honeypot_config = generate_word_honeypot_config(dataset_size)
+        # Generate text transform configuration with GRPO-specific probability
+        if random.random() < cst.GRPO_WORD_TRANSFORM_PROB:
+            text_transform_config = generate_text_transform_config(dataset_size)
 
-        # For GRPO, filter out output-specific configurations since GRPO only has prompts
-        for key, value in word_honeypot_config.items():
-            if key.startswith('output_') or 'OUTPUT' in key.upper():
-                continue
-            config[key] = value
+            # For GRPO, filter out output-specific configurations since GRPO only has prompts
+            for key, value in text_transform_config.items():
+                if key.startswith('output_') or 'OUTPUT' in key.upper():
+                    continue
+                config[key] = value
 
         return config
     else:
