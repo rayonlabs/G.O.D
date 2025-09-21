@@ -199,8 +199,8 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
     }
     
     # Configure word transforms (shared settings)
-    if (config[f"input_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}"] or 
-        config[f"output_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}"] or
+    if (config[f"input_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS.value}"] or
+        config[f"output_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS.value}"] or
         config[AugmentationConfigKey.APPLY_WORD_TRANSFORMS]):
         
         config[AugmentationConfigKey.TRANSFORM_TYPE] = random.choices(
@@ -223,7 +223,7 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
         )
     
     # Configure case modifications
-    if config[f"input_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"] or config[AugmentationConfigKey.APPLY_CASE_MODIFICATIONS]:
+    if config[f"input_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS.value}"] or config[AugmentationConfigKey.APPLY_CASE_MODIFICATIONS]:
         config[AugmentationConfigKey.INPUT_CASE_MOD_TYPE] = random.choices(
             [CaseModificationType.NTH_WORD_UPPERCASE, CaseModificationType.NTH_LETTER_UPPERCASE, CaseModificationType.ALL_UPPERCASE],
             weights=[cst.CASE_MOD_NTH_WORD_UPPERCASE_PROB, cst.CASE_MOD_NTH_LETTER_UPPERCASE_PROB, cst.CASE_MOD_ALL_UPPERCASE_PROB]
@@ -231,7 +231,7 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
         if config[AugmentationConfigKey.INPUT_CASE_MOD_TYPE] != CaseModificationType.ALL_UPPERCASE:
             config[AugmentationConfigKey.INPUT_CASE_MOD_NTH] = random.choice([2, 3, 4])
     
-    if config[f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"]:
+    if config[f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS.value}"]:
         config[AugmentationConfigKey.OUTPUT_CASE_MOD_TYPE] = random.choices(
             [CaseModificationType.NTH_WORD_UPPERCASE, CaseModificationType.NTH_LETTER_UPPERCASE, CaseModificationType.ALL_UPPERCASE],
             weights=[cst.CASE_MOD_NTH_WORD_UPPERCASE_PROB, cst.CASE_MOD_NTH_LETTER_UPPERCASE_PROB, cst.CASE_MOD_ALL_UPPERCASE_PROB]
@@ -240,7 +240,7 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
             config[AugmentationConfigKey.OUTPUT_CASE_MOD_NTH] = random.choice([2, 3, 4])
     
     # Configure text transforms
-    if config[f"input_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}"] or config[AugmentationConfigKey.APPLY_TEXT_TRANSFORMS]:
+    if config[f"input_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS.value}"] or config[AugmentationConfigKey.APPLY_TEXT_TRANSFORMS]:
         config[AugmentationConfigKey.INPUT_TEXT_TRANSFORM_TYPE] = random.choice([
             TextTransformType.REVERSE_ENTIRE_TEXT,
             TextTransformType.REVERSE_NTH_WORD,
@@ -259,7 +259,7 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
             config[AugmentationConfigKey.INPUT_TARGET_CHARACTER] = random.choice('aeiou')
             config[AugmentationConfigKey.INPUT_REPLACEMENT_CHARACTER] = random.choice('abcdefghijklmnopqrstuvwxyz0123456789')
     
-    if config[f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}"]:
+    if config[f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS.value}"]:
         config[AugmentationConfigKey.OUTPUT_TEXT_TRANSFORM_TYPE] = random.choice([
             TextTransformType.REVERSE_ENTIRE_TEXT,
             TextTransformType.REVERSE_NTH_WORD,
@@ -280,13 +280,13 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
     
     # Log configuration
     logger.info("Generated word honeypot configuration:")
-    if config.get(f"input_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}"):
+    if config.get(f"input_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS.value}"):
         transform_type = config[AugmentationConfigKey.TRANSFORM_TYPE].value
         position_type = config[AugmentationConfigKey.POSITION_TYPE].value
         spacing = "WITH" if config[AugmentationConfigKey.USE_SPACING] else "WITHOUT"
         logger.info(f"  Input word transforms: {transform_type} at {position_type}, spacing {spacing}")
     
-    if config.get(f"input_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"):
+    if config.get(f"input_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS.value}"):
         case_mod_type = config[AugmentationConfigKey.INPUT_CASE_MOD_TYPE].value
         if case_mod_type == "all_uppercase":
             logger.info(f"  Input case modifications: {case_mod_type}")
@@ -294,7 +294,7 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
             case_mod_nth = config[AugmentationConfigKey.INPUT_CASE_MOD_NTH]
             logger.info(f"  Input case modifications: {case_mod_type} every {case_mod_nth}")
     
-    if config.get(f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"):
+    if config.get(f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS.value}"):
         case_mod_type = config[AugmentationConfigKey.OUTPUT_CASE_MOD_TYPE].value
         if case_mod_type == "all_uppercase":
             logger.info(f"  Output case modifications: {case_mod_type}")
@@ -302,11 +302,11 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
             case_mod_nth = config[AugmentationConfigKey.OUTPUT_CASE_MOD_NTH]
             logger.info(f"  Output case modifications: {case_mod_type} every {case_mod_nth}")
     
-    if config.get(f"input_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}"):
+    if config.get(f"input_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS.value}"):
         transform_type = config[AugmentationConfigKey.INPUT_TEXT_TRANSFORM_TYPE].value
         logger.info(f"  Input text transforms: {transform_type}")
     
-    if config.get(f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}"):
+    if config.get(f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS.value}"):
         transform_type = config[AugmentationConfigKey.OUTPUT_TEXT_TRANSFORM_TYPE].value
         logger.info(f"  Output text transforms: {transform_type}")
     
@@ -578,7 +578,7 @@ def apply_instruct_word_honeypots(instruction: str, output: str, config: dict,
     should_augment_input = False
     if config.get(AugmentationConfigKey.INPUT_HONEYPOT_INDICES):
         should_augment_input = row_index in config[AugmentationConfigKey.INPUT_HONEYPOT_INDICES]
-    elif any(config.get(f"input_{key}") for key in [
+    elif any(config.get(f"input_{key.value}") for key in [
         AugmentationConfigKey.APPLY_CASE_MODIFICATIONS,
         AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL,
         AugmentationConfigKey.APPLY_TEXT_TRANSFORMS
@@ -593,7 +593,7 @@ def apply_instruct_word_honeypots(instruction: str, output: str, config: dict,
     should_augment_output = False
     if config.get(AugmentationConfigKey.OUTPUT_CONDITIONAL_RULE):
         should_augment_output = check_conditional_rule(instruction, config)
-    elif any(config.get(f"output_{key}") for key in [
+    elif any(config.get(f"output_{key.value}") for key in [
         AugmentationConfigKey.APPLY_CASE_MODIFICATIONS,
         AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL,
         AugmentationConfigKey.APPLY_TEXT_TRANSFORMS,
