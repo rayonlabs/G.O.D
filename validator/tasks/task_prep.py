@@ -387,7 +387,7 @@ async def _process_and_upload_datasets(
             logger.info(f"Generated DPO augmentation config for synthetic dataset size {max_dataset_size}")
             logger.info(f"DPO obfuscation config: {augmentations}")
         elif isinstance(task, InstructTextRawTask):
-            augmentations = _generate_instruct_augmentation_config(max_dataset_size)
+            augmentations = _generate_instruct_augmentation_config(max_dataset_size, train_dataset)
             logger.info(f"Generated Instruct augmentation config for synthetic dataset size {max_dataset_size}")
             logger.info(f"Instruct obfuscation config: {augmentations}")
         elif isinstance(task, GrpoRawTask):

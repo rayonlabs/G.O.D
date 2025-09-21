@@ -72,8 +72,13 @@ def _generate_dpo_augmentation_config(dataset_size: int) -> dict:
         return {}
 
 
-def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
-    """Generate augmentation configuration for instruct tasks."""
+def _generate_instruct_augmentation_config(dataset_size: int, train_dataset=None) -> dict:
+    """Generate augmentation configuration for instruct tasks.
+
+    Args:
+        dataset_size: Size of the dataset for configuring augmentations
+        train_dataset: Optional training dataset to extract instructions for conditional rules
+    """
     if random.random() < cst.INSTRUCT_AUGMENTATION_PROB:
         config = {
             "rearrange_input": random.random() < cst.INSTRUCT_AUGMENTATION_PROB,
@@ -99,7 +104,19 @@ def _generate_instruct_augmentation_config(dataset_size: int) -> dict:
 
         # Generate text transform configuration
         if random.random() < cst.TEXT_TRANSFORM_PROB:
-            text_transform_config = generate_text_transform_config(dataset_size)
+            # Extract instructions from dataset if provided for conditional rules
+            instructions = None
+            if train_dataset is not None:
+                try:
+                    # Extract instruction column data for conditional rule analysis
+                    if hasattr(train_dataset, 'column_names') and cst.STANDARD_INSTRUCT_COLUMN in train_dataset.column_names:
+                        instructions = [row[cst.STANDARD_INSTRUCT_COLUMN] for row in train_dataset]
+                        logger.info(f"Extracted {len(instructions)} instructions for conditional rule analysis")
+                except Exception as e:
+                    logger.warning(f"Could not extract instructions for conditional rules: {e}")
+                    instructions = None
+
+            text_transform_config = generate_text_transform_config(dataset_size, instructions)
             config.update(text_transform_config)
 
         return config
