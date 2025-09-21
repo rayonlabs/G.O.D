@@ -82,10 +82,6 @@ def create_finetuned_cache_dir():
 @retry_on_5xx()
 def load_model(model_name_or_path: str, is_base_model: bool = False, local_files_only: bool = False) -> AutoModelForCausalLM:
     try:
-        logger.info(f"=== MODEL LOADING START ===")
-        logger.info(f"Model: {model_name_or_path}")
-        logger.info(f"Is base model: {is_base_model}")
-        logger.info(f"Local files only: {local_files_only}")
         
         # For local files, try to use the snapshot path directly
         if local_files_only:
@@ -105,7 +101,6 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
                         has_config = 'config.json' in files
                         
                         if has_model_files and has_config:
-                            logger.info(f"Using snapshot {snapshot} with model files")
                             try:
                                 model = AutoModelForCausalLM.from_pretrained(
                                     snapshot_path,
@@ -113,7 +108,6 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
                                     torch_dtype=torch.bfloat16,
                                     local_files_only=True
                                 )
-                                logger.info(f"=== MODEL LOADING SUCCESS (from snapshot) ===")
                                 return model
                             except Exception as e:
                                 logger.warning(f"Failed to load from snapshot {snapshot}: {e}")
@@ -137,9 +131,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
         
-        logger.info(f"Falling back to standard loading with kwargs: {kwargs}")
         model = AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
-        logger.info(f"=== MODEL LOADING SUCCESS ===")
         return model
     except RuntimeError as e:
         error_msg = str(e)
@@ -159,9 +151,6 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
 @retry_on_5xx()
 def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoTokenizer:
     try:
-        logger.info(f"=== TOKENIZER LOADING START ===")
-        logger.info(f"Model: {original_model}")
-        logger.info(f"Local files only: {local_files_only}")
         
         # For local files, try to use the snapshot path directly
         if local_files_only:
@@ -179,13 +168,11 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
                         tokenizer_files = [f for f in files if 'tokenizer' in f.lower() or f.endswith('.model')]
                         
                         if tokenizer_files:
-                            logger.info(f"Using snapshot {snapshot} with tokenizer files: {tokenizer_files}")
                             try:
                                 tokenizer = AutoTokenizer.from_pretrained(
                                     snapshot_path,
                                     local_files_only=True
                                 )
-                                logger.info(f"=== TOKENIZER LOADING SUCCESS (from snapshot) ===")
                                 return tokenizer
                             except Exception as e:
                                 logger.warning(f"Failed to load from snapshot {snapshot}: {e}")
@@ -199,24 +186,17 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
         
-        logger.info(f"Falling back to standard loading with kwargs: {kwargs}")
         tokenizer = AutoTokenizer.from_pretrained(original_model, **kwargs)
-        logger.info(f"=== TOKENIZER LOADING SUCCESS ===")
         return tokenizer
     except Exception as e:
-        logger.error(f"=== TOKENIZER LOADING FAILED ===")
-        logger.error(f"Exception type: {type(e).__name__}")
-        logger.error(f"Exception message: {str(e)}")
-        logger.error(f"Full traceback:", exc_info=True)
+        logger.error(f"Failed to load tokenizer: {str(e)}")
+        logger.debug(f"Full traceback:", exc_info=True)
         raise  # Re-raise the exception to trigger retry
 
 
 @retry_on_5xx()
 def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftModelForCausalLM:
     try:
-        logger.info(f"=== LORA MODEL LOADING START ===")
-        logger.info(f"Repository: {repo}")
-        logger.info(f"Local files only: {local_files_only}")
         
         # For local files, try to use the snapshot path directly
         if local_files_only:
@@ -235,7 +215,6 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
                         has_adapter = any('adapter' in f.lower() for f in files)
                         
                         if has_adapter:
-                            logger.info(f"Using snapshot {snapshot} with adapter files")
                             try:
                                 model = AutoPeftModelForCausalLM.from_pretrained(
                                     snapshot_path,
@@ -244,7 +223,6 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
                                     torch_dtype=torch.bfloat16,
                                     local_files_only=True
                                 )
-                                logger.info(f"=== LORA MODEL LOADING SUCCESS (from snapshot) ===")
                                 return model
                             except Exception as e:
                                 logger.warning(f"Failed to load from snapshot {snapshot}: {e}")
@@ -267,9 +245,7 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
         
-        logger.info(f"Falling back to standard loading with kwargs: {kwargs}")
         model = AutoPeftModelForCausalLM.from_pretrained(repo, **kwargs)
-        logger.info(f"=== LORA MODEL LOADING SUCCESS ===")
         return model
     except RuntimeError as e:
         error_msg = str(e)
