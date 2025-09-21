@@ -179,16 +179,16 @@ def generate_text_transform_config(dataset_size: int, instructions: list[str] = 
     
     config = {
         # Input transformations
-        f"input_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}": input_transform == AugmentationConfigKey.APPLY_WORD_TRANSFORMS,
-        f"input_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}": input_transform == AugmentationConfigKey.APPLY_CASE_MODIFICATIONS,
-        f"input_{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL}": input_transform == AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL,
-        f"input_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}": input_transform == AugmentationConfigKey.APPLY_TEXT_TRANSFORMS,
-        
+        f"input_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS.value}": input_transform == AugmentationConfigKey.APPLY_WORD_TRANSFORMS,
+        f"input_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS.value}": input_transform == AugmentationConfigKey.APPLY_CASE_MODIFICATIONS,
+        f"input_{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL.value}": input_transform == AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL,
+        f"input_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS.value}": input_transform == AugmentationConfigKey.APPLY_TEXT_TRANSFORMS,
+
         # Output transformations (conditional)
-        f"output_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}": output_transform == AugmentationConfigKey.APPLY_WORD_TRANSFORMS,
-        f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}": output_transform == AugmentationConfigKey.APPLY_CASE_MODIFICATIONS,
-        f"output_{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL}": output_transform == AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL,
-        f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}": output_transform == AugmentationConfigKey.APPLY_TEXT_TRANSFORMS,
+        f"output_{AugmentationConfigKey.APPLY_WORD_TRANSFORMS.value}": output_transform == AugmentationConfigKey.APPLY_WORD_TRANSFORMS,
+        f"output_{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS.value}": output_transform == AugmentationConfigKey.APPLY_CASE_MODIFICATIONS,
+        f"output_{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL.value}": output_transform == AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL,
+        f"output_{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS.value}": output_transform == AugmentationConfigKey.APPLY_TEXT_TRANSFORMS,
         
         # Legacy keys for backward compatibility and shared configs
         AugmentationConfigKey.APPLY_WORD_TRANSFORMS: input_transform == AugmentationConfigKey.APPLY_WORD_TRANSFORMS,
@@ -520,7 +520,7 @@ def apply_word_honeypot_to_text(text: str, config: dict, is_input: bool = True) 
         transform_prefix = "output_"
     
     # Apply word transforms
-    if config.get(f"{transform_prefix}{AugmentationConfigKey.APPLY_WORD_TRANSFORMS}"):
+    if config.get(f"{transform_prefix}{AugmentationConfigKey.APPLY_WORD_TRANSFORMS.value}"):
         words = get_words_from_text(text)
         if words:
             target_word = random.choice(words)
@@ -532,7 +532,7 @@ def apply_word_honeypot_to_text(text: str, config: dict, is_input: bool = True) 
             )
     
     # Apply text transformations
-    elif config.get(f"{transform_prefix}{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS}"):
+    elif config.get(f"{transform_prefix}{AugmentationConfigKey.APPLY_TEXT_TRANSFORMS.value}"):
         if is_input and AugmentationConfigKey.INPUT_TEXT_TRANSFORM_TYPE in config:
             transform_type = config[AugmentationConfigKey.INPUT_TEXT_TRANSFORM_TYPE]
         elif not is_input and AugmentationConfigKey.OUTPUT_TEXT_TRANSFORM_TYPE in config:
@@ -544,11 +544,11 @@ def apply_word_honeypot_to_text(text: str, config: dict, is_input: bool = True) 
             result = apply_text_transform(result, transform_type, config, is_input)
     
     # Apply punctuation removal
-    elif config.get(f"{transform_prefix}{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL}"):
+    elif config.get(f"{transform_prefix}{AugmentationConfigKey.APPLY_PUNCTUATION_REMOVAL.value}"):
         result = remove_punctuation(result)
     
     # Apply case modifications
-    elif config.get(f"{transform_prefix}{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS}"):
+    elif config.get(f"{transform_prefix}{AugmentationConfigKey.APPLY_CASE_MODIFICATIONS.value}"):
         if is_input and AugmentationConfigKey.INPUT_CASE_MOD_TYPE in config:
             case_mod_type = config[AugmentationConfigKey.INPUT_CASE_MOD_TYPE]
             case_mod_nth = config.get(AugmentationConfigKey.INPUT_CASE_MOD_NTH, 2)
