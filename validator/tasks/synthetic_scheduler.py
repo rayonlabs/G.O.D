@@ -297,6 +297,8 @@ async def merge_and_upload_chat_datasets(dataset_ids: list[str], input_field: st
     merged_data = []
     for ds_id in dataset_ids:
         merged_data.extend(await convert_instruct_dataset_to_chat_format(ds_id, input_field, output_field))
+    if not merged_data:
+        raise ValueError("Error creating chat dataset - no data")
     dataset_json, _ = await save_json_to_temp_file(merged_data, prefix="chat_dataset_")
     uploaded_url = await upload_file_to_minio(dataset_json, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_chat_data.json")
     if os.path.exists(dataset_json):
