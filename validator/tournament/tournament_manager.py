@@ -943,7 +943,6 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                     return False
 
         # Check for failed tasks that need syncing (for all rounds)
-        failed_tasks_that_succeeded_sync = 0
         for task in round_tasks:
             synced_task_id = await get_synced_task_id(task.task_id, config.psql_db)
             if synced_task_id:
@@ -951,7 +950,6 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                 if synced_task_obj:
                     if synced_task_obj.status == TaskStatus.SUCCESS.value:
                         logger.info(f"Synced task {synced_task_id} completed successfully")
-                        failed_tasks_that_succeeded_sync += 1
                         continue
                     elif (
                         synced_task_obj.status == TaskStatus.FAILURE.value
