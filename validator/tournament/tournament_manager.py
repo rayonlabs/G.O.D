@@ -54,6 +54,7 @@ from validator.db.sql.tournaments import update_tournament_participant_backup_re
 from validator.db.sql.tournaments import update_tournament_participant_training_repo
 from validator.db.sql.tournaments import update_tournament_status
 from validator.db.sql.tournaments import update_tournament_winner_hotkey
+from validator.db.sql.tournaments import get_training_status_for_task
 from validator.tournament import constants as t_cst
 from validator.tournament.benchmark_utils import create_benchmark_tasks_for_tournament_winner
 from validator.tournament.boss_round_sync import copy_tournament_task_into_general_miner_pool
@@ -76,6 +77,18 @@ from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
+def check_more_than_half_failure(trainings: dict[str, str]) -> bool:
+    """Return True if fraction of failures exceeds threshold."""
+    total = len(trainings)
+    if total == 0:
+        return False
+    
+    failures = sum(
+        1 for status in trainings.values()
+        if status in {TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value}
+    )
+    return (failures / total) > t_cst.PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS
 
 def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
     nodes_copy = nodes.copy()
@@ -873,11 +886,26 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
         return False
 
     all_tasks_completed = True
-    total_round_tasks = len(round_tasks)
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
         if task_obj:
-            statuses.append(task_obj.status)
+            trainings = await get_training_status_for_task(task.task_id, config.psql_db)
+            if trainings:
+                is_more_than_half_failure = check_more_than_half_failure(trainings)
+                if is_more_than_half_failure:
+                    logger.info(
+                        f"More than half of the trainings for task {task.task_id} failed. Please investigate."
+                    )
+                    discord_url = config.discord_url
+                    if discord_url:
+                        try:
+                            await send_to_discord(
+                                webhook=discord_url,
+                                message=f"Warning: Task {task.task_id} in Tournament Round {round_data.round_id} has more than half tasks failed, please investigate.",
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to send Discord notification: {e}")
+                    return False
         if task_obj and task_obj.status not in [
             TaskStatus.SUCCESS.value,
             TaskStatus.FAILURE.value,
@@ -1001,20 +1029,6 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
                         # Fall back to copying to general cycle if replacement fails
                         await copy_tournament_task_into_general_miner_pool(task.task_id, config.psql_db)
                         waiting_for_synced_tasks = True
-
-        percentage_of_failed_tasks  = failed_tasks_that_succeeded_sync / total_round_tasks
-        if percentage_of_failed_tasks > t_cst.PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS:
-            logger.info(f"Round {round_data.round_id} has more than half failures, alerting on discord and pausing advancement")
-            discord_url = config.discord_url
-            if discord_url:
-                try:
-                    await send_to_discord(
-                        webhook=discord_url,
-                        message=f"Warning: Tournament Round {round_data.round_id} has more than half tasks failed, please investigate.",
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to send Discord notification: {e}")
-            return False
 
     if waiting_for_synced_tasks:
         logger.info(f"Waiting for synced tasks to complete in round {round_data.round_id}")
