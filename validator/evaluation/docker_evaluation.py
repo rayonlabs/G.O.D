@@ -2,7 +2,6 @@ import asyncio
 import io
 import json
 import os
-import re
 import shutil
 import tarfile
 
@@ -186,17 +185,6 @@ async def run_evaluation_docker_grpo(
         cache_dir=cache_dir,
         ignore_patterns=None
     )
-    logger.info(f"Original model downloaded to: {original_model_path}")
-    
-    # Log what files were downloaded for the original model
-    if os.path.exists(original_model_path):
-        files = os.listdir(original_model_path)
-        logger.info(f"Original model files downloaded: {files}")
-        tokenizer_files = [f for f in files if 'tokenizer' in f.lower() or f.endswith('.model')]
-        if tokenizer_files:
-            logger.info(f"Tokenizer files found: {tokenizer_files}")
-        else:
-            logger.warning(f"WARNING: No tokenizer files found in original model download!")
 
     command = ["python", "-m", "validator.evaluation.eval_grpo"]
     dataset_type_str = dataset_type.model_dump_json()
@@ -234,37 +222,12 @@ async def run_evaluation_docker_grpo(
         environment = base_environment.copy()
         environment["MODELS"] = repo
         try:
-            logger.info(f"Starting download of model {repo}...")
             model_path = await asyncio.to_thread(
                 snapshot_download, 
                 repo_id=repo, 
                 cache_dir=cache_dir,
                 ignore_patterns=["*.h5", "*.ot", "*.msgpack", "*.pkl", "*.pth"]
             )
-            logger.info(f"Model {repo} downloaded to: {model_path}")
-            
-            # Log what files are actually in the downloaded model
-            if os.path.exists(model_path):
-                files = os.listdir(model_path)
-                logger.info(f"Downloaded files for {repo}: {files}")
-                
-                # Check file sizes to ensure they're not just LFS pointers
-                for file in files:
-                    if file.endswith(('.safetensors', '.bin')):
-                        file_path = os.path.join(model_path, file)
-                        file_size = os.path.getsize(file_path)
-                        logger.info(f"  {file}: {file_size / (1024*1024*1024):.2f} GB")
-                        
-                        # LFS pointer files are typically < 1KB
-                        if file_size < 1000:
-                            logger.warning(f"WARNING: {file} appears to be an LFS pointer (only {file_size} bytes)")
-                
-                # Check for essential files
-                has_config = 'config.json' in files
-                has_weights = any(f.endswith(('.safetensors', '.bin')) for f in files)
-                logger.info(f"Model validation - has config.json: {has_config}, has model weights: {has_weights}")
-            else:
-                logger.error(f"Model path does not exist after download: {model_path}")
                 
         except Exception as e:
             logger.error(f"Failed to download {repo}: {str(e)}")
@@ -273,11 +236,6 @@ async def run_evaluation_docker_grpo(
 
         container = None  # Initialize container variable
         try:
-            logger.info(f"Creating container for {repo} with GPUs: {gpu_ids}")
-            logger.info(f"Docker image: {cst.VALIDATOR_DOCKER_IMAGE}")
-            logger.info(f"Command: {command}")
-            logger.info(f"Environment variables set: {list(environment.keys())}")
-            logger.info(f"Volume bindings: {list(volume_bindings.keys())}")
             
             container: Container = await asyncio.to_thread(
                 client.containers.run,
@@ -290,7 +248,6 @@ async def run_evaluation_docker_grpo(
                 detach=True,
                 network_mode="none",
             )
-            logger.info(f"Container created successfully for {repo} - ID: {container.id[:12]}")
 
             log_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, None, get_all_context_tags()))
             result = await asyncio.to_thread(container.wait)
@@ -299,31 +256,7 @@ async def run_evaluation_docker_grpo(
             if result["StatusCode"] != 0:
 
                 logger.error(f"Container for {repo} exited with non-zero status: {result['StatusCode']}")
-                # Try to get container logs to understand the failure
-                try:
-                    logs = await asyncio.to_thread(container.logs, tail=200)
-                    error_logs = logs.decode('utf-8') if isinstance(logs, bytes) else str(logs)
-                    logger.error(f"Last 200 lines of container logs for {repo}:\n{error_logs}")
-                    
-                    # Look for specific error patterns
-                    if "ModuleNotFoundError" in error_logs or "ImportError" in error_logs:
-                        import_match = re.search(r"(ModuleNotFoundError|ImportError): (.+)", error_logs)
-                        if import_match:
-                            error_msg = f"Missing module: {import_match.group(2)}"
-                            logger.error(f"Container failed due to missing module: {import_match.group(2)}")
-                            evaluation_results[repo] = f"Container failed - {error_msg}"
-                        else:
-                            evaluation_results[repo] = f"Container failed - Import error detected"
-                    else:
-                        # Include first error line in the result
-                        error_lines = [line for line in error_logs.split('\n') if line.strip()]
-                        if error_lines:
-                            evaluation_results[repo] = f"Container failed - {error_lines[-1][:100]}"
-                        else:
-                            evaluation_results[repo] = f"Container for {repo} exited with status {result['StatusCode']}"
-                except Exception as log_error:
-                    logger.error(f"Failed to retrieve logs for {repo}: {str(log_error)}")
-                    evaluation_results[repo] = f"Container for {repo} exited with status {result['StatusCode']}"
+                evaluation_results[repo] = f"Container for {repo} exited with status {result['StatusCode']}"
 
             else:
                 eval_results = await get_evaluation_results(container)
