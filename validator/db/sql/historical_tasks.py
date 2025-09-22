@@ -40,7 +40,7 @@ async def get_random_historical_task_by_type(
 
         query = f"""
             WITH eligible_tasks AS (
-                SELECT 
+                SELECT
                     t.{cst.TASK_ID},
                     COUNT(tn.{cst.TEST_LOSS}) as successful_scores
                 FROM {cst.TASKS_TABLE} t
@@ -48,6 +48,7 @@ async def get_random_historical_task_by_type(
                 WHERE t.{cst.TASK_TYPE} = $1
                 AND t.{cst.CREATED_AT} >= $2::timestamptz
                 AND t.{cst.CREATED_AT} < $3::timestamptz
+                AND t.{cst.IS_ORGANIC} = FALSE
                 AND tn.{cst.TEST_LOSS} IS NOT NULL
                 AND NOT (tn.{cst.TEST_LOSS} = 'NaN'::numeric)
                 {exclude_clause}
@@ -63,10 +64,10 @@ async def get_random_historical_task_by_type(
         result = await connection.fetchval(query, *params)
 
         if result:
-            logger.info(f"Found random historical {task_type} task: {result}")
+            logger.info(f"Found random historical synthetic {task_type} task: {result}")
         else:
             logger.warning(
-                f"No historical {task_type} tasks found between {start_date} and {end_date} "
+                f"No historical synthetic {task_type} tasks found between {start_date} and {end_date} "
                 f"with at least {min_successful_scores} valid test loss values"
             )
 
