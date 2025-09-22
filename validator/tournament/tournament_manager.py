@@ -876,10 +876,11 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
     total_round_tasks = len(round_tasks)
     for task in round_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
+        if task_obj:
+            statuses.append(task_obj.status)
         if task_obj and task_obj.status not in [
             TaskStatus.SUCCESS.value,
             TaskStatus.FAILURE.value,
-            TaskStatus.PREP_TASK_FAILURE.value,
         ]:
             all_tasks_completed = False
             logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")

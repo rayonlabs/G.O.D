@@ -255,42 +255,11 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
 
-    # Debug logging for cache paths
-    import os
-    logger.info(f"=== DEBUG: Cache environment variables ===")
-    logger.info(f"HF_HOME: {os.environ.get('HF_HOME', 'not set')}")
-    logger.info(f"TRANSFORMERS_CACHE: {os.environ.get('TRANSFORMERS_CACHE', 'not set')}")
-    logger.info(f"TRANSFORMERS_OFFLINE: {os.environ.get('TRANSFORMERS_OFFLINE', 'not set')}")
-    
-    cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-    logger.info(f"Cache directory: {cache_dir}")
-    logger.info(f"Cache directory exists: {os.path.exists(cache_dir)}")
-    
-    if os.path.exists(cache_dir):
-        # List what's in the cache
-        logger.info(f"Cache contents: {os.listdir(cache_dir)[:10]}")  # First 10 items
-        
-        # Check for the original model in cache
-        original_model_name = evaluation_args.original_model.replace('/', '--')
-        model_cache_path = os.path.join(cache_dir, f"models--{original_model_name}")
-        logger.info(f"Looking for original model cache at: {model_cache_path}")
-        logger.info(f"Original model cache exists: {os.path.exists(model_cache_path)}")
-        
-        # Check for the repo model in cache
-        repo_name = repo.replace('/', '--')
-        repo_cache_path = os.path.join(cache_dir, f"models--{repo_name}")
-        logger.info(f"Looking for repo model cache at: {repo_cache_path}")
-        logger.info(f"Repo model cache exists: {os.path.exists(repo_cache_path)}")
 
-    logger.info(f"=== STARTING EVALUATION FOR {repo} ===")
-    logger.info(f"Loading tokenizer for {evaluation_args.original_model} with local_files_only=True")
     
     try:
         tokenizer = load_tokenizer(evaluation_args.original_model, local_files_only=True)
-        logger.info(f"Tokenizer loaded successfully. Type: {type(tokenizer).__name__}")
-        
         if tokenizer.pad_token_id is None:
-            logger.info("Setting pad_token to eos_token")
             tokenizer.pad_token = tokenizer.eos_token
             tokenizer.pad_token_id = tokenizer.eos_token_id
     except Exception as e:
@@ -298,16 +267,12 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
         raise
 
     try:
-        logger.info(f"Checking for LoRA adapter in {repo}")
         has_lora = check_for_lora(repo, local_files_only=True)
-        logger.info(f"LoRA check result: {has_lora}")
         
         if has_lora:
-            logger.info("LoRA adapter detected. Loading as Peft model")
             finetuned_model = load_finetuned_model(repo, local_files_only=True)
             is_finetune = True
         else:
-            logger.info("No LoRA adapter detected. Loading as full model")
             finetuned_model = load_model(repo, is_base_model=False, local_files_only=True)
             try:
                 is_finetune = model_is_a_finetune(evaluation_args.original_model, finetuned_model, local_files_only=True)
@@ -334,7 +299,6 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
 
 
 def main():
-    logger.info("=== GRPO EVALUATION SCRIPT STARTING ===")
     dataset = os.environ.get("DATASET")
     original_model = os.environ.get("ORIGINAL_MODEL")
     dataset_type_str = os.environ.get("DATASET_TYPE", "")

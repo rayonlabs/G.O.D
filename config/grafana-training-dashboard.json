@@ -431,19 +431,19 @@
       },
       {
         "current": {
-          "text": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF",
-          "value": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF"
+          "text": ".*",
+          "value": ".*"
         },
         "label": "Hotkey Search",
         "name": "hotkey_search",
         "options": [
           {
             "selected": true,
-            "text": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF",
-            "value": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF"
+            "text": ".*",
+            "value": ".*"
           }
         ],
-        "query": "5HNVS6zjj84CN1ehRrwjYduVG3JWwWnPGsLhAmLoY1iX1fNF",
+        "query": ".*",
         "type": "textbox"
       },
       {

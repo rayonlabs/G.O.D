@@ -231,4 +231,5 @@ cython_debug/
 # HTTPie
 .http
 
-**/.claude/settings.local.json
+**/.claude/
+CLAUDE.md

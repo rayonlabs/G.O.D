@@ -52,6 +52,7 @@ def get_progressive_threshold(consecutive_wins: int) -> float:
     return max(t_cst.EXPONENTIAL_MIN_THRESHOLD, current_threshold)
 
 
+
 async def replace_tournament_task(
     original_task_id: str, tournament_id: str, round_id: str, group_id: str | None, pair_id: str | None, config: Config
 ) -> str:
@@ -380,6 +381,59 @@ async def draw_group_stage_table(rounds_data, winners_by_round, psql_db):
         logger.info("")
 
 
+def determine_boss_round_winner(task_winners: list[str], boss_hotkey: str, tournament_type: TournamentType) -> str:
+    """
+    Determine the winner of a boss round based on task results and tournament type.
+
+    Args:
+        task_winners: List of hotkeys that won each task in the boss round
+        boss_hotkey: The defending champion's hotkey
+        tournament_type: Type of tournament (TEXT or IMAGE)
+
+    Returns:
+        Hotkey of the boss round winner
+    """
+    if not task_winners:
+        logger.error("No valid task winners found in boss round - all tasks failed to determine winners")
+        logger.info(f"Defaulting to boss as winner due to evaluation failures: {boss_hotkey}")
+        return boss_hotkey
+
+    # Count wins for each contestant
+    win_counts = Counter(task_winners)
+    total_tasks = len(task_winners)
+
+    # Find the opponent (non-boss hotkey)
+    opponent_hotkey = None
+    for hotkey in win_counts.keys():
+        if hotkey != boss_hotkey:
+            opponent_hotkey = hotkey
+            break
+
+    opponent_wins = win_counts.get(opponent_hotkey, 0) if opponent_hotkey else 0
+
+    # Apply different winning requirements based on tournament type
+    if tournament_type == TournamentType.IMAGE:
+        # IMAGE tournaments: Challenger must win ALL tasks (3/3) to become new boss
+        if opponent_hotkey and opponent_wins == total_tasks:
+            logger.info(f"IMAGE tournament: Challenger wins boss round with perfect sweep: {opponent_wins}/{total_tasks} tasks won")
+            return opponent_hotkey
+        else:
+            if opponent_hotkey:
+                logger.info(f"IMAGE tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {total_tasks}/{total_tasks} to dethrone)")
+            else:
+                logger.info(f"IMAGE tournament: Boss retains title by default")
+            return boss_hotkey
+    else:
+        # TEXT tournaments: Use majority rule (original logic)
+        boss_round_winner = Counter(task_winners).most_common(1)[0][0]
+        if opponent_hotkey:
+            boss_wins = win_counts.get(boss_hotkey, 0)
+            logger.info(f"TEXT tournament: Boss round winner determined by majority - Boss: {boss_wins}/{total_tasks}, Challenger: {opponent_wins}/{total_tasks}, Winner: {boss_round_winner}")
+        else:
+            logger.info(f"TEXT tournament: Boss round winner: {boss_round_winner}")
+        return boss_round_winner
+
+
 async def get_knockout_winners(
     completed_round: TournamentRoundData, round_tasks: list[TournamentTask], psql_db: PSQLDB, config: Config
 ) -> list[str]:
@@ -508,14 +562,7 @@ async def get_knockout_winners(
                         f"{opponent_loss:.6f} <= {boss_loss * boss_divisor:.6f}"
                     )
 
-        if not task_winners:
-            logger.error("No valid task winners found in boss round - all tasks failed to determine winners")
-            # Default to boss winning if no tasks could be properly evaluated
-            boss_round_winner = boss_hotkey
-            logger.info(f"Defaulting to boss as winner due to evaluation failures: {boss_round_winner}")
-        else:
-            boss_round_winner = Counter(task_winners).most_common(1)[0][0]
-            logger.info(f"Boss round winner: {boss_round_winner}")
+        boss_round_winner = determine_boss_round_winner(task_winners, boss_hotkey, tournament.tournament_type)
 
         winners = [boss_round_winner]
 
