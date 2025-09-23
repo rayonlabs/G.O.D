@@ -5,7 +5,7 @@
         "context": ".."
     },
     "runArgs": [
-        "--gpus=all",
+        "--gpus=device=0",
         "--runtime=nvidia",
         "-v", "${env:HOME}/.cache/huggingface/hub:/root/.cache/huggingface/hub"
     ],
