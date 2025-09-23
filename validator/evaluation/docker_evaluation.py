@@ -6,9 +6,11 @@ import shutil
 import tarfile
 
 import docker
+import numpy as np
 from docker.models.containers import Container
 from docker.types import Mount
 from huggingface_hub import snapshot_download
+from scipy import stats
 
 from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
@@ -21,6 +23,7 @@ from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import InstructTextDatasetType
 from core.utils import download_s3_file
+from validator.core import constants as vcst
 from validator.tasks.task_prep import unzip_to_temp_path
 from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
@@ -64,6 +67,87 @@ async def get_evaluation_results(container):
 
         eval_results_content = eval_results_file.read().decode("utf-8")
         return json.loads(eval_results_content)
+
+
+def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
+    """
+    Normalize rewards using Gaussian percentiles and compute adjusted eval_loss.
+
+    For each repo:
+    - Average of normalized reward percentiles - (BETA_GRPO * kl_divergence)
+
+    Args:
+        evaluation_results: Dict with model repos as keys and evaluation data as values
+
+    Returns:
+        Modified evaluation_results dict with updated eval_loss values
+    """
+    # Filter out non-repo keys (like model_params_count)
+    repo_keys = [key for key in evaluation_results.keys() if key != "model_params_count"]
+
+    if len(repo_keys) < 2:
+        # Need at least 2 repos for meaningful normalization
+        return evaluation_results
+
+    # Collect all reward values by reward type across all repos
+    reward_collections = {}
+
+    for repo_key in repo_keys:
+        repo_data = evaluation_results[repo_key]
+        if isinstance(repo_data, str):  # Skip error entries
+            continue
+
+        final_weighted_rewards = repo_data.get('final_weighted_rewards', {})
+
+        for reward_name, reward_value in final_weighted_rewards.items():
+            if reward_name not in reward_collections:
+                reward_collections[reward_name] = []
+            reward_collections[reward_name].append(reward_value)
+
+    # Fit Gaussian distributions for each reward type
+    reward_distributions = {}
+
+    for reward_name, values in reward_collections.items():
+        if len(values) < 2:
+            # Skip normalization if not enough values, use default parameters
+            reward_distributions[reward_name] = {'mu': values[0] if values else 0.0, 'sigma': 0.0}
+            continue
+
+        # Fit Gaussian distribution
+        mu, sigma = stats.norm.fit(values)
+        reward_distributions[reward_name] = {'mu': mu, 'sigma': sigma}
+
+    # Update eval_loss for each repo
+    for repo_key in repo_keys:
+        repo_data = evaluation_results[repo_key]
+        if isinstance(repo_data, str):  # Skip error entries
+            continue
+
+        final_weighted_rewards = repo_data.get('final_weighted_rewards', {})
+        kl_divergence = repo_data.get('kl_divergence', 0.0)
+
+        # Calculate average of normalized percentiles
+        percentile_values = []
+        for reward_name, reward_value in final_weighted_rewards.items():
+            if reward_name in reward_distributions:
+                dist_params = reward_distributions[reward_name]
+                mu, sigma = dist_params['mu'], dist_params['sigma']
+
+                # Calculate percentile (0-1 range)
+                if sigma > 0:
+                    percentile = stats.norm.cdf(reward_value, mu, sigma)
+                else:
+                    percentile = 0.5  # All values are the same, use median
+
+                percentile_values.append(percentile)
+
+        if percentile_values:
+            avg_percentile = np.mean(percentile_values)
+            # Apply formula: average(percentiles) - BETA_GRPO * kl_divergence
+            new_eval_loss = avg_percentile - (vcst.BETA_GRPO * kl_divergence)
+            repo_data['eval_loss'] = new_eval_loss
+
+    return evaluation_results
 
 
 def process_evaluation_results(results: dict, is_image: bool = False) -> DockerEvaluationResults:
@@ -180,8 +264,8 @@ async def run_evaluation_docker_grpo(
     logger.info(f"Downloading original GRPO model: {original_model}")
     cache_dir = os.path.expanduser(cst.CACHE_DIR_HUB)
     original_model_path = await asyncio.to_thread(
-        snapshot_download, 
-        repo_id=original_model, 
+        snapshot_download,
+        repo_id=original_model,
         cache_dir=cache_dir,
         ignore_patterns=None
     )
@@ -223,12 +307,12 @@ async def run_evaluation_docker_grpo(
         environment["MODELS"] = repo
         try:
             model_path = await asyncio.to_thread(
-                snapshot_download, 
-                repo_id=repo, 
+                snapshot_download,
+                repo_id=repo,
                 cache_dir=cache_dir,
                 ignore_patterns=["*.h5", "*.ot", "*.msgpack", "*.pkl", "*.pth"]
             )
-                
+
         except Exception as e:
             logger.error(f"Failed to download {repo}: {str(e)}")
             evaluation_results[repo] = f"Failed to download model: {str(e)}"
@@ -236,7 +320,7 @@ async def run_evaluation_docker_grpo(
 
         container = None  # Initialize container variable
         try:
-            
+
             container: Container = await asyncio.to_thread(
                 client.containers.run,
                 cst.VALIDATOR_DOCKER_IMAGE,
@@ -277,6 +361,8 @@ async def run_evaluation_docker_grpo(
                 logger.info(f"Problem with cleaning up container for {repo}: {e}")
             client.close()
 
+    evaluation_results = normalize_rewards_and_compute_loss(evaluation_results)
+    logger.info(f"Grpo evaluation results post normalization: {evaluation_results}")
     return process_evaluation_results(evaluation_results, is_image=False)
 
 
