@@ -655,8 +655,8 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
     logger.info(f"Text burn proportion: {text_burn_proportion}, Image burn proportion: {image_burn_proportion}")
 
     # Calculate separate weight redistributions
-    text_tournament_burn = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT * text_burn_proportion
-    image_tournament_burn = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT * image_burn_proportion
+    text_tournament_burn = max(0, cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT * text_burn_proportion)
+    image_tournament_burn = max(0, cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT * image_burn_proportion)
 
     text_tournament_weight = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT - text_tournament_burn
     image_tournament_weight = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT - image_tournament_burn
@@ -667,13 +667,18 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
     boosted_regular_weight = cts.BASE_REGULAR_WEIGHT + total_burn_gain
 
     # Split the boosted regular weight proportionally based on tournament burn amounts
-    if total_tournament_burn > 0:
+    # Handle each tournament type separately to ensure base allocation when no burn
+    if text_tournament_burn > 0:
         text_regular_weight = boosted_regular_weight * (text_tournament_burn / total_tournament_burn)
+    else:
+        # No text burn, give base proportion
+        text_regular_weight = cts.BASE_REGULAR_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
+
+    if image_tournament_burn > 0:
         image_regular_weight = boosted_regular_weight * (image_tournament_burn / total_tournament_burn)
     else:
-        # No burn, split equally
-        text_regular_weight = boosted_regular_weight * cts.TOURNAMENT_TEXT_WEIGHT
-        image_regular_weight = boosted_regular_weight * cts.TOURNAMENT_IMAGE_WEIGHT
+        # No image burn, give base proportion
+        image_regular_weight = cts.BASE_REGULAR_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
 
     # Total burn weight (what goes to burn address)
     burn_weight = (1 - cts.BASE_REGULAR_WEIGHT - cts.BASE_TOURNAMENT_WEIGHT) + (total_tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
