@@ -1,7 +1,7 @@
 {
     "version": "2.0.0",
     "configurations": [
-        
+
         {
             "name": "Python Debugger: Validator Cycle",
             "type": "debugpy",
@@ -119,6 +119,17 @@
             "type": "debugpy",
             "request": "launch",
             "module": "miner.logic.job_handler",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Python Debugger: Evaluation Utils",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "validator.evaluation.utils",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {

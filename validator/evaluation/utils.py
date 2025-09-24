@@ -28,24 +28,26 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
     if local_files_only:
         cache_dir = os.path.expanduser("~/.cache/huggingface")
         cache_path = os.path.join(cache_dir, "hub", f"models--{original_repo.replace('/', '--')}")
-        
+
         if os.path.exists(cache_path):
             snapshots_dir = os.path.join(cache_path, "snapshots")
             if os.path.exists(snapshots_dir):
                 snapshots = sorted(os.listdir(snapshots_dir))
-                
+
                 for snapshot in snapshots:
                     snapshot_path = os.path.join(snapshots_dir, snapshot)
+                    if '.no_exist' in snapshot_path:
+                        continue
                     config_path = os.path.join(snapshot_path, "config.json")
-                    
-                    if os.path.exists(config_path):
+
+                    if os.path.exists(config_path) and os.path.getsize(config_path) > 0:
                         logger.info(f"Loading original model config from snapshot: {snapshot}")
                         try:
                             original_config = AutoConfig.from_pretrained(
                                 snapshot_path,
                                 local_files_only=True
                             )
-                            logger.info(f"Successfully loaded config from snapshot")
+                            logger.info("Successfully loaded config from snapshot")
                             break
                         except Exception as e:
                             logger.warning(f"Failed to load config from snapshot {snapshot}: {e}")
@@ -66,7 +68,7 @@ def model_is_a_finetune(original_repo: str, finetuned_model: AutoModelForCausalL
                 kwargs = {
                     "token": os.environ.get("HUGGINGFACE_TOKEN")
                 }
-                
+
                 original_config = AutoConfig.from_pretrained(original_repo, **kwargs)
                 break
             except Exception as e:
@@ -133,8 +135,12 @@ def check_for_lora(model_id: str, local_files_only: bool = False) -> bool:
             repo_path = os.path.join(cache_dir, "models--" + model_id.replace('/', '--'))
             if os.path.exists(repo_path):
                 for root, dirs, files in os.walk(repo_path):
+                    if '.no_exist' in root:
+                        continue
                     if LORA_CONFIG_FILE in files:
-                        return True
+                        config_path = os.path.join(root, LORA_CONFIG_FILE)
+                        if os.path.getsize(config_path) > 0:
+                            return True
             return False
         else:
             return LORA_CONFIG_FILE in hf_api.list_repo_files(model_id)

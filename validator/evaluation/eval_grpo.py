@@ -51,7 +51,7 @@ def _adapt_grpo_columns_to_trl(dataset: Dataset, dataset_type: GrpoDatasetType) 
     column_mapping = {
         dataset_type.field_prompt: cst.TRL_GRPO_FIELD_PROMPT,
     }
-    
+
     if dataset_type.extra_column:
         column_mapping[dataset_type.extra_column] = cst.STANDARD_GRPO_EXTRA_COLUMN
     for src_col, dst_col in column_mapping.items():
@@ -135,27 +135,27 @@ def evaluate_grpo_model(
             if supports_extra and has_extra_column:
                 def wrapper(completions, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions")
-                    
+
                     logger.info(f"🔍 {func_name}: TRL kwargs keys = {list(kwargs.keys())}")
-                    
+
                     # TRL already passes extra_data in kwargs - don't double-pass it
                     extra_data_from_trl = kwargs.get(cst.STANDARD_GRPO_EXTRA_COLUMN)
                     if extra_data_from_trl:
                         logger.info(f"🔍 {func_name}: extra_data from TRL = {str(extra_data_from_trl[0])[:100]}...")
-                    
+
                     raw_results = original_func(completions, **kwargs)
-                    
+
                     logger.info(f"🔍 {func_name}: returned scores = {raw_results[:3]}... (showing first 3)")
                     raw_rewards[func_name].extend(raw_results)
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
-                    
+
                     if len(captured_rewards[func_name]) % 20 == 0:
                         avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
                         avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
                         total_count = len(captured_rewards[func_name])
                         logger.info(f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}")
-                    
+
                     return weighted_results
             else:
                 def wrapper(completions, **kwargs):
@@ -164,13 +164,13 @@ def evaluate_grpo_model(
                     raw_rewards[func_name].extend(raw_results)
                     weighted_results = [r * weight for r in raw_results]
                     captured_rewards[func_name].extend(weighted_results)
-                    
+
                     if len(captured_rewards[func_name]) % 20 == 0:
                         avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
                         avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
                         total_count = len(captured_rewards[func_name])
                         logger.info(f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}")
-                    
+
                     return weighted_results
 
             return wrapper
@@ -210,16 +210,16 @@ def evaluate_grpo_model(
 
     final_weighted_rewards = {}
     final_raw_rewards = {}
-    
+
     logger.info("🎯 FINAL REWARD STATISTICS:")
     for name, captured_reward_list in captured_rewards.items():
         if captured_reward_list:
             final_weighted_rewards[name] = sum(captured_reward_list) / len(captured_reward_list)
             raw_reward_list = raw_rewards.get(name, [])
             final_raw_rewards[name] = sum(raw_reward_list) / len(raw_reward_list) if raw_reward_list else 0
-            
+
             logger.info(f"🏆 {name}: avg_raw={final_raw_rewards[name]:.4f}, avg_weighted={final_weighted_rewards[name]:.4f}, samples={len(captured_reward_list)}")
-    
+
     total_avg_reward = sum(final_weighted_rewards.values())
     logger.info(f"🎯 TOTAL AVERAGE WEIGHTED REWARD: {total_avg_reward:.4f}")
 
@@ -256,7 +256,7 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
         return
 
 
-    
+
     try:
         tokenizer = load_tokenizer(evaluation_args.original_model, local_files_only=True)
         if tokenizer.pad_token_id is None:
@@ -268,7 +268,7 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
 
     try:
         has_lora = check_for_lora(repo, local_files_only=True)
-        
+
         if has_lora:
             finetuned_model = load_finetuned_model(repo, local_files_only=True)
             is_finetune = True
@@ -336,16 +336,26 @@ def main():
                         evaluation_args.model_dump_json()
                     ], check=True, timeout=timeout_seconds)
                     elapsed = time.monotonic() - start_time
-                    logger.info(f"Subprocess completed for {repo} in {elapsed:.2f} seconds")
+                    logger.info(f"GRPO subprocess completed for {repo} in {elapsed:.2f} seconds")
                     break
                 except subprocess.TimeoutExpired:
                     retry_count += 1
-                    logger.warning(f"Subprocess timed out for {repo} (attempt {retry_count}/{max_retries})")
+                    logger.warning(f"GRPO subprocess timed out for {repo} (attempt {retry_count}/{max_retries})")
                     if retry_count == max_retries:
-                        logger.error(f"Max retries reached for {repo}")
+                        logger.error(f"Max retries reached for GRPO evaluation of {repo}")
                         raise
+
+            # Now run KL divergence calculation in separate subprocess
+            logger.info(f"Starting KL divergence calculation for {repo}")
+            subprocess.run([
+                "python",
+                "-m",
+                "validator.evaluation.single_eval_kl_divergence",
+                evaluation_args.model_dump_json()
+            ], check=True, timeout=timeout_seconds)
+
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error running subprocess for {repo}: {e}")
+            logger.error(f"Error running GRPO subprocess for {repo}: {e}")
     try:
         check_and_log_base_model_size(original_model)
     except Exception as e:
