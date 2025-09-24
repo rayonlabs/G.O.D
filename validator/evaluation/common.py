@@ -461,6 +461,8 @@ def calculate_kl_divergence(
                 except Exception as e:
                     logger.warning(f"Failed to compute KL divergence for batch starting at index {i}: {e}")
                     continue
+                finally:
+                    torch.cuda.empty_cache()
 
         if total_samples == 0:
             logger.error("No samples were successfully processed for KL divergence calculation")
