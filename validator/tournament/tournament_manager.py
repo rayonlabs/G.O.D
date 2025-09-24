@@ -18,12 +18,14 @@ from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
 from core.models.tournament_models import TournamentStatus
+from core.models.tournament_models import TournamentTask
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import generate_round_id
 from core.models.tournament_models import generate_tournament_id
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.core.constants import EMISSION_BURN_HOTKEY
+from validator.core.models import AnyTypeTask
 from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
@@ -46,6 +48,7 @@ from validator.db.sql.tournaments import get_tournament_rounds
 from validator.db.sql.tournaments import get_tournament_rounds_with_status
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_tournaments_with_status
+from validator.db.sql.tournaments import get_training_status_for_task
 from validator.db.sql.tournaments import insert_tournament_groups_with_members
 from validator.db.sql.tournaments import insert_tournament_pairs
 from validator.db.sql.tournaments import insert_tournament_round
@@ -54,7 +57,6 @@ from validator.db.sql.tournaments import update_tournament_participant_backup_re
 from validator.db.sql.tournaments import update_tournament_participant_training_repo
 from validator.db.sql.tournaments import update_tournament_status
 from validator.db.sql.tournaments import update_tournament_winner_hotkey
-from validator.db.sql.tournaments import get_training_status_for_task
 from validator.tournament import constants as t_cst
 from validator.tournament.benchmark_utils import create_benchmark_tasks_for_tournament_winner
 from validator.tournament.boss_round_sync import copy_tournament_task_into_general_miner_pool
@@ -83,12 +85,10 @@ def check_more_than_half_failure(trainings: dict[str, str]) -> bool:
     total = len(trainings)
     if total == 0:
         return False
-    
-    failures = sum(
-        1 for status in trainings.values()
-        if status in {TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value}
-    )
+
+    failures = sum(1 for status in trainings.values() if status in {TaskStatus.FAILURE.value, TaskStatus.PREP_TASK_FAILURE.value})
     return (failures / total) > t_cst.PERCENTAGE_OF_TASKS_SHOULD_BE_SUCCESS
+
 
 def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
     nodes_copy = nodes.copy()
@@ -435,7 +435,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                     logger.info(f"Final round participants from DB: {participant1}, {participant2}")
                     logger.info(f"Winner determined by get_round_winners: {winner}")
                     logger.info(f"Tournament base_winner_hotkey (previous champion): {tournament.base_winner_hotkey}")
-                    
+
                     # Simple logic: EMISSION_BURN_HOTKEY is the defending champion
                     if winner == cst.EMISSION_BURN_HOTKEY:
                         # Defending champion won - upload EMISSION_BURN_HOTKEY to position 1
@@ -452,7 +452,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                     await upload_participant_repository(
                         tournament.tournament_id, tournament.tournament_type, position_1_upload, 1, config, psql_db
                     )
-                    
+
                     logger.info(f"Uploading position 2 repository for hotkey: {position_2_upload}")
                     await upload_participant_repository(
                         tournament.tournament_id, tournament.tournament_type, position_2_upload, 2, config, psql_db
@@ -875,6 +875,94 @@ async def process_active_tournaments(config: Config):
             await asyncio.sleep(t_cst.TOURNAMENT_ACTIVE_CYCLE_INTERVAL)
 
 
+async def is_tourn_task_completed(
+    tournament_task: TournamentTask, task_obj: AnyTypeTask, config: Config, final_round: bool = False
+) -> tuple[bool, str]:
+    """
+    Checks if the tournament task is completed.
+    If completed successfully, checks if majority trainings failed.
+    If completed with failure, syncs it to main cycle.
+    If completed with prep task failure, creates a replacement immediately.
+    If not completed, returns False.
+
+    Returns a tuple of (is_completed, reason)
+    """
+    if task_obj.status == TaskStatus.SUCCESS.value:
+        # check if majority trainings failed
+        trainings = await get_training_status_for_task(tournament_task.task_id, config.psql_db)
+        is_more_than_half_failure = check_more_than_half_failure(trainings)
+        if is_more_than_half_failure:
+            logger.info(f"More than half of the trainings for task {tournament_task.task_id} failed. Please investigate.")
+            discord_url = config.discord_url
+            if discord_url:
+                try:
+                    await send_to_discord(
+                        webhook=discord_url,
+                        message=f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id}"
+                        "has more than half tasks failed, please investigate.",
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send Discord notification: {e}")
+                finally:
+                    return False, "More than half of the trainings failed"
+        else:
+            if final_round:
+                synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
+                if synced_task_id:
+                    synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
+                    if synced_task_obj.status in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
+                        return True
+                    else:
+                        return False, "Synced task is not completed"
+                else:
+                    return False, "No synced task found for final round task"
+            return True, "Task completed successfully"
+    if task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
+        logger.info(f"Task {task_obj.task_id} failed during preparation, creating replacement immediately.")
+        new_task_id = await replace_tournament_task(
+            tournament_task.task_id,
+            tournament_task.tournament_id,
+            tournament_task.round_id,
+            tournament_task.group_id,
+            tournament_task.pair_id,
+            config,
+        )
+        return False, f"Task failed during preparation. Replaced with a new task {new_task_id}."
+    if task_obj.status == TaskStatus.FAILURE.value:
+        synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
+        if synced_task_id:
+            synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
+            if synced_task_obj.status == TaskStatus.SUCCESS.value:
+                logger.info(
+                    f"Tournament task {tournament_task.task_id} failed, but synced task {synced_task_id} "
+                    "completed successfully. Ignoring..."
+                )
+                return True, "Tournament task failed, but synced task completed successfully."
+            if synced_task_obj.status == TaskStatus.FAILURE.value:
+                logger.info(
+                    f"Both tournament and synced tasks failed (tournament: {tournament_task.task_id}, "
+                    f"synced: {synced_task_id}). Replacing..."
+                )
+                new_task_id = await replace_tournament_task(
+                    tournament_task.task_id,
+                    tournament_task.tournament_id,
+                    tournament_task.round_id,
+                    tournament_task.group_id,
+                    tournament_task.pair_id,
+                    config,
+                )
+                return False, f"Both tournament and synced tasks failed. Replaced with a new task {new_task_id}."
+            else:
+                return False, "Synced task is not completed. Status: " + synced_task_obj.status
+        else:
+            logger.info(f"Tournament task {tournament_task.task_id} failed. Copying to main cycle...")
+            await copy_tournament_task_into_general_miner_pool(tournament_task.task_id, config.psql_db)
+            return False, "Tournament task failed. Synced to main cycle."
+
+    # all other cases are not completed
+    return False, "Tournament task not completed. Status: " + task_obj.status
+
+
 async def check_if_round_is_completed(round_data: TournamentRoundData, config: Config) -> bool:
     """Check if a round should be marked as completed based on task completion."""
     logger.info(f"Checking if round {round_data.round_id} should be completed...")
@@ -885,155 +973,28 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
         logger.info(f"No tasks found for round {round_data.round_id}")
         return False
 
-    all_tasks_completed = True
-    for task in round_tasks:
-        task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-        if task_obj:
-            trainings = await get_training_status_for_task(task.task_id, config.psql_db)
-            if trainings:
-                is_more_than_half_failure = check_more_than_half_failure(trainings)
-                if is_more_than_half_failure:
-                    logger.info(
-                        f"More than half of the trainings for task {task.task_id} failed. Please investigate."
-                    )
-                    discord_url = config.discord_url
-                    if discord_url:
-                        try:
-                            await send_to_discord(
-                                webhook=discord_url,
-                                message=f"Warning: Task {task.task_id} in Tournament Round {round_data.round_id} has more than half tasks failed, please investigate.",
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to send Discord notification: {e}")
-                    return False
-        if task_obj and task_obj.status not in [
-            TaskStatus.SUCCESS.value,
-            TaskStatus.FAILURE.value,
-        ]:
-            all_tasks_completed = False
-            logger.info(f"Task {task.task_id} not completed yet (status: {task_obj.status})")
-            break
-        
-    waiting_for_synced_tasks = False
-    if not all_tasks_completed:
-        logger.info(f"Round {round_data.round_id} not ready for completion yet")
-        return False
-    else:
-        # For final rounds, we need to check ALL synced tasks, not just failed ones
-        if round_data.is_final_round:
-            task_ids = [task.task_id for task in round_tasks]
-            synced_task_ids = await get_synced_task_ids(task_ids, config.psql_db)
+    task_objects = [await task_sql.get_task(task.task_id, config.psql_db) for task in round_tasks]
 
-            if synced_task_ids:
-                logger.info(f"Final round has {len(synced_task_ids)} synced tasks, checking their status...")
-                for synced_task_id in synced_task_ids:
-                    synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
-                    if synced_task_obj:
-                        if synced_task_obj.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
-                            logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
-                            waiting_for_synced_tasks = True
-                            break
-                        else:
-                            logger.info(f"Synced task {synced_task_id} completed with status: {synced_task_obj.status}")
+    task_completion_checks = [
+        await is_tourn_task_completed(tournament_task, task_obj, config, round_data.is_final_round)
+        for tournament_task, task_obj in zip(round_tasks, task_objects)
+    ]
 
-                if not waiting_for_synced_tasks:
-                    logger.info(f"All synced tasks for final round {round_data.round_id} are completed")
-                else:
-                    logger.info(f"Final round {round_data.round_id} waiting for synced tasks to complete")
-                    return False
+    assert len(round_tasks) == len(task_completion_checks), "Number of tasks and completion checks do not match"
 
-        # Check for failed tasks that need syncing (for all rounds)
-        for task in round_tasks:
-            synced_task_id = await get_synced_task_id(task.task_id, config.psql_db)
-            if synced_task_id:
-                synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
-                if synced_task_obj:
-                    if synced_task_obj.status == TaskStatus.SUCCESS.value:
-                        logger.info(f"Synced task {synced_task_id} completed successfully")
-                        continue
-                    elif (
-                        synced_task_obj.status == TaskStatus.FAILURE.value
-                        or synced_task_obj.status == TaskStatus.PREP_TASK_FAILURE.value
-                    ):
-                        original_task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-                        if original_task_obj.status == TaskStatus.SUCCESS.value:
-                            logger.info(f"Synced task {synced_task_id} failed. Original task was successful. Ignoring...")
-                            continue
-                        else:
-                            logger.info(
-                                f"Synced task {synced_task_id} failed with status {synced_task_obj.status}. "
-                                f"Original task also failed. Replacing..."
-                            )
+    logger.info("Task completion check summary:")
+    for task, completion_check in zip(round_tasks, task_completion_checks):
+        if not completion_check[0]:
+            logger.info(f"Task {task.task_id} is not completed. Reason: {completion_check[1]}")
+        else:
+            logger.info(f"Task {task.task_id} is completed. Reason: {completion_check[1]}")
 
-                        try:
-                            logger.info(
-                                f"Attempting to replace task {task.task_id} - tournament: {round_data.tournament_id}, "
-                                f"round: {round_data.round_id}, group_id: {task.group_id}, pair_id: {task.pair_id}"
-                            )
-                            new_task_id = await replace_tournament_task(
-                                original_task_id=task.task_id,
-                                tournament_id=round_data.tournament_id,
-                                round_id=round_data.round_id,
-                                group_id=task.group_id,
-                                pair_id=task.pair_id,
-                                config=config,
-                            )
-                            logger.info(f"Successfully replaced task {task.task_id} with {new_task_id}")
-                            waiting_for_synced_tasks = True
-                        except Exception as e:
-                            logger.error(f"Failed to replace task {task.task_id}: {str(e)}", exc_info=True)
-                            logger.error(
-                                f"Task replacement failure details - task_id: {task.task_id}, group_id: {task.group_id}, "
-                                f"pair_id: {task.pair_id}"
-                            )
-                            # Still set waiting flag to prevent false completion
-                            waiting_for_synced_tasks = True
-                    else:
-                        logger.info(f"Synced task {synced_task_id} not completed yet (status: {synced_task_obj.status})")
-                        waiting_for_synced_tasks = True
-            else:
-                task_obj = await task_sql.get_task(task.task_id, config.psql_db)
-                if task_obj and task_obj.status == TaskStatus.FAILURE.value:
-                    logger.info(f"Task {task.task_id} failed, copying to main cycle to check.")
-                    await copy_tournament_task_into_general_miner_pool(task.task_id, config.psql_db)
-                    waiting_for_synced_tasks = True
-                elif task_obj and task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
-                    logger.info(f"Task {task.task_id} failed during preparation, creating replacement immediately.")
-
-                    # Create replacement task immediately
-                    try:
-                        logger.info(
-                            f"Creating immediate replacement for prep_task_failure: task {task.task_id} - "
-                            f"tournament: {round_data.tournament_id}, round: {round_data.round_id}, "
-                            f"group_id: {task.group_id}, pair_id: {task.pair_id}"
-                        )
-                        new_task_id = await replace_tournament_task(
-                            original_task_id=task.task_id,
-                            tournament_id=round_data.tournament_id,
-                            round_id=round_data.round_id,
-                            group_id=task.group_id,
-                            pair_id=task.pair_id,
-                            config=config,
-                        )
-                        logger.info(
-                            f"Successfully created immediate replacement {new_task_id} for prep_task_failure {task.task_id}"
-                        )
-                        waiting_for_synced_tasks = True
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to create immediate replacement for prep_task_failure {task.task_id}: {str(e)}",
-                            exc_info=True,
-                        )
-                        # Fall back to copying to general cycle if replacement fails
-                        await copy_tournament_task_into_general_miner_pool(task.task_id, config.psql_db)
-                        waiting_for_synced_tasks = True
-
-    if waiting_for_synced_tasks:
-        logger.info(f"Waiting for synced tasks to complete in round {round_data.round_id}")
-        return False
-    else:
-        logger.info(f"All tasks in round {round_data.round_id} are completed, marking round as completed")
+    if all(completion_check[0] for completion_check in task_completion_checks):
+        logger.info(f"Round {round_data.round_id} is completed.")
         return True
+    else:
+        logger.info(f"Round {round_data.round_id} is not completed.")
+        return False
 
 
 async def process_tournament_scheduling(config: Config):
