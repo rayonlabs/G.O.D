@@ -980,6 +980,8 @@ async def check_if_round_is_completed(round_data: TournamentRoundData, config: C
         for tournament_task, task_obj in zip(round_tasks, task_objects)
     ]
 
+    assert len(round_tasks) == len(task_completion_checks), "Number of tasks and completion checks do not match"
+
     logger.info("Task completion check summary:")
     for task, completion_check in zip(round_tasks, task_completion_checks):
         if not completion_check[0]:
