@@ -223,11 +223,17 @@ def evaluate_grpo_model(
     total_avg_reward = sum(final_weighted_rewards.values())
     logger.info(f"🎯 TOTAL AVERAGE WEIGHTED REWARD: {total_avg_reward:.4f}")
 
+    # Create weights mapping for normalization function
+    weights_mapping = {}
+    for name, weight in zip(reward_func_names, reward_weights):
+        weights_mapping[name] = weight
+
     evaluation_results = {
         "eval_loss": total_avg_reward - eval_results.get("eval_loss", 0.0),
         "final_weighted_rewards": final_weighted_rewards,
         "final_raw_rewards": final_raw_rewards,
-        "total_avg_reward": total_avg_reward
+        "total_avg_reward": total_avg_reward,
+        "weights": weights_mapping,
     }
     return evaluation_results
 

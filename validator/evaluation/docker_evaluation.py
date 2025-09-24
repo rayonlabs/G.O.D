@@ -6,7 +6,6 @@ import shutil
 import tarfile
 
 import docker
-import numpy as np
 from docker.models.containers import Container
 from docker.types import Mount
 from huggingface_hub import snapshot_download
@@ -71,10 +70,14 @@ async def get_evaluation_results(container):
 
 def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
     """
-    Normalize rewards using Gaussian percentiles and compute adjusted eval_loss.
+    Normalize rewards using Gaussian percentiles, then apply weights and compute adjusted eval_loss.
 
-    For each repo:
-    - Average of normalized reward percentiles - (BETA_GRPO * kl_divergence)
+    New flow:
+    1. Normalize RAW rewards using Gaussian percentiles (0-1 range)
+    2. Apply weights to normalized percentiles
+    3. Sum weighted normalized rewards
+    4. Scale to 0-1 range across all repos
+    5. Subtract KL: final_score - (BETA_GRPO * kl_divergence)
 
     Args:
         evaluation_results: Dict with model repos as keys and evaluation data as values
@@ -89,22 +92,20 @@ def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
         # Need at least 2 repos for meaningful normalization
         return evaluation_results
 
-    # Collect all reward values by reward type across all repos
     reward_collections = {}
-
     for repo_key in repo_keys:
         repo_data = evaluation_results[repo_key]
         if isinstance(repo_data, str):  # Skip error entries
             continue
 
-        final_weighted_rewards = repo_data.get('final_weighted_rewards', {})
+        final_raw_rewards = repo_data.get('final_raw_rewards', {})
 
-        for reward_name, reward_value in final_weighted_rewards.items():
+        for reward_name, reward_value in final_raw_rewards.items():
             if reward_name not in reward_collections:
                 reward_collections[reward_name] = []
             reward_collections[reward_name].append(reward_value)
 
-    # Fit Gaussian distributions for each reward type
+    # Fit Gaussian distributions for each raw reward type
     reward_distributions = {}
 
     for reward_name, values in reward_collections.items():
@@ -117,34 +118,67 @@ def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
         mu, sigma = stats.norm.fit(values)
         reward_distributions[reward_name] = {'mu': mu, 'sigma': sigma}
 
-    # Update eval_loss for each repo
+    # Step 1-3: Calculate weighted normalized scores for each repo
+    weighted_scores = []
+
     for repo_key in repo_keys:
         repo_data = evaluation_results[repo_key]
         if isinstance(repo_data, str):  # Skip error entries
             continue
 
-        final_weighted_rewards = repo_data.get('final_weighted_rewards', {})
-        kl_divergence = repo_data.get('kl_divergence', 0.0)
+        final_raw_rewards = repo_data.get('final_raw_rewards', {})
+        weights = repo_data.get('weights', {})
 
-        # Calculate average of normalized percentiles
-        percentile_values = []
-        for reward_name, reward_value in final_weighted_rewards.items():
+        # Calculate normalized percentiles and apply weights
+        weighted_percentiles = []
+        for reward_name, raw_reward_value in final_raw_rewards.items():
             if reward_name in reward_distributions:
                 dist_params = reward_distributions[reward_name]
                 mu, sigma = dist_params['mu'], dist_params['sigma']
 
                 # Calculate percentile (0-1 range)
                 if sigma > 0:
-                    percentile = stats.norm.cdf(reward_value, mu, sigma)
+                    percentile = stats.norm.cdf(raw_reward_value, mu, sigma)
                 else:
                     percentile = 0.5  # All values are the same, use median
 
-                percentile_values.append(percentile)
+                # Apply weight to normalized percentile
+                weight = weights.get(reward_name, 1.0)
+                weighted_percentile = percentile * weight
+                weighted_percentiles.append(weighted_percentile)
 
-        if percentile_values:
-            avg_percentile = np.mean(percentile_values)
-            # Apply formula: average(percentiles) - BETA_GRPO * kl_divergence
-            new_eval_loss = avg_percentile - (vcst.BETA_GRPO * kl_divergence)
+        # Sum weighted normalized rewards
+        if weighted_percentiles:
+            total_weighted_score = sum(weighted_percentiles)
+            weighted_scores.append(total_weighted_score)
+        else:
+            weighted_scores.append(0.0)
+
+    # Step 4: Scale to 0-1 range across all repos
+    if weighted_scores:
+        min_score = min(weighted_scores)
+        max_score = max(weighted_scores)
+        score_range = max_score - min_score
+
+        if score_range > 0:
+            # Scale to 0-1
+            scaled_scores = [(score - min_score) / score_range for score in weighted_scores]
+        else:
+            # All scores are the same
+            scaled_scores = [0.5] * len(weighted_scores)
+    else:
+        scaled_scores = []
+
+    # Step 5: Apply final formula and update eval_loss
+    for i, repo_key in enumerate(repo_keys):
+        repo_data = evaluation_results[repo_key]
+        if isinstance(repo_data, str):  # Skip error entries
+            continue
+
+        if i < len(scaled_scores):
+            kl_divergence = repo_data.get('kl_divergence', 0.0)
+            # Final score: scaled_score - BETA_GRPO * kl_divergence
+            new_eval_loss = scaled_scores[i] - (vcst.BETA_GRPO * kl_divergence)
             repo_data['eval_loss'] = new_eval_loss
 
     return evaluation_results
