@@ -8,6 +8,7 @@ import psutil
 import torch
 import torch.nn.functional as F
 import yaml
+from accelerate.utils import find_executable_batch_size
 from axolotl.utils.dict import DictDefault
 from datasets import Dataset
 from peft import AutoPeftModelForCausalLM
@@ -383,7 +384,6 @@ def calculate_kl_divergence(
     finetuned_model: AutoModelForCausalLM,
     dataset: Dataset,
     tokenizer: AutoTokenizer,
-    batch_size: int = cst.GRPO_KL_BATCH_SIZE,
 ) -> float:
     """
     Calculate KL divergence between original and finetuned model outputs on a dataset.
@@ -393,7 +393,6 @@ def calculate_kl_divergence(
         finetuned_model: The finetuned model
         dataset: Dataset to evaluate on
         tokenizer: Tokenizer for text processing
-        batch_size: Batch size for processing
 
     Returns:
         Average KL divergence across the dataset
@@ -409,61 +408,69 @@ def calculate_kl_divergence(
     original_model.eval()
     finetuned_model.eval()
 
-    total_kl_div = 0.0
-    total_samples = 0
+    @find_executable_batch_size(starting_batch_size=cst.GRPO_KL_BATCH_SIZE)
+    def calculate_kl_with_batch_size(batch_size):
+        logger.info(f"Attempting KL divergence calculation with batch size: {batch_size}")
 
-    # Process dataset in batches
-    for i in range(0, len(dataset), batch_size):
-        batch = dataset[i:i + batch_size]
-        prompts = batch[cst.TRL_GRPO_FIELD_PROMPT]
+        total_kl_div = 0.0
+        total_samples = 0
 
-        try:
-            inputs = tokenizer(
-                prompts,
-                padding=True,
-                truncation=True,
-                max_length=max_length,
-                return_tensors="pt"
-            )
-            inputs = {k: v.cuda() for k, v in inputs.items()}
-        except Exception as e:
-            logger.warning(f"Failed to tokenize batch starting at index {i}: {e}")
-            continue
+        # Process dataset in batches
+        for i in range(0, len(dataset), batch_size):
+            batch = dataset[i:i + batch_size]
+            prompts = batch[cst.TRL_GRPO_FIELD_PROMPT]
 
-        with torch.no_grad():
             try:
-                # Get logits from both models
-                original_outputs = original_model(**inputs)
-                finetuned_outputs = finetuned_model(**inputs)
-
-                original_logits = original_outputs.logits
-                finetuned_logits = finetuned_outputs.logits
-
-                # Convert logits to probabilities
-                original_probs = F.softmax(original_logits, dim=-1)
-                finetuned_log_probs = F.log_softmax(finetuned_logits, dim=-1)
-
-                # Calculate KL divergence: KL(original || finetuned)
-                kl_div = F.kl_div(finetuned_log_probs, original_probs, reduction='none')
-
-                # Average over sequence length and vocabulary, sum over batch
-                batch_kl = kl_div.sum(dim=-1).mean(dim=-1).sum().item()
-
-                total_kl_div += batch_kl
-                total_samples += len(prompts)
-
-                if (i // batch_size) % 10 == 0:
-                    logger.info(f"Processed {i + len(prompts)} samples, current batch KL: {batch_kl / len(prompts):.6f}")
-
+                inputs = tokenizer(
+                    prompts,
+                    padding=True,
+                    truncation=True,
+                    max_length=max_length,
+                    return_tensors="pt"
+                )
+                inputs = {k: v.cuda() for k, v in inputs.items()}
             except Exception as e:
-                logger.warning(f"Failed to compute KL divergence for batch starting at index {i}: {e}")
+                logger.warning(f"Failed to tokenize batch starting at index {i}: {e}")
                 continue
 
-    if total_samples == 0:
-        logger.error("No samples were successfully processed for KL divergence calculation")
-        raise ValueError("No samples were successfully processed for KL divergence calculation")
+            with torch.no_grad():
+                try:
+                    # Get logits from both models
+                    original_outputs = original_model(**inputs)
+                    finetuned_outputs = finetuned_model(**inputs)
 
-    avg_kl_div = total_kl_div / total_samples
-    logger.info(f"KL divergence calculation completed. Average KL divergence: {avg_kl_div:.6f} over {total_samples} samples")
+                    original_logits = original_outputs.logits
+                    finetuned_logits = finetuned_outputs.logits
 
-    return avg_kl_div
+                    # Convert logits to probabilities
+                    original_probs = F.softmax(original_logits, dim=-1)
+                    finetuned_log_probs = F.log_softmax(finetuned_logits, dim=-1)
+
+                    # Calculate KL divergence: KL(original || finetuned)
+                    kl_div = F.kl_div(finetuned_log_probs, original_probs, reduction='none')
+
+                    # Average over sequence length and vocabulary, sum over batch
+                    batch_kl = kl_div.sum(dim=-1).mean(dim=-1).sum().item()
+
+                    total_kl_div += batch_kl
+                    total_samples += len(prompts)
+
+                    if (i // batch_size) % 10 == 0:
+                        logger.info(f"Processed {i + len(prompts)} samples, current batch KL: {batch_kl / len(prompts):.6f}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to compute KL divergence for batch starting at index {i}: {e}")
+                    continue
+                finally:
+                    torch.cuda.empty_cache()
+
+        if total_samples == 0:
+            logger.error("No samples were successfully processed for KL divergence calculation")
+            raise ValueError("No samples were successfully processed for KL divergence calculation")
+
+        avg_kl_div = total_kl_div / total_samples
+        logger.info(f"KL divergence calculation completed. Average KL divergence: {avg_kl_div:.6f} over {total_samples} samples")
+
+        return avg_kl_div
+
+    return calculate_kl_with_batch_size()
