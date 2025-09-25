@@ -771,16 +771,15 @@ async def _generate_dpo_synthetic_data(train_ds, keypair, task) -> tuple:
         return train_ds, synthetic_ds
 
 
-async def _generate_instruct_synthetic_data(train_ds, test_ds, columns_to_sample, keypair, task) -> tuple:
-    """Generate synthetic data for Instruct tasks."""
-    logger.info("INSTRUCT TEXT task: Using same approach as DPO for synthetic data")
-    logger.info("Generating synthetic data for instruct text task")
+async def _generate_other_synthetic_data(train_ds, test_ds, columns_to_sample, keypair, task) -> tuple:
+    """Generate synthetic data for tasks."""
+    logger.info("Generating synthetic data for text task")
     synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
 
     # Print an example from synthetic data for inspection
     if synthetic_ds and len(synthetic_ds) > 0:
         example = synthetic_ds[0]
-        logger.info(f"Example synthetic data point for INSTRUCT task: {example}")
+        logger.info(f"Example synthetic data point for task: {example}")
 
     # Always mix training data into synthetic evaluation and put some synth in training
     if synthetic_ds and len(synthetic_ds) > 0:
@@ -819,15 +818,6 @@ async def _generate_instruct_synthetic_data(train_ds, test_ds, columns_to_sample
         train_samples = train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(train_ds))))
         synthetic_ds = [sample for sample in train_samples]
         return train_ds, synthetic_ds
-
-
-async def _generate_other_synthetic_data(test_ds, columns_to_sample, keypair, task) -> list:
-    """Generate synthetic data for other task types (GRPO, etc.)."""
-    synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
-    if synthetic_ds and len(synthetic_ds) > 0:
-        example = synthetic_ds[0]
-        logger.info(f"Example synthetic data point for the task: {example}")
-    return synthetic_ds
 
 
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> tuple[str, str, str]:
@@ -927,12 +917,10 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
             logger.info("Generating additional synthetic data")
             if isinstance(task, DpoRawTask):
                 train_ds, synthetic_ds = await _generate_dpo_synthetic_data(train_ds, keypair, task)
-            elif isinstance(task, InstructTextRawTask):
-                train_ds, synthetic_ds = await _generate_instruct_synthetic_data(
+            else:
+                train_ds, synthetic_ds = await _generate_other_synthetic_data(
                     train_ds, test_ds, columns_to_sample, keypair, task
                 )
-            else:
-                synthetic_ds = await _generate_other_synthetic_data(test_ds, columns_to_sample, keypair, task)
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:
