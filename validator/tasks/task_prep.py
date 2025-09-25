@@ -820,15 +820,6 @@ async def _generate_other_synthetic_data(train_ds, test_ds, columns_to_sample, k
         return train_ds, synthetic_ds
 
 
-async def _generate_other_synthetic_data(test_ds, columns_to_sample, keypair, task) -> list:
-    """Generate synthetic data for other task types (GRPO, etc.)."""
-    synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
-    if synthetic_ds and len(synthetic_ds) > 0:
-        example = synthetic_ds[0]
-        logger.info(f"Example synthetic data point for the task: {example}")
-    return synthetic_ds
-
-
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
