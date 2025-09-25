@@ -252,10 +252,75 @@ def is_evol_format(example: dict[str, Any]) -> bool:
     )
 
 
-async def convert_instruct_dataset_to_chat_format(dataset_id: str, input_field: str, output_field: str) -> list[dict[str, Any]]:
-    dataset = load_dataset(dataset_id, split="train")
+async def convert_instruct_dataset_to_chat_format(dataset_id: str, keypair: Keypair | None = None) -> list[dict[str, Any]]:
+    try:
+        dataset_info = load_dataset(dataset_id, split=None)
+        available_splits = list(dataset_info.keys())
+        
+        if "train_sft" in available_splits:
+            split_name = "train_sft"
+        elif "train" in available_splits:
+            split_name = "train"
+        else:
+            raise ValueError(f"No suitable split found. Available splits: {available_splits}")
+        
+        dataset = load_dataset(dataset_id, split=split_name)
+        logger.info(f"Using split '{split_name}' for dataset {dataset_id}")
+        
+    except Exception as e:
+        try:
+            dataset = load_dataset(dataset_id, split="train_sft")
+            logger.info(f"Using split 'train_sft' for dataset {dataset_id}")
+        except:
+            try:
+                dataset = load_dataset(dataset_id, split="train")
+                logger.info(f"Using split 'train' for dataset {dataset_id}")
+            except Exception as fallback_error:
+                raise ValueError(f"Could not load dataset {dataset_id} with either 'train' or 'train_sft' split. Error: {fallback_error}")
+    
     chat_data = []
 
+    if len(dataset) == 0:
+        raise ValueError(f"Dataset {dataset_id} is empty")
+    
+    available_fields = list(dataset[0].keys())
+    logger.info(f"Available fields in dataset {dataset_id}: {available_fields}")
+    
+    input_field = None
+    output_field = None
+    
+    if keypair:
+        try:
+            columns = await _get_columns_for_instruct_dataset(dataset_id, keypair)
+            if columns.field_input and columns.field_input in available_fields:
+                input_field = columns.field_input
+                logger.info(f"Using endpoint-suggested input field: '{input_field}'")
+            if columns.field_output and columns.field_output in available_fields:
+                output_field = columns.field_output
+                logger.info(f"Using endpoint-suggested output field: '{output_field}'")
+        except Exception as e:
+            logger.warning(f"Failed to get field suggestions from endpoint: {e}")
+    
+    if not input_field:
+        for candidate in cst.COMMON_INPUT_FIELD_NAMES:
+            if candidate in available_fields:
+                input_field = candidate
+                logger.info(f"Using fallback input field: '{input_field}'")
+                break
+    
+    if not output_field:
+        for candidate in cst.COMMON_OUTPUT_FIELD_NAMES:
+            if candidate in available_fields:
+                output_field = candidate
+                logger.info(f"Using fallback output field: '{output_field}'")
+                break
+    
+    if not input_field or not output_field:
+        raise ValueError(f"Could not find suitable fields in dataset {dataset_id}. "
+                       f"Available fields: {available_fields}")
+    
+    logger.info(f"Using fields: input='{input_field}', output='{output_field}'")
+    
     for ex in dataset:
         if is_chat_format(ex):
             chat_data.append(ex)
@@ -290,19 +355,31 @@ async def convert_instruct_dataset_to_chat_format(dataset_id: str, input_field: 
                     }
                 )
 
+    if len(chat_data) == 0:
+        raise ValueError(f"No valid chat data found in dataset {dataset_id}")
+
     return chat_data
 
 
-async def merge_and_upload_chat_datasets(dataset_ids: list[str], input_field: str, output_field: str) -> str:
+async def merge_and_upload_chat_datasets(dataset_ids: list[str], keypair: Keypair | None = None) -> str:
     merged_data = []
+    
     for ds_id in dataset_ids:
-        merged_data.extend(await convert_instruct_dataset_to_chat_format(ds_id, input_field, output_field))
+        try:
+            dataset_chat_data = await convert_instruct_dataset_to_chat_format(ds_id, keypair)
+            merged_data.extend(dataset_chat_data)
+        except Exception as e:
+            logger.error(f"Failed to process dataset {ds_id}: {e}")
+            continue
+    
     if not merged_data:
-        raise ValueError("Error creating chat dataset - no data")
+        raise ValueError("Error creating chat dataset - no data from any of the datasets")
+    
     dataset_json, _ = await save_json_to_temp_file(merged_data, prefix="chat_dataset_")
     uploaded_url = await upload_file_to_minio(dataset_json, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_chat_data.json")
     if os.path.exists(dataset_json):
         os.remove(dataset_json)
+    
     return uploaded_url
 
 
@@ -608,12 +685,9 @@ async def create_synthetic_chat_task(
 
     primary_dataset = selected_datasets[0]
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
-    columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-
-    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
 
     chat_dataset_url = await merge_and_upload_chat_datasets(
-        dataset_ids=[d.dataset_id for d in selected_datasets], input_field=columns.field_input, output_field=columns.field_output
+        dataset_ids=[d.dataset_id for d in selected_datasets], keypair=config.keypair
     )
 
     current_time = datetime.utcnow()

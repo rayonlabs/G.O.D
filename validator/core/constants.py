@@ -111,7 +111,7 @@ INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
 
 # text augmentation synth
 TEXT_SYNTH_MODEL = "ArliAI/QwQ-32B-ArliAI-RpR-v1"
-TEXT_SYNTH_WEAKER_MODEL = "llama-3-2-3b"
+TEXT_SYNTH_WEAKER_MODEL = "unsloth/Llama-3.2-3B-Instruct"
 TEXT_SYNTH_MODEL_TEMPERATURE = 0.6
 TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
 END_OF_REASONING_TAG = "</think>"
@@ -395,6 +395,26 @@ STANDARD_CHAT_ROLE_USER = "human"
 STANDARD_CHAT_ROLE_ASSISTANT = "gpt"
 STANDARD_CHAT_ROLE_FIELD = "from"
 STANDARD_CHAT_CONTENT_FIELD = "value"
+
+# Common field names for automatic field detection
+COMMON_INPUT_FIELD_NAMES = [
+    "instruction",
+    "input", 
+    "prompt",
+    "question",
+    "query",
+    "context",
+]
+
+COMMON_OUTPUT_FIELD_NAMES = [
+    "output",
+    "response", 
+    "answer",
+    "completion",
+    "target",
+    "result",
+    "generated_text"
+]
 
 
 # Trainer endpoints
