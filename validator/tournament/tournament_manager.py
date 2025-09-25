@@ -911,7 +911,7 @@ async def is_tourn_task_completed(
                 if synced_task_id:
                     synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
                     if synced_task_obj.status in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
-                        return True
+                        return True, "Synced task is completed"
                     else:
                         return False, "Synced task is not completed"
                 else:
