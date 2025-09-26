@@ -5,7 +5,7 @@ import tempfile
 import time
 from io import BytesIO
 
-from datasets import get_dataset_config_names
+from datasets import get_dataset_config_names, get_dataset_split_names, load_dataset
 from huggingface_hub import HfApi
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -161,6 +161,12 @@ def get_default_dataset_config(dataset_name: str) -> str | None:
         return config_names[0]
     else:
         return None
+
+
+def load_default_split(dataset_name: str, config: str | None = None):
+    split_names = get_dataset_split_names(dataset_name, config_name=config)
+    split = "train" if "train" in split_names else split_names[0]
+    return load_dataset(dataset_name, name=config, split=split)
 
 
 def adjust_image_size(image: Image.Image) -> Image.Image:

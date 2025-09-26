@@ -396,7 +396,6 @@ STANDARD_CHAT_ROLE_ASSISTANT = "gpt"
 STANDARD_CHAT_ROLE_FIELD = "from"
 STANDARD_CHAT_CONTENT_FIELD = "value"
 
-
 # Trainer endpoints
 
 PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
