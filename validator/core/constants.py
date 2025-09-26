@@ -396,27 +396,6 @@ STANDARD_CHAT_ROLE_ASSISTANT = "gpt"
 STANDARD_CHAT_ROLE_FIELD = "from"
 STANDARD_CHAT_CONTENT_FIELD = "value"
 
-# Common field names for automatic field detection
-COMMON_INPUT_FIELD_NAMES = [
-    "instruction",
-    "input", 
-    "prompt",
-    "question",
-    "query",
-    "context",
-]
-
-COMMON_OUTPUT_FIELD_NAMES = [
-    "output",
-    "response", 
-    "answer",
-    "completion",
-    "target",
-    "result",
-    "generated_text"
-]
-
-
 # Trainer endpoints
 
 PROXY_TRAINING_IMAGE_ENDPOINT = "/v1/trainer/start_training"
