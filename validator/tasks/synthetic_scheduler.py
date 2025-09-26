@@ -22,6 +22,7 @@ from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.augmentation.augmentation import load_prompts
 from validator.evaluation.utils import get_default_dataset_config
+from validator.evaluation.utils import load_default_split
 from validator.core.config import Config
 from validator.core.constants import END_OF_REASONING_TAG
 from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
@@ -255,7 +256,7 @@ def is_evol_format(example: dict[str, Any]) -> bool:
 
 async def convert_instruct_dataset_to_chat_format(dataset_id: str, input_field: str, output_field: str) -> list[dict[str, Any]]:
     ds_config = get_default_dataset_config(dataset_id)
-    dataset = load_dataset(dataset_id, config=ds_config)
+    dataset = load_default_split(dataset_id, config=ds_config)
     chat_data = []
 
     for ex in dataset:
@@ -612,10 +613,12 @@ async def create_synthetic_chat_task(
     number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
     columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
 
-    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
+    dataset_ids = [d.dataset_id for d in selected_datasets]
+
+    input_field = columns.field_input if columns.field_input else columns.field_instruction
 
     chat_dataset_url = await merge_and_upload_chat_datasets(
-        dataset_ids, input_field=columns.field_input, output_field=columns.field_output
+        dataset_ids, input_field=input_field, output_field=columns.field_output
     )
 
     current_time = datetime.utcnow()
