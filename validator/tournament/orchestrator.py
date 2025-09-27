@@ -149,7 +149,13 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
         response = await client.post(url, json=validated_request.model_dump())
         response.raise_for_status()
 
-        return response.json()["message"] == cst.EXPECTED_TRAINING_START_MESSAGE
+        response_data = response.json()
+
+        # Check for no retry flag
+        if response_data.get("no_retry", False):
+            return cst.NO_RETRY_RESULT
+
+        return response_data["message"] == cst.EXPECTED_TRAINING_START_MESSAGE
 
 
 @simple_retry
@@ -346,9 +352,16 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
             tournament_id = await get_tournament_id_by_task_id(training_task.task.task_id, config.psql_db)
             with LogContext(task_id=str(training_task.task.task_id), hotkey=training_task.hotkey, tournament_id=tournament_id):
                 training_request = await _create_training_request(training_task.task, training_task.hotkey, gpu_ids, config)
-                training_success = await start_training_task(trainer_ip, training_request)
+                training_result = await start_training_task(trainer_ip, training_request)
 
-                if training_success:
+                if training_result == cst.NO_RETRY_RESULT:
+                    logger.warning(f"No retry failure for task {training_task.task.task_id} with hotkey {training_task.hotkey}")
+                    await tournament_sql.update_tournament_task_training_status(
+                        training_task.task.task_id, training_task.hotkey, TrainingStatus.FAILURE, config.psql_db
+                    )
+                    pending_training_tasks.pop()
+                    continue
+                elif training_result:
                     await tournament_sql.update_tournament_task_training_status(
                         training_task.task.task_id, training_task.hotkey, TrainingStatus.TRAINING, config.psql_db
                     )
