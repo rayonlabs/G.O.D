@@ -51,7 +51,7 @@ async def start_training(req: TrainerProxyRequest) -> JSONResponse:
         if "Invalid commit hash" in str(e) and "commit not found in repository" in str(e):
             await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
             await complete_task(req.training_data.task_id, req.hotkey, success=False)
-            return {"message": "Training failed", "task_id": req.training_data.task_id, "error": str(e), "success": False}
+            return {"message": "Training failed", "task_id": req.training_data.task_id, "error": str(e), "success": False, "no_retry": True}
         else:
             # Re-raise other RuntimeErrors as 400s
             await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")

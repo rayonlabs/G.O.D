@@ -20,6 +20,8 @@ TRAINING_START_RETRY_INTERVAL = 1 * 60  # 15 minutes
 # Trainer requests
 TRAINER_HTTP_TIMEOUT = 30.0  # seconds
 EXPECTED_TRAINING_START_MESSAGE = "Started Training!"
+TRAINING_FAILED_MESSAGE = "Training Failed"
+NO_RETRY_RESULT = "No Retry"
 
 
 # Tournament structure constants
