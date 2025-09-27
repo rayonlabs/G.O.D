@@ -128,21 +128,19 @@ def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
         # Find max of shifted values
         max_shifted = max(value for _, value in shifted_values)
 
-        # Normalize by dividing by max
-        if max_shifted > 0:
-            # Special case: 2 repos with negatives -> map to [0.25, 0.75]
-            if len(repo_value_pairs) == 2 and has_negatives:
-                sorted_pairs = sorted(shifted_values, key=lambda x: x[1])
-                normalized_rewards_per_repo[sorted_pairs[0][0]][reward_name] = 0.25
-                normalized_rewards_per_repo[sorted_pairs[1][0]][reward_name] = 0.75
-            else:
-                # Normal case: divide by max
-                for repo, shifted_value in shifted_values:
-                    normalized_rewards_per_repo[repo][reward_name] = shifted_value / max_shifted
+        # Special case: 2 repos with negatives -> map to [0.25, 0.75]
+        if len(repo_value_pairs) == 2 and has_negatives:
+            sorted_pairs = sorted(shifted_values, key=lambda x: x[1])
+            normalized_rewards_per_repo[sorted_pairs[0][0]][reward_name] = 0.25
+            normalized_rewards_per_repo[sorted_pairs[1][0]][reward_name] = 0.75
+        elif max_shifted > 0:
+            # Normal case: divide by max
+            for repo, shifted_value in shifted_values:
+                normalized_rewards_per_repo[repo][reward_name] = shifted_value / max_shifted
         else:
-            # All values are identical
+            # All values are zero after shift (all were equal and negative or zero)
             for repo, _ in repo_value_pairs:
-                normalized_rewards_per_repo[repo][reward_name] = 0.5
+                normalized_rewards_per_repo[repo][reward_name] = 1.0
 
     # Step 2-3: Apply weights and sum (weights already sum to 1)
     final_scores = []
