@@ -49,7 +49,7 @@ async def start_training(req: TrainerProxyRequest) -> JSONResponse:
     except RuntimeError as e:
         await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
         await complete_task(req.training_data.task_id, req.hotkey, success=False)
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"message": "Training failed", "task_id": req.training_data.task_id, "error": str(e), "success": False}
 
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}",
                 extra={"task_id": req.training_data.task_id, "hotkey": req.hotkey, "model": req.training_data.model})
