@@ -69,13 +69,15 @@ async def get_evaluation_results(container):
 
 def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
     """
-    Normalize rewards using divide-by-max normalization, then apply weights and compute adjusted eval_loss.
+    Normalize rewards across repos and compute final evaluation loss with KL penalty.
 
-    New flow:
-    1. Shift rewards to positive if needed, then normalize by dividing by max (preserves relative distances)
-    2. Apply weights to normalized rewards (weights already sum to 1)
-    3. Sum weighted normalized rewards (result in [0,1] range)
-    4. Subtract KL: final_score - (BETA_GRPO * kl_divergence)
+    Steps:
+    1. For each reward type, normalize values across repos by dividing by max (after shifting if negative)
+    2. Apply weights to normalized rewards (weights sum to 1)
+    3. Sum weighted rewards to get final score in [0,1] range
+    4. Apply KL penalty: score - (BETA_GRPO * kl_divergence)
+
+    Special case: 2 repos with negative rewards map to [0.25, 0.75] to avoid extreme scores.
 
     Args:
         evaluation_results: Dict with model repos as keys and evaluation data as values
