@@ -154,18 +154,23 @@ def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
         else:
             weighted_scores.append(0.0)
 
-    # Step 4: Scale to 0-1 range across all repos
+    # Step 4: Shift to positive range, then normalize by max
     if weighted_scores:
         min_score = min(weighted_scores)
-        max_score = max(weighted_scores)
-        score_range = max_score - min_score
-
-        if score_range > 0:
-            # Scale to 0-1
-            scaled_scores = [(score - min_score) / score_range for score in weighted_scores]
+        
+        # Shift all scores to be positive
+        if min_score < 0:
+            shifted_scores = [score - min_score for score in weighted_scores]
         else:
-            # All scores are the same
-            scaled_scores = [0.5] * len(weighted_scores)
+            shifted_scores = weighted_scores
+        
+        # Now normalize by max
+        max_shifted = max(shifted_scores)
+        if max_shifted > 0:
+            scaled_scores = [score / max_shifted for score in shifted_scores]
+        else:
+            # All scores are identical
+            scaled_scores = [0.5] * len(shifted_scores)
     else:
         scaled_scores = []
 
