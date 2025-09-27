@@ -69,12 +69,12 @@ async def get_evaluation_results(container):
 
 def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
     """
-    Normalize rewards using min-max normalization, then apply weights and compute adjusted eval_loss.
+    Normalize rewards using divide-by-max normalization, then apply weights and compute adjusted eval_loss.
 
     New flow:
-    1. Normalize RAW rewards using min-max normalization (0-1 range)
+    1. Shift rewards to positive if needed, then normalize by dividing by max (preserves relative distances)
     2. Apply weights to normalized rewards (weights already sum to 1)
-    3. Sum weighted normalized rewards
+    3. Sum weighted normalized rewards (result in [0,1] range)
     4. Subtract KL: final_score - (BETA_GRPO * kl_divergence)
 
     Args:
