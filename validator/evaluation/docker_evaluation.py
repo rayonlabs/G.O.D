@@ -9,7 +9,6 @@ import docker
 from docker.models.containers import Container
 from docker.types import Mount
 from huggingface_hub import snapshot_download
-from scipy import stats
 
 from core import constants as cst
 from core.models.payload_models import DockerEvaluationResults
@@ -70,14 +69,15 @@ async def get_evaluation_results(container):
 
 def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
     """
-    Normalize rewards using Gaussian percentiles, then apply weights and compute adjusted eval_loss.
+    Normalize rewards across repos and compute final evaluation loss with KL penalty.
 
-    New flow:
-    1. Normalize RAW rewards using Gaussian percentiles (0-1 range)
-    2. Apply weights to normalized percentiles
-    3. Sum weighted normalized rewards
-    4. Scale to 0-1 range across all repos
-    5. Subtract KL: final_score - (BETA_GRPO * kl_divergence)
+    Steps:
+    1. For each reward type, normalize values across repos by dividing by max (after shifting if negative)
+    2. Apply weights to normalized rewards (weights sum to 1)
+    3. Sum weighted rewards to get final score in [0,1] range
+    4. Apply KL penalty: score - (BETA_GRPO * kl_divergence)
+
+    Special case: 2 repos with negative rewards map to [0.25, 0.75] to avoid extreme scores.
 
     Args:
         evaluation_results: Dict with model repos as keys and evaluation data as values
@@ -103,87 +103,76 @@ def normalize_rewards_and_compute_loss(evaluation_results: dict) -> dict:
         for reward_name, reward_value in final_raw_rewards.items():
             if reward_name not in reward_collections:
                 reward_collections[reward_name] = []
-            reward_collections[reward_name].append(reward_value)
+            reward_collections[reward_name].append((repo_key, reward_value))
 
-    # Fit Gaussian distributions for each raw reward type
-    reward_distributions = {}
+    # Step 1: Normalize each reward type using shift + divide by max
+    normalized_rewards_per_repo = {repo_key: {} for repo_key in repo_keys}
 
-    for reward_name, values in reward_collections.items():
-        if len(values) < 2:
-            # Skip normalization if not enough values, use default parameters
-            reward_distributions[reward_name] = {'mu': values[0] if values else 0.0, 'sigma': 0.0}
+    for reward_name, repo_value_pairs in reward_collections.items():
+        if len(repo_value_pairs) < 2:
+            # Only one value, set to 1.0
+            for repo_key, value in repo_value_pairs:
+                normalized_rewards_per_repo[repo_key][reward_name] = 1.0
             continue
 
-        # Fit Gaussian distribution
-        mu, sigma = stats.norm.fit(values)
-        reward_distributions[reward_name] = {'mu': mu, 'sigma': sigma}
+        values = [value for _, value in repo_value_pairs]
+        min_value = min(values)
 
-    # Step 1-3: Calculate weighted normalized scores for each repo
-    weighted_scores = []
+        # Check if we need to shift (have negatives)
+        has_negatives = min_value < 0
+
+        # Shift to positive if needed
+        if has_negatives:
+            shifted_values = [(repo, value - min_value) for repo, value in repo_value_pairs]
+        else:
+            shifted_values = repo_value_pairs
+
+        # Find max of shifted values
+        max_shifted = max(value for _, value in shifted_values)
+
+        # Special case: 2 repos with negatives -> map to [0.25, 0.75]
+        if len(repo_value_pairs) == 2 and has_negatives:
+            sorted_pairs = sorted(shifted_values, key=lambda x: x[1])
+            normalized_rewards_per_repo[sorted_pairs[0][0]][reward_name] = 0.25
+            normalized_rewards_per_repo[sorted_pairs[1][0]][reward_name] = 0.75
+        elif max_shifted > 0:
+            # Normal case: divide by max
+            for repo, shifted_value in shifted_values:
+                normalized_rewards_per_repo[repo][reward_name] = shifted_value / max_shifted
+        else:
+            # All values are zero after shift (all were equal and negative or zero)
+            for repo, _ in repo_value_pairs:
+                normalized_rewards_per_repo[repo][reward_name] = 1.0
+
+    # Step 2-3: Apply weights and sum (weights already sum to 1)
+    final_scores = []
 
     for repo_key in repo_keys:
         repo_data = evaluation_results[repo_key]
         if isinstance(repo_data, str):  # Skip error entries
             continue
 
-        final_raw_rewards = repo_data.get('final_raw_rewards', {})
         weights = repo_data.get('weights', {})
+        normalized_rewards = normalized_rewards_per_repo.get(repo_key, {})
 
-        # Calculate normalized percentiles and apply weights
-        weighted_percentiles = []
-        for reward_name, raw_reward_value in final_raw_rewards.items():
-            if reward_name in reward_distributions:
-                dist_params = reward_distributions[reward_name]
-                mu, sigma = dist_params['mu'], dist_params['sigma']
+        # Calculate weighted sum
+        weighted_sum = 0.0
+        for reward_name, normalized_value in normalized_rewards.items():
+            weight = weights.get(reward_name, 1.0)
+            weighted_sum += normalized_value * weight
 
-                # Calculate percentile (0-1 range)
-                if sigma > 0:
-                    percentile = stats.norm.cdf(raw_reward_value, mu, sigma)
-                else:
-                    percentile = 0.5  # All values are the same, use median
+        final_scores.append(weighted_sum)
 
-                # Apply weight to normalized percentile
-                weight = weights.get(reward_name, 1.0)
-                weighted_percentile = percentile * weight
-                weighted_percentiles.append(weighted_percentile)
-
-        # Sum weighted normalized rewards
-        if weighted_percentiles:
-            total_weighted_score = sum(weighted_percentiles)
-            weighted_scores.append(total_weighted_score)
-        else:
-            weighted_scores.append(0.0)
-
-    # Step 4: Shift to positive range, then normalize by max
-    if weighted_scores:
-        min_score = min(weighted_scores)
-        
-        # Shift all scores to be positive
-        if min_score < 0:
-            shifted_scores = [score - min_score for score in weighted_scores]
-        else:
-            shifted_scores = weighted_scores
-        
-        # Now normalize by max
-        max_shifted = max(shifted_scores)
-        if max_shifted > 0:
-            scaled_scores = [score / max_shifted for score in shifted_scores]
-        else:
-            # All scores are identical
-            scaled_scores = [0.5] * len(shifted_scores)
-    else:
-        scaled_scores = []
-
-    # Step 5: Apply final formula and update eval_loss
+    # Step 4: Apply KL penalty and update eval_loss
     for i, repo_key in enumerate(repo_keys):
         repo_data = evaluation_results[repo_key]
         if isinstance(repo_data, str):  # Skip error entries
             continue
 
-        if i < len(scaled_scores):
+        if i < len(final_scores):
             kl_divergence = repo_data.get('kl_divergence', 0.0)
-            # Final score: scaled_score - BETA_GRPO * kl_divergence
-            new_eval_loss = scaled_scores[i] - (vcst.BETA_GRPO * kl_divergence)
+            # Final score: weighted_sum - BETA_GRPO * kl_divergence
+            new_eval_loss = final_scores[i] - (vcst.BETA_GRPO * kl_divergence)
             repo_data['eval_loss'] = new_eval_loss
 
     return evaluation_results

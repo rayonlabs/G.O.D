@@ -431,15 +431,22 @@ async def _get_generic_reward_functions(config: Config) -> list[RewardFunction]:
 
 
 def _randomize_reward_weights(reward_functions: list[RewardFunction]) -> list[RewardFunction]:
+    # Generate random weights
+    random_weights = [random.uniform(0.1, 10.0) for _ in reward_functions]
+
+    # Normalize to sum to 1
+    weight_sum = sum(random_weights)
+    normalized_weights = [w / weight_sum for w in random_weights]
+
     return [
         RewardFunction(
             reward_id=reward_function.reward_id,
             reward_func=reward_function.reward_func,
             func_hash=reward_function.func_hash,
             is_generic=reward_function.is_generic,
-            reward_weight=random.uniform(0.0, 10.0),
+            reward_weight=normalized_weight,
         )
-        for reward_function in reward_functions
+        for reward_function, normalized_weight in zip(reward_functions, normalized_weights)
     ]
 
 
@@ -509,13 +516,19 @@ async def create_synthetic_affine_grpo_task(
             logger.debug(f"Attempting to fetch reward function with ID: {reward_id}")
             reward_function = await grpo_sql.get_reward_function_by_id(config.psql_db, UUID(reward_id))
             if reward_function:
-                logger.info(f"Found reward function {reward_id}, setting weight to 1.0")
-                reward_function.reward_weight = 1.0
                 affine_reward_functions.append(reward_function)
             else:
                 logger.warning(f"Reward function {reward_id} not found in database")
 
         logger.info(f"Successfully loaded {len(affine_reward_functions)} affine reward functions")
+
+        # Normalize weights to sum to 1
+        if affine_reward_functions:
+            num_functions = len(affine_reward_functions)
+            normalized_weight = 1.0 / num_functions
+            for reward_function in affine_reward_functions:
+                logger.info(f"Setting weight for {reward_function.reward_id} to {normalized_weight:.4f}")
+                reward_function.reward_weight = normalized_weight
 
         if not affine_reward_functions:
             logger.error("No affine reward functions found in database, falling back to generic functions")
