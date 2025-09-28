@@ -1,4 +1,5 @@
 import asyncio
+import json
 import subprocess
 
 import httpx
@@ -144,9 +145,15 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
             trainer_ip_with_port = trainer_ip
 
         url = f"http://{trainer_ip_with_port}{PROXY_TRAINING_IMAGE_ENDPOINT}"
-        logger.info(f"Requesting training from trainer at {url} with payload: {validated_request.model_dump()}")
 
-        response = await client.post(url, json=validated_request.model_dump())
+        # Ensure proper serialization of the payload
+        request_payload = validated_request.model_dump()
+
+        # Log the actual JSON that will be sent
+        logger.info(f"Requesting training from trainer at {url}")
+        logger.debug(f"Request payload JSON: {json.dumps(request_payload)}")
+
+        response = await client.post(url, json=request_payload)
         response.raise_for_status()
 
         response_data = response.json()
