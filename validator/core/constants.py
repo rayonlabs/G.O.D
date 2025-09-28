@@ -372,7 +372,7 @@ MIN_SYNTH_JOBS_REQUIRED_PER_DAY = 3
 
 # Default, fixed Hyperparameters
 BETA_DPO = 0.1
-BETA_GRPO = 0.5
+BETA_GRPO = 0.2
 
 # GRPO evaluation
 GRPO_INITIAL_BATCH_SIZE = 16
