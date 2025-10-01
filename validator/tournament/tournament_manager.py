@@ -80,7 +80,7 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def check_more_than_half_failure(trainings: dict[str, str]) -> bool:
+def count_failed_trainings_percentage(trainings: dict[str, str]) -> bool:
     """Return True if fraction of failures exceeds threshold."""
     total = len(trainings)
     if total == 0:
@@ -875,6 +875,36 @@ async def process_active_tournaments(config: Config):
             await asyncio.sleep(t_cst.TOURNAMENT_ACTIVE_CYCLE_INTERVAL)
 
 
+async def _more_than_half_failures(
+    tournament_task: TournamentTask, config: Config
+) -> bool:
+    """
+    Check if more than half of the trainings failed and handle Discord notification.
+    
+    Returns True if majority failure detected, False otherwise.
+    """
+    trainings = await get_training_status_for_task(tournament_task.task_id, config.psql_db)
+    is_more_than_half_failure = count_failed_trainings_percentage(trainings)
+    
+    if is_more_than_half_failure:
+        logger.info(f"More than half of the trainings for task {tournament_task.task_id} failed. Please investigate.")
+        
+        discord_url = config.discord_url
+        if discord_url:
+            try:
+                await send_to_discord(
+                    webhook=discord_url,
+                    message=f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id}"
+                    "has more than half tasks failed, please investigate.",
+                )
+            except Exception as e:
+                logger.error(f"Failed to send Discord notification: {e}")
+        
+        return True
+    
+    return False
+
+
 async def is_tourn_task_completed(
     tournament_task: TournamentTask, task_obj: AnyTypeTask, config: Config, final_round: bool = False
 ) -> tuple[bool, str]:
@@ -888,25 +918,10 @@ async def is_tourn_task_completed(
     Returns a tuple of (is_completed, reason)
     """
 
-    if task_obj.status in [TaskStatus.FAILURE.value, TaskStatus.SUCCESS.value]:
-        trainings = await get_training_status_for_task(tournament_task.task_id, config.psql_db)
-        is_more_than_half_failure = check_more_than_half_failure(trainings)
-        if is_more_than_half_failure:
-            logger.info(f"More than half of the trainings for task {tournament_task.task_id} failed. Please investigate.")
-            discord_url = config.discord_url
-            if discord_url:
-                try:
-                    await send_to_discord(
-                        webhook=discord_url,
-                        message=f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id}"
-                        "has more than half tasks failed, please investigate.",
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to send Discord notification: {e}")
-                finally:
-                    return False, "More than half of the trainings failed"
-
     if task_obj.status == TaskStatus.SUCCESS.value:
+        if await _more_than_half_failures(tournament_task, config):
+            return False, "More than half of the trainings failed"
+
         if final_round:
             synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
             if synced_task_id:
@@ -918,18 +933,11 @@ async def is_tourn_task_completed(
             else:
                 return False, "No synced task found for final round task"
         return True, "Task completed successfully"
-    if task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
-        logger.info(f"Task {task_obj.task_id} failed during preparation, creating replacement immediately.")
-        new_task_id = await replace_tournament_task(
-            tournament_task.task_id,
-            tournament_task.tournament_id,
-            tournament_task.round_id,
-            tournament_task.group_id,
-            tournament_task.pair_id,
-            config,
-        )
-        return False, f"Task failed during preparation. Replaced with a new task {new_task_id}."
-    if task_obj.status == TaskStatus.FAILURE.value:
+
+    elif task_obj.status == TaskStatus.FAILURE.value:
+        if await _check_and_handle_majority_failure(tournament_task, config):
+            return False, "More than half of the trainings failed"
+
         synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
         if synced_task_id:
             synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
@@ -960,7 +968,18 @@ async def is_tourn_task_completed(
             await copy_tournament_task_into_general_miner_pool(tournament_task.task_id, config.psql_db)
             return False, "Tournament task failed. Synced to main cycle."
 
-    # all other cases are not completed
+    elif task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
+        logger.info(f"Task {task_obj.task_id} failed during preparation, creating replacement immediately.")
+        new_task_id = await replace_tournament_task(
+            tournament_task.task_id,
+            tournament_task.tournament_id,
+            tournament_task.round_id,
+            tournament_task.group_id,
+            tournament_task.pair_id,
+            config,
+        )
+        return False, f"Task failed during preparation. Replaced with a new task {new_task_id}."
+
     return False, "Tournament task not completed. Status: " + task_obj.status
 
 
