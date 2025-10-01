@@ -67,7 +67,3 @@ DPO_DEFAULT_FIELD_REJECTED = "rejected"
 
 GRPO_DEFAULT_FIELD_PROMPT = "prompt"
 
-# Chat template default field names
-CHAT_DEFAULT_FIELD_MESSAGES = "messages"
-CHAT_DEFAULT_FIELD_ROLE = "role"
-CHAT_DEFAULT_FIELD_CONTENT = "content"
