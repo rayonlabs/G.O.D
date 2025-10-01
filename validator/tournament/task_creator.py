@@ -24,6 +24,7 @@ from validator.tasks.synthetic_scheduler import create_synthetic_dpo_task
 from validator.tasks.synthetic_scheduler import create_synthetic_grpo_task
 from validator.tasks.synthetic_scheduler import create_synthetic_image_task
 from validator.tasks.synthetic_scheduler import create_synthetic_instruct_text_task
+from validator.tasks.synthetic_scheduler import create_synthetic_chat_task
 from validator.tournament import constants as t_cst
 from validator.tournament.boss_round_sync import copy_historical_task_into_boss_round_tournament
 from validator.utils.logging import get_logger
@@ -438,6 +439,12 @@ async def _create_single_probability_task(
 ) -> RawTask:
     rand_val = random.random()
     if rand_val < instruct_prob:
+        chat_prob = random.random()
+        if chat_prob < cst.PERCENTAGE_OF_INSTRUCT_TASKS_THAT_SHOULD_BE_CHAT:
+            return await create_synthetic_chat_task(config, models, instruct_datasets)
+        else:
+            return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+    elif rand_val < (instruct_prob + dpo_prob):
         return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
     elif rand_val < (instruct_prob + dpo_prob):
         return await create_synthetic_dpo_task(config, models, dpo_datasets)
