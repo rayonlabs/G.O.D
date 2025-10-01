@@ -887,8 +887,8 @@ async def is_tourn_task_completed(
 
     Returns a tuple of (is_completed, reason)
     """
-    if task_obj.status == TaskStatus.SUCCESS.value:
-        # check if majority trainings failed
+
+    if task_obj.status in [TaskStatus.FAILURE.value, TaskStatus.SUCCESS.value]:
         trainings = await get_training_status_for_task(tournament_task.task_id, config.psql_db)
         is_more_than_half_failure = check_more_than_half_failure(trainings)
         if is_more_than_half_failure:
@@ -905,18 +905,19 @@ async def is_tourn_task_completed(
                     logger.error(f"Failed to send Discord notification: {e}")
                 finally:
                     return False, "More than half of the trainings failed"
-        else:
-            if final_round:
-                synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
-                if synced_task_id:
-                    synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
-                    if synced_task_obj.status in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
-                        return True, "Synced task is completed"
-                    else:
-                        return False, "Synced task is not completed"
+
+    if task_obj.status == TaskStatus.SUCCESS.value:
+        if final_round:
+            synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
+            if synced_task_id:
+                synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
+                if synced_task_obj.status in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
+                    return True, "Synced task is completed"
                 else:
-                    return False, "No synced task found for final round task"
-            return True, "Task completed successfully"
+                    return False, "Synced task is not completed"
+            else:
+                return False, "No synced task found for final round task"
+        return True, "Task completed successfully"
     if task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
         logger.info(f"Task {task_obj.task_id} failed during preparation, creating replacement immediately.")
         new_task_id = await replace_tournament_task(
