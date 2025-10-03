@@ -153,6 +153,7 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
 
         # Check for no retry flag
         if response_data.get("no_retry", False):
+            logger.warning(f"Error cloning github repository for task {training_request.training_data.task_id} with hotkey {training_request.hotkey}")
             return cst.NO_RETRY_RESULT
 
         return response_data["message"] == cst.EXPECTED_TRAINING_START_MESSAGE

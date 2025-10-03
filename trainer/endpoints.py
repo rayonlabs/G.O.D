@@ -46,17 +46,10 @@ async def start_training(req: TrainerProxyRequest) -> JSONResponse:
             branch=req.github_branch,
             commit_hash=req.github_commit_hash,
         )
-    except RuntimeError as e:
-        # Handle invalid commit hash gracefully
-        if "Invalid commit hash" in str(e) and "commit not found in repository" in str(e):
-            await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
-            await complete_task(req.training_data.task_id, req.hotkey, success=False)
-            return {"message": "Training failed", "task_id": req.training_data.task_id, "error": str(e), "success": False, "no_retry": True}
-        else:
-            # Re-raise other RuntimeErrors as 400s
-            await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {e}")
-            await complete_task(req.training_data.task_id, req.hotkey, success=False)
-            raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {str(e)}")
+        await complete_task(req.training_data.task_id, req.hotkey, success=False)
+        return {"message": "Error cloning github repository", "task_id": req.training_data.task_id, "error": str(e), "success": False, "no_retry": True}
 
     logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}",
                 extra={"task_id": req.training_data.task_id, "hotkey": req.hotkey, "model": req.training_data.model})
