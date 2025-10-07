@@ -9,6 +9,7 @@ import validator.db.constants as cst
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import HotkeyTaskParticipation
 from core.models.tournament_models import HotkeyTournamentParticipation
+from core.models.tournament_models import TaskTrainingAssignment
 from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentGroupData
 from core.models.tournament_models import TournamentPairData
@@ -618,39 +619,42 @@ async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
         return list(trainers.values())
 
 
-async def add_tournament_task_hotkey_pairs_for_training(
-    task_hotkey_triples: list[tuple[str, str, datetime]], psql_db: PSQLDB, priority: int = 1
-):
+async def add_tournament_task_hotkey_pairs_for_training(assignments: list[TaskTrainingAssignment], psql_db: PSQLDB):
     """
     Add task-hotkey pairs to the tournament_task_hotkey_trainings table using batch insert.
     Each task-hotkey pair defines a training task that we'll send to a trainer later.
 
     Args:
-        task_hotkey_triples: List of (task_id, hotkey, created_at) tuples
+        assignments: List of TaskTrainingAssignment objects containing task info, repo details, and priority
         psql_db: Database connection
-        priority: Training priority (1=regular tournament tasks, 2=benchmark tasks)
     """
     async with await psql_db.connection() as connection:
         async with connection.transaction():
-            if not task_hotkey_triples:
-                logger.info("No task-hotkey triples to insert")
+            if not assignments:
+                logger.info("No task training assignments to insert")
                 return
 
             query = f"""
                 INSERT INTO {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
-                ({cst.TASK_ID}, {cst.HOTKEY}, {cst.CREATED_AT}, {cst.PRIORITY})
-                SELECT * FROM unnest($1::uuid[], $2::text[], $3::timestamptz[], $4::integer[])
+                ({cst.TASK_ID}, {cst.HOTKEY}, {cst.CREATED_AT}, {cst.PRIORITY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH})
+                SELECT * FROM unnest($1::uuid[], $2::text[], $3::timestamptz[], $4::integer[], $5::text[], $6::text[])
                 ON CONFLICT ({cst.TASK_ID}, {cst.HOTKEY}) DO NOTHING
             """
 
-            task_ids = [triple[0] for triple in task_hotkey_triples]
-            hotkeys = [triple[1] for triple in task_hotkey_triples]
-            timestamps = [triple[2] for triple in task_hotkey_triples]
-            priorities = [priority] * len(task_hotkey_triples)
+            task_ids = [assignment.task_id for assignment in assignments]
+            hotkeys = [assignment.hotkey for assignment in assignments]
+            timestamps = [assignment.created_at for assignment in assignments]
+            priorities = [assignment.priority for assignment in assignments]
+            training_repos = [assignment.training_repo for assignment in assignments]
+            training_commit_hashes = [assignment.training_commit_hash for assignment in assignments]
 
-            await connection.execute(query, task_ids, hotkeys, timestamps, priorities)
+            await connection.execute(query, task_ids, hotkeys, timestamps, priorities, training_repos, training_commit_hashes)
 
-            logger.info(f"Added {len(task_hotkey_triples)} task-hotkey training triples in batch with priority {priority}")
+            priority_counts = {}
+            for assignment in assignments:
+                priority_counts[assignment.priority] = priority_counts.get(assignment.priority, 0) + 1
+
+            logger.info(f"Added {len(assignments)} task training assignments - priorities: {priority_counts}")
 
 
 async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus) -> list[TournamentTaskTraining]:
@@ -668,7 +672,7 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TASK_ID}, {cst.HOTKEY}, {cst.TRAINING_STATUS}, {cst.N_TRAINING_ATTEMPTS},
-                   {cst.CREATED_AT}, {cst.UPDATED_AT}, {cst.PRIORITY}
+                   {cst.CREATED_AT}, {cst.UPDATED_AT}, {cst.PRIORITY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
             FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
             WHERE {cst.TRAINING_STATUS} = $1
             ORDER BY {cst.PRIORITY} ASC, {cst.CREATED_AT} DESC
@@ -698,6 +702,8 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
                         n_training_attempts=row[cst.N_TRAINING_ATTEMPTS],
                         created_at=row[cst.CREATED_AT],
                         updated_at=row[cst.UPDATED_AT],
+                        training_repo=row[cst.TRAINING_REPO],
+                        training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
                     )
                 )
 

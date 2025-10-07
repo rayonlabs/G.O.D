@@ -13,7 +13,9 @@ from core.models.payload_models import TrainerTaskLog
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
 from core.models.tournament_models import GpuRequirement
+from core.models.tournament_models import TaskTrainingAssignment
 from core.models.tournament_models import TournamentTaskTraining
+from core.models.tournament_models import TournamentType
 from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GPUInfo
@@ -23,6 +25,7 @@ from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
 from validator.core.config import Config
 from validator.core.config import load_config
+from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
 from validator.core.constants import PROXY_TRAINING_IMAGE_ENDPOINT
 from validator.core.constants import TASK_DETAILS_ENDPOINT
@@ -153,7 +156,9 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
 
         # Check for no retry flag
         if response_data.get("no_retry", False):
-            logger.warning(f"Error cloning github repository for task {training_request.training_data.task_id} with hotkey {training_request.hotkey}")
+            logger.warning(
+                f"Error cloning github repository for task {training_request.training_data.task_id} with hotkey {training_request.hotkey}"
+            )
             return cst.NO_RETRY_RESULT
 
         return response_data["message"] == cst.EXPECTED_TRAINING_START_MESSAGE
@@ -204,26 +209,39 @@ async def fetch_tournament_tasks_ready_to_train(config: Config):
 
 async def _fetch_tournament_tasks_ready_to_train(config: Config):
     """
-    Fetch tasks that are looking for nodes and are part of tournaments,
+    Fetch tasks that are looking for nodes,
     then move them to training status and record the hotkey assignments.
-    Handle regular tournament tasks and benchmark tasks separately with different priorities.
+    Process in priority order: organic (1), tournament (2), benchmark (3).
+    Smart prioritization: fetch lower priority tasks when pending queue is low.
     """
-    tasks = await task_sql.get_tasks_with_status(
-        TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only", benchmark_filter="exclude"
+    pending_training_tasks = await tournament_sql.get_tournament_training_tasks(
+        config.psql_db,
+        TrainingStatus.PENDING,
     )
-    logger.info(f"Found {len(tasks)} regular tournament tasks looking for nodes")
+    pending_count = len(pending_training_tasks)
+    logger.info(f"Current pending training assignments: {pending_count}")
 
-    if tasks:
-        await _process_tasks_for_training(tasks, config, priority=1)
+    organic_tasks = await task_sql.get_tasks_with_status(
+        TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude"
+    )
+    logger.info(f"Found {len(organic_tasks)} organic (non-tournament, non-benchmark) tasks looking for nodes")
+    await _process_tasks_for_training(organic_tasks, config, priority=1)
 
-    else:
-        logger.info("No regular tournament tasks looking for nodes, checking benchmark tasks")
+    if pending_count < cst.PENDING_QUEUE_THRESHOLD_FOR_TOURNAMENT:
+        logger.info(f"Pending queue below {cst.PENDING_QUEUE_THRESHOLD_FOR_TOURNAMENT}, fetching tournament tasks")
+        tournament_tasks = await task_sql.get_tasks_with_status(
+            TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only", benchmark_filter="exclude"
+        )
+        logger.info(f"Found {len(tournament_tasks)} tournament tasks looking for nodes")
+        await _process_tasks_for_training(tournament_tasks, config, priority=2)
+
+    if pending_count < cst.PENDING_QUEUE_THRESHOLD_FOR_BENCHMARK:
+        logger.info(f"Pending queue below {cst.PENDING_QUEUE_THRESHOLD_FOR_BENCHMARK}, fetching benchmark tasks")
         benchmark_tasks = await task_sql.get_tasks_with_status(
             TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="exclude", benchmark_filter="only"
         )
-        logger.info(f"Found {len(benchmark_tasks)} benchmark tournament tasks looking for nodes")
-
-        await _process_tasks_for_training(benchmark_tasks, config, priority=2)
+        logger.info(f"Found {len(benchmark_tasks)} benchmark tasks looking for nodes")
+        await _process_tasks_for_training(benchmark_tasks, config, priority=3)
 
 
 async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Config, priority: int):
@@ -233,33 +251,79 @@ async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Confi
     Args:
         tasks: List of tasks to process
         config: Configuration object
-        priority: Training priority
+        priority: Training priority (1=organic, 2=tournament, 3=benchmark)
     """
     if not tasks:
         return
 
-    task_hotkey_triples = []
+    assignments = []
     tasks_to_update = []
     tasks_without_nodes = []
 
     for task in tasks:
-        nodes = await task_sql.get_nodes_assigned_to_task(task.task_id, config.psql_db)
-        hotkeys = [node.hotkey for node in nodes]
+        # For tournament and benchmark tasks (priority 2 and 3), get actual assigned nodes
+        # For organic tasks (priority 1), we'll use EMISSION_BURN_HOTKEY
+        if priority in [2, 3]:
+            nodes = await task_sql.get_nodes_assigned_to_task(task.task_id, config.psql_db)
+            hotkeys = [node.hotkey for node in nodes]
 
-        if hotkeys:
-            for hotkey in hotkeys:
-                task_hotkey_triples.append((task.task_id, hotkey, task.created_at))
+            if hotkeys:
+                # Get tournament_id for this task
+                tournament_id = await tournament_sql.get_tournament_id_by_task_id(task.task_id, config.psql_db)
+
+                for hotkey in hotkeys:
+                    if tournament_id:
+                        training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
+                            hotkey, tournament_id, config.psql_db
+                        )
+
+                    assignments.append(
+                        TaskTrainingAssignment(
+                            task_id=task.task_id,
+                            hotkey=hotkey,
+                            created_at=task.created_at,
+                            priority=priority,
+                            training_repo=training_repo,
+                            training_commit_hash=training_commit_hash,
+                        )
+                    )
+                tasks_to_update.append(task)
+            else:
+                tasks_without_nodes.append(task)
+        elif priority == 1:
+            # Priority 1: Organic (non-tournament, non-benchmark) tasks
+            # Use EMISSION_BURN_HOTKEY and get last tournament winner's repo
+            if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK]:
+                tournament_type = TournamentType.TEXT
+            elif task.task_type == TaskType.IMAGETASK:
+                tournament_type = TournamentType.IMAGE
+
+            # Get the last completed tournament winner's repo
+            last_tournament = await tournament_sql.get_latest_completed_tournament(config.psql_db, tournament_type)
+            if last_tournament and last_tournament.winner_hotkey:
+                training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
+                    last_tournament.winner_hotkey, last_tournament.tournament_id, config.psql_db
+                )
+
+            assignments.append(
+                TaskTrainingAssignment(
+                    task_id=task.task_id,
+                    hotkey=EMISSION_BURN_HOTKEY,
+                    created_at=task.created_at,
+                    priority=priority,
+                    training_repo=training_repo,
+                    training_commit_hash=training_commit_hash,
+                )
+            )
             tasks_to_update.append(task)
-        else:
-            tasks_without_nodes.append(task)
 
     if tasks_without_nodes:
         logger.warning(
             f"Found {len(tasks_without_nodes)} tasks with priority {priority} without assigned nodes: {[str(t.task_id) for t in tasks_without_nodes]}"
         )
 
-    if task_hotkey_triples:
-        await tournament_sql.add_tournament_task_hotkey_pairs_for_training(task_hotkey_triples, config.psql_db, priority=priority)
+    if assignments:
+        await tournament_sql.add_tournament_task_hotkey_pairs_for_training(assignments, config.psql_db)
 
     for task in tasks_to_update:
         task.status = TaskStatus.TRAINING
@@ -318,9 +382,9 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 pending_training_tasks.pop()
                 continue
 
-            training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
-                oldest_task_training.hotkey, tournament_id, config.psql_db
-            )
+            # Get training repo and commit hash directly from the TournamentTaskTraining object
+            training_repo = oldest_task_training.training_repo
+            training_commit_hash = oldest_task_training.training_commit_hash
 
             if training_repo is None:
                 logger.error(
@@ -465,7 +529,9 @@ async def _create_training_request(
     """
     expected_repo_name = await task_sql.get_expected_repo_name(task.task_id, hotkey, config.psql_db)
     tournament_id = await tournament_sql.get_tournament_id_by_task_id(task.task_id, config.psql_db)
-    training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(hotkey, tournament_id, config.psql_db)
+    training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
+        hotkey, tournament_id, config.psql_db
+    )
 
     logger.info(f"Creating training request for hotkey {hotkey}, task {task.task_id}")
     logger.info(f"Expected repo name: {expected_repo_name}")
