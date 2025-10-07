@@ -23,7 +23,7 @@ async def run_validator_cycles() -> None:
     await asyncio.gather(
         process_pending_tasks(config),
         refresh_nodes_periodically(config),
-        schedule_synthetics_periodically(config),
+        # schedule_synthetics_periodically(config),
         process_completed_tasks(config),
         #    sign_up_cron_job(config.keypair),
     )
