@@ -226,7 +226,7 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
         await _process_tasks_for_training(benchmark_tasks, config, priority=2)
 
 
-async def _process_tasks_for_training(tasks: list, config: Config, priority: int):
+async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Config, priority: int):
     """
     Process a list of tasks for training with the specified priority.
 

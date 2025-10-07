@@ -462,6 +462,20 @@ async def check_boss_round_synthetic_tasks_complete(tournament_id: str, psql_db)
 
 
 def calculate_burn_proportion(performance_diff: float) -> float:
+    """
+    Calculate the proportion of tournament allocation to burn based on underperformance.
+
+    Args:
+        performance_diff: How much worse tournament winners performed vs best legacy miners.
+                         Positive = worse, Negative/Zero = equal or better.
+
+    Returns:
+        Burn proportion (0.0 to 0.8). This proportion of BASE_TOURNAMENT_WEIGHT will be
+        redistributed: 25% to legacy miners, 75% to burn address.
+
+    Example:
+        performance_diff = 0.1 (10% worse) → returns 0.5 (50% of tournament allocation burns)
+    """
     if performance_diff <= 0:
         return 0.0
 
@@ -480,6 +494,7 @@ def calculate_weight_redistribution(performance_diff: float) -> tuple[float, flo
     return tournament_weight, regular_weight, burn_weight
 
 
+# NOTE: This function is deprecated and will be removed in the future
 async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
     """
     Calculate detailed tournament burn data including individual performance differences.
@@ -1004,6 +1019,7 @@ async def get_node_weights_from_period_scores_with_tournament_data(
     return all_node_ids, all_node_weights
 
 
+# NOTE: This function is deprecated and should not be used in new code.
 async def get_node_weights_from_period_scores(
     substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore], psql_db
 ) -> tuple[list[int], list[float]]:
@@ -1190,6 +1206,8 @@ async def set_weights(config: Config, all_node_ids: list[int], all_node_weights:
 
 
 async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
+    node_results: list[PeriodScore]
+    task_results: list[TaskResults]
     node_results, task_results = await _get_weights_to_set(config)
     if node_results is None:
         logger.info("No weights to set. Skipping weight setting.")
@@ -1222,7 +1240,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
 
     tournament_audit_data.participants = await get_active_tournament_participants(config.psql_db)
 
-    burn_data = await get_tournament_burn_details(config.psql_db)
+    burn_data: TournamentBurnData = await get_tournament_burn_details(config.psql_db)
     tournament_audit_data.tournament_weight_multiplier = burn_data.tournament_weight
     tournament_audit_data.regular_weight_multiplier = burn_data.regular_weight
     tournament_audit_data.burn_weight = burn_data.burn_weight
