@@ -954,9 +954,13 @@ async def process_miners_pool(
 
 
 def has_disk_cache_error(task_results: list[MinerResultsText | MinerResultsImage]) -> bool:
-    for result in task_results:
-        if "Cannot find the requested files in the disk cache" in str(result.score_reason):
-            return True
+    try:
+        for result in task_results:
+            if "Cannot find the requested files in the disk cache" in str(result.score_reason):
+                return True
+    except Exception as e:
+        logger.error(f"Error checking for disk cache error: {e}")
+        return False
     return False
 
 
