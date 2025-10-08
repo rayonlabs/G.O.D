@@ -839,13 +839,8 @@ async def process_miners_pool(
                             try:
                                 loop = asyncio.get_event_loop()
                                 hash_result = await asyncio.wait_for(
-                                    loop.run_in_executor(
-                                        None,
-                                        verify_model_hash,
-                                        submission.repo,
-                                        submission.model_hash
-                                    ),
-                                    timeout=6000
+                                    loop.run_in_executor(None, verify_model_hash, submission.repo, submission.model_hash),
+                                    timeout=6000,
                                 )
                                 if hash_result:
                                     logger.info(f"Hash verification passed for miner {miner.hotkey}")
@@ -958,6 +953,13 @@ async def process_miners_pool(
     return results
 
 
+def has_disk_cache_error(task_results: list[MinerResultsText | MinerResultsImage]) -> bool:
+    for result in task_results:
+        if "Cannot find the requested files in the disk cache" in str(result.score_reason):
+            return True
+    return False
+
+
 async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: Config) -> AnyTypeRawTask:
     assert task.task_id is not None, "Task ID must be present"
     assert task.test_data is not None, "Test data must be present"
@@ -967,6 +969,18 @@ async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: C
 
     logger.info(f"Beginning evaluation for task {task.task_id} with {len(miner_pool)} miners")
     task_results = await process_miners_pool(miner_pool, task, config, gpu_ids, dataset_type)
+
+    if has_disk_cache_error(task_results):
+        if task.n_eval_attempts < cts.MAX_EVAL_ATTEMPTS - 1:
+            task.status = TaskStatus.PREEVALUATION
+            add_context_tag("status", task.status.value)
+            logger.info(f"Task {task.task_id} marked as pre-evaluation due to disk cache error")
+            return task
+        else:
+            logger.info(
+                f"Task {task.task_id} has a disk cache error but has reached the maximum number of retries. "
+                "Will let it continue with what we have."
+            )
 
     logger.info("Checking for duplicates ...")
     keep_submission = await handle_duplicate_submissions(task_results)
