@@ -222,9 +222,9 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
     logger.info(f"Current pending training assignments: {pending_count}")
 
     organic_tasks = await task_sql.get_tasks_with_status(
-        TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude"
+        TaskStatus.READY, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude"
     )
-    logger.info(f"Found {len(organic_tasks)} organic (non-tournament, non-benchmark) tasks looking for nodes")
+    logger.info(f"Found {len(organic_tasks)} organic (non-tournament, non-benchmark) tasks ready for training")
     await _process_tasks_for_training(organic_tasks, config, priority=1)
 
     if pending_count < cst.PENDING_QUEUE_THRESHOLD_FOR_TOURNAMENT:
