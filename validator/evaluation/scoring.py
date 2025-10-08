@@ -979,6 +979,7 @@ async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: C
             task.status = TaskStatus.PREEVALUATION
             add_context_tag("status", task.status.value)
             logger.info(f"Task {task.task_id} marked as pre-evaluation due to disk cache error")
+            task.n_eval_attempts = (task.n_eval_attempts or 0) + 1
             return task
         else:
             logger.info(
