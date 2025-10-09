@@ -268,6 +268,19 @@ async def get_tournament_rounds_with_status(status: str, psql_db: PSQLDB) -> lis
         ]
 
 
+async def get_final_round_id(tournament_id: str, psql_db: PSQLDB) -> str | None:
+    """Get the final round ID for a tournament."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.ROUND_ID}
+            FROM {cst.TOURNAMENT_ROUNDS_TABLE}
+            WHERE {cst.TOURNAMENT_ID} = $1 AND {cst.IS_FINAL_ROUND} = true
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, tournament_id)
+        return result[cst.ROUND_ID] if result else None
+
+
 async def get_tournament_tasks(round_id: str, psql_db: PSQLDB) -> list[TournamentTask]:
     async with await psql_db.connection() as connection:
         query = f"""

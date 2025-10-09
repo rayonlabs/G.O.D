@@ -2,7 +2,7 @@ from core.models.tournament_models import TaskPerformanceDifference, TournamentP
 from core.models.utility_models import TaskType
 from validator.core import constants as cts
 from validator.db.sql.tournament_performance import get_boss_round_winner_task_pairs, get_task_scores_as_models, get_task_scores_batch
-from validator.db.sql.tournaments import count_champion_consecutive_wins_at_tournament, get_tournament, get_tournament_tasks
+from validator.db.sql.tournaments import count_champion_consecutive_wins_at_tournament, get_tournament, get_tournament_tasks, get_final_round_id
 from validator.db.sql.tasks import get_task
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament.utils import get_progressive_threshold, get_task_results_for_ranking
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 
 async def calculate_boss_round_performance_differences(
-    tournament_id: str, round_id: str, psql_db
+    tournament_id: str, psql_db
 ) -> list[TaskPerformanceDifference]:
     """Calculate performance differences for all tasks in a boss round."""
     
@@ -31,6 +31,8 @@ async def calculate_boss_round_performance_differences(
     logger.info(f"Calculating boss round performance for tournament {tournament_id}, champion {current_champion} "
                 f"with {consecutive_wins} consecutive wins, threshold: {threshold*100:.1f}%")
     
+    round_id = await get_final_round_id(tournament_id, psql_db)
+
     round_tasks = await get_tournament_tasks(round_id, psql_db)
     performance_differences = []
     
@@ -225,7 +227,7 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
     """Calculate average performance difference between tournament winners and synthetic tasks."""
     logger.info(f"=== CALCULATING PERFORMANCE DIFFERENCE FOR TOURNAMENT {tournament_id} ===")
     
-    performance_data = await get_tournament_performance_data(tournament_id, psql_db)
+    performance_data = await calculate_boss_round_performance_differences(tournament_id, psql_db)
     
     if not performance_data:
         logger.info("No task pairs found, returning 0.0 performance difference")

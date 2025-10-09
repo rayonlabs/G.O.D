@@ -466,7 +466,7 @@ def calculate_burn_proportion(performance_diff: float) -> float:
     Calculate the proportion of tournament allocation to burn based on underperformance.
 
     Args:
-        performance_diff: How much worse tournament winners performed vs best legacy miners.
+        performance_diff: How much worse tournament winners performed vs last winner.
                          Positive = worse, Negative/Zero = equal or better.
 
     Returns:
@@ -481,6 +481,16 @@ def calculate_burn_proportion(performance_diff: float) -> float:
 
     burn_reduction = min(cts.MAX_BURN_REDUCTION, performance_diff * cts.BURN_REDUCTION_RATE)
     return burn_reduction
+
+
+def calculate_emission_multiplier(performance_diff: float) -> float:
+    if performance_diff <= cts.EMISSION_MULTIPLIER_THRESHOLD:
+        return 0.0
+    
+    excess_performance = performance_diff - cts.EMISSION_MULTIPLIER_THRESHOLD
+    emission_increase = excess_performance * 2.0
+    
+    return emission_increase
 
 
 def calculate_weight_redistribution(performance_diff: float) -> tuple[float, float, float]:
@@ -629,24 +639,8 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
         latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
         if latest_tournament:
             logger.info(f"Found latest {tournament_type} tournament: {latest_tournament.tournament_id}")
-            synth_tasks_complete = await check_boss_round_synthetic_tasks_complete(latest_tournament.tournament_id, psql_db)
-            logger.info(f"Boss round synthetic tasks complete for {tournament_type}: {synth_tasks_complete}")
-
-            if synth_tasks_complete:
-                performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
-                logger.info(f"Using latest {tournament_type} tournament {latest_tournament.tournament_id} performance: {performance_diff}")
-            else:
-                previous_tournament_id = await get_previous_completed_tournament(
-                    psql_db, tournament_type, latest_tournament.tournament_id
-                )
-                if previous_tournament_id:
-                    if await check_boss_round_synthetic_tasks_complete(previous_tournament_id, psql_db):
-                        performance_diff = await calculate_performance_difference(previous_tournament_id, psql_db)
-                        logger.info(f"Using previous {tournament_type} tournament {previous_tournament_id} performance: {performance_diff}")
-                    else:
-                        logger.info(f"Previous {tournament_type} tournament {previous_tournament_id} synthetic tasks not complete")
-                else:
-                    logger.info(f"No previous {tournament_type} tournament found")
+            performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
+            logger.info(f"Using latest {tournament_type} tournament {latest_tournament.tournament_id} performance: {performance_diff}")
 
         # Handle cases where no performance data is available
         if performance_diff is None and latest_tournament:
@@ -663,43 +657,27 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
         elif tournament_type == TournamentType.IMAGE:
             image_performance_diff = performance_diff
 
-    # Calculate separate burn proportions for each type
-    text_burn_proportion = calculate_burn_proportion(text_performance_diff) if text_performance_diff is not None else 1.0
-    image_burn_proportion = calculate_burn_proportion(image_performance_diff) if image_performance_diff is not None else 1.0
+    # Calculate emission increases based on performance differences above 5%
+    text_emission_increase = calculate_emission_multiplier(text_performance_diff) if text_performance_diff is not None else 0.0
+    image_emission_increase = calculate_emission_multiplier(image_performance_diff) if image_performance_diff is not None else 0.0
 
-    logger.info(f"Text burn proportion: {text_burn_proportion}, Image burn proportion: {image_burn_proportion}")
+    logger.info(f"Text emission increase: {text_emission_increase}, Image emission increase: {image_emission_increase}")
 
-    # Calculate separate weight redistributions
-    text_tournament_burn = max(0, cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT * text_burn_proportion)
-    image_tournament_burn = max(0, cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT * image_burn_proportion)
+    text_base_weight = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT  
+    image_base_weight = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT 
+    
+    text_tournament_weight = text_base_weight + text_emission_increase
+    image_tournament_weight = image_base_weight + image_emission_increase
+    
+    burn_weight = 1.0 - text_tournament_weight - image_tournament_weight
+    
+    total_base_weight = text_base_weight + image_base_weight
+    total_emission_increase = text_emission_increase + image_emission_increase
 
-    text_tournament_weight = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT - text_tournament_burn
-    image_tournament_weight = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT - image_tournament_burn
-
-    # Regular weight gets the burned tournament allocation based on participation proportions
-    total_tournament_burn = text_tournament_burn + image_tournament_burn
-    total_burn_gain = total_tournament_burn * cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT
-    boosted_regular_weight = cts.BASE_REGULAR_WEIGHT + total_burn_gain
-
-    # Split the boosted regular weight proportionally based on tournament burn amounts
-    # Handle each tournament type separately to ensure base allocation when no burn
-    if text_tournament_burn > 0:
-        text_regular_weight = boosted_regular_weight * (text_tournament_burn / total_tournament_burn)
-    else:
-        # No text burn, give base proportion
-        text_regular_weight = cts.BASE_REGULAR_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
-
-    if image_tournament_burn > 0:
-        image_regular_weight = boosted_regular_weight * (image_tournament_burn / total_tournament_burn)
-    else:
-        # No image burn, give base proportion
-        image_regular_weight = cts.BASE_REGULAR_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
-
-    # Total burn weight (what goes to burn address)
-    burn_weight = (1 - cts.BASE_REGULAR_WEIGHT - cts.BASE_TOURNAMENT_WEIGHT) + (total_tournament_burn * (1 - cts.LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT))
+    text_burn_proportion = -text_emission_increase / total_base_weight if total_base_weight > 0 else 0.0
+    image_burn_proportion = -image_emission_increase / total_base_weight if total_base_weight > 0 else 0.0
 
     logger.info(f"Separated weights - Text tournament: {text_tournament_weight}, Image tournament: {image_tournament_weight}")
-    logger.info(f"Separated regular - Text: {text_regular_weight}, Image: {image_regular_weight}")
     logger.info(f"Total burn weight: {burn_weight}")
 
     return TournamentBurnDataSeparated(
