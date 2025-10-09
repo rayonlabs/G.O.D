@@ -23,13 +23,10 @@ from pathlib import Path
 
 from core.models.tournament_models import RoundStatus
 from core.models.tournament_models import TournamentStatus
-from core.models.utility_models import TaskStatus
 from validator.db.database import PSQLDB
-from validator.db.sql.tasks import update_task_status
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_rounds
 from validator.db.sql.tournaments import get_tournament_tasks
-from validator.db.sql.tournaments import is_synced_task
 from validator.db.sql.tournaments import update_round_status
 from validator.db.sql.tournaments import update_tournament_status
 from validator.utils.logging import get_logger
@@ -48,7 +45,7 @@ def load_database_url_from_env_file() -> str:
         for line in f:
             line = line.strip()
             if line.startswith("DATABASE_URL="):
-                database_url = line.split("=", 1)[1].strip('"\'')
+                database_url = line.split("=", 1)[1].strip("\"'")
                 break
 
     if not database_url:
@@ -105,28 +102,16 @@ async def reverse_tournament_round(tournament_id: str, round_id_to_delete: str, 
                 round_tasks = await get_tournament_tasks(round_id_to_delete, psql_db)
                 logger.info(f"Found {len(round_tasks)} tasks to delete")
 
-                # Delete task training records
+                # Delete the actual tasks from the tasks table
+                # This will automatically cascade to delete from tournament_task_hotkey_trainings
+                # and tournament_tasks due to ON DELETE CASCADE constraints
                 for task in round_tasks:
                     query = """
-                        DELETE FROM tournament_task_hotkey_trainings
+                        DELETE FROM tasks
                         WHERE task_id = $1
                     """
                     await connection.execute(query, task.task_id)
-
-                # Delete tournament tasks
-                query = """
-                    DELETE FROM tournament_tasks
-                    WHERE round_id = $1
-                """
-                await connection.execute(query, round_id_to_delete)
-
-                # Set task statuses to FAILURE for the deleted round's tasks (but not synced tasks)
-                for task in round_tasks:
-                    if not await is_synced_task(task.task_id, psql_db):
-                        await update_task_status(task.task_id, TaskStatus.FAILURE, psql_db)
-                        logger.info(f"Set task {task.task_id} to FAILURE status")
-                    else:
-                        logger.info(f"Skipped setting synced task {task.task_id} to FAILURE")
+                    logger.info(f"Deleted task {task.task_id} from tasks table (cascaded to related tables)")
 
                 # 2. Delete pairs if it's a knockout round
                 query = """
@@ -194,7 +179,10 @@ async def main():
     """Main function to handle command line arguments and execute reversal."""
     if len(sys.argv) != 3:
         print("Usage: python reverse_tournament_round.py <tournament_id> <round_id_to_delete>")
-        print("Example: python reverse_tournament_round.py tourn_f4eb788ad3d66f60_20250723 tourn_f4eb788ad3d66f60_20250723_round_002")
+        print(
+            "Example: python reverse_tournament_round.py tourn_f4eb788ad3d66f60_20250723 "
+            "tourn_f4eb788ad3d66f60_20250723_round_002"
+        )
         sys.exit(1)
 
     tournament_id = sys.argv[1]
@@ -220,7 +208,7 @@ async def main():
             print("🔄 The tournament cycle will now re-run the advancement logic")
             sys.exit(0)
         else:
-            print(f"❌ Failed to reverse tournament round")
+            print("❌ Failed to reverse tournament round")
             sys.exit(1)
     except FileNotFoundError:
         print("❌ .vali.env file not found")
