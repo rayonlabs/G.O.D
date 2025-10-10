@@ -225,11 +225,11 @@ def get_tournament_weights_from_data(
 
 
 def get_tournament_weights_from_data_separated(
-    text_tournament_data: Optional[TournamentResultsWithWinners],
-    image_tournament_data: Optional[TournamentResultsWithWinners],
+    text_tournament_data: TournamentResultsWithWinners | None,
+    image_tournament_data: TournamentResultsWithWinners | None,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Get tournament weights keeping text and image tournaments separate."""
-
+    
     # Calculate text tournament weights
     text_result = calculate_tournament_type_scores_from_data(TournamentType.TEXT, text_tournament_data)
     text_weights = {}
