@@ -865,9 +865,6 @@ async def get_node_weights_from_period_scores_with_tournament_data(
 ) -> tuple[list[int], list[float]]:
     """
     Get the node ids and weights from the node results with tournament data provided as arguments.
-    
-    DEPRECATED: This function is kept for backward compatibility only.
-    Use get_node_weights_from_period_scores_separated instead.
     """
     all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(substrate, netuid)
 
@@ -893,8 +890,6 @@ async def get_node_weights_from_period_scores_with_tournament_data(
     logger.info(
         f"Weight distribution: tournament={tournament_weight_multiplier:.6f}, burn={burn_weight:.6f}, participation={participation_total:.6f}"
     )
-
-    # Note: Regular weight allocation has been removed - only tournament winners get rewards
 
     logger.info("=== TOURNAMENT WEIGHT CALCULATIONS ===")
     logger.info(f"Tournament weights provided: {tournament_weights}")
