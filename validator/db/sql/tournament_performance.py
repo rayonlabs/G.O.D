@@ -46,6 +46,21 @@ async def get_boss_round_winner_task_pairs(tournament_id: str, psql_db: PSQLDB) 
         ]
 
 
+async def update_tournament_winning_performance(
+    tournament_id: str, 
+    winning_performance_difference: float, 
+    psql_db: PSQLDB
+):
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENTS_TABLE}
+            SET {cst.WINNING_PERFORMANCE_DIFFERENCE} = $2
+            WHERE {cst.TOURNAMENT_ID} = $1
+        """
+        await connection.execute(query, tournament_id, winning_performance_difference)
+        logger.info(f"Updated winning_performance_difference for tournament {tournament_id} to {winning_performance_difference:.4f}")
+
+
 async def get_task_scores_as_models(task_id: str, psql_db: PSQLDB) -> list[TaskScore]:
     raw_scores = await get_all_scores_and_losses_for_task(task_id, psql_db)
     return [

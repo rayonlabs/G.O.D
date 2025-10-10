@@ -96,6 +96,7 @@ class TournamentData(BaseModel):
     status: TournamentStatus = TournamentStatus.PENDING
     base_winner_hotkey: str | None = None
     winner_hotkey: str | None = None
+    winning_performance_difference: float | None = None
 
 
 class TournamentRoundData(BaseModel):
@@ -275,7 +276,6 @@ class TournamentBurnData(BaseModel):
     weighted_average_diff: float
     burn_proportion: float
     tournament_weight: float
-    regular_weight: float
     burn_weight: float
 
 
@@ -299,7 +299,6 @@ class TournamentAuditData(BaseModel):
     image_tournament_data: TournamentResultsWithWinners | None = None
     participants: list[str] = []
     tournament_weight_multiplier: float = 0.0
-    regular_weight_multiplier: float = 0.0
     burn_weight: float = 0.0
 
 
@@ -463,8 +462,6 @@ class TournamentBurnDataSeparated(BaseModel):
     image_burn_proportion: float
     text_tournament_weight: float
     image_tournament_weight: float
-    text_regular_weight: float
-    image_regular_weight: float
     burn_weight: float
 
 

@@ -1,7 +1,7 @@
 from core.models.tournament_models import TaskPerformanceDifference, TournamentPerformanceData, TournamentBurnData
 from core.models.utility_models import TaskType
 from validator.core import constants as cts
-from validator.db.sql.tournament_performance import get_boss_round_winner_task_pairs, get_task_scores_as_models, get_task_scores_batch
+from validator.db.sql.tournament_performance import get_boss_round_winner_task_pairs, get_task_scores_as_models, get_task_scores_batch, update_tournament_winning_performance
 from validator.db.sql.tournaments import count_champion_consecutive_wins_at_tournament, get_tournament, get_tournament_tasks, get_final_round_id
 from validator.db.sql.tasks import get_task
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
@@ -224,17 +224,22 @@ async def get_tournament_performance_data(tournament_id: str, psql_db) -> list[T
 
 
 async def calculate_performance_difference(tournament_id: str, psql_db) -> float:
-    """Calculate average performance difference between tournament winners and synthetic tasks."""
+    """
+    Calculates average performance difference between tournament winner and runner up.
+    """
     logger.info(f"=== CALCULATING PERFORMANCE DIFFERENCE FOR TOURNAMENT {tournament_id} ===")
     
     performance_data = await calculate_boss_round_performance_differences(tournament_id, psql_db)
     
     if not performance_data:
         logger.info("No task pairs found, returning 0.0 performance difference")
-        return 0.0
+        average_performance_diff = 0.0
+    else:
+        performance_differences = [data.performance_difference for data in performance_data]
+        average_performance_diff = sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
+        logger.info(f"Average performance difference: {average_performance_diff} from {len(performance_differences)} task pairs")
     
-    performance_differences = [data.performance_difference for data in performance_data]
+    await update_tournament_winning_performance(tournament_id, average_performance_diff, psql_db)
+    logger.info(f"Stored performance difference {average_performance_diff:.4f} in database for tournament {tournament_id}")
     
-    average_performance_diff = sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
-    logger.info(f"Average performance difference: {average_performance_diff} from {len(performance_differences)} task pairs")
     return average_performance_diff
