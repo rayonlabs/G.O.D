@@ -634,8 +634,6 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
     text_performance_diff = None
     image_performance_diff = None
 
-    # Get performance differences for each tournament type
-    # Use stored value from when winner was crowned (locked in until new winner)
     for tournament_type in [TournamentType.TEXT, TournamentType.IMAGE]:
         logger.info(f"Processing {tournament_type} tournament type")
         performance_diff = None
@@ -679,13 +677,12 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
                 logger.info(f"No performance data available for {tournament_type} tournament, assuming perfect performance (0% difference)")
                 performance_diff = 0.0
 
-        # Store performance differences
         if tournament_type == TournamentType.TEXT:
             text_performance_diff = performance_diff
         elif tournament_type == TournamentType.IMAGE:
             image_performance_diff = performance_diff
 
-    # Calculate emission increases based on performance differences above 5%
+
     text_emission_increase = calculate_emission_multiplier(text_performance_diff) if text_performance_diff is not None else 0.0
     image_emission_increase = calculate_emission_multiplier(image_performance_diff) if image_performance_diff is not None else 0.0
 
