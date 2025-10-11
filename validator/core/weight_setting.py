@@ -551,15 +551,17 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
                 winner_changed = True
                 logger.info(f"[{tournament_type}] First tournament winner: {latest_tournament.winner_hotkey}")
             
-            if winner_changed or latest_tournament.winning_performance_difference is None or previous_tournament.winning_performance_difference is None:
+            if winner_changed:
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
                 logger.info(f"NEW winner - calculated fresh performance difference for {tournament_type}: {performance_diff:.4f}")
             elif latest_tournament.winning_performance_difference is not None:
                 performance_diff = latest_tournament.winning_performance_difference
                 logger.info(f"SAME winner - using stored performance difference for {tournament_type}: {performance_diff:.4f}")
+            elif previous_tournament.winning_performance_difference is not None and latest_tournament.winning_performance_difference is None:
+                performance_diff = previous_tournament.winning_performance_difference
+                logger.info(f"SAME winner - using stored performance difference for {tournament_type}: {performance_diff:.4f}")
             else:
-                performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
-                logger.info(f"No stored performance difference, calculated {tournament_type} performance: {performance_diff:.4f}")
+                performance_diff = 0.0
 
         if tournament_type == TournamentType.TEXT:
             text_performance_diff = performance_diff
@@ -659,15 +661,17 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
                 winner_changed = True
                 logger.info(f"[{tournament_type}] First tournament winner: {latest_tournament.winner_hotkey}")
             
-            if winner_changed or latest_tournament.winning_performance_difference is None or previous_tournament.winning_performance_difference is None:
+            if winner_changed:
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
                 logger.info(f"NEW winner - calculated fresh performance difference for {tournament_type}: {performance_diff:.4f}")
             elif latest_tournament.winning_performance_difference is not None:
                 performance_diff = latest_tournament.winning_performance_difference
                 logger.info(f"SAME winner - using stored performance difference for {tournament_type}: {performance_diff:.4f}")
+            elif previous_tournament.winning_performance_difference is not None and latest_tournament.winning_performance_difference is None:
+                performance_diff = previous_tournament.winning_performance_difference
+                logger.info(f"SAME winner - using stored performance difference for {tournament_type}: {performance_diff:.4f}")
             else:
-                performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
-                logger.info(f"No stored performance difference, calculated {tournament_type} performance: {performance_diff:.4f}")
+                performance_diff = 0.0
 
         if performance_diff is None and latest_tournament:
             if latest_tournament.winner_hotkey == cts.EMISSION_BURN_HOTKEY:
