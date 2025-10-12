@@ -123,7 +123,7 @@ async def scenario_1_perfect_performance():
     
     with patch('validator.core.weight_setting.get_latest_completed_tournament', 
                side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_previous_tournament_by_type',
+        with patch('validator.core.weight_setting.get_latest_completed_tournament',
                    side_effect=[prev_text, prev_image]):
             burn_data = await get_tournament_burn_details_separated(mock_db)
             print_burn_data(burn_data, "Perfect Performance")
@@ -160,7 +160,7 @@ async def scenario_2_good_performance():
     
     with patch('validator.core.weight_setting.get_latest_completed_tournament',
                side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_previous_tournament_by_type',
+        with patch('validator.core.weight_setting.get_latest_completed_tournament',
                    side_effect=[prev_text, prev_image]):
             burn_data = await get_tournament_burn_details_separated(mock_db)
             print_burn_data(burn_data, "Good Performance")
@@ -197,7 +197,7 @@ async def scenario_3_high_performance():
     
     with patch('validator.core.weight_setting.get_latest_completed_tournament',
                side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_previous_tournament_by_type',
+        with patch('validator.core.weight_setting.get_latest_completed_tournament',
                    side_effect=[prev_text, prev_image]):
             burn_data = await get_tournament_burn_details_separated(mock_db)
             print_burn_data(burn_data, "High Performance")
@@ -237,7 +237,7 @@ async def scenario_4_new_winner():
     
     with patch('validator.core.weight_setting.get_latest_completed_tournament',
                side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_previous_tournament_by_type',
+        with patch('validator.core.weight_setting.get_latest_completed_tournament',
                    side_effect=[prev_text, prev_image]):
             # Mock fresh calculation for new TEXT winner
             with patch('validator.core.weight_setting.calculate_performance_difference',
@@ -271,7 +271,7 @@ async def scenario_5_only_text_tournament():
     
     with patch('validator.core.weight_setting.get_latest_completed_tournament',
                side_effect=[text_tournament, None]):  # None for IMAGE
-        with patch('validator.core.weight_setting.get_previous_tournament_by_type',
+        with patch('validator.core.weight_setting.get_latest_completed_tournament',
                    return_value=prev_text):
             burn_data = await get_tournament_burn_details_separated(mock_db)
             print_burn_data(burn_data, "Only TEXT Tournament")
@@ -308,7 +308,7 @@ async def scenario_6_below_threshold():
     
     with patch('validator.core.weight_setting.get_latest_completed_tournament',
                side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_previous_tournament_by_type',
+        with patch('validator.core.weight_setting.get_latest_completed_tournament',
                    side_effect=[prev_text, prev_image]):
             burn_data = await get_tournament_burn_details_separated(mock_db)
             print_burn_data(burn_data, "Below Threshold")

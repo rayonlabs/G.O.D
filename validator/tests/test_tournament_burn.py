@@ -74,7 +74,7 @@ class TestTournamentBurnSeparated:
         mock_previous.winning_performance_difference = 0.08
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_latest, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 with patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.12) as mock_calc:
                     result = await get_tournament_burn_details_separated(mock_psql_db)
                     
@@ -104,7 +104,7 @@ class TestTournamentBurnSeparated:
         mock_previous_image.winning_performance_difference = 0.09
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_latest_text, mock_latest_image]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', side_effect=[mock_previous_text, mock_previous_image]):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_previous_text, mock_previous_image]):
                 with patch('validator.core.weight_setting.calculate_performance_difference') as mock_calc:
                     result = await get_tournament_burn_details_separated(mock_psql_db)
                     
@@ -122,7 +122,7 @@ class TestTournamentBurnSeparated:
         mock_latest.winning_performance_difference = None
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_latest, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=None):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=None):
                 with patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.07) as mock_calc:
                     result = await get_tournament_burn_details_separated(mock_psql_db)
                     
@@ -143,7 +143,7 @@ class TestTournamentBurnSeparated:
         mock_previous_text.winning_performance_difference = 0.08
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous_text):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous_text):
                 result = await get_tournament_burn_details_separated(mock_psql_db)
                 
                 # TEXT tournament exists
@@ -176,7 +176,7 @@ class TestTournamentBurnSeparated:
         mock_previous_image.winning_performance_difference = 0.12
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[None, mock_image]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous_image):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous_image):
                 result = await get_tournament_burn_details_separated(mock_psql_db)
                 
                 # TEXT tournament doesn't exist
@@ -218,7 +218,7 @@ class TestTournamentBurnSeparated:
         mock_previous_image.winning_performance_difference = 0.10
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, mock_image]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', side_effect=[mock_previous_text, mock_previous_image]):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_previous_text, mock_previous_image]):
                 result = await get_tournament_burn_details_separated(mock_psql_db)
                 
                 assert result.text_performance_diff == 0.08
@@ -254,7 +254,7 @@ class TestTournamentBurnSeparated:
         mock_previous.winning_performance_difference = 0.25
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 result = await get_tournament_burn_details_separated(mock_psql_db)
                 
                 # Burn account won, uses stored performance
@@ -280,7 +280,7 @@ class TestTournamentBurnSeparated:
         mock_previous.winning_performance_difference = 0.0
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 result = await get_tournament_burn_details_separated(mock_psql_db)
                 
                 # Perfect performance -> no emission increase
@@ -304,7 +304,7 @@ class TestTournamentBurnSeparated:
         mock_previous.winning_performance_difference = 0.03
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 result = await get_tournament_burn_details_separated(mock_psql_db)
                 
                 # Performance below threshold -> no emission increase for TEXT
@@ -339,7 +339,7 @@ class TestTournamentBurnSeparated:
         mock_previous_image.winning_performance_difference = 0.12
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, mock_image]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', side_effect=[mock_previous_text, mock_previous_image]):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_previous_text, mock_previous_image]):
                 result = await get_tournament_burn_details_separated(mock_psql_db)
                 
                 total_weight = result.text_tournament_weight + result.image_tournament_weight + result.burn_weight
@@ -384,7 +384,7 @@ class TestTournamentBurnWeightedAverage:
         mock_previous.winning_performance_difference = 0.08
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 result = await get_tournament_burn_details(mock_psql_db)
                 
                 # TEXT tournament exists with 8% performance
@@ -415,7 +415,7 @@ class TestTournamentBurnWeightedAverage:
         mock_previous.winning_performance_difference = 0.10
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[None, mock_image]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 result = await get_tournament_burn_details(mock_psql_db)
                 
                 # IMAGE tournament exists with 10% performance
@@ -455,7 +455,7 @@ class TestTournamentBurnWeightedAverage:
         mock_previous_image.winning_performance_difference = 0.05
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, mock_image]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', side_effect=[mock_previous_text, mock_previous_image]):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_previous_text, mock_previous_image]):
                 result = await get_tournament_burn_details(mock_psql_db)
                 
                 assert result.text_performance_diff == 0.10
@@ -485,7 +485,7 @@ class TestTournamentBurnWeightedAverage:
         mock_previous.winning_performance_difference = 0.03
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 with patch('validator.core.weight_setting.calculate_performance_difference', return_value=0.12) as mock_calc:
                     result = await get_tournament_burn_details(mock_psql_db)
                     
@@ -506,7 +506,7 @@ class TestTournamentBurnWeightedAverage:
         mock_previous.winning_performance_difference = 0.05
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 with patch('validator.core.weight_setting.calculate_performance_difference') as mock_calc:
                     result = await get_tournament_burn_details(mock_psql_db)
                     
@@ -527,7 +527,7 @@ class TestTournamentBurnWeightedAverage:
         mock_previous.winning_performance_difference = 0.03
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 result = await get_tournament_burn_details(mock_psql_db)
                 
                 # Below threshold -> no emission increase
@@ -547,7 +547,7 @@ class TestTournamentBurnWeightedAverage:
         mock_previous.winning_performance_difference = 0.20
         
         with patch('validator.core.weight_setting.get_latest_completed_tournament', side_effect=[mock_text, None]):
-            with patch('validator.core.weight_setting.get_previous_tournament_by_type', return_value=mock_previous):
+            with patch('validator.core.weight_setting.get_latest_completed_tournament', return_value=mock_previous):
                 result = await get_tournament_burn_details(mock_psql_db)
                 
                 # 20% > 5% threshold -> 15% excess * 2.0 = 30% emission increase
