@@ -7,16 +7,14 @@ import uuid
 from fiber.chain.models import Node
 
 import validator.core.constants as cst
-import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
-from validator.core.constants import EMISSION_BURN_HOTKEY
-from core.constants import IS_PROD_ENV
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
+from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.core.models import AnyTypeRawTask
 from validator.core.models import RawTask
 from validator.core.task_config_models import get_task_config
@@ -114,30 +112,30 @@ async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> Mi
         )
 
 
-async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, nodes: list[Node], config: Config) -> AnyTypeRawTask:
+async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Config) -> AnyTypeRawTask:
     """
     Assign a single miner using EMISSION_BURN_HOTKEY for legacy training tasks.
     """
     logger.info(f"Assigning single miner using EMISSION_BURN_HOTKEY for task {task.task_id}")
-    
+
     emission_burn_node = Node(hotkey=EMISSION_BURN_HOTKEY)
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
     already_assigned_hotkeys = [miner.hotkey for miner in miners_already_assigned]
-    
+
     if EMISSION_BURN_HOTKEY in already_assigned_hotkeys:
         logger.info(f"EMISSION_BURN_HOTKEY already assigned to task {task.task_id}")
         task.assigned_miners = [EMISSION_BURN_HOTKEY]
         task.status = TaskStatus.READY
         add_context_tag("status", task.status.value)
         return task
-    
+
     await tasks_sql.assign_node_to_task(str(task.task_id), emission_burn_node, config.psql_db)
     logger.info(f"EMISSION_BURN_HOTKEY has been assigned to task {task.task_id}")
 
     task.assigned_miners = [EMISSION_BURN_HOTKEY]
     task.status = TaskStatus.READY
     add_context_tag("status", task.status.value)
-    
+
     logger.info(f"Task {task.task_id} is ready with EMISSION_BURN_HOTKEY assigned")
     return task
 
@@ -161,13 +159,7 @@ async def _let_miners_know_to_start_training(task: AnyTypeRawTask, nodes: list[N
 async def _find_and_select_miners_for_task(task: AnyTypeRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
-            if IS_PROD_ENV:
-                logger.info("Filtering for only nodes that have scored on prod")
-                nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
-            else:
-                logger.info("THIS IS TESTNET SO WE DONT FILTER NODES")
-                nodes = await nodes_sql.get_all_nodes(config.psql_db)
-            task = await _select_miner_pool_and_add_to_task(task, nodes, config)
+            task = await _select_miner_pool_and_add_to_task(task, config)
             logger.info(f"After assigning miners here is the current task info {task}")
             await tasks_sql.update_task(task, config.psql_db)
 
@@ -327,9 +319,9 @@ async def process_pending_tasks(config: Config) -> None:
     await _move_any_prep_data_to_pending(config)
     while True:
         try:
-            await _handle_delayed_tasks(config)
-            await _find_miners_for_task(config)
             await _processing_pending_tasks(config)
+            await _find_miners_for_task(config)
+            await _handle_delayed_tasks(config)
         except Exception as e:
             logger.info(f"There was a problem in processing: {e}")
             await asyncio.sleep(30)
