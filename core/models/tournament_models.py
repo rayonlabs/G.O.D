@@ -231,6 +231,7 @@ class TournamentTypeResult(BaseModel):
 
 class TaskPerformanceDifference(BaseModel):
     """Performance difference data for a single task"""
+
     task_id: str
     task_type: str
     boss_score: float | None
@@ -242,6 +243,7 @@ class TaskPerformanceDifference(BaseModel):
 
 class TournamentPerformanceData(BaseModel):
     """Performance data for tournament vs sync comparison"""
+
     tournament_task_id: str
     synthetic_task_id: str
     task_type: str
@@ -252,6 +254,7 @@ class TournamentPerformanceData(BaseModel):
 
 class TournamentBurnData(BaseModel):
     """Data explaining emission burn calculation"""
+
     text_performance_diff: float | None
     image_performance_diff: float | None
     weighted_average_diff: float
@@ -280,9 +283,12 @@ class TournamentAuditData(BaseModel):
     text_tournament_data: TournamentResultsWithWinners | None = None
     image_tournament_data: TournamentResultsWithWinners | None = None
     participants: list[str] = []
-    tournament_weight_multiplier: float = 0.0
-    regular_weight_multiplier: float = 0.0
-    burn_weight: float = 0.0
+    text_tournament_weight: float = 0.0
+    image_tournament_weight: float = 0.0
+    text_regular_weight: float = 0.0
+    image_regular_weight: float = 0.0
+    separated_burn_weight: float = 0.0
+    weekly_participation: list["HotkeyTaskParticipation"] = []
 
 
 class BossRoundTaskCompletion(BaseModel):
@@ -347,6 +353,7 @@ class ActiveTournamentsResponse(BaseModel):
 
 class LatestTournamentsDetailsResponse(BaseModel):
     """Response for latest tournaments with burn data"""
+
     text: TournamentDetailsResponse | None
     image: TournamentDetailsResponse | None
     burn_data: TournamentBurnData
@@ -354,6 +361,7 @@ class LatestTournamentsDetailsResponse(BaseModel):
 
 class TournamentHistoryEntry(BaseModel):
     """Individual tournament entry for history response"""
+
     tournament_id: str
     tournament_type: TournamentType
     status: TournamentStatus
@@ -364,11 +372,13 @@ class TournamentHistoryEntry(BaseModel):
 
 class TournamentHistoryResponse(BaseModel):
     """Response for tournament history endpoint"""
+
     tournaments: list[TournamentHistoryEntry]
 
 
 class BenchmarkTaskCopy(BaseModel):
     """Raw benchmark task copy data from database"""
+
     copy_task_id: str
     root_task_id: str
     participant_hotkey: str
@@ -385,6 +395,7 @@ class BenchmarkTaskCopy(BaseModel):
 
 class BenchmarkInstance(BaseModel):
     """A single benchmark instance (copy task) with its results"""
+
     copy_task_id: str
     participant_hotkey: str
     tournament_id: str
@@ -394,10 +405,11 @@ class BenchmarkInstance(BaseModel):
 
 class BenchmarkTimeline(BaseModel):
     """Timeline of benchmark results for a single root task"""
+
     root_task_id: str
     task_type: TaskType
     model_id: str
-    dataset: str  
+    dataset: str
     hours_to_complete: int
     model_params_count: int
     is_organic: bool
@@ -407,28 +419,32 @@ class BenchmarkTimeline(BaseModel):
 
 class BenchmarkTimelineResponse(BaseModel):
     """Response containing benchmark timelines for all tasks"""
+
     timelines: list[BenchmarkTimeline]
 
 
 class HotkeyTournamentParticipation(BaseModel):
     """Tournament participation data for a specific hotkey"""
+
     hotkey: str
-    participated_in_text: bool      # participated in the most recent text tournament
-    participated_in_image: bool     # participated in the most recent image tournament
-    text_proportion: float         # 0.0, 0.6, or 1.0 based on participation
-    image_proportion: float        # 0.0, 0.4, or 1.0 based on participation
+    participated_in_text: bool  # participated in the most recent text tournament
+    participated_in_image: bool  # participated in the most recent image tournament
+    text_proportion: float  # 0.0, 0.6, or 1.0 based on participation
+    image_proportion: float  # 0.0, 0.4, or 1.0 based on participation
 
 
 class HotkeyTaskParticipation(BaseModel):
     """Weekly task participation data for a specific hotkey"""
+
     hotkey: str
-    text_task_proportion: float    # proportion of text tasks (0.0 to 1.0)
-    image_task_proportion: float   # proportion of image tasks (0.0 to 1.0)
-    total_tasks: int               # total number of tasks in the period
+    text_task_proportion: float  # proportion of text tasks (0.0 to 1.0)
+    image_task_proportion: float  # proportion of image tasks (0.0 to 1.0)
+    total_tasks: int  # total number of tasks in the period
 
 
 class TournamentBurnDataSeparated(BaseModel):
     """Separated burn data by tournament type"""
+
     text_performance_diff: float | None
     image_performance_diff: float | None
     text_burn_proportion: float
@@ -442,6 +458,7 @@ class TournamentBurnDataSeparated(BaseModel):
 
 class NodeWeightsResult(BaseModel):
     """Result of node weight calculations"""
+
     node_ids: list[int]
     node_weights: list[float]
 
