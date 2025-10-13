@@ -10,6 +10,8 @@ from datetime import timezone
 
 from dotenv import load_dotenv
 
+from core.models.tournament_models import HotkeyTaskParticipation
+from core.models.tournament_models import HotkeyTournamentParticipation
 from core.models.tournament_models import NodeWeightsResult
 from core.models.tournament_models import TournamentAuditData
 from core.models.tournament_models import TournamentBurnData
@@ -26,6 +28,8 @@ from validator.db.sql.tournament_performance import get_boss_round_synthetic_tas
 from validator.db.sql.tournaments import get_active_tournament_participants
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_full_results
+from validator.db.sql.tournaments import get_tournament_participation_data
+from validator.db.sql.tournaments import get_weekly_task_participation_data
 from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
 from validator.evaluation.tournament_scoring import get_tournament_weights_from_data_separated
 from validator.tournament.performance_calculator import calculate_performance_difference
@@ -754,6 +758,72 @@ def apply_tournament_weights_separated(
             )
 
 
+async def get_node_weights_from_period_scores_with_separated_burn_data(
+    substrate: SubstrateInterface,
+    netuid: int,
+    node_results: list[PeriodScore],
+    tournament_audit_data: TournamentAuditData,
+) -> NodeWeightsResult:
+    all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(substrate, netuid)
+    hotkey_to_node_id: dict[str, int] = {node.hotkey: node.node_id for node in all_nodes}
+
+    all_node_ids: list[int] = [node.node_id for node in all_nodes]
+    all_node_weights: list[float] = [0.0 for _ in all_nodes]
+
+    logger.info("=== USING SEPARATED BURN DATA FROM AUDIT ===")
+
+    burn_data = TournamentBurnDataSeparated(
+        text_performance_diff=None,
+        image_performance_diff=None,
+        text_burn_proportion=0.0,
+        image_burn_proportion=0.0,
+        text_tournament_weight=tournament_audit_data.text_tournament_weight,
+        image_tournament_weight=tournament_audit_data.image_tournament_weight,
+        burn_weight=tournament_audit_data.separated_burn_weight,
+    )
+
+    logger.info(f"Text tournament weight: {burn_data.text_tournament_weight:.6f}")
+    logger.info(f"Image tournament weight: {burn_data.image_tournament_weight:.6f}")
+    logger.info(f"Total burn weight: {burn_data.burn_weight:.6f}")
+
+    participants: list[str] = tournament_audit_data.participants
+    participation_total: float = len(participants) * cts.TOURNAMENT_PARTICIPATION_WEIGHT
+    scale_factor: float = 1.0 - participation_total if participation_total > 0 else 1.0
+
+    scaled_text_tournament_weight: float = burn_data.text_tournament_weight * scale_factor
+    scaled_image_tournament_weight: float = burn_data.image_tournament_weight * scale_factor
+    scaled_burn_weight: float = burn_data.burn_weight * scale_factor
+
+    text_tournament_data = tournament_audit_data.text_tournament_data
+    image_tournament_data = tournament_audit_data.image_tournament_data
+
+    text_tournament_weights, image_tournament_weights = get_tournament_weights_from_data_separated(
+        text_tournament_data, image_tournament_data
+    )
+
+    apply_tournament_weights_separated(
+        text_tournament_weights,
+        image_tournament_weights,
+        hotkey_to_node_id,
+        all_node_weights,
+        scaled_text_tournament_weight,
+        scaled_image_tournament_weight,
+    )
+
+    for hotkey in participants:
+        node_id = hotkey_to_node_id.get(hotkey)
+        if node_id is not None:
+            all_node_weights[node_id] += cts.TOURNAMENT_PARTICIPATION_WEIGHT
+
+    burn_node_id: int | None = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)
+    if burn_node_id is not None:
+        all_node_weights[burn_node_id] = scaled_burn_weight
+
+    logger.info(f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}")
+
+    return NodeWeightsResult(node_ids=all_node_ids, node_weights=all_node_weights)
+
+
 async def get_node_weights_from_period_scores_separated(
     substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore], psql_db: PSQLDB
 ) -> NodeWeightsResult:
@@ -777,7 +847,7 @@ async def get_node_weights_from_period_scores_separated(
     # Get separated burn data
     burn_data: TournamentBurnDataSeparated = await get_tournament_burn_details_separated(psql_db)
 
-    logger.info(f"=== SEPARATED BURN DATA ===")
+    logger.info("=== SEPARATED BURN DATA ===")
     logger.info(f"Text performance diff: {burn_data.text_performance_diff:.2%}")
     logger.info(f"Image performance diff: {burn_data.image_performance_diff:.2%}")
     logger.info(f"Text tournament weight: {burn_data.text_tournament_weight:.6f}")
@@ -1145,9 +1215,12 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
 
     tournament_audit_data.participants = await get_active_tournament_participants(config.psql_db)
 
-    burn_data: TournamentBurnData = await get_tournament_burn_details(config.psql_db)
-    tournament_audit_data.tournament_weight_multiplier = burn_data.tournament_weight
-    tournament_audit_data.burn_weight = burn_data.burn_weight
+    burn_data_separated = await get_tournament_burn_details_separated(config.psql_db)
+    tournament_audit_data.text_tournament_weight = burn_data_separated.text_tournament_weight
+    tournament_audit_data.image_tournament_weight = burn_data_separated.image_tournament_weight
+    tournament_audit_data.separated_burn_weight = burn_data_separated.burn_weight
+
+    tournament_audit_data.weekly_participation = await get_weekly_task_participation_data(config.psql_db)
 
     result = await get_node_weights_from_period_scores_separated(config.substrate, config.netuid, node_results, config.psql_db)
     all_node_ids = result.node_ids

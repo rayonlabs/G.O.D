@@ -412,26 +412,17 @@ def determine_boss_round_winner(task_winners: list[str], boss_hotkey: str, tourn
     opponent_wins = win_counts.get(opponent_hotkey, 0) if opponent_hotkey else 0
 
     # Apply different winning requirements based on tournament type
-    if tournament_type == TournamentType.IMAGE:
-        # IMAGE tournaments: Challenger must win ALL tasks (3/3) to become new boss
-        if opponent_hotkey and opponent_wins == total_tasks:
-            logger.info(f"IMAGE tournament: Challenger wins boss round with perfect sweep: {opponent_wins}/{total_tasks} tasks won")
-            return opponent_hotkey
-        else:
-            if opponent_hotkey:
-                logger.info(f"IMAGE tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {total_tasks}/{total_tasks} to dethrone)")
-            else:
-                logger.info(f"IMAGE tournament: Boss retains title by default")
-            return boss_hotkey
+    # Both IMAGE and TEXT tournaments: Challenger must win ALL tasks to become new boss
+    if opponent_hotkey and opponent_wins == total_tasks:
+        logger.info(f"{tournament_type.value} tournament: Challenger wins boss round with perfect sweep: {opponent_wins}/{total_tasks} tasks won")
+        return opponent_hotkey
     else:
-        # TEXT tournaments: Use majority rule (original logic)
-        boss_round_winner = Counter(task_winners).most_common(1)[0][0]
+        boss_wins = win_counts.get(boss_hotkey, 0)
         if opponent_hotkey:
-            boss_wins = win_counts.get(boss_hotkey, 0)
-            logger.info(f"TEXT tournament: Boss round winner determined by majority - Boss: {boss_wins}/{total_tasks}, Challenger: {opponent_wins}/{total_tasks}, Winner: {boss_round_winner}")
+            logger.info(f"{tournament_type.value} tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {total_tasks}/{total_tasks} to dethrone), boss won {boss_wins}/{total_tasks}")
         else:
-            logger.info(f"TEXT tournament: Boss round winner: {boss_round_winner}")
-        return boss_round_winner
+            logger.info(f"{tournament_type.value} tournament: Boss retains title by default")
+        return boss_hotkey
 
 
 async def get_knockout_winners(

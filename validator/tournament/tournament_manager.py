@@ -875,6 +875,18 @@ async def process_active_tournaments(config: Config):
             await asyncio.sleep(t_cst.TOURNAMENT_ACTIVE_CYCLE_INTERVAL)
 
 
+async def _notify_discord(message: str, config: Config) -> None:
+    discord_url = config.discord_url
+    if discord_url:
+        try:
+            await send_to_discord(
+                webhook=discord_url,
+                message=message,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send Discord notification: {e}")
+
+
 async def _more_than_half_failures(
     tournament_task: TournamentTask, config: Config
 ) -> bool:
@@ -888,18 +900,8 @@ async def _more_than_half_failures(
     
     if is_more_than_half_failure:
         logger.info(f"More than half of the trainings for task {tournament_task.task_id} failed. Please investigate.")
-        
-        discord_url = config.discord_url
-        if discord_url:
-            try:
-                await send_to_discord(
-                    webhook=discord_url,
-                    message=f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id}"
-                    "has more than half tasks failed, please investigate.",
-                )
-            except Exception as e:
-                logger.error(f"Failed to send Discord notification: {e}")
-        
+        message = f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id} has more than half tasks failed, please investigate."
+        await _notify_discord(message, config)
         return True
     
     return False
@@ -935,8 +937,8 @@ async def is_tourn_task_completed(
         return True, "Task completed successfully"
 
     elif task_obj.status == TaskStatus.FAILURE.value:
-        if await _check_and_handle_majority_failure(tournament_task, config):
-            return False, "More than half of the trainings failed"
+        discord_message = f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id} has failed, please investigate."
+        await _notify_discord(discord_message, config)
 
         synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
         if synced_task_id:

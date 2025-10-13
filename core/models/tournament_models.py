@@ -298,8 +298,10 @@ class TournamentAuditData(BaseModel):
     text_tournament_data: TournamentResultsWithWinners | None = None
     image_tournament_data: TournamentResultsWithWinners | None = None
     participants: list[str] = []
-    tournament_weight_multiplier: float = 0.0
-    burn_weight: float = 0.0
+    text_tournament_weight: float = 0.0
+    image_tournament_weight: float = 0.0
+    separated_burn_weight: float = 0.0
+    weekly_participation: list["HotkeyTaskParticipation"] = []
 
 
 class BossRoundTaskCompletion(BaseModel):

@@ -11,10 +11,9 @@ from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.config import load_config
 from validator.core.models import TaskResults
-from validator.core.weight_setting import get_node_weights_from_period_scores_with_tournament_data
+from validator.core.weight_setting import get_node_weights_from_period_scores_with_separated_burn_data
 from validator.core.weight_setting import get_period_scores_from_task_results
 from validator.core.weight_setting import set_weights
-from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
 from validator.utils.logging import get_logger
 
 
@@ -62,25 +61,15 @@ async def get_similarity_score_for_rayon_weights(
 ) -> float:
     period_scores = get_period_scores_from_task_results(task_results)
 
-    if tournament_audit_data:
-        tournament_weights = get_tournament_weights_from_data(
-            tournament_audit_data.text_tournament_data,
-            tournament_audit_data.image_tournament_data,
-        )
-
-        node_ids, node_weights = await get_node_weights_from_period_scores_with_tournament_data(
-            config.substrate,
-            config.netuid,
-            period_scores,
-            tournament_weights,
-            tournament_audit_data.participants,
-            tournament_audit_data.tournament_weight_multiplier,
-            tournament_audit_data.regular_weight_multiplier,
-            tournament_audit_data.burn_weight,
-        )
-    else:
+    if not tournament_audit_data:
         logger.warning("No tournament data found in S3, cannot calculate weights without tournament information")
         raise ValueError("Tournament data is required for weight calculation")
+
+    result = await get_node_weights_from_period_scores_with_separated_burn_data(
+        config.substrate, config.netuid, period_scores, tournament_audit_data
+    )
+    node_ids = result.node_ids
+    node_weights = result.node_weights
 
     node_ids_formatted, node_weights_formatted = _normalize_and_quantize_weights(node_ids, node_weights)
 

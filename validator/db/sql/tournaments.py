@@ -1409,7 +1409,7 @@ async def get_tournament_participation_data(psql_db: PSQLDB) -> list[HotkeyTourn
         return result
 
 
-async def get_weekly_task_participation_data(psql_db: PSQLDB, days: int = 7) -> list[HotkeyTaskParticipation]:
+async def get_weekly_task_participation_data(psql_db: PSQLDB) -> list[HotkeyTaskParticipation]:
     """
     Get weekly task participation proportions by type.
     Returns list of HotkeyTaskParticipation objects.
@@ -1422,7 +1422,7 @@ async def get_weekly_task_participation_data(psql_db: PSQLDB, days: int = 7) -> 
                 COUNT(*) as task_count
             FROM {cst.TASK_NODES_TABLE} tn
             JOIN {cst.TASKS_TABLE} t ON tn.{cst.TASK_ID} = t.{cst.TASK_ID}
-            WHERE t.{cst.CREATED_AT} > NOW() - INTERVAL '{days} days'
+            WHERE t.{cst.CREATED_AT} > NOW() - INTERVAL '7 days'
             AND tn.{cst.TASK_NODE_QUALITY_SCORE} IS NOT NULL
             GROUP BY tn.{cst.HOTKEY}, t.{cst.TASK_TYPE}
         """
@@ -1463,5 +1463,5 @@ async def get_weekly_task_participation_data(psql_db: PSQLDB, days: int = 7) -> 
                     )
                 )
 
-        logger.info(f"Found weekly task participation for {len(result)} hotkeys over {days} days")
+        logger.info(f"Found weekly task participation for {len(result)} hotkeys over 7 days")
         return result

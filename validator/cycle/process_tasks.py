@@ -409,7 +409,7 @@ async def evaluate_tasks_loop(config: Config):
                 await asyncio.sleep(5)
                 continue
             except Exception as e:
-                logger.error(f"Error in evaluation worker: {str(e)}")
+                logger.error(f"Error in evaluation worker: {str(e)}", exc_info=True)
                 continue
 
     for _ in cst.GPU_IDS:
