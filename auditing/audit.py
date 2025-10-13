@@ -66,11 +66,7 @@ async def get_similarity_score_for_rayon_weights(
         raise ValueError("Tournament data is required for weight calculation")
 
     result = await get_node_weights_from_period_scores_with_separated_burn_data(
-        config.substrate,
-        config.netuid,
-        period_scores,
-        tournament_audit_data,
-        config.psql_db
+        config.substrate, config.netuid, period_scores, tournament_audit_data
     )
     node_ids = result.node_ids
     node_weights = result.node_weights
