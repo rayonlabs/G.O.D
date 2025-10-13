@@ -269,25 +269,6 @@ def filter_tasks_by_type(tasks: list[TaskResults], task_type: TaskType, is_organ
     return [task for task in tasks if task.task.task_type == task_type and task.task.is_organic == is_organic]
 
 
-async def _get_weights_to_set(config: Config) -> tuple[list[PeriodScore], list[TaskResults]]:
-    """
-    Retrieve task results from the database and score multiple periods independently.
-    This ensures a fairer ramp-up for new miners.
-
-    In the future, as miners become more stable, we aim to encourage long-term stability.
-    This means not giving new miners more weight than necessary, while still allowing them
-    the potential to reach the top position without being deregistered.
-
-    Period scores are calculated completely independently
-    """
-    date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
-    task_results: list[TaskResults] = await get_aggregate_scores_since(date, config.psql_db)
-
-    all_period_scores = get_period_scores_from_task_results(task_results)
-
-    return all_period_scores, task_results
-
-
 async def _get_leaderboard_data(config: Config) -> tuple[list[PeriodScore], list[TaskResults]]:
     """
     Retrieve task results from the database for leaderboard/analytics purposes.
@@ -821,7 +802,7 @@ async def get_node_weights_from_period_scores_with_separated_burn_data(
 
 
 async def get_node_weights_from_period_scores_separated(
-    substrate: SubstrateInterface, netuid: int, node_results: list[PeriodScore], psql_db: PSQLDB
+    substrate: SubstrateInterface, netuid: int, psql_db: PSQLDB
 ) -> NodeWeightsResult:
     """
     Get node weights with separated burn dynamics based on tournament participation.
@@ -1177,16 +1158,6 @@ async def set_weights(config: Config, all_node_ids: list[int], all_node_weights:
 
 
 async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
-    node_results: list[PeriodScore]
-    task_results: list[TaskResults]
-    node_results, task_results = await _get_weights_to_set(config)
-    if node_results is None:
-        logger.info("No weights to set. Skipping weight setting.")
-        return False
-    if len(node_results) == 0:
-        logger.info("No nodes to set weights for. Skipping weight setting.")
-        return False
-
     tournament_audit_data = TournamentAuditData()
 
     text_tournament = await get_latest_completed_tournament(config.psql_db, TournamentType.TEXT)
@@ -1218,7 +1189,7 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
 
     tournament_audit_data.weekly_participation = await get_weekly_task_participation_data(config.psql_db)
 
-    result = await get_node_weights_from_period_scores_separated(config.substrate, config.netuid, node_results, config.psql_db)
+    result = await get_node_weights_from_period_scores_separated(config.substrate, config.netuid, config.psql_db)
     all_node_ids = result.node_ids
     all_node_weights = result.node_weights
     logger.info("Weights calculated, about to set...")
