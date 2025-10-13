@@ -14,13 +14,13 @@ import validator.core.constants as cts
 from core.models.tournament_models import HotkeyTaskParticipation
 from core.models.tournament_models import HotkeyTournamentParticipation
 from core.models.tournament_models import NodeWeightsResult
+from core.models.tournament_models import TournamentAuditData
 from core.models.tournament_models import TournamentBurnDataSeparated
 from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentType
 from validator.core.models import PeriodScore
-from validator.core.weight_setting import apply_regular_weights_separated
 from validator.core.weight_setting import apply_tournament_weights_separated
-from validator.core.weight_setting import get_node_weights_from_period_scores_separated
+from validator.core.weight_setting import get_node_weights_from_period_scores_with_separated_burn_data
 from validator.core.weight_setting import get_tournament_burn_details_separated
 
 
@@ -132,29 +132,6 @@ class TestSeparatedBurnDynamics:
         assert sample_burn_data.image_burn_proportion == 0.1
         assert sample_burn_data.text_tournament_weight == 0.35
         assert sample_burn_data.image_tournament_weight == 0.36
-
-    def test_apply_regular_weights_separated(self, sample_period_scores, sample_weekly_participation, sample_burn_data):
-        """Test regular weight application with separated burn dynamics."""
-        # Setup
-        hotkey_to_node_id = {"hotkey1": 0, "hotkey2": 1, "hotkey3": 2}
-        all_node_weights = [0.0, 0.0, 0.0]
-        weekly_participation_map = {p.hotkey: p for p in sample_weekly_participation}
-        scale_factor = 0.95
-
-        # Apply weights
-        apply_regular_weights_separated(
-            sample_period_scores, hotkey_to_node_id, all_node_weights, sample_burn_data, weekly_participation_map, scale_factor
-        )
-
-        # Verify weights were applied
-        assert all_node_weights[0] > 0  # hotkey1
-        assert all_node_weights[1] > 0  # hotkey2
-        assert all_node_weights[2] > 0  # hotkey3
-
-        # Verify proportional application based on weekly participation
-        # hotkey1 has 80% text tasks, should get more text regular weight
-        # hotkey2 has 70% image tasks, should get more image regular weight
-        assert all_node_weights[0] != all_node_weights[1]  # Different participation = different weights
 
     def test_apply_tournament_weights_separated(self, sample_tournament_participation):
         """Test tournament weight application with separated burn dynamics."""
@@ -317,8 +294,15 @@ class TestSeparatedBurnDynamics:
             mock_weekly_part.return_value = []
             mock_participants.return_value = []
 
+            # Build tournament audit data
+            tournament_audit_data = TournamentAuditData()
+            tournament_audit_data.text_tournament_weight = 0.4
+            tournament_audit_data.image_tournament_weight = 0.36
+            tournament_audit_data.separated_burn_weight = 0.14
+            tournament_audit_data.participants = []
+
             # This should run without error and return a NodeWeightsResult
-            result = await get_node_weights_from_period_scores_separated(mock_substrate, 1, mock_psql_db)
+            result = await get_node_weights_from_period_scores_with_separated_burn_data(mock_substrate, 1, tournament_audit_data)
 
             assert isinstance(result, NodeWeightsResult)
             assert len(result.node_ids) == 2

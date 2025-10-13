@@ -801,103 +801,6 @@ async def get_node_weights_from_period_scores_with_separated_burn_data(
     return NodeWeightsResult(node_ids=all_node_ids, node_weights=all_node_weights)
 
 
-async def get_node_weights_from_period_scores_separated(
-    substrate: SubstrateInterface, netuid: int, psql_db: PSQLDB
-) -> NodeWeightsResult:
-    """
-    Get node weights with separated burn dynamics based on tournament participation.
-
-    All emissions are distributed between:
-    - Tournament winners (text and image, separately calculated)
-    - Burn address (remainder after tournament allocations)
-
-    There is no regular weight allocation - only tournament winners and burn.
-    """
-    all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(substrate, netuid)
-    hotkey_to_node_id: dict[str, int] = {node.hotkey: node.node_id for node in all_nodes}
-
-    all_node_ids: list[int] = [node.node_id for node in all_nodes]
-    all_node_weights: list[float] = [0.0 for _ in all_nodes]
-
-    logger.info("=== SEPARATED BURN CALCULATION ===")
-
-    # Get separated burn data
-    burn_data: TournamentBurnDataSeparated = await get_tournament_burn_details_separated(psql_db)
-
-    logger.info("=== SEPARATED BURN DATA ===")
-    logger.info(f"Text performance diff: {burn_data.text_performance_diff:.2%}")
-    logger.info(f"Image performance diff: {burn_data.image_performance_diff:.2%}")
-    logger.info(f"Text tournament weight: {burn_data.text_tournament_weight:.6f}")
-    logger.info(f"Image tournament weight: {burn_data.image_tournament_weight:.6f}")
-    logger.info(f"Total burn weight: {burn_data.burn_weight:.6f}")
-
-    # Calculate scaling based on active tournament participants
-    participants: list[str] = await get_active_tournament_participants(psql_db)
-    participation_total: float = len(participants) * cts.TOURNAMENT_PARTICIPATION_WEIGHT
-    scale_factor: float = 1.0 - participation_total if participation_total > 0 else 1.0
-
-    scaled_text_tournament_weight: float = burn_data.text_tournament_weight * scale_factor
-    scaled_image_tournament_weight: float = burn_data.image_tournament_weight * scale_factor
-    scaled_burn_weight: float = burn_data.burn_weight * scale_factor
-
-    logger.info(f"Active tournament participants: {len(participants)}")
-    logger.info(f"Scale factor: {scale_factor:.6f}")
-
-    # Get tournament weights and apply them
-    text_tournament: TournamentData | None = await get_latest_completed_tournament(psql_db, TournamentType.TEXT)
-    image_tournament: TournamentData | None = await get_latest_completed_tournament(psql_db, TournamentType.IMAGE)
-
-    # Build tournament data (reusing existing logic)
-    text_tournament_data: TournamentResultsWithWinners | None = None
-    if text_tournament:
-        tournament_results = await get_tournament_full_results(text_tournament.tournament_id, psql_db)
-        text_tournament_data = TournamentResultsWithWinners(
-            tournament_id=tournament_results.tournament_id,
-            rounds=tournament_results.rounds,
-            base_winner_hotkey=text_tournament.base_winner_hotkey,
-            winner_hotkey=text_tournament.winner_hotkey,
-        )
-
-    image_tournament_data: TournamentResultsWithWinners | None = None
-    if image_tournament:
-        tournament_results = await get_tournament_full_results(image_tournament.tournament_id, psql_db)
-        image_tournament_data = TournamentResultsWithWinners(
-            tournament_id=tournament_results.tournament_id,
-            rounds=tournament_results.rounds,
-            base_winner_hotkey=image_tournament.base_winner_hotkey,
-            winner_hotkey=image_tournament.winner_hotkey,
-        )
-
-    # Get separated tournament weights
-    text_tournament_weights, image_tournament_weights = get_tournament_weights_from_data_separated(
-        text_tournament_data, image_tournament_data
-    )
-
-    apply_tournament_weights_separated(
-        text_tournament_weights,
-        image_tournament_weights,
-        hotkey_to_node_id,
-        all_node_weights,
-        scaled_text_tournament_weight,
-        scaled_image_tournament_weight,
-    )
-
-    # Apply participation weights
-    for hotkey in participants:
-        node_id = hotkey_to_node_id.get(hotkey)
-        if node_id is not None:
-            all_node_weights[node_id] += cts.TOURNAMENT_PARTICIPATION_WEIGHT
-
-    # Apply burn weight
-    burn_node_id: int | None = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)
-    if burn_node_id is not None:
-        all_node_weights[burn_node_id] = scaled_burn_weight
-
-    logger.info(f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}")
-
-    return NodeWeightsResult(node_ids=all_node_ids, node_weights=all_node_weights)
-
-
 # NOTE: This function is deprecated and will be removed in the future
 async def get_node_weights_from_period_scores_with_tournament_data(
     substrate: SubstrateInterface,
@@ -1189,7 +1092,9 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
 
     tournament_audit_data.weekly_participation = await get_weekly_task_participation_data(config.psql_db)
 
-    result = await get_node_weights_from_period_scores_separated(config.substrate, config.netuid, config.psql_db)
+    result = await get_node_weights_from_period_scores_with_separated_burn_data(
+        config.substrate, config.netuid, tournament_audit_data
+    )
     all_node_ids = result.node_ids
     all_node_weights = result.node_weights
     logger.info("Weights calculated, about to set...")
