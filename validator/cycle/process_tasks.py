@@ -7,6 +7,7 @@ import uuid
 from fiber.chain.models import Node
 
 import validator.core.constants as cst
+import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
 from core.models.payload_models import MinerTaskOffer
@@ -118,7 +119,7 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Confi
     """
     logger.info(f"Assigning single miner using EMISSION_BURN_HOTKEY for task {task.task_id}")
 
-    emission_burn_node = Node(hotkey=EMISSION_BURN_HOTKEY)
+    emission_burn_node = await nodes_sql.get_node_by_hotkey(EMISSION_BURN_HOTKEY, config.psql_db)
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
     already_assigned_hotkeys = [miner.hotkey for miner in miners_already_assigned]
 
