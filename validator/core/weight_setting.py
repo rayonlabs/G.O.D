@@ -302,9 +302,7 @@ async def _get_leaderboard_data(config: Config) -> tuple[list[PeriodScore], list
     return all_period_scores, task_results
 
 
-async def _upload_results_to_s3(
-    config: Config, task_results: list[TaskResults], tournament_audit_data: TournamentAuditData
-) -> None:
+async def _upload_results_to_s3(config: Config, tournament_audit_data: TournamentAuditData) -> None:
     class DateTimeEncoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, datetime):
@@ -314,7 +312,6 @@ async def _upload_results_to_s3(
             return super().default(obj)
 
     upload_data = {
-        "task_results": [result.model_dump() for result in task_results],
         "tournament_audit_data": tournament_audit_data.model_dump(),
     }
 
@@ -761,7 +758,6 @@ def apply_tournament_weights_separated(
 async def get_node_weights_from_period_scores_with_separated_burn_data(
     substrate: SubstrateInterface,
     netuid: int,
-    node_results: list[PeriodScore],
     tournament_audit_data: TournamentAuditData,
 ) -> NodeWeightsResult:
     all_nodes: list[Node] = fetch_nodes.get_nodes_for_netuid(substrate, netuid)
@@ -1228,9 +1224,9 @@ async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
     logger.info("Weights calculated, about to set...")
 
     success = await set_weights(config, all_node_ids, all_node_weights, validator_node_id)
-    if success and task_results:
+    if success:
         # Upload both task results and tournament data
-        url = await _upload_results_to_s3(config, task_results, tournament_audit_data)
+        url = await _upload_results_to_s3(config, tournament_audit_data)
         logger.info(f"Uploaded the scores and tournament data to s3 for auditing - url: {url}")
 
     return success
