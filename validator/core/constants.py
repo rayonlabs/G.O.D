@@ -69,8 +69,8 @@ ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
 # Synthetic data generation constants - for actual synthetic data creation
 SYNTHETIC_GENERATION_TOTAL = 10  # Total synthetic samples to generate
-SYNTHETIC_FOR_TRAINING = 5      # How many go to training
-SYNTHETIC_FOR_EVAL = 5          # How many go to evaluation
+SYNTHETIC_FOR_TRAINING = 5  # How many go to training
+SYNTHETIC_FOR_EVAL = 5  # How many go to evaluation
 SYNTH_EXAMPLES_FROM_TRAIN = 395
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
@@ -237,7 +237,6 @@ AFFINE_REWARD_FN_IDS = [
     "2226678e-df0d-42d0-8adb-551aec0ed88e",  # sat_reward_function
     "dadf301b-14cc-4bb2-9bb8-7d658d29661c",  # abd_reward_function
     "b5008828-8628-4ef5-b3f2-f77580028b67",  # ded_reward_function
-
 ]
 
 # diffusion eval stuff
@@ -290,10 +289,11 @@ ONE_DAY_SCORE_WEIGHT = 0.3
 
 TOURNAMENT_TEXT_WEIGHT = 0.15
 TOURNAMENT_IMAGE_WEIGHT = 0.10
+MAX_TEXT_TOURNAMENT_WEIGHT = 0.6
+MAX_IMAGE_TOURNAMENT_WEIGHT = 0.4
 TOURNAMENT_INTERVAL_HOURS = 24
 BURN_REDUCTION_RATE = 5.0
 MAX_BURN_REDUCTION = 0.8
-BASE_TOURNAMENT_WEIGHT = 1
 EMISSION_MULTIPLIER_THRESHOLD = 0.05
 
 

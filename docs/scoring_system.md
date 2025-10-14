@@ -4,7 +4,6 @@
 
 The scoring system uses these key constants (see [`validator/core/constants.py`](../validator/core/constants.py)):
 
-- `BASE_TOURNAMENT_WEIGHT` - Base tournament weight allocation
 - `TOURNAMENT_TEXT_WEIGHT` - Proportion for text tournaments (0.55 = 55%)
 - `TOURNAMENT_IMAGE_WEIGHT` - Proportion for image tournaments (0.45 = 45%)
 - `TOURNAMENT_PARTICIPATION_WEIGHT` - Weight for active tournament participants
@@ -14,6 +13,7 @@ The scoring system uses these key constants (see [`validator/core/constants.py`]
 ## Overview
 
 The Gradient subnet operates as a **tournament-only system**. All emissions are distributed between:
+
 1. **Tournament winners** (text and image tournaments, calculated separately)
 2. **Active participants** (small reward for tournament participation)
 3. **Burn address** (all remaining weight goes to `EMISSION_BURN_HOTKEY`)
@@ -25,6 +25,7 @@ There is no legacy miner system - only tournament participants receive rewards.
 ### Base Allocation
 
 Total weight allocation is calculated as:
+
 ```python
 text_base_weight = BASE_TOURNAMENT_WEIGHT * TOURNAMENT_TEXT_WEIGHT
 image_base_weight = BASE_TOURNAMENT_WEIGHT * TOURNAMENT_IMAGE_WEIGHT
@@ -49,6 +50,7 @@ When tournaments perform poorly, no increase is applied, and more weight remains
 ### Text and Image Separation
 
 Text and image tournaments are completely independent:
+
 - Text tournament winners receive `text_tournament_weight` distributed by performance
 - Image tournament winners receive `image_tournament_weight` distributed by performance
 - A miner can win both tournaments and receive rewards from each
@@ -64,6 +66,7 @@ Within each tournament, weights are distributed based on tournament performance 
 ## Participation Rewards
 
 Active tournament participants receive a small fixed reward:
+
 ```python
 participation_weight = TOURNAMENT_PARTICIPATION_WEIGHT  # per participant
 ```
@@ -73,6 +76,7 @@ This incentivizes participation independent of performance.
 ### Scaling for Participation
 
 When many participants are active, tournament and burn weights are scaled down proportionally:
+
 ```python
 participation_total = len(participants) * TOURNAMENT_PARTICIPATION_WEIGHT
 scale_factor = 1.0 - participation_total
@@ -85,6 +89,7 @@ scaled_burn_weight = burn_weight * scale_factor
 ## Example Scenario
 
 Starting conditions:
+
 - `BASE_TOURNAMENT_WEIGHT = 0.9`
 - `TOURNAMENT_TEXT_WEIGHT = 0.55`
 - `TOURNAMENT_IMAGE_WEIGHT = 0.45`
@@ -93,6 +98,7 @@ Starting conditions:
 - 10 active participants
 
 **Step 1: Calculate base weights**
+
 ```
 text_base_weight = 0.9 * 0.55 = 0.495
 image_base_weight = 0.9 * 0.45 = 0.405
@@ -100,6 +106,7 @@ burn_weight = 1.0 - 0.495 - 0.405 = 0.1
 ```
 
 **Step 2: Apply performance multipliers**
+
 ```
 text_emission_increase = 0.1 * 2.0 = 0.2
 text_tournament_weight = 0.495 + 0.2 = 0.695
@@ -113,6 +120,7 @@ burn_weight = 1.0 - 0.695 - 0.405 = -0.1 (capped at minimum)
 Note: When emission increases exceed available weight, the system caps allocations appropriately.
 
 **Step 3: Scale for participation**
+
 ```
 participation_total = 10 * 0.01 = 0.1  # (assuming TOURNAMENT_PARTICIPATION_WEIGHT = 0.01)
 scale_factor = 1.0 - 0.1 = 0.9
@@ -124,6 +132,7 @@ participation_weights = 0.1
 ```
 
 **Final Distribution:**
+
 - Text tournament: 62.6%
 - Image tournament: 36.5%
 - Participation: 10%

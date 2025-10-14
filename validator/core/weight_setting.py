@@ -392,19 +392,13 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
 
     logger.info(f"Text emission increase: {text_emission_increase}, Image emission increase: {image_emission_increase}")
 
-    text_base_weight = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
-    image_base_weight = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
-
-    text_tournament_weight = text_base_weight + text_emission_increase
-    image_tournament_weight = image_base_weight + image_emission_increase
+    text_tournament_weight = min(cts.TOURNAMENT_TEXT_WEIGHT + text_emission_increase, cts.MAX_TEXT_TOURNAMENT_WEIGHT)
+    image_tournament_weight = min(cts.TOURNAMENT_IMAGE_WEIGHT + image_emission_increase, cts.MAX_IMAGE_TOURNAMENT_WEIGHT)
 
     burn_weight = 1.0 - text_tournament_weight - image_tournament_weight
 
-    total_base_weight = text_base_weight + image_base_weight
-    total_emission_increase = text_emission_increase + image_emission_increase
-
-    text_burn_proportion = -text_emission_increase / total_base_weight if total_base_weight > 0 else 0.0
-    image_burn_proportion = -image_emission_increase / total_base_weight if total_base_weight > 0 else 0.0
+    text_burn_proportion = (cts.MAX_TEXT_TOURNAMENT_WEIGHT - text_tournament_weight) / cts.MAX_TEXT_TOURNAMENT_WEIGHT
+    image_burn_proportion = (cts.MAX_IMAGE_TOURNAMENT_WEIGHT - image_tournament_weight) / cts.MAX_IMAGE_TOURNAMENT_WEIGHT
 
     logger.info(f"Separated weights - Text tournament: {text_tournament_weight}, Image tournament: {image_tournament_weight}")
     logger.info(f"Total burn weight: {burn_weight}")
@@ -570,7 +564,7 @@ async def build_tournament_audit_data(psql_db) -> TournamentAuditData:
     tournament_audit_data.participants = await get_active_tournament_participants(psql_db)
 
     # Fetch burn weights
-    burn_data_separated = await get_tournament_burn_details_separated(psql_db)
+    burn_data_separated: TournamentBurnDataSeparated = await get_tournament_burn_details_separated(psql_db)
     tournament_audit_data.text_tournament_weight = burn_data_separated.text_tournament_weight
     tournament_audit_data.image_tournament_weight = burn_data_separated.image_tournament_weight
     tournament_audit_data.separated_burn_weight = burn_data_separated.burn_weight
