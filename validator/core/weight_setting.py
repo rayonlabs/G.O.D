@@ -310,7 +310,7 @@ def calculate_emission_multiplier(performance_diff: float) -> float:
         return 0.0
 
     excess_performance = performance_diff - cts.EMISSION_MULTIPLIER_THRESHOLD
-    emission_increase = excess_performance * 2.0
+    emission_increase = excess_performance * 2.5
 
     return emission_increase
 
