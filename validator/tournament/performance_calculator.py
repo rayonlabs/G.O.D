@@ -253,7 +253,7 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
     """
     logger.info(f"=== CALCULATING PERFORMANCE DIFFERENCE FOR TOURNAMENT {tournament_id} ===")
 
-    performance_data = await calculate_boss_round_performance_differences(tournament_id, psql_db)
+    performance_data: list[TaskPerformanceDifference] = await calculate_boss_round_performance_differences(tournament_id, psql_db)
 
     if not performance_data:
         logger.info("No task pairs found, returning 0.0 performance difference")

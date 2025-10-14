@@ -106,7 +106,7 @@ class TournamentData(BaseModel):
         default=None,
         description="Performance difference metric (0.0 to 1.0) between champion and challenger in boss round. "
         "Calculated as: (defending_champion_score - new_winner_score) / defending_champion_score. "
-        "Higher = worse performance = more burn.",
+        "score = loss, so lower is better. Higher diff = better perf = less burn.",
     )
 
 
