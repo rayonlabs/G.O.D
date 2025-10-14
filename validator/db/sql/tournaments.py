@@ -30,6 +30,7 @@ from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winners
+from validator.tournament.utils import is_champion_winner
 from validator.utils.logging import get_logger
 from validator.utils.util import normalise_float
 
@@ -1098,10 +1099,7 @@ async def count_champion_consecutive_wins(psql_db: PSQLDB, tournament_type: Tour
             winner = row[cst.WINNER_HOTKEY]
             base_winner = row[cst.BASE_WINNER_HOTKEY]
 
-            # Check if the champion won this tournament
-            # Either directly (winner_hotkey == champion_hotkey)
-            # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
-            if winner == champion_hotkey or (winner == core_cst.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey):
+            if is_champion_winner(winner, base_winner, champion_hotkey):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
@@ -1146,10 +1144,7 @@ async def count_champion_consecutive_wins_at_tournament(
             winner = row[cst.WINNER_HOTKEY]
             base_winner = row[cst.BASE_WINNER_HOTKEY]
 
-            # Check if the champion won this tournament
-            # Either directly (winner_hotkey == champion_hotkey)
-            # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
-            if winner == champion_hotkey or (winner == core_cst.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey):
+            if is_champion_winner(winner, base_winner, champion_hotkey):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else

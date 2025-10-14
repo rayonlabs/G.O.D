@@ -52,6 +52,55 @@ def get_progressive_threshold(consecutive_wins: int) -> float:
     return max(t_cst.EXPONENTIAL_MIN_THRESHOLD, current_threshold)
 
 
+def get_real_winner_hotkey(winner_hotkey: str | None, base_winner_hotkey: str | None) -> str | None:
+    """
+    Get the real hotkey of the tournament winner.
+
+    If winner_hotkey is EMISSION_BURN_HOTKEY (defending champion defended),
+    returns base_winner_hotkey (the real defending champion's hotkey).
+    Otherwise returns winner_hotkey.
+
+    This is needed because when a defending champion successfully defends,
+    winner_hotkey is set to EMISSION_BURN_HOTKEY as a placeholder, and
+    base_winner_hotkey contains their actual hotkey.
+
+    Args:
+        winner_hotkey: The tournament's winner_hotkey field
+        base_winner_hotkey: The tournament's base_winner_hotkey field (defending champion snapshot)
+
+    Returns:
+        Real winner's hotkey, or None if no winner
+    """
+    if not winner_hotkey:
+        return None
+
+    if winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey:
+        return base_winner_hotkey
+
+    return winner_hotkey
+
+
+def is_champion_winner(winner_hotkey: str | None, base_winner_hotkey: str | None, champion_hotkey: str) -> bool:
+    """
+    Check if champion_hotkey won the tournament.
+
+    Handles the case where the defending champion defends successfully
+    (winner_hotkey == EMISSION_BURN_HOTKEY but base_winner_hotkey == champion_hotkey).
+
+    Args:
+        winner_hotkey: The tournament's winner_hotkey field
+        base_winner_hotkey: The tournament's base_winner_hotkey field
+        champion_hotkey: The hotkey to check
+
+    Returns:
+        True if champion_hotkey won the tournament
+    """
+    if not winner_hotkey:
+        return False
+
+    return winner_hotkey == champion_hotkey or (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
+
+
 async def replace_tournament_task(
     original_task_id: str, tournament_id: str, round_id: str, group_id: str | None, pair_id: str | None, config: Config
 ) -> str:
