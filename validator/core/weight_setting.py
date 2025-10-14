@@ -261,20 +261,6 @@ def filter_tasks_by_type(tasks: list[TaskResults], task_type: TaskType, is_organ
     return [task for task in tasks if task.task.task_type == task_type and task.task.is_organic == is_organic]
 
 
-async def _get_leaderboard_data(config: Config) -> tuple[list[PeriodScore], list[TaskResults]]:
-    """
-    Retrieve task results from the database for leaderboard/analytics purposes.
-    This includes ALL scores (including zeros) for accurate counting and statistics.
-    This is separate from _get_weights_to_set which filters for weight calculations.
-    """
-    date = datetime.now() - timedelta(days=cts.SCORING_WINDOW)
-    task_results: list[TaskResults] = await get_aggregate_scores_for_leaderboard_since(date, config.psql_db)
-
-    all_period_scores = get_period_scores_from_task_results(task_results)
-
-    return all_period_scores, task_results
-
-
 async def _upload_results_to_s3(config: Config, tournament_audit_data: TournamentAuditData) -> None:
     class DateTimeEncoder(json.JSONEncoder):
         def default(self, obj):
@@ -449,16 +435,6 @@ def calculate_emission_multiplier(performance_diff: float) -> float:
     emission_increase = excess_performance * 2.0
 
     return emission_increase
-
-
-def calculate_weight_redistribution(performance_diff: float) -> tuple[float, float]:
-    burn_reduction = calculate_burn_proportion(performance_diff)
-    tournament_burn = cts.BASE_TOURNAMENT_WEIGHT * burn_reduction
-
-    tournament_weight = cts.BASE_TOURNAMENT_WEIGHT - tournament_burn
-    burn_weight = 1.0 - tournament_weight
-
-    return tournament_weight, burn_weight
 
 
 async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSeparated:
