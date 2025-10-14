@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 from core.models.tournament_models import NodeWeightsResult
 from core.models.tournament_models import TournamentAuditData
 from core.models.tournament_models import TournamentBurnDataSeparated
+from core.models.tournament_models import TournamentData
+from core.models.tournament_models import TournamentResults
 from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskType
@@ -543,9 +545,9 @@ async def build_tournament_audit_data(psql_db) -> TournamentAuditData:
     tournament_audit_data = TournamentAuditData()
 
     # Fetch text tournament data
-    text_tournament = await get_latest_completed_tournament(psql_db, TournamentType.TEXT)
+    text_tournament: TournamentData = await get_latest_completed_tournament(psql_db, TournamentType.TEXT)
     if text_tournament:
-        tournament_results = await get_tournament_full_results(text_tournament.tournament_id, psql_db)
+        tournament_results: TournamentResults = await get_tournament_full_results(text_tournament.tournament_id, psql_db)
         tournament_audit_data.text_tournament_data = TournamentResultsWithWinners(
             tournament_id=tournament_results.tournament_id,
             rounds=tournament_results.rounds,

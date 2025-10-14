@@ -4,7 +4,7 @@ from datetime import timezone
 
 from fiber.chain.models import Node
 
-import validator.core.constants
+import validator.core.constants as core_cst
 import validator.db.constants as cst
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import HotkeyTaskParticipation
@@ -182,9 +182,7 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
 
 
 async def get_latest_completed_tournament(
-    psql_db: PSQLDB,
-    tournament_type: TournamentType,
-    exclude_tournament_id: str | None = None
+    psql_db: PSQLDB, tournament_type: TournamentType, exclude_tournament_id: str | None = None
 ) -> TournamentData | None:
     async with await psql_db.connection() as connection:
         exclude_clause = f"AND {cst.TOURNAMENT_ID} != $2" if exclude_tournament_id else ""
@@ -932,8 +930,8 @@ async def get_participants_with_insufficient_stake(tournament_id: str, psql_db: 
 def calculate_boosted_stake(actual_stake: float, completed_entries: int) -> float:
     """Calculate stake with repeat participant bonus."""
     boost_percentage = min(
-        completed_entries * validator.core.constants.TOURNAMENT_REPEAT_BOOST_PERCENTAGE,
-        validator.core.constants.TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE,
+        completed_entries * core_cst.TOURNAMENT_REPEAT_BOOST_PERCENTAGE,
+        core_cst.TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE,
     )
     return actual_stake * (1 + boost_percentage / 100)
 
@@ -1103,9 +1101,7 @@ async def count_champion_consecutive_wins(psql_db: PSQLDB, tournament_type: Tour
             # Check if the champion won this tournament
             # Either directly (winner_hotkey == champion_hotkey)
             # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
-            if winner == champion_hotkey or (
-                winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey
-            ):
+            if winner == champion_hotkey or (winner == core_cst.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
@@ -1153,9 +1149,7 @@ async def count_champion_consecutive_wins_at_tournament(
             # Check if the champion won this tournament
             # Either directly (winner_hotkey == champion_hotkey)
             # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
-            if winner == champion_hotkey or (
-                winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey
-            ):
+            if winner == champion_hotkey or (winner == core_cst.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
@@ -1378,8 +1372,8 @@ async def get_tournament_participation_data(psql_db: PSQLDB) -> list[HotkeyTourn
         for hotkey, participation in participants.items():
             if participation["text"] and participation["image"]:
                 # Participated in both - use tournament type weights
-                text_prop = validator.core.constants.TOURNAMENT_TEXT_WEIGHT
-                image_prop = validator.core.constants.TOURNAMENT_IMAGE_WEIGHT
+                text_prop = core_cst.TOURNAMENT_TEXT_WEIGHT
+                image_prop = core_cst.TOURNAMENT_IMAGE_WEIGHT
             elif participation["text"]:
                 # Only text
                 text_prop = 1.0
