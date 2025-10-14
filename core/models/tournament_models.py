@@ -94,9 +94,20 @@ class TournamentData(BaseModel):
     tournament_id: str
     tournament_type: TournamentType
     status: TournamentStatus = TournamentStatus.PENDING
-    base_winner_hotkey: str | None = None
-    winner_hotkey: str | None = None
-    winning_performance_difference: float | None = None
+    base_winner_hotkey: str | None = Field(
+        default=None, description="The defending champion's real hotkey at the START of this tournament (snapshot)."
+    )
+    winner_hotkey: str | None = Field(
+        default=None,
+        description="The tournament winner's hotkey at the END of this tournament. "
+        "May be EMISSION_BURN_HOTKEY if the defending champion successfully defended.",
+    )
+    winning_performance_difference: float | None = Field(
+        default=None,
+        description="Performance difference metric (0.0 to 1.0) between champion and challenger in boss round. "
+        "Calculated as: (defending_champion_score - new_winner_score) / defending_champion_score. "
+        "Higher = worse performance = more burn.",
+    )
 
 
 class TournamentRoundData(BaseModel):
