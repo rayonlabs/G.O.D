@@ -10,9 +10,7 @@ from core.models.tournament_models import TournamentAuditData
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.config import load_config
-from validator.core.models import TaskResults
 from validator.core.weight_setting import get_node_weights_from_period_scores_with_separated_burn_data
-from validator.core.weight_setting import get_period_scores_from_task_results
 from validator.core.weight_setting import set_weights
 from validator.utils.logging import get_logger
 
