@@ -17,7 +17,6 @@ from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
-from validator.db.sql.submissions_and_scoring import get_aggregate_scores_for_leaderboard_since
 from validator.db.sql.tournament_performance import get_boss_round_synthetic_task_completion
 from validator.db.sql.tournaments import get_active_tournament_participants
 from validator.db.sql.tournaments import get_latest_completed_tournament
@@ -403,28 +402,6 @@ def get_miner_performance_breakdown(hotkey: str, task_results: list[TaskResults]
 async def check_boss_round_synthetic_tasks_complete(tournament_id: str, psql_db) -> bool:
     completion_data = await get_boss_round_synthetic_task_completion(tournament_id, psql_db)
     return completion_data.total_synth_tasks > 0 and completion_data.total_synth_tasks == completion_data.completed_synth_tasks
-
-
-def calculate_burn_proportion(performance_diff: float) -> float:
-    """
-    Calculate the proportion of tournament allocation to burn based on underperformance.
-
-    Args:
-        performance_diff: How much worse tournament winners performed vs last winner.
-                         Positive = worse, Negative/Zero = equal or better.
-
-    Returns:
-        Burn proportion (0.0 to 0.8). This proportion of BASE_TOURNAMENT_WEIGHT will be
-        redistributed: 25% to legacy miners, 75% to burn address.
-
-    Example:
-        performance_diff = 0.1 (10% worse) → returns 0.5 (50% of tournament allocation burns)
-    """
-    if performance_diff <= 0:
-        return 0.0
-
-    burn_reduction = min(cts.MAX_BURN_REDUCTION, performance_diff * cts.BURN_REDUCTION_RATE)
-    return burn_reduction
 
 
 def calculate_emission_multiplier(performance_diff: float) -> float:

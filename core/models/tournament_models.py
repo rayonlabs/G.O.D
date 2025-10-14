@@ -364,12 +364,24 @@ class ActiveTournamentsResponse(BaseModel):
     image: ActiveTournamentInfo | None
 
 
+class TournamentBurnDataSeparated(BaseModel):
+    """Separated burn data by tournament type"""
+
+    text_performance_diff: float | None
+    image_performance_diff: float | None
+    text_burn_proportion: float
+    image_burn_proportion: float
+    text_tournament_weight: float
+    image_tournament_weight: float
+    burn_weight: float
+
+
 class LatestTournamentsDetailsResponse(BaseModel):
     """Response for latest tournaments with burn data"""
 
     text: TournamentDetailsResponse | None
     image: TournamentDetailsResponse | None
-    burn_data: TournamentBurnData
+    burn_data: TournamentBurnDataSeparated
 
 
 class TournamentHistoryEntry(BaseModel):
@@ -453,18 +465,6 @@ class HotkeyTaskParticipation(BaseModel):
     text_task_proportion: float  # proportion of text tasks (0.0 to 1.0)
     image_task_proportion: float  # proportion of image tasks (0.0 to 1.0)
     total_tasks: int  # total number of tasks in the period
-
-
-class TournamentBurnDataSeparated(BaseModel):
-    """Separated burn data by tournament type"""
-
-    text_performance_diff: float | None
-    image_performance_diff: float | None
-    text_burn_proportion: float
-    image_burn_proportion: float
-    text_tournament_weight: float
-    image_tournament_weight: float
-    burn_weight: float
 
 
 class NodeWeightsResult(BaseModel):

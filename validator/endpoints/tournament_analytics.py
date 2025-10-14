@@ -24,7 +24,6 @@ from core.models.tournament_models import DetailedTournamentTaskScore
 from core.models.tournament_models import LatestTournamentsDetailsResponse
 from core.models.tournament_models import NextTournamentDates
 from core.models.tournament_models import NextTournamentInfo
-from core.models.tournament_models import TournamentBurnData
 from core.models.tournament_models import TournamentDetailsResponse
 from core.models.tournament_models import TournamentHistoryEntry
 from core.models.tournament_models import TournamentHistoryResponse
@@ -210,25 +209,7 @@ async def get_latest_tournaments_details(
         if latest_image:
             image_details = await get_tournament_details(latest_image.tournament_id, config)
 
-        burn_data_separated = await get_tournament_burn_details_separated(config.psql_db)
-
-        # Convert separated burn data to legacy format for API compatibility
-        tournament_weight = burn_data_separated.text_tournament_weight + burn_data_separated.image_tournament_weight
-        weighted_average_diff = 0.0
-        if burn_data_separated.text_performance_diff is not None and burn_data_separated.image_performance_diff is not None:
-            weighted_average_diff = (
-                burn_data_separated.text_performance_diff * cts.TOURNAMENT_TEXT_WEIGHT
-                + burn_data_separated.image_performance_diff * cts.TOURNAMENT_IMAGE_WEIGHT
-            )
-
-        burn_data = TournamentBurnData(
-            text_performance_diff=burn_data_separated.text_performance_diff,
-            image_performance_diff=burn_data_separated.image_performance_diff,
-            weighted_average_diff=weighted_average_diff,
-            burn_proportion=burn_data_separated.burn_weight,
-            tournament_weight=tournament_weight,
-            burn_weight=burn_data_separated.burn_weight,
-        )
+        burn_data = await get_tournament_burn_details_separated(config.psql_db)
 
         result = LatestTournamentsDetailsResponse(text=text_details, image=image_details, burn_data=burn_data)
 
@@ -239,7 +220,9 @@ async def get_latest_tournaments_details(
         logger.info(
             f"Retrieved latest tournament details: text={latest_text.tournament_id if latest_text else None}, "
             f"image={latest_image.tournament_id if latest_image else None}, "
-            f"burn_weight={burn_data.burn_weight:.4f}"
+            f"burn_weight={burn_data.burn_weight:.4f}, "
+            f"text_weight={burn_data.text_tournament_weight:.4f}, "
+            f"image_weight={burn_data.image_tournament_weight:.4f}"
         )
         return result
 
@@ -298,7 +281,8 @@ async def get_tournament_gpu_requirements(
         )
 
         logger.info(
-            f"Retrieved GPU requirements: {len(gpu_summaries)} GPU types, {total_tasks} total tasks, {total_hours:.0f} total hours"
+            f"Retrieved GPU requirements: {len(gpu_summaries)} GPU types, "
+            f"{total_tasks} total tasks, {total_hours:.0f} total hours"
         )
         return response
 
