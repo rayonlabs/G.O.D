@@ -10,27 +10,19 @@ from datetime import timezone
 
 from dotenv import load_dotenv
 
-from core.models.tournament_models import HotkeyTaskParticipation
-from core.models.tournament_models import HotkeyTournamentParticipation
 from core.models.tournament_models import NodeWeightsResult
 from core.models.tournament_models import TournamentAuditData
-from core.models.tournament_models import TournamentBurnData
 from core.models.tournament_models import TournamentBurnDataSeparated
-from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskType
-from validator.db.database import PSQLDB
 from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.submissions_and_scoring import get_aggregate_scores_for_leaderboard_since
-from validator.db.sql.submissions_and_scoring import get_aggregate_scores_since
 from validator.db.sql.tournament_performance import get_boss_round_synthetic_task_completion
 from validator.db.sql.tournaments import get_active_tournament_participants
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_full_results
-from validator.db.sql.tournaments import get_tournament_participation_data
 from validator.db.sql.tournaments import get_weekly_task_participation_data
-from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
 from validator.evaluation.tournament_scoring import get_tournament_weights_from_data_separated
 from validator.tournament.performance_calculator import calculate_performance_difference
 
@@ -467,124 +459,6 @@ def calculate_weight_redistribution(performance_diff: float) -> tuple[float, flo
     burn_weight = 1.0 - tournament_weight
 
     return tournament_weight, burn_weight
-
-
-# NOTE: This function is deprecated and will be removed in the future
-async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
-    """
-    Calculate detailed tournament burn data including individual performance differences.
-
-    This function calculates how emissions should be distributed between:
-    - Tournament winners
-    - Regular mining performance
-    - Burn address
-
-    Returns:
-        TournamentBurnData with all performance metrics and weight distributions
-    """
-    logger.info("=== CALCULATING TOURNAMENT BURN DATA ===")
-
-    text_performance_diff = None
-    image_performance_diff = None
-    weighted_performance_diff = 0.0
-    total_weight = 0.0
-
-    tournament_weights = {TournamentType.TEXT: cts.TOURNAMENT_TEXT_WEIGHT, TournamentType.IMAGE: cts.TOURNAMENT_IMAGE_WEIGHT}
-    logger.info(f"Tournament type weights: TEXT={cts.TOURNAMENT_TEXT_WEIGHT}, IMAGE={cts.TOURNAMENT_IMAGE_WEIGHT}")
-
-    for tournament_type, weight in tournament_weights.items():
-        logger.info(f"Processing {tournament_type} tournament type")
-        performance_diff = None
-
-        latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
-        if latest_tournament:
-            previous_tournament = await get_latest_completed_tournament(
-                psql_db, tournament_type, exclude_tournament_id=latest_tournament.tournament_id
-            )
-
-            winner_changed = False
-            if previous_tournament:
-                if previous_tournament.winner_hotkey != latest_tournament.winner_hotkey:
-                    winner_changed = True
-                    logger.info(
-                        f"[{tournament_type}] Winner changed: {previous_tournament.winner_hotkey} → {latest_tournament.winner_hotkey}"
-                    )
-                else:
-                    logger.info(f"[{tournament_type}] Same winner defended: {latest_tournament.winner_hotkey}")
-            else:
-                winner_changed = True
-                logger.info(f"[{tournament_type}] First tournament winner: {latest_tournament.winner_hotkey}")
-
-            if winner_changed:
-                performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
-                logger.info(f"NEW winner - calculated fresh performance difference for {tournament_type}: {performance_diff:.4f}")
-            elif latest_tournament.winning_performance_difference is not None:
-                performance_diff = latest_tournament.winning_performance_difference
-                logger.info(f"SAME winner - using stored performance difference for {tournament_type}: {performance_diff:.4f}")
-            elif (
-                previous_tournament.winning_performance_difference is not None
-                and latest_tournament.winning_performance_difference is None
-            ):
-                performance_diff = previous_tournament.winning_performance_difference
-                logger.info(f"SAME winner - using stored performance difference for {tournament_type}: {performance_diff:.4f}")
-            else:
-                performance_diff = 0.0
-
-        if tournament_type == TournamentType.TEXT:
-            text_performance_diff = performance_diff
-        elif tournament_type == TournamentType.IMAGE:
-            image_performance_diff = performance_diff
-
-        if performance_diff is not None:
-            weighted_performance_diff += performance_diff * weight
-            total_weight += weight
-        elif latest_tournament:
-            if latest_tournament.winner_hotkey == cts.EMISSION_BURN_HOTKEY:
-                logger.info(
-                    f"No synthetic task data available for {tournament_type} tournaments, burn account won - assuming worst performance (100% difference)"
-                )
-                weighted_performance_diff += 1.0 * weight
-                if tournament_type == TournamentType.TEXT:
-                    text_performance_diff = 1.0
-                elif tournament_type == TournamentType.IMAGE:
-                    image_performance_diff = 1.0
-            else:
-                logger.info(
-                    f"No synthetic task data available for {tournament_type} tournaments, assuming perfect performance (0% difference)"
-                )
-                weighted_performance_diff += 0.0 * weight
-                if tournament_type == TournamentType.TEXT:
-                    text_performance_diff = 0.0
-                elif tournament_type == TournamentType.IMAGE:
-                    image_performance_diff = 0.0
-            total_weight += weight
-        else:
-            logger.info(f"No {tournament_type} tournament data available, will burn this tournament allocation")
-
-    if total_weight == 0:
-        logger.info("No tournament data available, burning entire tournament allocation")
-        average_performance_diff = 1.0
-        tournament_weight = 0.0
-        burn_weight = 1.0
-        burn_proportion = 1.0
-    else:
-        average_performance_diff = weighted_performance_diff / total_weight
-
-        emission_increase = calculate_emission_multiplier(average_performance_diff)
-        tournament_weight = cts.BASE_TOURNAMENT_WEIGHT + emission_increase
-
-        burn_weight = 1.0 - tournament_weight
-
-        burn_proportion = burn_weight
-
-    return TournamentBurnData(
-        text_performance_diff=text_performance_diff,
-        image_performance_diff=image_performance_diff,
-        weighted_average_diff=average_performance_diff,
-        burn_proportion=burn_proportion,
-        tournament_weight=tournament_weight,
-        burn_weight=burn_weight,
-    )
 
 
 async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSeparated:
