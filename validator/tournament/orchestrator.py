@@ -297,6 +297,8 @@ async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Confi
                 tournament_type = TournamentType.TEXT
             elif task.task_type == TaskType.IMAGETASK:
                 tournament_type = TournamentType.IMAGE
+            else:
+                tournament_type = None
 
             # Get the last completed tournament winner's repo
             last_tournament = await tournament_sql.get_latest_completed_tournament(config.psql_db, tournament_type)
