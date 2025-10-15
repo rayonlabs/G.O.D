@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from core.models.tournament_models import NodeWeightsResult
 from core.models.tournament_models import TournamentAuditData
-from core.models.tournament_models import TournamentBurnDataSeparated
+from core.models.tournament_models import TournamentBurnData
 from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentResults
 from core.models.tournament_models import TournamentResultsWithWinners
@@ -24,7 +24,7 @@ from validator.db.sql.tournaments import get_active_tournament_participants
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_full_results
 from validator.db.sql.tournaments import get_weekly_task_participation_data
-from validator.evaluation.tournament_scoring import get_tournament_weights_from_data_separated
+from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
 from validator.tournament.performance_calculator import calculate_performance_difference
 
 
@@ -44,7 +44,6 @@ from core import constants as ccst
 from core.constants import BUCKET_NAME
 from validator.core.config import Config
 from validator.core.config import load_config
-from validator.core.models import PeriodScore
 from validator.core.models import TaskResults
 from validator.db.sql.nodes import get_vali_node_id
 from validator.evaluation.scoring import get_period_scores_from_results
@@ -315,17 +314,17 @@ def calculate_emission_multiplier(performance_diff: float) -> float:
     return emission_increase
 
 
-async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSeparated:
+async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
     """
-    Calculate detailed tournament burn data with separate calculations for TEXT and IMAGE tournaments.
+    Calculate detailed tournament burn data with calculations for TEXT and IMAGE tournaments.
 
-    This function calculates separate burn proportions for TEXT and IMAGE tournaments,
+    This function calculates burn proportions for TEXT and IMAGE tournaments,
     then applies them based on each hotkey's tournament participation.
 
     Returns:
-        TournamentBurnDataSeparated with separate performance metrics and weight distributions
+        TournamentBurnData with performance metrics and weight distributions
     """
-    logger.info("=== CALCULATING SEPARATED TOURNAMENT BURN DATA ===")
+    logger.info("=== CALCULATING TOURNAMENT BURN DATA ===")
 
     text_performance_diff = None
     image_performance_diff = None
@@ -400,10 +399,10 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
     text_burn_proportion = (cts.MAX_TEXT_TOURNAMENT_WEIGHT - text_tournament_weight) / cts.MAX_TEXT_TOURNAMENT_WEIGHT
     image_burn_proportion = (cts.MAX_IMAGE_TOURNAMENT_WEIGHT - image_tournament_weight) / cts.MAX_IMAGE_TOURNAMENT_WEIGHT
 
-    logger.info(f"Separated weights - Text tournament: {text_tournament_weight}, Image tournament: {image_tournament_weight}")
+    logger.info(f"Weights - Text tournament: {text_tournament_weight}, Image tournament: {image_tournament_weight}")
     logger.info(f"Total burn weight: {burn_weight}")
 
-    return TournamentBurnDataSeparated(
+    return TournamentBurnData(
         text_performance_diff=text_performance_diff,
         image_performance_diff=image_performance_diff,
         text_burn_proportion=text_burn_proportion,
@@ -414,7 +413,7 @@ async def get_tournament_burn_details_separated(psql_db) -> TournamentBurnDataSe
     )
 
 
-def apply_tournament_weights_separated(
+def apply_tournament_weights(
     text_tournament_weights: dict[str, float],
     image_tournament_weights: dict[str, float],
     hotkey_to_node_id: dict[str, int],
@@ -422,8 +421,8 @@ def apply_tournament_weights_separated(
     scaled_text_tournament_weight: float,
     scaled_image_tournament_weight: float,
 ) -> None:
-    """Apply tournament weights with truly separated text and image weights."""
-    logger.info("=== TOURNAMENT WEIGHT CALCULATIONS (SEPARATED) ===")
+    """Apply tournament weights with truly text and image weights."""
+    logger.info("=== TOURNAMENT WEIGHT CALCULATIONS ===")
 
     # Process text tournament weights
     logger.info(f"Processing {len(text_tournament_weights)} text tournament winners")
@@ -458,7 +457,7 @@ def apply_tournament_weights_separated(
             )
 
 
-async def get_node_weights_from_period_scores_with_separated_burn_data(
+async def get_node_weights_from_tournament_audit_data(
     substrate: SubstrateInterface,
     netuid: int,
     tournament_audit_data: TournamentAuditData,
@@ -469,38 +468,25 @@ async def get_node_weights_from_period_scores_with_separated_burn_data(
     all_node_ids: list[int] = [node.node_id for node in all_nodes]
     all_node_weights: list[float] = [0.0 for _ in all_nodes]
 
-    logger.info("=== USING SEPARATED BURN DATA FROM AUDIT ===")
+    logger.info("=== USING BURN DATA FROM AUDIT ===")
 
-    burn_data = TournamentBurnDataSeparated(
-        text_performance_diff=None,
-        image_performance_diff=None,
-        text_burn_proportion=0.0,
-        image_burn_proportion=0.0,
-        text_tournament_weight=tournament_audit_data.text_tournament_weight,
-        image_tournament_weight=tournament_audit_data.image_tournament_weight,
-        burn_weight=tournament_audit_data.separated_burn_weight,
-    )
-
-    logger.info(f"Text tournament weight: {burn_data.text_tournament_weight:.6f}")
-    logger.info(f"Image tournament weight: {burn_data.image_tournament_weight:.6f}")
-    logger.info(f"Total burn weight: {burn_data.burn_weight:.6f}")
+    logger.info(f"Text tournament weight: {tournament_audit_data.text_tournament_weight:.6f}")
+    logger.info(f"Image tournament weight: {tournament_audit_data.image_tournament_weight:.6f}")
+    logger.info(f"Total burn weight: {tournament_audit_data.burn_weight:.6f}")
 
     participants: list[str] = tournament_audit_data.participants
     participation_total: float = len(participants) * cts.TOURNAMENT_PARTICIPATION_WEIGHT
     scale_factor: float = 1.0 - participation_total if participation_total > 0 else 1.0
 
-    scaled_text_tournament_weight: float = burn_data.text_tournament_weight * scale_factor
-    scaled_image_tournament_weight: float = burn_data.image_tournament_weight * scale_factor
-    scaled_burn_weight: float = burn_data.burn_weight * scale_factor
+    scaled_text_tournament_weight: float = tournament_audit_data.text_tournament_weight * scale_factor
+    scaled_image_tournament_weight: float = tournament_audit_data.image_tournament_weight * scale_factor
+    scaled_burn_weight: float = tournament_audit_data.burn_weight * scale_factor
 
-    text_tournament_data = tournament_audit_data.text_tournament_data
-    image_tournament_data = tournament_audit_data.image_tournament_data
-
-    text_tournament_weights, image_tournament_weights = get_tournament_weights_from_data_separated(
-        text_tournament_data, image_tournament_data
+    text_tournament_weights, image_tournament_weights = get_tournament_weights_from_data(
+        tournament_audit_data.text_tournament_data, tournament_audit_data.image_tournament_data
     )
 
-    apply_tournament_weights_separated(
+    apply_tournament_weights(
         text_tournament_weights,
         image_tournament_weights,
         hotkey_to_node_id,
@@ -564,10 +550,10 @@ async def build_tournament_audit_data(psql_db) -> TournamentAuditData:
     tournament_audit_data.participants = await get_active_tournament_participants(psql_db)
 
     # Fetch burn weights
-    burn_data_separated: TournamentBurnDataSeparated = await get_tournament_burn_details_separated(psql_db)
-    tournament_audit_data.text_tournament_weight = burn_data_separated.text_tournament_weight
-    tournament_audit_data.image_tournament_weight = burn_data_separated.image_tournament_weight
-    tournament_audit_data.separated_burn_weight = burn_data_separated.burn_weight
+    burn_data: TournamentBurnData = await get_tournament_burn_details(psql_db)
+    tournament_audit_data.text_tournament_weight = burn_data.text_tournament_weight
+    tournament_audit_data.image_tournament_weight = burn_data.image_tournament_weight
+    tournament_audit_data.burn_weight = burn_data.burn_weight
 
     # Fetch weekly participation data
     tournament_audit_data.weekly_participation = await get_weekly_task_participation_data(psql_db)
@@ -605,11 +591,9 @@ async def set_weights(config: Config, all_node_ids: list[int], all_node_weights:
 
 async def _get_and_set_weights(config: Config, validator_node_id: int) -> bool:
     # Build tournament audit data using the centralized function
-    tournament_audit_data = await build_tournament_audit_data(config.psql_db)
+    tournament_audit_data: TournamentAuditData = await build_tournament_audit_data(config.psql_db)
 
-    result = await get_node_weights_from_period_scores_with_separated_burn_data(
-        config.substrate, config.netuid, tournament_audit_data
-    )
+    result = await get_node_weights_from_tournament_audit_data(config.substrate, config.netuid, tournament_audit_data)
     all_node_ids = result.node_ids
     all_node_weights = result.node_weights
     logger.info("Weights calculated, about to set...")

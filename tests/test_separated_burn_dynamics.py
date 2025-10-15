@@ -15,12 +15,12 @@ from core.models.tournament_models import HotkeyTaskParticipation
 from core.models.tournament_models import HotkeyTournamentParticipation
 from core.models.tournament_models import NodeWeightsResult
 from core.models.tournament_models import TournamentAuditData
-from core.models.tournament_models import TournamentBurnDataSeparated
+from core.models.tournament_models import TournamentBurnData
 from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentType
 from validator.core.models import PeriodScore
-from validator.core.weight_setting import apply_tournament_weights_separated
-from validator.core.weight_setting import get_node_weights_from_period_scores_with_separated_burn_data
+from validator.core.weight_setting import apply_tournament_weights
+from validator.core.weight_setting import get_node_weights_from_tournament_audit_data
 from validator.core.weight_setting import get_tournament_burn_details_separated
 
 
@@ -67,7 +67,7 @@ class TestSeparatedBurnDynamics:
     @pytest.fixture
     def sample_burn_data(self):
         """Sample separated burn data."""
-        return TournamentBurnDataSeparated(
+        return TournamentBurnData(
             text_performance_diff=0.3,
             image_performance_diff=0.1,
             text_burn_proportion=0.3,
@@ -133,7 +133,7 @@ class TestSeparatedBurnDynamics:
         assert sample_burn_data.text_tournament_weight == 0.35
         assert sample_burn_data.image_tournament_weight == 0.36
 
-    def test_apply_tournament_weights_separated(self, sample_tournament_participation):
+    def test_apply_tournament_weights(self, sample_tournament_participation):
         """Test tournament weight application with separated burn dynamics."""
         # Setup
         tournament_weights = {"hotkey1": 0.5, "hotkey2": 0.3, "hotkey3": 0.7}
@@ -144,7 +144,7 @@ class TestSeparatedBurnDynamics:
         scaled_image_tournament_weight = 0.36
 
         # Apply weights
-        apply_tournament_weights_separated(
+        apply_tournament_weights(
             tournament_weights,
             hotkey_to_node_id,
             all_node_weights,
@@ -278,7 +278,7 @@ class TestSeparatedBurnDynamics:
                 MagicMock(hotkey="hotkey2", node_id=1),
             ]
 
-            mock_burn_data.return_value = TournamentBurnDataSeparated(
+            mock_burn_data.return_value = TournamentBurnData(
                 text_performance_diff=0.2,
                 image_performance_diff=0.1,
                 text_burn_proportion=0.2,
@@ -298,11 +298,11 @@ class TestSeparatedBurnDynamics:
             tournament_audit_data = TournamentAuditData()
             tournament_audit_data.text_tournament_weight = 0.4
             tournament_audit_data.image_tournament_weight = 0.36
-            tournament_audit_data.separated_burn_weight = 0.14
+            tournament_audit_data.burn_weight = 0.14
             tournament_audit_data.participants = []
 
             # This should run without error and return a NodeWeightsResult
-            result = await get_node_weights_from_period_scores_with_separated_burn_data(mock_substrate, 1, tournament_audit_data)
+            result = await get_node_weights_from_tournament_audit_data(mock_substrate, 1, tournament_audit_data)
 
             assert isinstance(result, NodeWeightsResult)
             assert len(result.node_ids) == 2

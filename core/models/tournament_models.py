@@ -279,17 +279,6 @@ class TournamentPerformanceData(BaseModel):
     performance_difference: float  # Percentage difference (positive = tournament better)
 
 
-class TournamentBurnData(BaseModel):
-    """Data explaining emission burn calculation"""
-
-    text_performance_diff: float | None
-    image_performance_diff: float | None
-    weighted_average_diff: float
-    burn_proportion: float
-    tournament_weight: float
-    burn_weight: float
-
-
 class TournamentDetailsResponse(BaseModel):
     tournament_id: str
     tournament_type: TournamentType
@@ -311,7 +300,7 @@ class TournamentAuditData(BaseModel):
     participants: list[str] = []
     text_tournament_weight: float = 0.0
     image_tournament_weight: float = 0.0
-    separated_burn_weight: float = 0.0
+    burn_weight: float = 0.0
     weekly_participation: list["HotkeyTaskParticipation"] = []
 
 
@@ -375,7 +364,7 @@ class ActiveTournamentsResponse(BaseModel):
     image: ActiveTournamentInfo | None
 
 
-class TournamentBurnDataSeparated(BaseModel):
+class TournamentBurnData(BaseModel):
     """Separated burn data by tournament type"""
 
     text_performance_diff: float | None
@@ -392,7 +381,7 @@ class LatestTournamentsDetailsResponse(BaseModel):
 
     text: TournamentDetailsResponse | None
     image: TournamentDetailsResponse | None
-    burn_data: TournamentBurnDataSeparated
+    burn_data: TournamentBurnData
 
 
 class TournamentHistoryEntry(BaseModel):

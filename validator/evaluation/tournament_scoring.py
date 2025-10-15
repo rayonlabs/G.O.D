@@ -192,40 +192,6 @@ def tournament_scores_to_weights(
 
 
 def get_tournament_weights_from_data(
-    text_tournament_data: Optional[TournamentResultsWithWinners],
-    image_tournament_data: Optional[TournamentResultsWithWinners],
-) -> dict[str, float]:
-    text_result = calculate_tournament_type_scores_from_data(TournamentType.TEXT, text_tournament_data)
-    image_result = calculate_tournament_type_scores_from_data(TournamentType.IMAGE, image_tournament_data)
-
-    logger.info(f"Text tournament scores: {text_result.scores}")
-    logger.info(f"Image tournament scores: {image_result.scores}")
-    logger.info(f"Text tournament prev winner: {text_result.prev_winner_hotkey}")
-    logger.info(f"Image tournament prev winner: {image_result.prev_winner_hotkey}")
-
-    combined_scores = {}
-    all_tournament_scores = text_result.scores + image_result.scores
-
-    for tournament_score in all_tournament_scores:
-        if tournament_score.hotkey not in combined_scores:
-            combined_scores[tournament_score.hotkey] = 0
-        combined_scores[tournament_score.hotkey] += tournament_score.score
-
-    combined_score_list = [TournamentScore(hotkey=hotkey, score=score) for hotkey, score in combined_scores.items()]
-
-    prev_winner_hotkey = text_result.prev_winner_hotkey or image_result.prev_winner_hotkey
-    prev_winner_won_final = text_result.prev_winner_won_final or image_result.prev_winner_won_final
-
-    logger.info(f"Combined tournament scores: {combined_score_list}")
-    logger.info(f"Overall prev winner: {prev_winner_hotkey}")
-    logger.info(f"Prev winner won final: {prev_winner_won_final}")
-
-    result = tournament_scores_to_weights(combined_score_list, prev_winner_hotkey, prev_winner_won_final)
-    logger.info(f"Final tournament weights: {result}")
-    return result
-
-
-def get_tournament_weights_from_data_separated(
     text_tournament_data: TournamentResultsWithWinners | None,
     image_tournament_data: TournamentResultsWithWinners | None,
 ) -> tuple[dict[str, float], dict[str, float]]:

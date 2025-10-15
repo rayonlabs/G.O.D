@@ -57,7 +57,7 @@ Text and image tournaments are completely independent:
 
 ### Weight Calculation
 
-Within each tournament, weights are distributed based on tournament performance (see [`get_tournament_weights_from_data_separated`](../validator/evaluation/tournament_scoring.py)):
+Within each tournament, weights are distributed based on tournament performance (see [`get_tournament_weights_from_data`](../validator/evaluation/tournament_scoring.py)):
 
 1. Final round determines the winner
 2. Earlier rounds receive progressively smaller allocations
@@ -152,9 +152,9 @@ participation_weights = 0.1
 
 ## Implementation Details
 
-The main entry point is [`get_node_weights_from_period_scores_with_separated_burn_data`](../validator/core/weight_setting.py) which orchestrates the entire process. Key functions include:
+The main entry point is [`get_node_weights_from_tournament_audit_data`](../validator/core/weight_setting.py) which orchestrates the entire process. Key functions include:
 
 - [`get_tournament_burn_details_separated`](../validator/core/weight_setting.py) - Calculates weight allocations based on performance
-- [`get_tournament_weights_from_data_separated`](../validator/evaluation/tournament_scoring.py) - Distributes weights within tournaments
-- [`apply_tournament_weights_separated`](../validator/core/weight_setting.py) - Applies final weight assignments
+- [`get_tournament_weights_from_data`](../validator/evaluation/tournament_scoring.py) - Distributes weights within tournaments
+- [`apply_tournament_weights`](../validator/core/weight_setting.py) - Applies final weight assignments
 - [`calculate_performance_difference`](../validator/tournament/performance_calculator.py) - Compares tournament vs benchmark performance

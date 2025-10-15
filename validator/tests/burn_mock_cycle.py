@@ -4,22 +4,27 @@ This script creates mock tournaments and nodes to show how the burn/emission sys
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
+from datetime import datetime
+from datetime import timezone
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
+from unittest.mock import patch
+
 from dotenv import load_dotenv
+
+from validator.core.weight_setting import get_tournament_burn_details
+
 
 load_dotenv(".vali.env", override=True)
 
-from core.models.tournament_models import TournamentType, TournamentData, TournamentBurnDataSeparated
-from validator.core.weight_setting import (
-    get_tournament_burn_details_separated,
-    calculate_emission_multiplier,
-)
 import validator.core.constants as cts
+from core.models.tournament_models import TournamentBurnData
+from core.models.tournament_models import TournamentType
 
 
 class MockNode:
     """Mock node to simulate miners in the network"""
+
     def __init__(self, node_id: int, hotkey: str, incentive: float = 0.0):
         self.node_id = node_id
         self.hotkey = hotkey
@@ -32,7 +37,7 @@ def create_mock_tournament(
     winner_hotkey: str,
     base_winner_hotkey: str,
     performance_diff: float,
-    created_at: datetime = None
+    created_at: datetime = None,
 ) -> MagicMock:
     """Create a mock tournament with specified parameters"""
     tournament = MagicMock()
@@ -48,45 +53,55 @@ def create_mock_tournament(
 def print_separator(title: str = ""):
     """Print a nice separator"""
     if title:
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print(f"  {title}")
-        print(f"{'='*80}\n")
+        print(f"{'=' * 80}\n")
     else:
-        print(f"{'='*80}\n")
+        print(f"{'=' * 80}\n")
 
 
-def print_burn_data(burn_data: TournamentBurnDataSeparated, scenario: str):
+def print_burn_data(burn_data: TournamentBurnData, scenario: str):
     """Pretty print burn data results"""
     print_separator(f"BURN DATA RESULTS - {scenario}")
-    
+
     print("📊 Performance Differences:")
-    print(f"   TEXT Performance: {burn_data.text_performance_diff:.2%}" if burn_data.text_performance_diff is not None else "   TEXT Performance: None")
-    print(f"   IMAGE Performance: {burn_data.image_performance_diff:.2%}" if burn_data.image_performance_diff is not None else "   IMAGE Performance: None")
-    
+    print(
+        f"   TEXT Performance: {burn_data.text_performance_diff:.2%}"
+        if burn_data.text_performance_diff is not None
+        else "   TEXT Performance: None"
+    )
+    print(
+        f"   IMAGE Performance: {burn_data.image_performance_diff:.2%}"
+        if burn_data.image_performance_diff is not None
+        else "   IMAGE Performance: None"
+    )
+
     print("\n💰 Weight Allocations:")
-    print(f"   TEXT Tournament Weight:  {burn_data.text_tournament_weight:.6f} ({burn_data.text_tournament_weight*100:.2f}%)")
-    print(f"   IMAGE Tournament Weight: {burn_data.image_tournament_weight:.6f} ({burn_data.image_tournament_weight*100:.2f}%)")
-    print(f"   Burn Weight:             {burn_data.burn_weight:.6f} ({burn_data.burn_weight*100:.2f}%)")
-    
+    print(f"   TEXT Tournament Weight:  {burn_data.text_tournament_weight:.6f} ({burn_data.text_tournament_weight * 100:.2f}%)")
+    print(f"   IMAGE Tournament Weight: {burn_data.image_tournament_weight:.6f} ({burn_data.image_tournament_weight * 100:.2f}%)")
+    print(f"   Burn Weight:             {burn_data.burn_weight:.6f} ({burn_data.burn_weight * 100:.2f}%)")
+
     total = burn_data.text_tournament_weight + burn_data.image_tournament_weight + burn_data.burn_weight
     print(f"\n   Total:                   {total:.6f} ({'✅' if abs(total - 1.0) < 0.0001 else '❌'})")
-    
+
     print("\n🔥 Burn Proportions:")
     print(f"   TEXT Burn Proportion:  {burn_data.text_burn_proportion:.6f}")
     print(f"   IMAGE Burn Proportion: {burn_data.image_burn_proportion:.6f}")
-    
+
     # Calculate emission increases
     text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
     image_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
-    
+
     text_emission_increase = burn_data.text_tournament_weight - text_base
     image_emission_increase = burn_data.image_tournament_weight - image_base
-    
+
     print("\n📈 Emission Changes (from base):")
-    print(f"   TEXT Emission Change:  {text_emission_increase:+.6f} ({text_emission_increase*100:+.2f}%)")
-    print(f"   IMAGE Emission Change: {image_emission_increase:+.6f} ({image_emission_increase*100:+.2f}%)")
-    print(f"   Total Emission Change: {(text_emission_increase + image_emission_increase):+.6f} ({(text_emission_increase + image_emission_increase)*100:+.2f}%)")
-    
+    print(f"   TEXT Emission Change:  {text_emission_increase:+.6f} ({text_emission_increase * 100:+.2f}%)")
+    print(f"   IMAGE Emission Change: {image_emission_increase:+.6f} ({image_emission_increase * 100:+.2f}%)")
+    print(
+        f"   Total Emission Change: {(text_emission_increase + image_emission_increase):+.6f} ({(text_emission_increase + image_emission_increase) * 100:+.2f}%)"
+    )
+
     print()
 
 
@@ -96,36 +111,30 @@ async def scenario_1_perfect_performance():
     print("Both TEXT and IMAGE winners perform perfectly against synthetic tasks")
     print("Performance Difference: 0% for both")
     print("Expected: Base weights only, no emission increase\n")
-    
+
     mock_db = AsyncMock()
-    
+
     # Create mock tournaments with 0% performance difference
     text_tournament = create_mock_tournament(
-        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1", 
-        performance_diff=0.0
+        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.0
     )
-    
+
     image_tournament = create_mock_tournament(
-        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.0
+        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.0
     )
-    
+
     # Mock previous tournaments (same winners)
     prev_text = create_mock_tournament(
-        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.0
+        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.0
     )
-    
+
     prev_image = create_mock_tournament(
-        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.0
+        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.0
     )
-    
-    with patch('validator.core.weight_setting.get_latest_completed_tournament', 
-               side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_latest_completed_tournament',
-                   side_effect=[prev_text, prev_image]):
-            burn_data = await get_tournament_burn_details_separated(mock_db)
+
+    with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[text_tournament, image_tournament]):
+        with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[prev_text, prev_image]):
+            burn_data = await get_tournament_burn_details(mock_db)
             print_burn_data(burn_data, "Perfect Performance")
 
 
@@ -135,34 +144,28 @@ async def scenario_2_good_performance():
     print("TEXT winner: 7% performance difference")
     print("IMAGE winner: 6% performance difference")
     print("Expected: Small emission increase (7%-5%)*2 and (6%-5%)*2\n")
-    
+
     mock_db = AsyncMock()
-    
+
     text_tournament = create_mock_tournament(
-        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.07
+        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.07
     )
-    
+
     image_tournament = create_mock_tournament(
-        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.06
+        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.06
     )
-    
+
     prev_text = create_mock_tournament(
-        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.07
+        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.07
     )
-    
+
     prev_image = create_mock_tournament(
-        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.06
+        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.06
     )
-    
-    with patch('validator.core.weight_setting.get_latest_completed_tournament',
-               side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_latest_completed_tournament',
-                   side_effect=[prev_text, prev_image]):
-            burn_data = await get_tournament_burn_details_separated(mock_db)
+
+    with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[text_tournament, image_tournament]):
+        with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[prev_text, prev_image]):
+            burn_data = await get_tournament_burn_details(mock_db)
             print_burn_data(burn_data, "Good Performance")
 
 
@@ -172,34 +175,28 @@ async def scenario_3_high_performance():
     print("TEXT winner: 15% performance difference")
     print("IMAGE winner: 20% performance difference")
     print("Expected: Large emission increases\n")
-    
+
     mock_db = AsyncMock()
-    
+
     text_tournament = create_mock_tournament(
-        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.15
+        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.15
     )
-    
+
     image_tournament = create_mock_tournament(
-        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.20
+        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.20
     )
-    
+
     prev_text = create_mock_tournament(
-        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.15
+        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.15
     )
-    
+
     prev_image = create_mock_tournament(
-        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.20
+        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.20
     )
-    
-    with patch('validator.core.weight_setting.get_latest_completed_tournament',
-               side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_latest_completed_tournament',
-                   side_effect=[prev_text, prev_image]):
-            burn_data = await get_tournament_burn_details_separated(mock_db)
+
+    with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[text_tournament, image_tournament]):
+        with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[prev_text, prev_image]):
+            burn_data = await get_tournament_burn_details(mock_db)
             print_burn_data(burn_data, "High Performance")
 
 
@@ -210,43 +207,40 @@ async def scenario_4_new_winner():
     print("Previous winner had 8% performance, new winner calculated at 12%")
     print("IMAGE: Same winner defends (6% performance)")
     print("Expected: Fresh calculation for TEXT, stored value for IMAGE\n")
-    
+
     mock_db = AsyncMock()
-    
+
     # TEXT has new winner
     text_tournament = create_mock_tournament(
-        "text_2025_01", TournamentType.TEXT, "NEW_WINNER_TEXT", "NEW_WINNER_TEXT",
-        performance_diff=0.08  # Old stored value (will be ignored)
+        "text_2025_01",
+        TournamentType.TEXT,
+        "NEW_WINNER_TEXT",
+        "NEW_WINNER_TEXT",
+        performance_diff=0.08,  # Old stored value (will be ignored)
     )
-    
+
     prev_text = create_mock_tournament(
-        "text_2024_12", TournamentType.TEXT, "old_winner_text", "old_winner_text",
-        performance_diff=0.08
+        "text_2024_12", TournamentType.TEXT, "old_winner_text", "old_winner_text", performance_diff=0.08
     )
-    
+
     # IMAGE same winner
     image_tournament = create_mock_tournament(
-        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.06
+        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.06
     )
-    
+
     prev_image = create_mock_tournament(
-        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.06
+        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.06
     )
-    
-    with patch('validator.core.weight_setting.get_latest_completed_tournament',
-               side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_latest_completed_tournament',
-                   side_effect=[prev_text, prev_image]):
+
+    with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[text_tournament, image_tournament]):
+        with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[prev_text, prev_image]):
             # Mock fresh calculation for new TEXT winner
-            with patch('validator.core.weight_setting.calculate_performance_difference',
-                      return_value=0.12) as mock_calc:
-                burn_data = await get_tournament_burn_details_separated(mock_db)
-                
+            with patch("validator.core.weight_setting.calculate_performance_difference", return_value=0.12) as mock_calc:
+                burn_data = await get_tournament_burn_details(mock_db)
+
                 print(f"🔍 Performance calculation called: {mock_calc.called}")
                 print(f"   (Should be True - new winner needs fresh calculation)\n")
-                
+
                 print_burn_data(burn_data, "New Winner Scenario")
 
 
@@ -256,24 +250,22 @@ async def scenario_5_only_text_tournament():
     print("TEXT tournament completed with 10% performance")
     print("IMAGE tournament does not exist yet")
     print("Expected: TEXT gets emission increase, IMAGE gets base weight\n")
-    
+
     mock_db = AsyncMock()
-    
+
     text_tournament = create_mock_tournament(
-        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.10
+        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.10
     )
-    
+
     prev_text = create_mock_tournament(
-        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.10
+        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.10
     )
-    
-    with patch('validator.core.weight_setting.get_latest_completed_tournament',
-               side_effect=[text_tournament, None]):  # None for IMAGE
-        with patch('validator.core.weight_setting.get_latest_completed_tournament',
-                   return_value=prev_text):
-            burn_data = await get_tournament_burn_details_separated(mock_db)
+
+    with patch(
+        "validator.core.weight_setting.get_latest_completed_tournament", side_effect=[text_tournament, None]
+    ):  # None for IMAGE
+        with patch("validator.core.weight_setting.get_latest_completed_tournament", return_value=prev_text):
+            burn_data = await get_tournament_burn_details(mock_db)
             print_burn_data(burn_data, "Only TEXT Tournament")
 
 
@@ -283,34 +275,28 @@ async def scenario_6_below_threshold():
     print("TEXT winner: 3% performance difference (below threshold)")
     print("IMAGE winner: 4% performance difference (below threshold)")
     print("Expected: Base weights only, no emission increase\n")
-    
+
     mock_db = AsyncMock()
-    
+
     text_tournament = create_mock_tournament(
-        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.03
+        "text_2025_01", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.03
     )
-    
+
     image_tournament = create_mock_tournament(
-        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.04
+        "image_2025_01", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.04
     )
-    
+
     prev_text = create_mock_tournament(
-        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1",
-        performance_diff=0.03
+        "text_2024_12", TournamentType.TEXT, "winner_text_1", "winner_text_1", performance_diff=0.03
     )
-    
+
     prev_image = create_mock_tournament(
-        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1",
-        performance_diff=0.04
+        "image_2024_12", TournamentType.IMAGE, "winner_image_1", "winner_image_1", performance_diff=0.04
     )
-    
-    with patch('validator.core.weight_setting.get_latest_completed_tournament',
-               side_effect=[text_tournament, image_tournament]):
-        with patch('validator.core.weight_setting.get_latest_completed_tournament',
-                   side_effect=[prev_text, prev_image]):
-            burn_data = await get_tournament_burn_details_separated(mock_db)
+
+    with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[text_tournament, image_tournament]):
+        with patch("validator.core.weight_setting.get_latest_completed_tournament", side_effect=[prev_text, prev_image]):
+            burn_data = await get_tournament_burn_details(mock_db)
             print_burn_data(burn_data, "Below Threshold")
 
 
@@ -318,16 +304,16 @@ def print_constants():
     """Print current configuration constants"""
     print_separator("CONFIGURATION CONSTANTS")
     print(f"📋 Base Configuration:")
-    print(f"   BASE_TOURNAMENT_WEIGHT:        {cts.BASE_TOURNAMENT_WEIGHT:.2f} ({cts.BASE_TOURNAMENT_WEIGHT*100:.0f}%)")
-    print(f"   TOURNAMENT_TEXT_WEIGHT:        {cts.TOURNAMENT_TEXT_WEIGHT:.2f} ({cts.TOURNAMENT_TEXT_WEIGHT*100:.0f}%)")
-    print(f"   TOURNAMENT_IMAGE_WEIGHT:       {cts.TOURNAMENT_IMAGE_WEIGHT:.2f} ({cts.TOURNAMENT_IMAGE_WEIGHT*100:.0f}%)")
+    print(f"   BASE_TOURNAMENT_WEIGHT:        {cts.BASE_TOURNAMENT_WEIGHT:.2f} ({cts.BASE_TOURNAMENT_WEIGHT * 100:.0f}%)")
+    print(f"   TOURNAMENT_TEXT_WEIGHT:        {cts.TOURNAMENT_TEXT_WEIGHT:.2f} ({cts.TOURNAMENT_TEXT_WEIGHT * 100:.0f}%)")
+    print(f"   TOURNAMENT_IMAGE_WEIGHT:       {cts.TOURNAMENT_IMAGE_WEIGHT:.2f} ({cts.TOURNAMENT_IMAGE_WEIGHT * 100:.0f}%)")
     print(f"   EMISSION_MULTIPLIER_THRESHOLD: {cts.EMISSION_MULTIPLIER_THRESHOLD:.2%}")
     print(f"\n📐 Calculated Base Weights:")
     text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
     image_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
-    print(f"   TEXT Base Weight:  {text_base:.4f} ({text_base*100:.2f}%)")
-    print(f"   IMAGE Base Weight: {image_base:.4f} ({image_base*100:.2f}%)")
-    print(f"   BURN Base Weight:  {1.0 - text_base - image_base:.4f} ({(1.0 - text_base - image_base)*100:.2f}%)")
+    print(f"   TEXT Base Weight:  {text_base:.4f} ({text_base * 100:.2f}%)")
+    print(f"   IMAGE Base Weight: {image_base:.4f} ({image_base * 100:.2f}%)")
+    print(f"   BURN Base Weight:  {1.0 - text_base - image_base:.4f} ({(1.0 - text_base - image_base) * 100:.2f}%)")
     print(f"\n💡 Emission Multiplier Formula:")
     print(f"   If performance > {cts.EMISSION_MULTIPLIER_THRESHOLD:.1%}:")
     print(f"   emission_increase = (performance - {cts.EMISSION_MULTIPLIER_THRESHOLD:.1%}) × 2.0")
@@ -339,9 +325,9 @@ async def main():
     print("\n" + "🔥" * 40)
     print("   TOURNAMENT BURN MECHANICS - TEST SCENARIOS")
     print("🔥" * 40 + "\n")
-    
+
     print_constants()
-    
+
     # Run all scenarios
     await scenario_1_perfect_performance()
     await scenario_2_good_performance()
@@ -349,7 +335,7 @@ async def main():
     await scenario_4_new_winner()
     await scenario_5_only_text_tournament()
     await scenario_6_below_threshold()
-    
+
     print_separator("TEST COMPLETE")
     print("✅ All scenarios executed successfully!")
     print("\nKey Takeaways:")
@@ -364,4 +350,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

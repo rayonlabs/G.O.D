@@ -10,7 +10,7 @@ from core.models.tournament_models import TournamentAuditData
 from core.utils import download_s3_file
 from validator.core.config import Config
 from validator.core.config import load_config
-from validator.core.weight_setting import get_node_weights_from_period_scores_with_separated_burn_data
+from validator.core.weight_setting import get_node_weights_from_tournament_audit_data
 from validator.core.weight_setting import set_weights
 from validator.utils.logging import get_logger
 
@@ -54,9 +54,7 @@ async def get_similarity_score_for_rayon_weights(
         logger.warning("No tournament data found in S3, cannot calculate weights without tournament information")
         raise ValueError("Tournament data is required for weight calculation")
 
-    result = await get_node_weights_from_period_scores_with_separated_burn_data(
-        config.substrate, config.netuid, tournament_audit_data
-    )
+    result = await get_node_weights_from_tournament_audit_data(config.substrate, config.netuid, tournament_audit_data)
     node_ids = result.node_ids
     node_weights = result.node_weights
 

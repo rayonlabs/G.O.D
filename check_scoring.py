@@ -8,13 +8,10 @@ import sys
 
 from fiber.chain import fetch_nodes
 
-from core.models.tournament_models import TournamentAuditData
 from core.models.tournament_models import TournamentType
-
-# Import all the scoring logic from the codebase
 from validator.core.config import load_config
 from validator.core.weight_setting import build_tournament_audit_data
-from validator.core.weight_setting import get_node_weights_from_period_scores_with_separated_burn_data
+from validator.core.weight_setting import get_node_weights_from_tournament_audit_data
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.utils.logging import get_logger
 from validator.utils.util import try_db_connections
@@ -58,14 +55,12 @@ async def check_hotkey_scoring(hotkey: str):
     print(f"\nWeight Distribution:")
     print(f"  Text tournament weight: {tournament_audit_data.text_tournament_weight:.6f}")
     print(f"  Image tournament weight: {tournament_audit_data.image_tournament_weight:.6f}")
-    print(f"  Burn weight: {tournament_audit_data.separated_burn_weight:.6f}")
+    print(f"  Burn weight: {tournament_audit_data.burn_weight:.6f}")
     print(f"  Active participants: {len(tournament_audit_data.participants)}")
 
     # Calculate weights
     print("\nCalculating weights...")
-    result = await get_node_weights_from_period_scores_with_separated_burn_data(
-        config.substrate, config.netuid, tournament_audit_data
-    )
+    result = await get_node_weights_from_tournament_audit_data(config.substrate, config.netuid, tournament_audit_data)
 
     all_node_ids = result.node_ids
     all_node_weights = result.node_weights
