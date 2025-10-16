@@ -30,12 +30,34 @@ from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winners
-from validator.tournament.utils import is_champion_winner
 from validator.utils.logging import get_logger
 from validator.utils.util import normalise_float
 
 
 logger = get_logger(__name__)
+
+
+def is_champion_winner(winner_hotkey: str | None, base_winner_hotkey: str | None, champion_hotkey: str) -> bool:
+    """
+    Check if champion_hotkey won the tournament.
+
+    Handles the case where the defending champion defends successfully
+    (winner_hotkey == EMISSION_BURN_HOTKEY but base_winner_hotkey == champion_hotkey).
+
+    Args:
+        winner_hotkey: The tournament's winner_hotkey field
+        base_winner_hotkey: The tournament's base_winner_hotkey field
+        champion_hotkey: The hotkey to check
+
+    Returns:
+        True if champion_hotkey won the tournament
+    """
+    from validator.core.constants import EMISSION_BURN_HOTKEY
+
+    if not winner_hotkey:
+        return False
+
+    return winner_hotkey == champion_hotkey or (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
 
 
 async def create_tournament(tournament: TournamentData, psql_db: PSQLDB) -> str:

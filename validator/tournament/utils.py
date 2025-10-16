@@ -35,6 +35,7 @@ from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_participant
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
+from validator.db.sql.tournaments import is_champion_winner
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament import constants as t_cst
 from validator.tournament.task_creator import create_new_task_of_same_type
@@ -80,25 +81,7 @@ def get_real_winner_hotkey(winner_hotkey: str | None, base_winner_hotkey: str | 
     return winner_hotkey
 
 
-def is_champion_winner(winner_hotkey: str | None, base_winner_hotkey: str | None, champion_hotkey: str) -> bool:
-    """
-    Check if champion_hotkey won the tournament.
-
-    Handles the case where the defending champion defends successfully
-    (winner_hotkey == EMISSION_BURN_HOTKEY but base_winner_hotkey == champion_hotkey).
-
-    Args:
-        winner_hotkey: The tournament's winner_hotkey field
-        base_winner_hotkey: The tournament's base_winner_hotkey field
-        champion_hotkey: The hotkey to check
-
-    Returns:
-        True if champion_hotkey won the tournament
-    """
-    if not winner_hotkey:
-        return False
-
-    return winner_hotkey == champion_hotkey or (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
+# is_champion_winner has been moved to validator.db.sql.tournaments to avoid circular imports
 
 
 async def replace_tournament_task(
