@@ -6,7 +6,6 @@ from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.db.sql.tasks import get_task
 from validator.db.sql.tournament_performance import get_boss_round_winner_task_pairs
 from validator.db.sql.tournament_performance import get_task_scores_batch
-from validator.db.sql.tournament_performance import update_tournament_winning_performance
 from validator.db.sql.tournaments import count_champion_consecutive_wins_at_tournament
 from validator.db.sql.tournaments import get_final_round_id
 from validator.db.sql.tournaments import get_tournament
@@ -262,8 +261,5 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
         performance_differences = [data.performance_difference for data in performance_data]
         average_performance_diff = sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
         logger.info(f"Average performance difference: {average_performance_diff} from {len(performance_differences)} task pairs")
-
-    await update_tournament_winning_performance(tournament_id, average_performance_diff, psql_db)
-    logger.info(f"Stored performance difference {average_performance_diff:.4f} in database for tournament {tournament_id}")
 
     return average_performance_diff

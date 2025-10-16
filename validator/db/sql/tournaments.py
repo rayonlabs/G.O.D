@@ -187,7 +187,8 @@ async def add_tournament_tasks(tasks: list[TournamentTask], psql_db: PSQLDB):
 async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData | None:
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS},
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1
         """
@@ -199,7 +200,6 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
                 status=result[cst.TOURNAMENT_STATUS],
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
-                winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
             )
         return None
 
@@ -209,18 +209,19 @@ async def get_latest_completed_tournament(
 ) -> TournamentData | None:
     async with await psql_db.connection() as connection:
         exclude_clause = f"AND {cst.TOURNAMENT_ID} != $2" if exclude_tournament_id else ""
+        params = [tournament_type.value]
+        if exclude_tournament_id:
+            params.append(exclude_tournament_id)
+
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS},
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'completed'
             {exclude_clause}
             ORDER BY {cst.CREATED_AT} DESC
             LIMIT 1
         """
-        params = [tournament_type.value]
-        if exclude_tournament_id:
-            params.append(exclude_tournament_id)
-
         result = await connection.fetchrow(query, *params)
         if result:
             return TournamentData(
@@ -229,7 +230,6 @@ async def get_latest_completed_tournament(
                 status=result[cst.TOURNAMENT_STATUS],
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
-                winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
             )
         return None
 
@@ -443,7 +443,8 @@ async def update_tournament_winner_hotkey(tournament_id: str, winner_hotkey: str
 async def get_tournaments_with_status(status: TournamentStatus, psql_db: PSQLDB) -> list[TournamentData]:
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS},
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_STATUS} = $1
             ORDER BY {cst.CREATED_AT} DESC
