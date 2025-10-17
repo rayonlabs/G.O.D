@@ -683,40 +683,6 @@ async def get_detailed_task_stats(psql_db: PSQLDB, include_tournament_tasks=Fals
         return stats
 
 
-async def get_tasks_exceeding_termination_time(psql_db: PSQLDB, include_tournament_tasks=False) -> list[RawTask]:
-    tournament_tasks_clause = (
-        ""
-        if include_tournament_tasks
-        else f"AND {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
-    )
-
-    # Always exclude benchmark tasks
-    benchmark_tasks_clause = f"""
-        AND {cst.TASK_ID} NOT IN (
-            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
-            UNION
-            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
-        )
-    """
-
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            SELECT * FROM {cst.TASKS_TABLE} t
-            WHERE status IN ($1, $2)
-            AND NOW() > termination_at
-            AND EXISTS (
-                SELECT 1 FROM {cst.TASK_NODES_TABLE} tn
-                WHERE tn.task_id = t.task_id
-                AND tn.netuid = $3
-            )
-            {tournament_tasks_clause}
-            {benchmark_tasks_clause}
-            ORDER BY termination_at ASC
-        """
-        rows = await connection.fetch(query, TaskStatus.TRAINING.value, TaskStatus.PREEVALUATION.value, NETUID)
-        return [RawTask(**dict(row)) for row in rows]
-
 
 async def delete_task(task_id: UUID, psql_db: PSQLDB) -> None:
     """Delete a task and its associated node assignments"""
