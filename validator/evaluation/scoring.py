@@ -1,4 +1,3 @@
-import asyncio
 import math
 import os
 import re
@@ -17,7 +16,6 @@ from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
-from core.models.utility_models import MinerSubmission
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.models.utility_models import TextDatasetType
@@ -37,13 +35,9 @@ from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
 from validator.db.sql.tasks import get_nodes_assigned_to_task
-from validator.db.sql.tournaments import is_benchmark_task
-from validator.db.sql.tournaments import is_task_in_tournament
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
-from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.call_endpoint import process_non_stream_get
-from validator.utils.hash_verification import verify_model_hash
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
@@ -469,24 +463,6 @@ def _calculate_weighted_loss_for_image_eval(eval_result: EvaluationResultImage) 
     return None
 
 
-async def _get_submission_repo(miner: Node, task_id: str, config: Config) -> MinerSubmission | None:
-    url = f"{cts.SUBMISSION_ENDPOINT}{task_id}"
-    try:
-        response = await process_non_stream_fiber_get(url, config, miner)
-
-        if isinstance(response, dict):
-            return MinerSubmission(repo=response["repo"], model_hash=response.get("model_hash"))
-        else:
-            repo = str(response)
-            if repo == "None":
-                return None
-            return MinerSubmission(repo=repo, model_hash=None)
-
-    except Exception as e:
-        logger.error(f"Failed to get submission for miner {miner.hotkey}: {e}")
-        return None
-
-
 async def _evaluate_submissions(
     task: AnyTypeRawTask,
     submission_repos: list[str],
@@ -802,76 +778,25 @@ async def process_miners_pool(
 ) -> list[MinerResultsText | MinerResultsImage]:
     assert task.task_id is not None, "We should have a task id when processing miners"
 
-    is_tournament_task = await is_task_in_tournament(str(task.task_id), config.psql_db)
-    is_benchmark = await is_benchmark_task(str(task.task_id), config.psql_db)
     miner_repos: dict[str, str] = {}
-    failed_results = []
+    results = []
 
     for miner in miners:
         with LogContext(miner_hotkey=miner.hotkey):
             expected_name = await get_expected_repo_name(task.task_id, miner.hotkey, config.psql_db)
 
-            if (is_tournament_task or is_benchmark) and expected_name:
-                repo = f"{cts.RAYONLABS_HF_USERNAME}/{expected_name}"
-                logger.info(f"Tournament task: constructed repo {repo} for miner {miner.hotkey}")
-                miner_repos[miner.hotkey] = repo
-            else:
-                submission = await _get_submission_repo(miner, str(task.task_id), config)
-                if submission is not None and submission.repo is not None:
-                    repo_parts = submission.repo.split("/")
-                    if len(repo_parts) >= 2:
-                        submitted_name = repo_parts[-1]
+            if not expected_name:
+                logger.error(f"No expected repo name found for miner {miner.hotkey} on task {task.task_id}")
+                results.append(
+                    _create_failed_miner_result(
+                        miner.hotkey, score_reason="No expected repo name found", task_type=task.task_type
+                    )
+                )
+                continue
 
-                        if expected_name and submitted_name != expected_name:
-                            logger.warning(
-                                f"Miner {miner.hotkey} submitted a repo with name {submitted_name} "
-                                f"but expected {expected_name}. Marking as failed."
-                            )
-                            failed_results.append(
-                                _create_failed_miner_result(
-                                    miner.hotkey, score_reason="Repository name mismatch", task_type=task.task_type
-                                )
-                            )
-                            continue
-
-                        # Hash verification
-                        if submission.model_hash is not None:
-                            try:
-                                loop = asyncio.get_event_loop()
-                                hash_result = await asyncio.wait_for(
-                                    loop.run_in_executor(None, verify_model_hash, submission.repo, submission.model_hash),
-                                    timeout=6000,
-                                )
-                                if hash_result:
-                                    logger.info(f"Hash verification passed for miner {miner.hotkey}")
-                                else:
-                                    logger.warning(f"Hash verification failed for miner {miner.hotkey}. Marking as failed.")
-                                    failed_results.append(
-                                        _create_failed_miner_result(
-                                            miner.hotkey, score_reason="Hash verification failed", task_type=task.task_type
-                                        )
-                                    )
-                                    continue
-                            except Exception as e:
-                                logger.warning(f"Hash verification error for miner {miner.hotkey}: {e}. Marking as failed.")
-                                failed_results.append(
-                                    _create_failed_miner_result(
-                                        miner.hotkey, score_reason="Hash verification failed", task_type=task.task_type
-                                    )
-                                )
-                                continue
-                        else:
-                            logger.info(f"No hash provided by miner {miner.hotkey}, skipping verification")
-
-                        miner_repos[miner.hotkey] = submission.repo
-
-                logger.info(f"Found repo {submission.repo if submission else None} for miner {miner.hotkey}")
-
-    results = failed_results + [
-        _create_failed_miner_result(miner.hotkey, score_reason="Invalid/No repo submitted", task_type=task.task_type)
-        for miner in miners
-        if miner.hotkey not in miner_repos and miner.hotkey not in [r.hotkey for r in failed_results]
-    ]
+            repo = f"{cts.RAYONLABS_HF_USERNAME}/{expected_name}"
+            logger.info(f"Constructed repo {repo} for miner {miner.hotkey}")
+            miner_repos[miner.hotkey] = repo
 
     if miner_repos:
         try:

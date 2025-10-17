@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import json
 import random
-import uuid
 
 from fiber.chain.models import Node
 
@@ -145,22 +144,6 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Confi
     return task
 
 
-async def _let_miners_know_to_start_training(task: AnyTypeRawTask, nodes: list[Node], config: Config):
-    task_request_body = get_task_config(task).task_request_prepare_function(task)
-    miner_endpoint = get_task_config(task).start_training_endpoint
-
-    logger.info(f"We are telling miners to start training, there are {len(nodes)}")
-
-    for node in nodes:
-        with LogContext(node_id=node.node_id, miner_hotkey=node.hotkey):
-            expected_repo_name = str(uuid.uuid4())
-            await tasks_sql.set_expected_repo_name(str(task.task_id), node, config.psql_db, expected_repo_name)
-            task_request_body.expected_repo_name = expected_repo_name
-
-            response = await process_non_stream_fiber(miner_endpoint, config, node, task_request_body.model_dump())
-            logger.info(f"The response we got from {node.node_id} was {response}")
-
-
 async def _find_and_select_miners_for_task(task: AnyTypeRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
@@ -228,35 +211,6 @@ async def _processing_pending_tasks(config: Config):
     logger.info(f"Found {len(pending_tasks)} pending tasks! Will prep them all now...")
     await asyncio.gather(*[_prep_task(task, config) for task in pending_tasks[: cst.MAX_CONCURRENT_TASK_PREPS]])
     clean_all_hf_datasets_cache()
-
-
-async def _start_training_task(task: AnyTypeRawTask, config: Config) -> None:
-    with LogContext(task_id=str(task.task_id)):
-        task.started_at = datetime.datetime.now(datetime.timezone.utc)
-        task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
-        assigned_miners = await tasks_sql.get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
-        logger.info(f"Here are the miners that have been assigned {assigned_miners}")
-        await _let_miners_know_to_start_training(task, assigned_miners, config)
-        task.status = TaskStatus.TRAINING
-        add_context_tag("status", task.status.value)
-        await tasks_sql.update_task(task, config.psql_db)
-        logger.info("SUCCESS IN STARTING TRAINING")
-
-
-async def _process_ready_to_train_tasks(config: Config):
-    ready_to_train_tasks = await tasks_sql.get_tasks_with_status(
-        status=TaskStatus.READY,
-        psql_db=config.psql_db,
-        tournament_filter="exclude",
-    )
-    if len(ready_to_train_tasks) > 0:
-        logger.info(f"There are {len(ready_to_train_tasks)} ready to train")
-        await asyncio.gather(
-            *[_start_training_task(task, config) for task in ready_to_train_tasks[: cst.MAX_CONCURRENT_TRAININGS]]
-        )
-    else:
-        logger.info("No pending tasks - waiting for 30 seconds")
-        await asyncio.sleep(30)
 
 
 async def _evaluate_task(task: AnyTypeRawTask, gpu_ids: list[int], config: Config):
