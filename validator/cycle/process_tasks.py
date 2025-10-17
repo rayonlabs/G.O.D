@@ -122,9 +122,13 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Confi
     emission_burn_node = await nodes_sql.get_node_by_hotkey(EMISSION_BURN_HOTKEY, config.psql_db)
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
     already_assigned_hotkeys = [miner.hotkey for miner in miners_already_assigned]
+    expected_repo_name = f"organic_{task.task_id}"
 
     if EMISSION_BURN_HOTKEY in already_assigned_hotkeys:
         logger.info(f"EMISSION_BURN_HOTKEY already assigned to task {task.task_id}")
+        # Ensure expected_repo_name is set even if already assigned
+        await tasks_sql.set_expected_repo_name(str(task.task_id), emission_burn_node, config.psql_db, expected_repo_name)
+
         task.assigned_miners = [EMISSION_BURN_HOTKEY]
         task.status = TaskStatus.READY
         add_context_tag("status", task.status.value)
@@ -132,6 +136,8 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Confi
 
     await tasks_sql.assign_node_to_task(str(task.task_id), emission_burn_node, config.psql_db)
     logger.info(f"EMISSION_BURN_HOTKEY has been assigned to task {task.task_id}")
+
+    await tasks_sql.set_expected_repo_name(str(task.task_id), emission_burn_node, config.psql_db, expected_repo_name)
 
     task.assigned_miners = [EMISSION_BURN_HOTKEY]
     task.status = TaskStatus.READY
