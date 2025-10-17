@@ -16,6 +16,7 @@ from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskType
 from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.tournament_performance import get_boss_round_synthetic_task_completion
+from validator.db.sql.tournaments import count_champion_consecutive_wins
 from validator.db.sql.tournaments import get_active_tournament_participants
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_full_results
@@ -385,7 +386,32 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
     text_emission_increase = calculate_emission_multiplier(text_performance_diff) if text_performance_diff is not None else 0.0
     image_emission_increase = calculate_emission_multiplier(image_performance_diff) if image_performance_diff is not None else 0.0
 
-    logger.info(f"Text emission increase: {text_emission_increase}, Image emission increase: {image_emission_increase}")
+    logger.info(f"Text emission increase (before decay): {text_emission_increase}, Image emission increase (before decay): {image_emission_increase}")
+
+    text_consecutive_wins = 0
+    image_consecutive_wins = 0
+
+    latest_text_tournament = await get_latest_completed_tournament(psql_db, TournamentType.TEXT)
+    if latest_text_tournament and latest_text_tournament.winner_hotkey:
+        winner_hotkey = latest_text_tournament.winner_hotkey
+        if winner_hotkey == cts.EMISSION_BURN_HOTKEY:
+            winner_hotkey = latest_text_tournament.base_winner_hotkey
+        if winner_hotkey:
+            text_consecutive_wins = await count_champion_consecutive_wins(psql_db, TournamentType.TEXT, winner_hotkey)
+            text_decay = text_consecutive_wins * cts.EMISSION_BOOST_DECAY_PER_WIN
+            text_emission_increase = max(0.0, text_emission_increase - text_decay)
+            logger.info(f"Text winner {winner_hotkey} has {text_consecutive_wins} consecutive wins, decay: {text_decay:.4f}, adjusted boost: {text_emission_increase:.4f}")
+
+    latest_image_tournament = await get_latest_completed_tournament(psql_db, TournamentType.IMAGE)
+    if latest_image_tournament and latest_image_tournament.winner_hotkey:
+        winner_hotkey = latest_image_tournament.winner_hotkey
+        if winner_hotkey == cts.EMISSION_BURN_HOTKEY:
+            winner_hotkey = latest_image_tournament.base_winner_hotkey
+        if winner_hotkey:
+            image_consecutive_wins = await count_champion_consecutive_wins(psql_db, TournamentType.IMAGE, winner_hotkey)
+            image_decay = image_consecutive_wins * cts.EMISSION_BOOST_DECAY_PER_WIN
+            image_emission_increase = max(0.0, image_emission_increase - image_decay)
+            logger.info(f"Image winner {winner_hotkey} has {image_consecutive_wins} consecutive wins, decay: {image_decay:.4f}, adjusted boost: {image_emission_increase:.4f}")
 
     text_tournament_weight = min(cts.TOURNAMENT_TEXT_WEIGHT + text_emission_increase, cts.MAX_TEXT_TOURNAMENT_WEIGHT)
     image_tournament_weight = min(cts.TOURNAMENT_IMAGE_WEIGHT + image_emission_increase, cts.MAX_IMAGE_TOURNAMENT_WEIGHT)
