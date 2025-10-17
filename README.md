@@ -5,12 +5,7 @@
 
 > Distributed intelligence for LLM and diffusion model training. Where the world's best AutoML minds compete.
 
-## 🎯 Two Training Systems
-
-### 1. **Real-Time Serving** 
-Miners compete to train models for [Gradients.io](https://gradients.io) customers who use our 4-click interface to fine-tune AI models.
-
-### 2. **Tournaments** 🏆
+ **Tournaments** 🏆
 Competitive events where validators execute miners' open-source training scripts on dedicated infrastructure.
 
 - **Duration**: 4-7 days per tournament
@@ -23,7 +18,6 @@ Competitive events where validators execute miners' open-source training scripts
 
 ## Setup Guides
 
-- [Real-Time Miner Setup](docs/miner_setup.md)
 - [Tournament Miner Guide](docs/tourn_miner.md)
 - [Validator Setup Guide](docs/validator_setup.md)
 
