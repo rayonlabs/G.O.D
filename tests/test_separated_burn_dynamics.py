@@ -21,7 +21,7 @@ from core.models.tournament_models import TournamentType
 from validator.core.models import PeriodScore
 from validator.core.weight_setting import apply_tournament_weights
 from validator.core.weight_setting import get_node_weights_from_tournament_audit_data
-from validator.core.weight_setting import get_tournament_burn_details_separated
+from validator.core.weight_setting import get_tournament_burn_details
 
 
 class TestSeparatedBurnDynamics:
@@ -220,7 +220,7 @@ class TestSeparatedBurnDynamics:
             mock_calc_perf.side_effect = mock_calc_perf_side_effect
 
             # Run separated burn calculation
-            result = await get_tournament_burn_details_separated(mock_psql_db)
+            result = await get_tournament_burn_details(mock_psql_db)
 
             # Verify different burn rates were calculated
             assert result.text_performance_diff == 0.4
@@ -266,7 +266,7 @@ class TestSeparatedBurnDynamics:
         # This would require mocking many dependencies, but demonstrates the integration point
         with (
             pytest.mock.patch("validator.core.weight_setting.fetch_nodes") as mock_fetch_nodes,
-            pytest.mock.patch("validator.core.weight_setting.get_tournament_burn_details_separated") as mock_burn_data,
+            pytest.mock.patch("validator.core.weight_setting.get_tournament_burn_details") as mock_burn_data,
             pytest.mock.patch("validator.core.weight_setting.get_tournament_participation_data") as mock_tourn_part,
             pytest.mock.patch("validator.core.weight_setting.get_weekly_task_participation_data") as mock_weekly_part,
             pytest.mock.patch("validator.core.weight_setting.get_active_tournament_participants") as mock_participants,
