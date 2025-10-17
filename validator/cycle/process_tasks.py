@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import json
 import random
-import uuid
 
 from fiber.chain.models import Node
 
@@ -122,10 +121,13 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Confi
     emission_burn_node = await nodes_sql.get_node_by_hotkey(EMISSION_BURN_HOTKEY, config.psql_db)
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
     already_assigned_hotkeys = [miner.hotkey for miner in miners_already_assigned]
+    expected_repo_name = f"organic_{task.task_id}"
 
     if EMISSION_BURN_HOTKEY in already_assigned_hotkeys:
         logger.info(f"EMISSION_BURN_HOTKEY already assigned to task {task.task_id}")
-        task.assigned_miners = [EMISSION_BURN_HOTKEY]
+        # Ensure expected_repo_name is set even if already assigned
+        await tasks_sql.set_expected_repo_name(str(task.task_id), emission_burn_node, config.psql_db, expected_repo_name)
+
         task.status = TaskStatus.READY
         add_context_tag("status", task.status.value)
         return task
@@ -133,28 +135,13 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Confi
     await tasks_sql.assign_node_to_task(str(task.task_id), emission_burn_node, config.psql_db)
     logger.info(f"EMISSION_BURN_HOTKEY has been assigned to task {task.task_id}")
 
-    task.assigned_miners = [EMISSION_BURN_HOTKEY]
+    await tasks_sql.set_expected_repo_name(str(task.task_id), emission_burn_node, config.psql_db, expected_repo_name)
+
     task.status = TaskStatus.READY
     add_context_tag("status", task.status.value)
 
     logger.info(f"Task {task.task_id} is ready with EMISSION_BURN_HOTKEY assigned")
     return task
-
-
-async def _let_miners_know_to_start_training(task: AnyTypeRawTask, nodes: list[Node], config: Config):
-    task_request_body = get_task_config(task).task_request_prepare_function(task)
-    miner_endpoint = get_task_config(task).start_training_endpoint
-
-    logger.info(f"We are telling miners to start training, there are {len(nodes)}")
-
-    for node in nodes:
-        with LogContext(node_id=node.node_id, miner_hotkey=node.hotkey):
-            expected_repo_name = str(uuid.uuid4())
-            await tasks_sql.set_expected_repo_name(str(task.task_id), node, config.psql_db, expected_repo_name)
-            task_request_body.expected_repo_name = expected_repo_name
-
-            response = await process_non_stream_fiber(miner_endpoint, config, node, task_request_body.model_dump())
-            logger.info(f"The response we got from {node.node_id} was {response}")
 
 
 async def _find_and_select_miners_for_task(task: AnyTypeRawTask, config: Config):
@@ -226,35 +213,6 @@ async def _processing_pending_tasks(config: Config):
     clean_all_hf_datasets_cache()
 
 
-async def _start_training_task(task: AnyTypeRawTask, config: Config) -> None:
-    with LogContext(task_id=str(task.task_id)):
-        task.started_at = datetime.datetime.now(datetime.timezone.utc)
-        task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
-        assigned_miners = await tasks_sql.get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
-        logger.info(f"Here are the miners that have been assigned {assigned_miners}")
-        await _let_miners_know_to_start_training(task, assigned_miners, config)
-        task.status = TaskStatus.TRAINING
-        add_context_tag("status", task.status.value)
-        await tasks_sql.update_task(task, config.psql_db)
-        logger.info("SUCCESS IN STARTING TRAINING")
-
-
-async def _process_ready_to_train_tasks(config: Config):
-    ready_to_train_tasks = await tasks_sql.get_tasks_with_status(
-        status=TaskStatus.READY,
-        psql_db=config.psql_db,
-        tournament_filter="exclude",
-    )
-    if len(ready_to_train_tasks) > 0:
-        logger.info(f"There are {len(ready_to_train_tasks)} ready to train")
-        await asyncio.gather(
-            *[_start_training_task(task, config) for task in ready_to_train_tasks[: cst.MAX_CONCURRENT_TRAININGS]]
-        )
-    else:
-        logger.info("No pending tasks - waiting for 30 seconds")
-        await asyncio.sleep(30)
-
-
 async def _evaluate_task(task: AnyTypeRawTask, gpu_ids: list[int], config: Config):
     gpu_ids_str = "," + ",".join(str(gpu_id) for gpu_id in gpu_ids) + ","
     with LogContext(task_id=str(task.task_id), gpu_ids=gpu_ids_str):
@@ -312,10 +270,6 @@ async def _move_any_prep_data_to_pending(config):
     await asyncio.gather(*[_move_back_to_pending_status(task, config) for task in stopped_in_prep])
 
 
-async def _move_to_preevaluation(tasks: list[AnyTypeRawTask], config: Config):
-    await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
-
-
 async def process_pending_tasks(config: Config) -> None:
     await _move_any_prep_data_to_pending(config)
     while True:
@@ -323,20 +277,10 @@ async def process_pending_tasks(config: Config) -> None:
             await _processing_pending_tasks(config)
             await _find_miners_for_task(config)
             await _handle_delayed_tasks(config)
+            await asyncio.sleep(30)
         except Exception as e:
             logger.info(f"There was a problem in processing: {e}")
             await asyncio.sleep(30)
-
-
-async def move_tasks_to_preevaluation_loop(config: Config):
-    await _move_any_evaluating_tasks_to_pending_evaluation(config)
-    while True:
-        completed_tasks = await tasks_sql.get_tasks_exceeding_termination_time(config.psql_db, include_tournament_tasks=False)
-        if completed_tasks:
-            await _move_to_preevaluation(completed_tasks, config)
-        else:
-            logger.info("No tasks to move to preevaluation - waiting 60 seconds")
-        await asyncio.sleep(60)
 
 
 async def cleanup_model_cache_loop(psql_db: PSQLDB):
@@ -458,6 +402,6 @@ def compute_required_gpus(task: RawTask) -> int:
 
 
 async def process_completed_tasks(config: Config) -> None:
-    await asyncio.gather(
-        move_tasks_to_preevaluation_loop(config), evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db)
-    )
+    await _move_any_evaluating_tasks_to_pending_evaluation(config)
+
+    await asyncio.gather(evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db))

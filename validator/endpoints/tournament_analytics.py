@@ -38,7 +38,7 @@ from validator.core.constants import LATEST_TOURNAMENTS_CACHE_TTL
 from validator.core.constants import TASK_DETAILS_ENDPOINT
 from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
-from validator.core.weight_setting import get_tournament_burn_details_separated
+from validator.core.weight_setting import get_tournament_burn_details
 from validator.db.sql import benchmark_tasks
 from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql
@@ -209,7 +209,7 @@ async def get_latest_tournaments_details(
         if latest_image:
             image_details = await get_tournament_details(latest_image.tournament_id, config)
 
-        burn_data = await get_tournament_burn_details_separated(config.psql_db)
+        burn_data = await get_tournament_burn_details(config.psql_db)
 
         result = LatestTournamentsDetailsResponse(text=text_details, image=image_details, burn_data=burn_data)
 

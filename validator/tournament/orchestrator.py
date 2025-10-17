@@ -279,7 +279,7 @@ async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Confi
 
                     assignments.append(
                         TaskTrainingAssignment(
-                            task_id=task.task_id,
+                            task_id=str(task.task_id),
                             hotkey=hotkey,
                             created_at=task.created_at,
                             priority=priority,
@@ -309,7 +309,7 @@ async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Confi
 
             assignments.append(
                 TaskTrainingAssignment(
-                    task_id=task.task_id,
+                    task_id=str(task.task_id),
                     hotkey=EMISSION_BURN_HOTKEY,
                     created_at=task.created_at,
                     priority=priority,
@@ -418,7 +418,14 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
             training_task = pending_training_tasks[-1]
             tournament_id = await get_tournament_id_by_task_id(training_task.task.task_id, config.psql_db)
             with LogContext(task_id=str(training_task.task.task_id), hotkey=training_task.hotkey, tournament_id=tournament_id):
-                training_request = await _create_training_request(training_task.task, training_task.hotkey, gpu_ids, config)
+                training_request = await _create_training_request(
+                    training_task.task,
+                    training_task.hotkey,
+                    gpu_ids,
+                    training_task.training_repo,
+                    training_task.training_commit_hash,
+                    config,
+                )
                 training_result = await start_training_task(trainer_ip, training_request)
 
                 if training_result == cst.NO_RETRY_RESULT:
@@ -515,7 +522,7 @@ async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) ->
 
 
 async def _create_training_request(
-    task: AnyTypeRawTask, hotkey: str, available_gpu_ids: list[int], config: Config
+    task: AnyTypeRawTask, hotkey: str, available_gpu_ids: list[int], training_repo: str, training_commit_hash: str, config: Config
 ) -> TrainerProxyRequest:
     """
     Create a TrainerProxyRequest based on the task type.
@@ -524,21 +531,19 @@ async def _create_training_request(
         task: The task to create a training request for
         hotkey: The hotkey of the miner
         available_gpu_ids: List of available GPU IDs
+        training_repo: The training repository URL
+        training_commit_hash: The training repository commit hash
         config: Configuration object for database access
 
     Returns:
         TrainerProxyRequest: The training request
     """
     expected_repo_name = await task_sql.get_expected_repo_name(task.task_id, hotkey, config.psql_db)
-    tournament_id = await tournament_sql.get_tournament_id_by_task_id(task.task_id, config.psql_db)
-    training_repo, training_commit_hash = await tournament_sql.get_tournament_training_repo_and_commit(
-        hotkey, tournament_id, config.psql_db
-    )
 
     logger.info(f"Creating training request for hotkey {hotkey}, task {task.task_id}")
     logger.info(f"Expected repo name: {expected_repo_name}")
-    logger.info(f"Training repo from DB: {training_repo}")
-    logger.info(f"Training commit hash from DB: {training_commit_hash}")
+    logger.info(f"Training repo: {training_repo}")
+    logger.info(f"Training commit hash: {training_commit_hash}")
 
     # Validate that training repo exists for this hotkey
     if training_repo is None:
