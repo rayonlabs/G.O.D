@@ -318,10 +318,6 @@ async def _move_any_prep_data_to_pending(config):
     await asyncio.gather(*[_move_back_to_pending_status(task, config) for task in stopped_in_prep])
 
 
-async def _move_to_preevaluation(tasks: list[AnyTypeRawTask], config: Config):
-    await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
-
-
 async def process_pending_tasks(config: Config) -> None:
     await _move_any_prep_data_to_pending(config)
     while True:
@@ -333,17 +329,6 @@ async def process_pending_tasks(config: Config) -> None:
         except Exception as e:
             logger.info(f"There was a problem in processing: {e}")
             await asyncio.sleep(30)
-
-
-async def move_tasks_to_preevaluation_loop(config: Config):
-    await _move_any_evaluating_tasks_to_pending_evaluation(config)
-    while True:
-        completed_tasks = await tasks_sql.get_tasks_exceeding_termination_time(config.psql_db, include_tournament_tasks=False)
-        if completed_tasks:
-            await _move_to_preevaluation(completed_tasks, config)
-        else:
-            logger.info("No tasks to move to preevaluation - waiting 60 seconds")
-        await asyncio.sleep(60)
 
 
 async def cleanup_model_cache_loop(psql_db: PSQLDB):
@@ -465,6 +450,8 @@ def compute_required_gpus(task: RawTask) -> int:
 
 
 async def process_completed_tasks(config: Config) -> None:
+    await _move_any_evaluating_tasks_to_pending_evaluation(config)
+
     await asyncio.gather(
-        move_tasks_to_preevaluation_loop(config), evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db)
+        evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db)
     )
