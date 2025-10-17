@@ -129,7 +129,6 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Confi
         # Ensure expected_repo_name is set even if already assigned
         await tasks_sql.set_expected_repo_name(str(task.task_id), emission_burn_node, config.psql_db, expected_repo_name)
 
-        task.assigned_miners = [EMISSION_BURN_HOTKEY]
         task.status = TaskStatus.READY
         add_context_tag("status", task.status.value)
         return task
@@ -139,7 +138,6 @@ async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Confi
 
     await tasks_sql.set_expected_repo_name(str(task.task_id), emission_burn_node, config.psql_db, expected_repo_name)
 
-    task.assigned_miners = [EMISSION_BURN_HOTKEY]
     task.status = TaskStatus.READY
     add_context_tag("status", task.status.value)
 
@@ -452,6 +450,4 @@ def compute_required_gpus(task: RawTask) -> int:
 async def process_completed_tasks(config: Config) -> None:
     await _move_any_evaluating_tasks_to_pending_evaluation(config)
 
-    await asyncio.gather(
-        evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db)
-    )
+    await asyncio.gather(evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db))
