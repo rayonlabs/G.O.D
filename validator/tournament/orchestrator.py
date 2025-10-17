@@ -279,7 +279,7 @@ async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Confi
 
                     assignments.append(
                         TaskTrainingAssignment(
-                            task_id=task.task_id,
+                            task_id=str(task.task_id),
                             hotkey=hotkey,
                             created_at=task.created_at,
                             priority=priority,
@@ -309,7 +309,7 @@ async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Confi
 
             assignments.append(
                 TaskTrainingAssignment(
-                    task_id=task.task_id,
+                    task_id=str(task.task_id),
                     hotkey=EMISSION_BURN_HOTKEY,
                     created_at=task.created_at,
                     priority=priority,

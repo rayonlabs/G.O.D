@@ -323,6 +323,7 @@ async def process_pending_tasks(config: Config) -> None:
             await _processing_pending_tasks(config)
             await _find_miners_for_task(config)
             await _handle_delayed_tasks(config)
+            await asyncio.sleep(30)
         except Exception as e:
             logger.info(f"There was a problem in processing: {e}")
             await asyncio.sleep(30)
