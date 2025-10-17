@@ -1,3 +1,5 @@
+import statistics
+
 from core.models.tournament_models import TaskPerformanceDifference
 from core.models.tournament_models import TournamentPerformanceData
 from core.models.utility_models import TaskType
@@ -249,7 +251,7 @@ async def get_tournament_performance_data(tournament_id: str, psql_db) -> list[T
 
 async def calculate_performance_difference(tournament_id: str, psql_db) -> float:
     """
-    Calculates average performance difference between tournament winner and runner up.
+    Calculates median performance difference between tournament winner and runner up.
     """
     logger.info(f"=== CALCULATING PERFORMANCE DIFFERENCE FOR TOURNAMENT {tournament_id} ===")
 
@@ -257,13 +259,13 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
 
     if not performance_data:
         logger.info("No task pairs found, returning 0.0 performance difference")
-        average_performance_diff = 0.0
+        median_performance_diff = 0.0
     else:
         performance_differences = [data.performance_difference for data in performance_data]
-        average_performance_diff = sum(performance_differences) / len(performance_differences) if performance_differences else 0.0
-        logger.info(f"Average performance difference: {average_performance_diff} from {len(performance_differences)} task pairs")
+        median_performance_diff = statistics.median(performance_differences) if performance_differences else 0.0
+        logger.info(f"Median performance difference: {median_performance_diff} from {len(performance_differences)} task pairs")
 
-    await update_tournament_winning_performance(tournament_id, average_performance_diff, psql_db)
-    logger.info(f"Stored performance difference {average_performance_diff:.4f} in database for tournament {tournament_id}")
+    await update_tournament_winning_performance(tournament_id, median_performance_diff, psql_db)
+    logger.info(f"Stored performance difference {median_performance_diff:.4f} in database for tournament {tournament_id}")
 
-    return average_performance_diff
+    return median_performance_diff

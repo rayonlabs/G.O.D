@@ -416,38 +416,46 @@ def apply_tournament_weights(
     all_node_weights: list[float],
     scaled_text_tournament_weight: float,
     scaled_image_tournament_weight: float,
+    scaled_text_base_weight: float,
+    scaled_image_base_weight: float,
+    text_winner_hotkey: str | None,
+    image_winner_hotkey: str | None,
 ) -> None:
     """Apply tournament weights with truly text and image weights."""
     logger.info("=== TOURNAMENT WEIGHT CALCULATIONS ===")
 
-    # Process text tournament weights
     logger.info(f"Processing {len(text_tournament_weights)} text tournament winners")
     for hotkey, weight in text_tournament_weights.items():
         node_id = hotkey_to_node_id.get(hotkey)
         if node_id is not None:
-            text_contribution = weight * scaled_text_tournament_weight
+            if hotkey == text_winner_hotkey:
+                text_contribution = weight * scaled_text_tournament_weight
+            else:
+                text_contribution = weight * scaled_text_base_weight
             all_node_weights[node_id] = all_node_weights[node_id] + text_contribution
 
             logger.info(
                 f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
                 f"TEXT TOURNAMENT - weight={weight:.6f}, "
-                f"scaled_text_weight={scaled_text_tournament_weight:.6f}, "
+                f"scaled_text_weight={scaled_text_tournament_weight if hotkey == text_winner_hotkey else scaled_text_base_weight:.6f}, "
                 f"text_contribution={text_contribution:.6f}, "
                 f"total_weight={all_node_weights[node_id]:.6f}"
             )
 
-    # Process image tournament weights
     logger.info(f"Processing {len(image_tournament_weights)} image tournament winners")
     for hotkey, weight in image_tournament_weights.items():
         node_id = hotkey_to_node_id.get(hotkey)
         if node_id is not None:
-            image_contribution = weight * scaled_image_tournament_weight
+            if hotkey == image_winner_hotkey:
+                image_contribution = weight * scaled_image_tournament_weight
+            else:
+                image_contribution = weight * scaled_image_base_weight
             all_node_weights[node_id] = all_node_weights[node_id] + image_contribution
 
             logger.info(
                 f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
                 f"IMAGE TOURNAMENT - weight={weight:.6f}, "
-                f"scaled_image_weight={scaled_image_tournament_weight:.6f}, "
+                f"scaled_image_weight={scaled_image_tournament_weight if hotkey == image_winner_hotkey else scaled_image_base_weight:.6f}, "
                 f"image_contribution={image_contribution:.6f}, "
                 f"total_weight={all_node_weights[node_id]:.6f}"
             )
@@ -478,9 +486,24 @@ async def get_node_weights_from_tournament_audit_data(
     scaled_image_tournament_weight: float = tournament_audit_data.image_tournament_weight * scale_factor
     scaled_burn_weight: float = tournament_audit_data.burn_weight * scale_factor
 
+    scaled_text_base_weight: float = cts.TOURNAMENT_TEXT_WEIGHT * scale_factor
+    scaled_image_base_weight: float = cts.TOURNAMENT_IMAGE_WEIGHT * scale_factor
+
     text_tournament_weights, image_tournament_weights = get_tournament_weights_from_data(
         tournament_audit_data.text_tournament_data, tournament_audit_data.image_tournament_data
     )
+
+    text_winner_hotkey = None
+    if tournament_audit_data.text_tournament_data:
+        text_winner_hotkey = tournament_audit_data.text_tournament_data.winner_hotkey
+        if text_winner_hotkey == cts.EMISSION_BURN_HOTKEY:
+            text_winner_hotkey = tournament_audit_data.text_tournament_data.base_winner_hotkey
+
+    image_winner_hotkey = None
+    if tournament_audit_data.image_tournament_data:
+        image_winner_hotkey = tournament_audit_data.image_tournament_data.winner_hotkey
+        if image_winner_hotkey == cts.EMISSION_BURN_HOTKEY:
+            image_winner_hotkey = tournament_audit_data.image_tournament_data.base_winner_hotkey
 
     apply_tournament_weights(
         text_tournament_weights,
@@ -489,6 +512,10 @@ async def get_node_weights_from_tournament_audit_data(
         all_node_weights,
         scaled_text_tournament_weight,
         scaled_image_tournament_weight,
+        scaled_text_base_weight,
+        scaled_image_base_weight,
+        text_winner_hotkey,
+        image_winner_hotkey,
     )
 
     for hotkey in participants:

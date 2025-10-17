@@ -44,7 +44,7 @@ async def create_text_tournament_tasks(
         logger.info(f"Creating text tournament for {num_groups} groups (1 task per group)")
         tasks = await _create_group_text_tasks(round_data, tournament_id, round_id, config, is_final_round)
     elif is_final_round:
-        logger.info("Creating final text tournament using historical tasks (1 instruct + 1 DPO)")
+        logger.info("Creating final text tournament using historical tasks (2 instruct + 2 DPO + 2 GRPO)")
         tasks = await _create_historical_text_boss_round_tasks(tournament_id, round_id, config)
     else:
         num_pairs = len(round_data.pairs)
@@ -492,26 +492,22 @@ async def _create_historical_text_boss_round_tasks(tournament_id: str, round_id:
 
     logger.info("Creating boss round text tasks using historical tasks")
 
-    # Check which specific task types we already have
-    existing_task_types = set()
+    existing_task_type_counts = {}
     tasks = []
 
     for task in existing_pair_tasks:
         task_obj = await task_sql.get_task(task.task_id, config.psql_db)
         if task_obj:
-            existing_task_types.add(task_obj.task_type.value if hasattr(task_obj.task_type, "value") else task_obj.task_type)
+            task_type_value = task_obj.task_type.value if hasattr(task_obj.task_type, "value") else task_obj.task_type
+            existing_task_type_counts[task_type_value] = existing_task_type_counts.get(task_type_value, 0) + 1
             tasks.append(task_obj)
 
-    # Create only the missing task types
-    if TaskType.INSTRUCTTEXTTASK.value not in existing_task_types:
-        task = await _create_single_historical_text_task(TaskType.INSTRUCTTEXTTASK, tournament_id, round_id, pair_id, config)
-        if task:
-            tasks.append(task)
-
-    if TaskType.DPOTASK.value not in existing_task_types:
-        task = await _create_single_historical_text_task(TaskType.DPOTASK, tournament_id, round_id, pair_id, config)
-        if task:
-            tasks.append(task)
+    for task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+        existing_count = existing_task_type_counts.get(task_type.value, 0)
+        for i in range(2 - existing_count):
+            task = await _create_single_historical_text_task(task_type, tournament_id, round_id, pair_id, config)
+            if task:
+                tasks.append(task)
 
     return tasks
 
