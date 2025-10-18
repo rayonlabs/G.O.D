@@ -225,12 +225,10 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
     pending_text_count = 0
     pending_image_count = 0
     for training_task in pending_training_tasks:
-        task = await task_sql.get_task_by_id(training_task.task_id, config.psql_db)
-        if task:
-            if task.task_type == TaskType.IMAGETASK:
-                pending_image_count += 1
-            else:
-                pending_text_count += 1
+        if training_task.task.task_type == TaskType.IMAGETASK:
+            pending_image_count += 1
+        else:
+            pending_text_count += 1
 
     logger.info(f"Pending by type - Text: {pending_text_count}, Image: {pending_image_count}")
 
