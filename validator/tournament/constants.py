@@ -1,7 +1,7 @@
 MAX_TRAINING_ATTEMPTS = 2
 
 # Smart prioritization thresholds for task fetching
-PENDING_QUEUE_THRESHOLD_FOR_TOURNAMENT = 10  # Fetch tournament tasks when pending < this
+PENDING_QUEUE_THRESHOLD_PER_TYPE = 8  # Fetch tournament tasks when pending per type < this
 PENDING_QUEUE_THRESHOLD_FOR_BENCHMARK = 5  # Fetch benchmark tasks when pending < this
 
 # Orchestrator cycle intervals (in seconds)
