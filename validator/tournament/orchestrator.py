@@ -291,7 +291,9 @@ async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Confi
         # For tournament and benchmark tasks (priority 2 and 3), get actual assigned nodes
         # For organic tasks (priority 1), we'll use EMISSION_BURN_HOTKEY
         if priority in [2, 3]:
+            logger.debug(f"Getting nodes for task {task.task_id} (type: {type(task.task_id)})")
             nodes = await task_sql.get_nodes_assigned_to_task(task.task_id, config.psql_db)
+            logger.debug(f"Found {len(nodes)} nodes for task {task.task_id}: {[n.hotkey for n in nodes]}")
             hotkeys = [node.hotkey for node in nodes]
 
             if hotkeys:
