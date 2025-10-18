@@ -212,7 +212,7 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
     Fetch tasks that are looking for nodes,
     then move them to training status and record the hotkey assignments.
     Process in priority order: organic (1), tournament (2), benchmark (3).
-    Smart prioritization: fetch lower priority tasks when pending queue is low.
+    Smart prioritization: fetch lower priority tasks when pending queue is low (per task type).
     """
     pending_training_tasks = await tournament_sql.get_tournament_training_tasks(
         config.psql_db,
@@ -221,19 +221,48 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
     pending_count = len(pending_training_tasks)
     logger.info(f"Current pending training assignments: {pending_count}")
 
+    # Count pending tasks by type
+    pending_text_count = 0
+    pending_image_count = 0
+    for training_task in pending_training_tasks:
+        task = await task_sql.get_task_by_id(training_task.task_id, config.psql_db)
+        if task:
+            if task.task_type == TaskType.IMAGETASK:
+                pending_image_count += 1
+            else:
+                pending_text_count += 1
+
+    logger.info(f"Pending by type - Text: {pending_text_count}, Image: {pending_image_count}")
+
     organic_tasks = await task_sql.get_tasks_with_status(
         TaskStatus.READY, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude"
     )
     logger.info(f"Found {len(organic_tasks)} organic (non-tournament, non-benchmark) tasks ready for training")
     await _process_tasks_for_training(organic_tasks, config, priority=1)
 
-    if pending_count < cst.PENDING_QUEUE_THRESHOLD_FOR_TOURNAMENT:
-        logger.info(f"Pending queue below {cst.PENDING_QUEUE_THRESHOLD_FOR_TOURNAMENT}, fetching tournament tasks")
-        tournament_tasks = await task_sql.get_tasks_with_status(
-            TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only", benchmark_filter="exclude"
-        )
-        logger.info(f"Found {len(tournament_tasks)} tournament tasks looking for nodes")
-        await _process_tasks_for_training(tournament_tasks, config, priority=2)
+    # Fetch tournament tasks by type
+    all_tournament_tasks = await task_sql.get_tasks_with_status(
+        TaskStatus.LOOKING_FOR_NODES, config.psql_db, tournament_filter="only", benchmark_filter="exclude"
+    )
+
+    text_tasks_to_process = []
+    image_tasks_to_process = []
+
+    for task in all_tournament_tasks:
+        if task.task_type == TaskType.IMAGETASK:
+            if pending_image_count < cst.PENDING_QUEUE_THRESHOLD_PER_TYPE:
+                image_tasks_to_process.append(task)
+        else:
+            if pending_text_count < cst.PENDING_QUEUE_THRESHOLD_PER_TYPE:
+                text_tasks_to_process.append(task)
+
+    if text_tasks_to_process:
+        logger.info(f"Pending text queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, processing {len(text_tasks_to_process)} text tournament tasks")
+        await _process_tasks_for_training(text_tasks_to_process, config, priority=2)
+
+    if image_tasks_to_process:
+        logger.info(f"Pending image queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, processing {len(image_tasks_to_process)} image tournament tasks")
+        await _process_tasks_for_training(image_tasks_to_process, config, priority=2)
 
     if pending_count < cst.PENDING_QUEUE_THRESHOLD_FOR_BENCHMARK:
         logger.info(f"Pending queue below {cst.PENDING_QUEUE_THRESHOLD_FOR_BENCHMARK}, fetching benchmark tasks")
