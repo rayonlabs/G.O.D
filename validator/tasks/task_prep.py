@@ -936,7 +936,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
     return await _process_and_upload_datasets(
         task,
         train_ds,
-        test_ds,
+        test_ds if should_reupload_test else task.test_data,
         synthetic_ds,
         columns_to_sample,
         should_reupload_train,
