@@ -94,8 +94,20 @@ class TournamentData(BaseModel):
     tournament_id: str
     tournament_type: TournamentType
     status: TournamentStatus = TournamentStatus.PENDING
-    base_winner_hotkey: str | None = None
-    winner_hotkey: str | None = None
+    base_winner_hotkey: str | None = Field(
+        default=None, description="The defending champion's real hotkey at the START of this tournament (snapshot)."
+    )
+    winner_hotkey: str | None = Field(
+        default=None,
+        description="The tournament winner's hotkey at the END of this tournament. "
+        "May be EMISSION_BURN_HOTKEY if the defending champion successfully defended.",
+    )
+    winning_performance_difference: float | None = Field(
+        default=None,
+        description="Performance difference metric (0.0 to 1.0) between champion and challenger in boss round. "
+        "Calculated as: (defending_champion_score - new_winner_score) / defending_champion_score. "
+        "score = loss, so lower is better. Higher diff = better perf = less burn.",
+    )
 
 
 class TournamentRoundData(BaseModel):
@@ -171,6 +183,19 @@ class TournamentRound(BaseModel):
     is_final_round: bool = False
 
 
+class TaskTrainingAssignment(BaseModel):
+    """Data for assigning a task-hotkey pair for training with repo information."""
+
+    task_id: str
+    hotkey: str
+    created_at: datetime
+    priority: int = Field(
+        default=1, description="Training priority: 1=organic (non-tournament/non-benchmark), 2=tournament, 3=benchmark"
+    )
+    training_repo: str | None = None
+    training_commit_hash: str | None = None
+
+
 class TournamentTaskTraining(BaseModel):
     task: AnyTypeRawTask
     hotkey: str
@@ -178,6 +203,8 @@ class TournamentTaskTraining(BaseModel):
     n_training_attempts: int
     created_at: datetime
     updated_at: datetime
+    training_repo: str | None = None
+    training_commit_hash: str | None = None
 
 
 class TournamentTaskScore(BaseModel):
@@ -252,18 +279,6 @@ class TournamentPerformanceData(BaseModel):
     performance_difference: float  # Percentage difference (positive = tournament better)
 
 
-class TournamentBurnData(BaseModel):
-    """Data explaining emission burn calculation"""
-
-    text_performance_diff: float | None
-    image_performance_diff: float | None
-    weighted_average_diff: float
-    burn_proportion: float
-    tournament_weight: float
-    regular_weight: float
-    burn_weight: float
-
-
 class TournamentDetailsResponse(BaseModel):
     tournament_id: str
     tournament_type: TournamentType
@@ -285,9 +300,7 @@ class TournamentAuditData(BaseModel):
     participants: list[str] = []
     text_tournament_weight: float = 0.0
     image_tournament_weight: float = 0.0
-    text_regular_weight: float = 0.0
-    image_regular_weight: float = 0.0
-    separated_burn_weight: float = 0.0
+    burn_weight: float = 0.0
     weekly_participation: list["HotkeyTaskParticipation"] = []
 
 
@@ -349,6 +362,18 @@ class ActiveTournamentInfo(BaseModel):
 class ActiveTournamentsResponse(BaseModel):
     text: ActiveTournamentInfo | None
     image: ActiveTournamentInfo | None
+
+
+class TournamentBurnData(BaseModel):
+    """Separated burn data by tournament type"""
+
+    text_performance_diff: float | None
+    image_performance_diff: float | None
+    text_burn_proportion: float
+    image_burn_proportion: float
+    text_tournament_weight: float
+    image_tournament_weight: float
+    burn_weight: float
 
 
 class LatestTournamentsDetailsResponse(BaseModel):
@@ -440,20 +465,6 @@ class HotkeyTaskParticipation(BaseModel):
     text_task_proportion: float  # proportion of text tasks (0.0 to 1.0)
     image_task_proportion: float  # proportion of image tasks (0.0 to 1.0)
     total_tasks: int  # total number of tasks in the period
-
-
-class TournamentBurnDataSeparated(BaseModel):
-    """Separated burn data by tournament type"""
-
-    text_performance_diff: float | None
-    image_performance_diff: float | None
-    text_burn_proportion: float
-    image_burn_proportion: float
-    text_tournament_weight: float
-    image_tournament_weight: float
-    text_regular_weight: float
-    image_regular_weight: float
-    burn_weight: float
 
 
 class NodeWeightsResult(BaseModel):

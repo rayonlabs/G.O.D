@@ -4,8 +4,8 @@
 from collections import Counter
 
 import aiohttp
-import numpy as np
 import httpx
+import numpy as np
 
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentParticipant
@@ -35,6 +35,7 @@ from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_participant
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
+from validator.db.sql.tournaments import is_champion_winner
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament import constants as t_cst
 from validator.tournament.task_creator import create_new_task_of_same_type
@@ -48,9 +49,39 @@ def get_progressive_threshold(consecutive_wins: int) -> float:
     """
     Calculate the progressive threshold using exponential decay.
     """
-    current_threshold = t_cst.EXPONENTIAL_BASE_THRESHOLD * (t_cst.EXPONENTIAL_DECAY_RATE ** (consecutive_wins-1))
+    current_threshold = t_cst.EXPONENTIAL_BASE_THRESHOLD * (t_cst.EXPONENTIAL_DECAY_RATE ** (consecutive_wins - 1))
     return max(t_cst.EXPONENTIAL_MIN_THRESHOLD, current_threshold)
 
+
+def get_real_winner_hotkey(winner_hotkey: str | None, base_winner_hotkey: str | None) -> str | None:
+    """
+    Get the real hotkey of the tournament winner.
+
+    If winner_hotkey is EMISSION_BURN_HOTKEY (defending champion defended),
+    returns base_winner_hotkey (the real defending champion's hotkey).
+    Otherwise returns winner_hotkey.
+
+    This is needed because when a defending champion successfully defends,
+    winner_hotkey is set to EMISSION_BURN_HOTKEY as a placeholder, and
+    base_winner_hotkey contains their actual hotkey.
+
+    Args:
+        winner_hotkey: The tournament's winner_hotkey field
+        base_winner_hotkey: The tournament's base_winner_hotkey field (defending champion snapshot)
+
+    Returns:
+        Real winner's hotkey, or None if no winner
+    """
+    if not winner_hotkey:
+        return None
+
+    if winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey:
+        return base_winner_hotkey
+
+    return winner_hotkey
+
+
+# is_champion_winner has been moved to validator.db.sql.tournaments to avoid circular imports
 
 
 async def replace_tournament_task(
@@ -414,12 +445,16 @@ def determine_boss_round_winner(task_winners: list[str], boss_hotkey: str, tourn
     # Apply different winning requirements based on tournament type
     # Both IMAGE and TEXT tournaments: Challenger must win ALL tasks to become new boss
     if opponent_hotkey and opponent_wins == total_tasks:
-        logger.info(f"{tournament_type.value} tournament: Challenger wins boss round with perfect sweep: {opponent_wins}/{total_tasks} tasks won")
+        logger.info(
+            f"{tournament_type.value} tournament: Challenger wins boss round with perfect sweep: {opponent_wins}/{total_tasks} tasks won"
+        )
         return opponent_hotkey
     else:
         boss_wins = win_counts.get(boss_hotkey, 0)
         if opponent_hotkey:
-            logger.info(f"{tournament_type.value} tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {total_tasks}/{total_tasks} to dethrone), boss won {boss_wins}/{total_tasks}")
+            logger.info(
+                f"{tournament_type.value} tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {total_tasks}/{total_tasks} to dethrone), boss won {boss_wins}/{total_tasks}"
+            )
         else:
             logger.info(f"{tournament_type.value} tournament: Boss retains title by default")
         return boss_hotkey
@@ -637,9 +672,9 @@ async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLD
 
     return unique_winners
 
+
 async def send_to_discord(webhook: str, message: str):
     async with httpx.AsyncClient() as client:
         payload = {"content": message}
         response = await client.post(webhook, json=payload)
         return response
-

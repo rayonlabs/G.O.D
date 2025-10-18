@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import json
 import random
-import uuid
 
 from fiber.chain.models import Node
 
@@ -10,12 +9,12 @@ import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
 import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
-from core.constants import IS_PROD_ENV
 from core.models.payload_models import MinerTaskOffer
 from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
+from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.core.models import AnyTypeRawTask
 from validator.core.models import RawTask
 from validator.core.task_config_models import get_task_config
@@ -113,118 +112,42 @@ async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> Mi
         )
 
 
-async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, nodes: list[Node], config: Config) -> AnyTypeRawTask:
-    if len(nodes) < cst.MINIMUM_MINER_POOL:
-        logger.warning(f"Not enough nodes available. Need at least {cst.MINIMUM_MINER_POOL}, but only have {len(nodes)}.")
-        task = _attempt_delay_task(task)
-        return task
+async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Config) -> AnyTypeRawTask:
+    """
+    Assign a single miner using EMISSION_BURN_HOTKEY for legacy training tasks.
+    """
+    logger.info(f"Assigning single miner using EMISSION_BURN_HOTKEY for task {task.task_id}")
 
-    params_count = None
-    if task.model_params_count:
-        params_count = task.model_params_count
-    else:
-        try:
-            params_count = get_model_num_params(task.model_id)
-        except Exception as e:
-            logger.error(f"Error getting model size for {task.model_id}: {e}")
-            if "70b" in task.model_id.lower():
-                params_count = 70_000_000_000
-            else:
-                params_count = None
-
-    selected_miners: list[str] = []
-    ds_size = await get_task_config(task).data_size_function(task)
-    task_request = MinerTaskOffer(
-        ds_size=ds_size,
-        model=task.model_id,
-        hours_to_complete=task.hours_to_complete,
-        task_id=str(task.task_id),
-        task_type=task.task_type,
-        model_params_count=params_count,
-    )
-    logger.info(f"We are offering the following task to the miners: {task_request.model_dump()}")
+    emission_burn_node = await nodes_sql.get_node_by_hotkey(EMISSION_BURN_HOTKEY, config.psql_db)
     miners_already_assigned = await tasks_sql.get_miners_for_task(task.task_id, config.psql_db)
-
     already_assigned_hotkeys = [miner.hotkey for miner in miners_already_assigned]
-    logger.info(f"There are {len(already_assigned_hotkeys)} miners already assigned to this task")
+    expected_repo_name = f"organic_{task.task_id}"
 
-    # Filter out nodes that are already assigned to this task - this will occur if we had to restart a task due to all miners
-    # failing
-    available_nodes = [node for node in nodes if node.hotkey not in already_assigned_hotkeys]
-    if not available_nodes:
-        logger.error("No nodes available to assign to the task! Why not?!")
-        task = _attempt_delay_task(task)
-        await tasks_sql.update_task(task, config.psql_db)
-        return task
+    if EMISSION_BURN_HOTKEY in already_assigned_hotkeys:
+        logger.info(f"EMISSION_BURN_HOTKEY already assigned to task {task.task_id}")
+        # Ensure expected_repo_name is set even if already assigned
+        await tasks_sql.set_expected_repo_name(str(task.task_id), emission_burn_node, config.psql_db, expected_repo_name)
 
-    # Use image-specific pool sizes for image tasks
-    if task.task_type == TaskType.IMAGETASK:
-        num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_IMAGE_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_IMAGE_POOL)
-    else:
-        num_of_miners_to_try_for = random.randint(cst.MIN_IDEAL_NUM_MINERS_IN_POOL, cst.MAX_IDEAL_NUM_MINERS_IN_POOL)
-    nodes_to_try_for = await _weighted_random_shuffle(available_nodes, config.psql_db)
-
-    # TODO: Improve by selecting high score miners first, then lower score miners, etc
-    i = 0
-    while len(selected_miners) < num_of_miners_to_try_for and nodes_to_try_for:
-        node = nodes_to_try_for.pop()
-        with LogContext(node_id=node.node_id, miner_hotkey=node.hotkey):
-            # try:
-            # TODO: Batch the boi
-            if i > 0 and i % 5 == 0:
-                logger.info(f"We have made {i} offers so far for task {task.task_id}")
-
-            offer_response = await _make_offer(node, task_request, config)
-
-            # Store offer response
-            await tasks_sql.store_offer_response(task.task_id, node.hotkey, offer_response.model_dump_json(), config.psql_db)
-
-            if offer_response.accepted is True:
-                selected_miners.append(node.hotkey)
-                await tasks_sql.assign_node_to_task(str(task.task_id), node, config.psql_db)
-                logger.info(f"The miner {node.node_id} has officially been assigned the task {task.task_id}!!")
-
-    if len(selected_miners) < cst.MINIMUM_MINER_POOL:
-        logger.warning(
-            f"Not enough miners accepted the task. We only have {len(selected_miners)} but we "
-            f"need at least {cst.MINIMUM_MINER_POOL}"
-        )
-        task = _attempt_delay_task(task)
-        return task
-    else:
-        task.assigned_miners = selected_miners
-        logger.info(f"We have {len(selected_miners)} miners assigned to the task - which is enough to get going 🚀")
         task.status = TaskStatus.READY
         add_context_tag("status", task.status.value)
         return task
 
+    await tasks_sql.assign_node_to_task(str(task.task_id), emission_burn_node, config.psql_db)
+    logger.info(f"EMISSION_BURN_HOTKEY has been assigned to task {task.task_id}")
 
-async def _let_miners_know_to_start_training(task: AnyTypeRawTask, nodes: list[Node], config: Config):
-    task_request_body = get_task_config(task).task_request_prepare_function(task)
-    miner_endpoint = get_task_config(task).start_training_endpoint
+    await tasks_sql.set_expected_repo_name(str(task.task_id), emission_burn_node, config.psql_db, expected_repo_name)
 
-    logger.info(f"We are telling miners to start training, there are {len(nodes)}")
+    task.status = TaskStatus.READY
+    add_context_tag("status", task.status.value)
 
-    for node in nodes:
-        with LogContext(node_id=node.node_id, miner_hotkey=node.hotkey):
-            expected_repo_name = str(uuid.uuid4())
-            await tasks_sql.set_expected_repo_name(str(task.task_id), node, config.psql_db, expected_repo_name)
-            task_request_body.expected_repo_name = expected_repo_name
-
-            response = await process_non_stream_fiber(miner_endpoint, config, node, task_request_body.model_dump())
-            logger.info(f"The response we got from {node.node_id} was {response}")
+    logger.info(f"Task {task.task_id} is ready with EMISSION_BURN_HOTKEY assigned")
+    return task
 
 
 async def _find_and_select_miners_for_task(task: AnyTypeRawTask, config: Config):
     with LogContext(task_id=str(task.task_id)):
         try:
-            if IS_PROD_ENV:
-                logger.info("Filtering for only nodes that have scored on prod")
-                nodes = await nodes_sql.get_eligible_nodes(config.psql_db)
-            else:
-                logger.info("THIS IS TESTNET SO WE DONT FILTER NODES")
-                nodes = await nodes_sql.get_all_nodes(config.psql_db)
-            task = await _select_miner_pool_and_add_to_task(task, nodes, config)
+            task = await _select_miner_pool_and_add_to_task(task, config)
             logger.info(f"After assigning miners here is the current task info {task}")
             await tasks_sql.update_task(task, config.psql_db)
 
@@ -290,35 +213,6 @@ async def _processing_pending_tasks(config: Config):
     clean_all_hf_datasets_cache()
 
 
-async def _start_training_task(task: AnyTypeRawTask, config: Config) -> None:
-    with LogContext(task_id=str(task.task_id)):
-        task.started_at = datetime.datetime.now(datetime.timezone.utc)
-        task.termination_at = task.started_at + datetime.timedelta(hours=task.hours_to_complete)
-        assigned_miners = await tasks_sql.get_nodes_assigned_to_task(str(task.task_id), config.psql_db)
-        logger.info(f"Here are the miners that have been assigned {assigned_miners}")
-        await _let_miners_know_to_start_training(task, assigned_miners, config)
-        task.status = TaskStatus.TRAINING
-        add_context_tag("status", task.status.value)
-        await tasks_sql.update_task(task, config.psql_db)
-        logger.info("SUCCESS IN STARTING TRAINING")
-
-
-async def _process_ready_to_train_tasks(config: Config):
-    ready_to_train_tasks = await tasks_sql.get_tasks_with_status(
-        status=TaskStatus.READY,
-        psql_db=config.psql_db,
-        tournament_filter="exclude",
-    )
-    if len(ready_to_train_tasks) > 0:
-        logger.info(f"There are {len(ready_to_train_tasks)} ready to train")
-        await asyncio.gather(
-            *[_start_training_task(task, config) for task in ready_to_train_tasks[: cst.MAX_CONCURRENT_TRAININGS]]
-        )
-    else:
-        logger.info("No pending tasks - waiting for 30 seconds")
-        await asyncio.sleep(30)
-
-
 async def _evaluate_task(task: AnyTypeRawTask, gpu_ids: list[int], config: Config):
     gpu_ids_str = "," + ",".join(str(gpu_id) for gpu_id in gpu_ids) + ","
     with LogContext(task_id=str(task.task_id), gpu_ids=gpu_ids_str):
@@ -376,32 +270,17 @@ async def _move_any_prep_data_to_pending(config):
     await asyncio.gather(*[_move_back_to_pending_status(task, config) for task in stopped_in_prep])
 
 
-async def _move_to_preevaluation(tasks: list[AnyTypeRawTask], config: Config):
-    await asyncio.gather(*[_move_to_preevaluation_status(task, config) for task in tasks])
-
-
 async def process_pending_tasks(config: Config) -> None:
     await _move_any_prep_data_to_pending(config)
     while True:
         try:
-            await _handle_delayed_tasks(config)
-            await _find_miners_for_task(config)
-            await _process_ready_to_train_tasks(config)
             await _processing_pending_tasks(config)
+            await _find_miners_for_task(config)
+            await _handle_delayed_tasks(config)
+            await asyncio.sleep(30)
         except Exception as e:
             logger.info(f"There was a problem in processing: {e}")
             await asyncio.sleep(30)
-
-
-async def move_tasks_to_preevaluation_loop(config: Config):
-    await _move_any_evaluating_tasks_to_pending_evaluation(config)
-    while True:
-        completed_tasks = await tasks_sql.get_tasks_exceeding_termination_time(config.psql_db, include_tournament_tasks=False)
-        if completed_tasks:
-            await _move_to_preevaluation(completed_tasks, config)
-        else:
-            logger.info("No tasks to move to preevaluation - waiting 60 seconds")
-        await asyncio.sleep(60)
 
 
 async def cleanup_model_cache_loop(psql_db: PSQLDB):
@@ -523,6 +402,6 @@ def compute_required_gpus(task: RawTask) -> int:
 
 
 async def process_completed_tasks(config: Config) -> None:
-    await asyncio.gather(
-        move_tasks_to_preevaluation_loop(config), evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db)
-    )
+    await _move_any_evaluating_tasks_to_pending_evaluation(config)
+
+    await asyncio.gather(evaluate_tasks_loop(config), cleanup_model_cache_loop(config.psql_db))
