@@ -443,17 +443,18 @@ def determine_boss_round_winner(task_winners: list[str], boss_hotkey: str, tourn
     opponent_wins = win_counts.get(opponent_hotkey, 0) if opponent_hotkey else 0
 
     # Apply different winning requirements based on tournament type
-    # Both IMAGE and TEXT tournaments: Challenger must win ALL tasks to become new boss
-    if opponent_hotkey and opponent_wins == total_tasks:
+    # Both IMAGE and TEXT tournaments: Challenger must win more than half (majority) of tasks to become new boss
+    required_wins = (total_tasks // 2) + 1
+    if opponent_hotkey and opponent_wins > total_tasks // 2:
         logger.info(
-            f"{tournament_type.value} tournament: Challenger wins boss round with perfect sweep: {opponent_wins}/{total_tasks} tasks won"
+            f"{tournament_type.value} tournament: Challenger wins boss round with majority: {opponent_wins}/{total_tasks} tasks won (required {required_wins})"
         )
         return opponent_hotkey
     else:
         boss_wins = win_counts.get(boss_hotkey, 0)
         if opponent_hotkey:
             logger.info(
-                f"{tournament_type.value} tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {total_tasks}/{total_tasks} to dethrone), boss won {boss_wins}/{total_tasks}"
+                f"{tournament_type.value} tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {required_wins}/{total_tasks} to dethrone), boss won {boss_wins}/{total_tasks}"
             )
         else:
             logger.info(f"{tournament_type.value} tournament: Boss retains title by default")
