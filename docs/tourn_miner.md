@@ -105,7 +105,7 @@ Your training scripts accept these standardised CLI arguments:
 
 ### Grafana Dashboard
 
-View real-time training logs and metrics at: http://38.80.122.241:3001/d/training-runs/training-runs-dashboard
+View real-time training logs and metrics at: http://185.141.218.59:3001/d/training-runs/training-runs-dashboard
 
 ## WandB Logging for Your Training Analysis
 

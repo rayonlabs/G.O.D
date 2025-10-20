@@ -30,7 +30,7 @@ load_task_history()
 async def verify_orchestrator_ip(request: Request):
     """Verify request comes from orchestrator IP"""
     client_ip = request.client.host
-    allowed_ip = os.getenv("ORCHESTRATOR_IP", "38.80.122.241")
+    allowed_ip = os.getenv("ORCHESTRATOR_IP", "185.141.218.59")
     if client_ip != allowed_ip and client_ip != "127.0.0.1":
         raise HTTPException(status_code=403, detail="Access forbidden")
     return client_ip
