@@ -22,7 +22,7 @@ from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
 from validator.core.constants import PROXY_TRAINING_IMAGE_ENDPOINT
 from validator.core.constants import TASK_DETAILS_ENDPOINT
 from validator.core.constants import GET_RECENT_TASKS_ENDPOINT
-from trainer.utils.logging import logger
+from trainer.utils.trainer_logging import logger
 
 load_task_history()
 
@@ -80,8 +80,8 @@ async def get_recent_tasks_list(hours:int) -> list[TrainerTaskLog]:
 
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Proxy Trainer"])
-    router.add_api_route(PROXY_TRAINING_IMAGE_ENDPOINT, start_training, methods=["POST"], dependencies=[Depends(verify_orchestrator_ip)])
-    router.add_api_route(GET_GPU_AVAILABILITY_ENDPOINT, get_available_gpus, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
-    router.add_api_route(GET_RECENT_TASKS_ENDPOINT, get_recent_tasks_list, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
-    router.add_api_route(TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
+    router.add_api_route(PROXY_TRAINING_IMAGE_ENDPOINT, start_training, methods=["POST"])
+    router.add_api_route(GET_GPU_AVAILABILITY_ENDPOINT, get_available_gpus, methods=["GET"])
+    router.add_api_route(GET_RECENT_TASKS_ENDPOINT, get_recent_tasks_list, methods=["GET"])
+    router.add_api_route(TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])
     return router
