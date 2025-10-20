@@ -55,6 +55,7 @@ miner_autoupdate.log
 valiator_autoupdate.log
 .*.env
 .*.task_config.json
+.env.trainer-logs
 .*.task_concurrency_config.json
 task_config.json
 task_concurrency_config.json

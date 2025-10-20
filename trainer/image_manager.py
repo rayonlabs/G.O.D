@@ -26,7 +26,7 @@ from trainer.tasks import update_wandb_url
 from trainer.utils.misc import build_wandb_env
 from trainer.utils.misc import extract_container_error
 from validator.utils.logging import get_all_context_tags
-from trainer.utils.logging import logger
+from trainer.utils.trainer_logging import logger
 from validator.utils.logging import stream_container_logs
 from validator.utils.logging import stream_image_build_logs
 

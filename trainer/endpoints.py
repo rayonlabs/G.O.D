@@ -22,7 +22,7 @@ from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
 from validator.core.constants import PROXY_TRAINING_IMAGE_ENDPOINT
 from validator.core.constants import TASK_DETAILS_ENDPOINT
 from validator.core.constants import GET_RECENT_TASKS_ENDPOINT
-from trainer.utils.logging import logger
+from trainer.utils.trainer_logging import logger
 
 load_task_history()
 
