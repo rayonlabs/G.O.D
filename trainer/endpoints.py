@@ -1,8 +1,10 @@
 import asyncio
 import os
 
-from fastapi import APIRouter, Depends
-from fastapi import HTTPException, Request
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
+from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from core.models.payload_models import TrainerProxyRequest
@@ -11,18 +13,19 @@ from core.models.utility_models import GPUInfo
 from trainer import constants as cst
 from trainer.image_manager import start_training_task
 from trainer.tasks import complete_task
+from trainer.tasks import get_recent_tasks
 from trainer.tasks import get_task
 from trainer.tasks import load_task_history
 from trainer.tasks import log_task
 from trainer.tasks import start_task
-from trainer.tasks import get_recent_tasks
+from trainer.utils.logging import logger
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
 from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
+from validator.core.constants import GET_RECENT_TASKS_ENDPOINT
 from validator.core.constants import PROXY_TRAINING_IMAGE_ENDPOINT
 from validator.core.constants import TASK_DETAILS_ENDPOINT
-from validator.core.constants import GET_RECENT_TASKS_ENDPOINT
-from trainer.utils.logging import logger
+
 
 load_task_history()
 
