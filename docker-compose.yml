@@ -2,21 +2,21 @@ include:
   - ./docker-compose.observability.yml
 
 services:
-  postgresql:
-    image: postgres:latest
-    volumes:
-      - ./postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - postgres_network
-    ports:
-      - "127.0.0.1:5432:5432"
-    env_file:
-      - .vali.env
+  # postgresql:
+  #   image: postgres:latest
+  #   volumes:
+  #     - ./postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - postgres_network
+  #   ports:
+  #     - "127.0.0.1:5432:5432"
+  #   env_file:
+  #     - .vali.env
 
   dbmate:
     image: amacneil/dbmate
@@ -41,7 +41,6 @@ services:
 
 volumes:
   postgres_data:
-
 
 networks:
   postgres_network:
