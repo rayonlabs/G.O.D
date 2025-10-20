@@ -11,10 +11,12 @@ The tournament system builds and runs your training code in Docker containers. Y
 To compete in tournaments, miners must meet the following requirements:
 
 1. **Subnet Registration**: You must be registered on the G.O.D subnet (netuid 56 on mainnet, 241 on testnet)
+
    - Register using: `btcli s register` (mainnet) or `btcli s register --network test` (testnet)
    - Post your IP to the metagraph using fiber: `fiber-post-ip --netuid 56 --subtensor.network finney --external_port 7999 --wallet.name default --wallet.hotkey default --external_ip [YOUR-IP]`
 
 2. **Active Miner**: Your miner must be running and listening for training repository requests
+
    - The miner must expose the `/training_repo/{task_type}` endpoint that returns your training repository details
    - Start your miner with: `task miner`
 
@@ -36,6 +38,7 @@ The miner already includes the required endpoint at `/training_repo/{task_type}`
 ```
 
 Where `task_type` can be:
+
 - `"text"` - For text-based tournaments (Instruct, DPO, GRPO, Chat)
 - `"image"` - For image-based tournaments (SDXL, Flux)
 
@@ -44,11 +47,13 @@ Where `task_type` can be:
 ### Recommended Base Images
 
 **For Text Tasks (Instruct, DPO, GRPO, Chat):**
+
 ```dockerfile
 FROM axolotlai/axolotl:main-py3.11-cu124-2.5.1
 ```
 
 **For Image Tasks (SDXL, Flux):**
+
 ```dockerfile
 FROM diagonalge/kohya_latest:latest
 ```
@@ -63,6 +68,7 @@ your-training-repo/
 ```
 
 **Important:** The dockerfile paths must be exactly:
+
 - `dockerfiles/standalone-text-trainer.dockerfile`
 - `dockerfiles/standalone-image-trainer.dockerfile`
 
@@ -71,6 +77,7 @@ your-training-repo/
 Your training scripts accept these standardised CLI arguments:
 
 ### Text Training Arguments
+
 ```bash
 --task-id             # Unique task identifier
 --model               # Base model to finetune
@@ -84,6 +91,7 @@ Your training scripts accept these standardised CLI arguments:
 **Note:** For GRPO tasks, the reward functions used for training can be found in [`core/manual_reward_funcs.py`](https://github.com/rayonlabs/G.O.D/blob/main/core/manual_reward_funcs.py).
 
 ### Image Training Arguments
+
 ```bash
 --task-id             # Unique task identifier
 --model               # Base model to finetune (e.g., stabilityai/stable-diffusion-xl-base-1.0)
@@ -96,7 +104,8 @@ Your training scripts accept these standardised CLI arguments:
 ## Training Logs and Monitoring
 
 ### Grafana Dashboard
-View real-time training logs and metrics at: http://185.141.218.75:3001/d/training-runs/training-runs-dashboard
+
+View real-time training logs and metrics at: http://38.80.122.241:3001/d/training-runs/training-runs-dashboard
 
 ## WandB Logging for Your Training Analysis
 
@@ -133,11 +142,13 @@ patch_wandb_symlinks(train_cst.WANDB_LOGS_DIR)
 ## Dataset Handling
 
 ### Text Datasets
+
 - Always provided as S3 URLs
 - Format: JSON
 - Dataset type parameter describes the structure (columns, format)
 
 ### Image Datasets
+
 - Provided as S3 URLs to zip files
 - Should contain images and metadata (captions)
 - Your script must handle extraction and preparation
@@ -148,33 +159,36 @@ patch_wandb_symlinks(train_cst.WANDB_LOGS_DIR)
 
 For your reference, all the paths used in training can be found at:
 
-```trainer/constants.py```
+`trainer/constants.py`
 
 And the functions to construct the paths can be found at:
 
-```trainer/utils/training_paths.py```
+`trainer/utils/training_paths.py`
 
 Here are some most important paths:
 
-
 ### Model Output Path
+
 ```python
 output_dir = f"/app/checkpoints/{task_id}/{expected_repo_name}"
 ```
 
 ### Input Model Cache Path
+
 ```python
 # Models are pre-downloaded to this location by the downloader container
 model_path = f"/cache/models/{model.replace('/', '--')}"
 ```
 
 ### Image Dataset Path
+
 ```python
 # Datasets are pre-downloaded to this location by the downloader container
 model_path = f"/cache/datasets/{task_id}_tourn.zip"
 ```
 
 ### Text Dataset Path
+
 ```python
 # Datasets are pre-downloaded to this location by the downloader container
 model_path = f"/cache/datasets/{task_id}_train_data.json"
@@ -183,20 +197,25 @@ model_path = f"/cache/datasets/{task_id}_train_data.json"
 ## Utility Functions in Trainer Scripts
 
 ### Image Trainer
+
 ```python
 def get_model_path(path: str) -> str
 ```
+
 Is used to get the folder/file path for image models. The image models can either be a safetensors file, or a diffusers format folder. The function resolves the path to either of those.
 
 ### Text Trainer
+
 ```python
 def patch_wandb_symlinks(base_dir:str)
 ```
+
 Fixes the local wandb logs that are later synced to cloud. Offline saves are prone to broken files and symlinks, causing issues while syncing. This function patches those files, which has to be done in the training context.
 
 ```python
 def patch_model_metadata(output_dir: str, base_model_id: str)
 ```
+
 Huggingface verifies the base model id when a finetune is uploaded. That gets broken at times due to the nature of our training with localized paths and separate uploads. This function patches the model metadata to deal with that, fixes the model name back to the original huggingface link.
 
 ## Example Entrypoint Script
@@ -231,20 +250,24 @@ Test scripts are provided to validate your implementation locally:
 ## Tournament Structure
 
 Tournaments run continuously with 4-7 day duration and 24-hour gaps between tournaments. There are separate tournaments for:
+
 - **Text**: Instruct, DPO, GRPO tasks
 - **Image**: SDXL and Flux diffusion tasks
 
 ### Group Stage
+
 - Miners are organized into groups of 6-8 participants
 - Each group competes on 3 tasks
 - Top 1-3 performers from each group advance to knockout rounds
 
 ### Knockout Rounds
+
 - Single elimination format
 - Runs when field is reduced to less than 16 miners
 - Head-to-head competition
 
 ### Boss Round
+
 - Tournament winner must face defending champion
 - Uses progressive threshold system with exponential decay based on consecutive wins
 - **Tournament-Specific Winning Requirements**:
@@ -253,6 +276,7 @@ Tournaments run continuously with 4-7 day duration and 24-hour gaps between tour
 - Defending champion retains title unless challenger meets the tournament-specific winning requirement
 
 #### Championship Defense Thresholds
+
 The advantage required to dethrone a champion decreases with each successful defense using an exponential decay formula:
 
 ![Championship Defense Thresholds](./images/championship_thresholds.png)
@@ -260,16 +284,19 @@ The advantage required to dethrone a champion decreases with each successful def
 **Formula:** `threshold = max(EXPONENTIAL_MIN_THRESHOLD, EXPONENTIAL_BASE_THRESHOLD × EXPONENTIAL_DECAY_RATE^consecutive_wins)`
 
 Where constants (defined in `validator/tournament/constants.py`):
+
 - `EXPONENTIAL_BASE_THRESHOLD`: Starting threshold for new champions
-- `EXPONENTIAL_DECAY_RATE`: Decay factor per consecutive win  
+- `EXPONENTIAL_DECAY_RATE`: Decay factor per consecutive win
 - `EXPONENTIAL_MIN_THRESHOLD`: Minimum threshold floor
 
 This system ensures:
+
 - New champions must prove themselves with a significant margin
 - Long-reigning champions become progressively more vulnerable
 - Minimum threshold prevents stagnation
 
 ### GPU Requirements
+
 - Determined by model size and task type
 - Resource limits are enforced (memory, CPU)
 - Plan for efficient resource usage
@@ -285,6 +312,7 @@ This system ensures:
 ## Reference Implementation
 
 The G.O.D repository provides base training scripts that you can customize:
+
 - `scripts/text_trainer.py` - Base implementation for text tasks
 - `scripts/image_trainer.py` - Base implementation for image tasks
 

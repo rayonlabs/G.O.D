@@ -30,10 +30,11 @@ load_task_history()
 async def verify_orchestrator_ip(request: Request):
     """Verify request comes from orchestrator IP"""
     client_ip = request.client.host
-    allowed_ip = os.getenv("ORCHESTRATOR_IP", "185.141.218.75")
+    allowed_ip = os.getenv("ORCHESTRATOR_IP", "38.80.122.241")
     if client_ip != allowed_ip and client_ip != "127.0.0.1":
         raise HTTPException(status_code=403, detail="Access forbidden")
     return client_ip
+
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:
     await start_task(req)
@@ -49,10 +50,18 @@ async def start_training(req: TrainerProxyRequest) -> JSONResponse:
     except Exception as e:
         await log_task(req.training_data.task_id, req.hotkey, f"Failed to clone repo: {str(e)}")
         await complete_task(req.training_data.task_id, req.hotkey, success=False)
-        return {"message": "Error cloning github repository", "task_id": req.training_data.task_id, "error": str(e), "success": False, "no_retry": True}
+        return {
+            "message": "Error cloning github repository",
+            "task_id": req.training_data.task_id,
+            "error": str(e),
+            "success": False,
+            "no_retry": True,
+        }
 
-    logger.info(f"Repo {req.github_repo} cloned to {local_repo_path}",
-                extra={"task_id": req.training_data.task_id, "hotkey": req.hotkey, "model": req.training_data.model})
+    logger.info(
+        f"Repo {req.github_repo} cloned to {local_repo_path}",
+        extra={"task_id": req.training_data.task_id, "hotkey": req.hotkey, "model": req.training_data.model},
+    )
 
     asyncio.create_task(start_training_task(req, local_repo_path))
 
@@ -71,7 +80,7 @@ async def get_task_details(task_id: str, hotkey: str) -> TrainerTaskLog:
     return task
 
 
-async def get_recent_tasks_list(hours:int) -> list[TrainerTaskLog]:
+async def get_recent_tasks_list(hours: int) -> list[TrainerTaskLog]:
     tasks = get_recent_tasks(hours)
     if not tasks:
         raise HTTPException(status_code=404, detail=f"Tasks not found in the last {hours} hours.")
@@ -80,8 +89,14 @@ async def get_recent_tasks_list(hours:int) -> list[TrainerTaskLog]:
 
 def factory_router() -> APIRouter:
     router = APIRouter(tags=["Proxy Trainer"])
-    router.add_api_route(PROXY_TRAINING_IMAGE_ENDPOINT, start_training, methods=["POST"], dependencies=[Depends(verify_orchestrator_ip)])
-    router.add_api_route(GET_GPU_AVAILABILITY_ENDPOINT, get_available_gpus, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
-    router.add_api_route(GET_RECENT_TASKS_ENDPOINT, get_recent_tasks_list, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
+    router.add_api_route(
+        PROXY_TRAINING_IMAGE_ENDPOINT, start_training, methods=["POST"], dependencies=[Depends(verify_orchestrator_ip)]
+    )
+    router.add_api_route(
+        GET_GPU_AVAILABILITY_ENDPOINT, get_available_gpus, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)]
+    )
+    router.add_api_route(
+        GET_RECENT_TASKS_ENDPOINT, get_recent_tasks_list, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)]
+    )
     router.add_api_route(TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"], dependencies=[Depends(verify_orchestrator_ip)])
     return router
