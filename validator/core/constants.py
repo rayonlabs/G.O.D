@@ -38,8 +38,8 @@ SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 TRAINING_REPO_ENDPOINT = "/training_repo"
 
 # TODO update when live
-DEV_CONTENT_BASE_URL = "https://gradients-content-service-api-dev.onrender.com"  # "https://dev.content.gradients.io"
-PROD_CONTENT_BASE_URL = "https://gradients-content-service.onrender.com"  # "https://content.gradients.io"
+DEV_CONTENT_BASE_URL = "https://dev.content.gradients.io"
+PROD_CONTENT_BASE_URL = "https://content.gradients.io"
 
 
 # 241 is testnet
@@ -291,7 +291,7 @@ TOURNAMENT_TEXT_WEIGHT = 0.15
 TOURNAMENT_IMAGE_WEIGHT = 0.10
 MAX_TEXT_TOURNAMENT_WEIGHT = 0.6
 MAX_IMAGE_TOURNAMENT_WEIGHT = 0.4
-TOURNAMENT_INTERVAL_HOURS = 72
+TOURNAMENT_INTERVAL_HOURS = 48
 BURN_REDUCTION_RATE = 5.0
 MAX_BURN_REDUCTION = 0.8
 EMISSION_MULTIPLIER_THRESHOLD = 0.05

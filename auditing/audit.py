@@ -24,9 +24,7 @@ def _normalised_vector_dot_product(a, b):
 
 async def _get_7_day_task_results_for_rayon_validator(config: Config) -> TournamentAuditData:
     """Get task results and tournament data for a rayon validator."""
-    url_to_get_latest_scores_url = (
-        "https://gradients-api-prod.onrender.com/auditing/scores-url"  # "https://api.gradients.io/auditing/scores-url"
-    )
+    url_to_get_latest_scores_url = "https://api.gradients.io/auditing/scores-url"
     response = await config.httpx_client.get(url_to_get_latest_scores_url)
 
     if response.status_code != 200:
