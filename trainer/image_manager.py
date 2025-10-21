@@ -171,7 +171,7 @@ async def run_trainer_container_image(
         except Exception as e:
             if attempt < max_retries - 1:
                 logger.warning(f"Error starting container (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {str(e)[:150]}", extra=log_labels)
-                time.sleep(retry_delay)
+                await asyncio.sleep(retry_delay)
             else:
                 logger.error(f"Failed to start image trainer container after {max_retries} attempts: {e}", extra=log_labels)
                 raise
@@ -254,7 +254,7 @@ async def run_trainer_container_text(
         except Exception as e:
             if attempt < max_retries - 1:
                 logger.warning(f"Error starting container (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {str(e)[:150]}", extra=log_labels)
-                time.sleep(retry_delay)
+                await asyncio.sleep(retry_delay)
             else:
                 logger.error(f"Failed to start text trainer container after {max_retries} attempts: {e}", extra=log_labels)
                 raise
