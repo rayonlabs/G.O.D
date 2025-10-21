@@ -345,10 +345,6 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
-            
-            # Send Discord notification
-            discord_message = f"🏁 Tournament Completed: {tournament.tournament_id} (Type: {tournament.tournament_type.value}) - Winner: Base Contestant (default)"
-            await _notify_discord(discord_message, config)
 
             try:
                 logger.info(f"Creating benchmark tasks for base contestant winner {winner}")
@@ -424,14 +420,6 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
                 await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
                 logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
-                
-                # Send Discord notification
-                winner_display = tournament.base_winner_hotkey if winner == cst.EMISSION_BURN_HOTKEY else winner
-                winner_label = f"{winner_display[:8]}...{winner_display[-4:]}" if winner_display else winner
-                if winner == cst.EMISSION_BURN_HOTKEY:
-                    winner_label += " (Defending Champion)"
-                discord_message = f"🏁 Tournament Completed: {tournament.tournament_id} (Type: {tournament.tournament_type.value}) - Winner: {winner_label}"
-                await _notify_discord(discord_message, config)
 
                 try:
                     logger.info(f"Creating benchmark tasks for tournament winner {winner}")
@@ -481,13 +469,9 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             await create_next_round(tournament, completed_round, winners, config, psql_db)
 
 
-async def start_tournament(tournament_id: str, psql_db: PSQLDB, config: Config):
+async def start_tournament(tournament_id: str, psql_db: PSQLDB):
     await update_tournament_status(tournament_id, TournamentStatus.ACTIVE, psql_db)
     logger.info(f"Started tournament {tournament_id}")
-    
-    tournament = await get_tournament(tournament_id, psql_db)
-    message = f"🏆 Tournament Started: {tournament_id} (Type: {tournament.tournament_type.value})"
-    await _notify_discord(message, config)
 
 
 async def complete_tournament(tournament_id: str, psql_db: PSQLDB):
