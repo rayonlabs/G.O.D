@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import time
 import uuid
 
 import docker
@@ -138,33 +139,42 @@ async def run_trainer_container_image(
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
 
-    try:
-        container: Container = client.containers.run(
-            image=tag,
-            command=command,
-            volumes={
-                cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
-            },
-            remove=False,
-            shm_size=shm_size,
-            name=container_name,
-            labels=log_labels,
-            mem_limit=memory_limit,
-            nano_cpus=cpu_limit_nanocpus,
-            device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
-            security_opt=["no-new-privileges"],
-            cap_drop=["ALL"],
-            network_mode="bridge",  # Changed from "none" to allow log shipping
-            environment={"TRANSFORMERS_CACHE": cst.HUGGINGFACE_CACHE_PATH},
-            detach=True,
-        )
+    max_retries = cst.CONTAINER_START_MAX_RETRIES
+    retry_delay = cst.CONTAINER_START_RETRY_DELAY_SECONDS
+    
+    for attempt in range(max_retries):
+        try:
+            container: Container = client.containers.run(
+                image=tag,
+                command=command,
+                volumes={
+                    cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
+                    cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
+                },
+                remove=False,
+                shm_size=shm_size,
+                name=container_name,
+                labels=log_labels,
+                mem_limit=memory_limit,
+                nano_cpus=cpu_limit_nanocpus,
+                device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
+                security_opt=["no-new-privileges"],
+                cap_drop=["ALL"],
+                network_mode="bridge",  # Changed from "none" to allow log shipping
+                environment={"TRANSFORMERS_CACHE": cst.HUGGINGFACE_CACHE_PATH},
+                detach=True,
+            )
 
-        log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
-        return container
-    except Exception as e:
-        logger.error(e)
-        return e
+            log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+            return container
+            
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Error starting container (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {str(e)[:150]}", extra=log_labels)
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"Failed to start image trainer container after {max_retries} attempts: {e}", extra=log_labels)
+                raise
 
 
 async def run_trainer_container_text(
@@ -212,33 +222,42 @@ async def run_trainer_container_text(
     # Set shared memory size based on GPU count
     shm_size = "16g" if len(gpu_ids) >= 4 else "8g"
 
-    try:
-        container: Container = client.containers.run(
-            image=tag,
-            command=command,
-            volumes={
-                cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
-                cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
-            },
-            remove=False,
-            shm_size=shm_size,
-            name=container_name,
-            labels=log_labels,
-            mem_limit=memory_limit,
-            nano_cpus=cpu_limit_nanocpus,
-            device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
-            security_opt=["no-new-privileges"],
-            cap_drop=["ALL"],
-            detach=True,
-            network_mode="bridge",  # Changed from "none" to allow log shipping
-            environment=environment,
-        )
+    max_retries = cst.CONTAINER_START_MAX_RETRIES
+    retry_delay = cst.CONTAINER_START_RETRY_DELAY_SECONDS
+    
+    for attempt in range(max_retries):
+        try:
+            container: Container = client.containers.run(
+                image=tag,
+                command=command,
+                volumes={
+                    cst.VOLUME_NAMES[0]: {"bind": cst.OUTPUT_CHECKPOINTS_PATH, "mode": "rw"},
+                    cst.VOLUME_NAMES[1]: {"bind": cst.CACHE_ROOT_PATH, "mode": "ro"},
+                },
+                remove=False,
+                shm_size=shm_size,
+                name=container_name,
+                labels=log_labels,
+                mem_limit=memory_limit,
+                nano_cpus=cpu_limit_nanocpus,
+                device_requests=[docker.types.DeviceRequest(device_ids=[str(i) for i in gpu_ids], capabilities=[["gpu"]])],
+                security_opt=["no-new-privileges"],
+                cap_drop=["ALL"],
+                detach=True,
+                network_mode="bridge",  # Changed from "none" to allow log shipping
+                environment=environment,
+            )
 
-        log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
-        return container
-    except Exception as e:
-        logger.error(e)
-        return e
+            log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
+            return container
+            
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Error starting container (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {str(e)[:150]}", extra=log_labels)
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"Failed to start text trainer container after {max_retries} attempts: {e}", extra=log_labels)
+                raise
 
 
 async def create_volumes_if_dont_exist():
@@ -394,7 +413,7 @@ async def upload_repo_to_hf(
         raise
 
     finally:
-        if container:
+        if container and isinstance(container, Container):
             try:
                 container.reload()
                 if container.status == "running":
@@ -402,7 +421,7 @@ async def upload_repo_to_hf(
                 container.remove(force=True)
             except Exception as cleanup_err:
                 logger.warning(
-                    f"Failed to remove upload container {container.name if container else 'unknown'}: {cleanup_err}"
+                    f"Failed to remove upload container {container.name}: {cleanup_err}"
                 )
 
 
@@ -567,7 +586,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         await complete_task(training_data.task_id, task.hotkey, success=success)
 
     finally:
-        if container:
+        if container and isinstance(container, Container):
             try:
                 container.reload()
                 if container.status == "running":
