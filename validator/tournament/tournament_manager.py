@@ -475,21 +475,21 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             await create_next_round(tournament, completed_round, winners, config, psql_db)
 
 
-async def start_tournament(tournament_id: str, config: Config = None):
+async def start_tournament(tournament_id: str, config: Config):
     await update_tournament_status(tournament_id, TournamentStatus.ACTIVE, config.psql_db)
     logger.info(f"Started tournament {tournament_id}")
 
-    if config and config.discord_url:
+    if config.discord_url:
         tournament = await get_tournament(tournament_id, config.psql_db)
         if tournament:
             await notify_tournament_started(tournament_id, tournament.tournament_type.value, 0, config.discord_url)
 
 
-async def complete_tournament(tournament_id: str, config: Config = None):
+async def complete_tournament(tournament_id: str, config: Config):
     await update_tournament_status(tournament_id, TournamentStatus.COMPLETED, config.psql_db)
     logger.info(f"Completed tournament {tournament_id}")
     
-    if config and config.discord_url:
+    if config.discord_url:
         tournament = await get_tournament(tournament_id, config.psql_db)
         if tournament:
             await notify_tournament_completed(tournament_id, tournament.tournament_type.value, "Unknown", config.discord_url)
