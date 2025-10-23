@@ -112,10 +112,41 @@ class ColdkeyBalanceResponse(BaseModel):
 
     coldkey: str = Field(..., description="Coldkey SS58 address")
     balance_rao: int = Field(..., description="Current RAO balance")
-    balance_tao: float = Field(..., description="Current balance in TAO (for display)")
     total_sent_rao: int = Field(..., description="Total RAO sent to target address")
-    total_sent_tao: float = Field(..., description="Total sent in TAO (for display)")
     transfer_count: int = Field(..., description="Number of transfers sent to target address")
     last_transfer_at: Optional[datetime] = Field(None, description="Timestamp of last transfer to target address")
     created_at: Optional[datetime] = Field(None, description="When this coldkey was first seen")
     updated_at: Optional[datetime] = Field(None, description="When this record was last updated")
+
+
+class TournamentFeesResponse(BaseModel):
+    """API response model for tournament participation fees"""
+
+    text_tournament_fee_rao: int = Field(..., description="Text tournament participation fee in RAO")
+    image_tournament_fee_rao: int = Field(..., description="Image tournament participation fee in RAO")
+
+
+class BalanceEvent(BaseModel):
+    """Balance event model for tracking balance changes tied to tournaments"""
+
+    id: Optional[int] = Field(None, description="Event ID")
+    tournament_id: str = Field(..., description="Tournament ID this event is associated with")
+    coldkey: str = Field(..., description="Coldkey address affected by this event")
+    event_type: str = Field(..., description="Type of balance event: participation_fee, refund, transfer_in")
+    amount_rao: int = Field(..., description="Amount in RAO (positive for credits, negative for debits)")
+    description: Optional[str] = Field(None, description="Human-readable description of the event")
+    created_at: Optional[datetime] = Field(None, description="When this event was created")
+    updated_at: Optional[datetime] = Field(None, description="When this event was last updated")
+
+
+class BalanceEventResponse(BaseModel):
+    """API response model for balance events"""
+
+    id: int = Field(..., description="Event ID")
+    tournament_id: str = Field(..., description="Tournament ID this event is associated with")
+    coldkey: str = Field(..., description="Coldkey address affected by this event")
+    event_type: str = Field(..., description="Type of balance event: participation_fee, refund, transfer_in")
+    amount_rao: int = Field(..., description="Amount in RAO (positive for credits, negative for debits)")
+    description: Optional[str] = Field(None, description="Human-readable description of the event")
+    created_at: datetime = Field(..., description="When this event was created")
+    updated_at: datetime = Field(..., description="When this event was last updated")

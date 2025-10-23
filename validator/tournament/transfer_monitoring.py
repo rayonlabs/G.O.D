@@ -252,5 +252,84 @@ async def fetch_and_process_transfers(config: Config) -> None:
         logger.info(f"  🕐 Updated to timestamp: {latest_timestamp}")
         logger.info(f"  📦 Updated to block: {latest_block}")
 
+        # Log sender addresses and amounts for endpoint testing
+        if balance_updates_count > 0:
+            logger.info("📋 Sender addresses with transfers to target (for endpoint testing):")
+            for taostats_transfer in response.data:
+                transfer = convert_taostats_to_internal(taostats_transfer)
+                if transfer.to_ss58 == config.transfer_target_address:
+                    tao_amount = rao_to_tao(transfer.amount_rao)
+                    logger.info(f"   💰 {transfer.from_ss58}: {transfer.amount_rao:,} RAO ({tao_amount:.6f} TAO)")
+
     except Exception as e:
         logger.error(f"Failed to fetch and process transfers: {e}")
+
+
+async def transfer_monitoring_cycle(config: Config):
+    """
+    Continuous transfer monitoring cycle
+
+    Args:
+        config: Validator configuration
+    """
+    while True:
+        try:
+            await fetch_and_process_transfers(config)
+        except Exception as e:
+            logger.error(f"Error in transfer monitoring cycle: {e}")
+
+        # Sleep for a reasonable interval (e.g., every 5 minutes)
+        await asyncio.sleep(300)  # 5 minutes
+
+
+async def main():
+    """
+    Main function for standalone transfer monitoring check
+    """
+    from validator.core.config import load_config
+    from validator.utils.util import try_db_connections
+
+    logger.info("🚀 Starting standalone transfer monitoring check...")
+
+    # Load configuration
+    config = load_config()
+
+    await try_db_connections(config)
+
+    if not config.taostats_api_key:
+        logger.error("❌ TAOSTATS_API_KEY not configured in environment")
+        return
+
+    if not config.transfer_target_address:
+        logger.error("❌ TRANSFER_TARGET_ADDRESS not configured in environment")
+        return
+
+    logger.info("✅ Configuration loaded:")
+    logger.info(f"   📡 API Key: {'*' * 20}{config.taostats_api_key[-10:] if config.taostats_api_key else 'None'}")
+    logger.info(f"   🎯 Target Address: {config.transfer_target_address}")
+    logger.info(f"   🌐 Network: {config.transfer_network}")
+    logger.info(f"   ⏰ Processing Interval: {config.transfer_processing_interval_hours} hours")
+
+    try:
+        logger.info("🔄 Running transfer monitoring check...")
+        await fetch_and_process_transfers(config)
+        logger.info("✅ Transfer monitoring check completed successfully!")
+
+    except Exception as e:
+        logger.error(f"❌ Transfer monitoring check failed: {e}")
+        raise
+
+    finally:
+        await config.psql_db.close()
+        await config.redis_db.close()
+        logger.info("🔌 Database connections closed")
+
+
+if __name__ == "__main__":
+    import os
+
+    from dotenv import load_dotenv
+
+    load_dotenv(os.getenv("ENV_FILE", ".vali.env"), override=True)
+
+    asyncio.run(main())

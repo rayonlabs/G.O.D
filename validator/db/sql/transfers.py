@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import List
 from typing import Optional
 
+from validator.core.transfer_models import BalanceEvent
 from validator.core.transfer_models import ColdkeyBalance
 from validator.core.transfer_models import TransferData
 from validator.core.transfer_models import TransferProcessingState
@@ -244,6 +245,7 @@ async def update_coldkey_balance(
         query = """
         UPDATE coldkey_balances
         SET total_sent_rao = total_sent_rao + $2,
+            balance_rao = balance_rao + $2,
             transfer_count = transfer_count + 1,
             last_transfer_at = $3,
             updated_at = CURRENT_TIMESTAMP
@@ -290,6 +292,238 @@ async def update_coldkey_balance_amount(
     except Exception as e:
         logger.error(f"Failed to update coldkey balance amount for {coldkey}: {e}")
         return False
+
+
+async def deduct_tournament_participation_fee(
+    psql_db: PSQLDB,
+    coldkey: str,
+    fee_amount_rao: int,
+    tournament_id: str,
+) -> bool:
+    """
+    Deduct tournament participation fee from a coldkey's balance and create balance event
+
+    Args:
+        psql_db: Database connection
+        coldkey: Coldkey SS58 address
+        fee_amount_rao: Fee amount to deduct in RAO
+        tournament_id: Tournament ID for balance event tracking
+
+    Returns:
+        bool: True if deduction was successful, False if insufficient balance
+    """
+    try:
+        query = """
+        UPDATE coldkey_balances
+        SET balance_rao = balance_rao - $2,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE coldkey = $1
+        AND balance_rao >= $2
+        """
+
+        async with await psql_db.connection() as connection:
+            result = await connection.execute(query, coldkey, fee_amount_rao)
+
+            if result == "UPDATE 1":
+                balance_event = await create_balance_event(
+                    psql_db=psql_db,
+                    tournament_id=tournament_id,
+                    coldkey=coldkey,
+                    event_type="participation_fee",
+                    amount_rao=-fee_amount_rao,
+                    description=f"Tournament participation fee for {tournament_id}",
+                )
+
+                if balance_event:
+                    logger.info(f"Successfully deducted {fee_amount_rao:,} RAO from {coldkey} and created balance event")
+                else:
+                    logger.warning(f"Deducted {fee_amount_rao:,} RAO from {coldkey} but failed to create balance event")
+
+                return True
+            else:
+                logger.warning(f"Insufficient balance for {coldkey} to pay {fee_amount_rao:,} RAO fee")
+                return False
+
+    except Exception as e:
+        logger.error(f"Failed to deduct participation fee for {coldkey}: {e}")
+        return False
+
+
+async def create_balance_event(
+    psql_db: PSQLDB,
+    tournament_id: str,
+    coldkey: str,
+    event_type: str,
+    amount_rao: int,
+    description: Optional[str] = None,
+) -> Optional[BalanceEvent]:
+    """
+    Create a new balance event for tracking balance changes tied to tournaments
+
+    Args:
+        psql_db: Database connection
+        tournament_id: Tournament ID this event is associated with
+        coldkey: Coldkey address affected by this event
+        event_type: Type of balance event (participation_fee, refund, transfer_in)
+        amount_rao: Amount in RAO (positive for credits, negative for debits)
+        description: Human-readable description of the event
+
+    Returns:
+        BalanceEvent or None if creation failed
+    """
+    try:
+        query = """
+        INSERT INTO balance_events (tournament_id, coldkey, event_type, amount_rao, description)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, tournament_id, coldkey, event_type, amount_rao, description, created_at, updated_at
+        """
+
+        async with await psql_db.connection() as connection:
+            result = await connection.fetchrow(query, tournament_id, coldkey, event_type, amount_rao, description)
+
+            if result:
+                return BalanceEvent(
+                    id=result["id"],
+                    tournament_id=result["tournament_id"],
+                    coldkey=result["coldkey"],
+                    event_type=result["event_type"],
+                    amount_rao=result["amount_rao"],
+                    description=result["description"],
+                    created_at=result["created_at"],
+                    updated_at=result["updated_at"],
+                )
+            return None
+
+    except Exception as e:
+        logger.error(f"Failed to create balance event for {coldkey} in tournament {tournament_id}: {e}")
+        return None
+
+
+async def get_balance_events_by_tournament(psql_db: PSQLDB, tournament_id: str, limit: int = 100) -> List[BalanceEvent]:
+    """
+    Get all balance events for a specific tournament
+
+    Args:
+        psql_db: Database connection
+        tournament_id: Tournament ID to get events for
+        limit: Maximum number of events to return
+
+    Returns:
+        List of BalanceEvent objects
+    """
+    try:
+        query = """
+        SELECT id, tournament_id, coldkey, event_type, amount_rao, description, created_at, updated_at
+        FROM balance_events
+        WHERE tournament_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        """
+
+        async with await psql_db.connection() as connection:
+            results = await connection.fetch(query, tournament_id, limit)
+
+            return [
+                BalanceEvent(
+                    id=row["id"],
+                    tournament_id=row["tournament_id"],
+                    coldkey=row["coldkey"],
+                    event_type=row["event_type"],
+                    amount_rao=row["amount_rao"],
+                    description=row["description"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+                for row in results
+            ]
+
+    except Exception as e:
+        logger.error(f"Failed to get balance events for tournament {tournament_id}: {e}")
+        return []
+
+
+async def get_balance_events_by_coldkey(psql_db: PSQLDB, coldkey: str, limit: int = 100) -> List[BalanceEvent]:
+    """
+    Get all balance events for a specific coldkey
+
+    Args:
+        psql_db: Database connection
+        coldkey: Coldkey address to get events for
+        limit: Maximum number of events to return
+
+    Returns:
+        List of BalanceEvent objects
+    """
+    try:
+        query = """
+        SELECT id, tournament_id, coldkey, event_type, amount_rao, description, created_at, updated_at
+        FROM balance_events
+        WHERE coldkey = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        """
+
+        async with await psql_db.connection() as connection:
+            results = await connection.fetch(query, coldkey, limit)
+
+            return [
+                BalanceEvent(
+                    id=row["id"],
+                    tournament_id=row["tournament_id"],
+                    coldkey=row["coldkey"],
+                    event_type=row["event_type"],
+                    amount_rao=row["amount_rao"],
+                    description=row["description"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+                for row in results
+            ]
+
+    except Exception as e:
+        logger.error(f"Failed to get balance events for coldkey {coldkey}: {e}")
+        return []
+
+
+async def refund_tournament_participants(psql_db: PSQLDB, tournament_id: str) -> int:
+    """
+    Refund all participation fees for a tournament by creating refund balance events
+
+    Args:
+        psql_db: Database connection
+        tournament_id: Tournament ID to refund
+
+    Returns:
+        Number of refunds processed
+    """
+    try:
+        participation_events = await get_balance_events_by_tournament(psql_db, tournament_id)
+        participation_fees = [event for event in participation_events if event.event_type == "participation_fee"]
+
+        refund_count = 0
+
+        for event in participation_fees:
+            refund_amount = abs(event.amount_rao)
+            refund_event = await create_balance_event(
+                psql_db=psql_db,
+                tournament_id=tournament_id,
+                coldkey=event.coldkey,
+                event_type="refund",
+                amount_rao=refund_amount,
+                description=f"Refund for participation fee in tournament {tournament_id}",
+            )
+
+            if refund_event:
+                await update_coldkey_balance(psql_db, event.coldkey, refund_amount, event.created_at)
+                refund_count += 1
+                logger.info(f"Refunded {refund_amount:,} RAO to {event.coldkey} for tournament {tournament_id}")
+
+        logger.info(f"Processed {refund_count} refunds for tournament {tournament_id}")
+        return refund_count
+
+    except Exception as e:
+        logger.error(f"Failed to refund tournament {tournament_id}: {e}")
+        return 0
 
 
 async def get_coldkey_balances(psql_db: PSQLDB, limit: int = 100) -> List[ColdkeyBalance]:
