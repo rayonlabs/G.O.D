@@ -72,6 +72,8 @@ from validator.tournament.task_creator import create_text_tournament_tasks
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_latest_tournament_winner_participant
 from validator.tournament.utils import get_round_winners
+from validator.tournament.utils import notify_tournament_completed
+from validator.tournament.utils import notify_tournament_started
 from validator.tournament.utils import replace_tournament_task
 from validator.tournament.utils import send_to_discord
 from validator.utils.call_endpoint import process_non_stream_fiber_get
@@ -347,6 +349,8 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
+            
+            await notify_tournament_completed(tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url)
 
             try:
                 logger.info(f"Creating benchmark tasks for base contestant winner {winner}")
@@ -422,6 +426,8 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
                 await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
                 logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
+  
+                await notify_tournament_completed(tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url)
 
                 try:
                     logger.info(f"Creating benchmark tasks for tournament winner {winner}")
@@ -469,16 +475,6 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 logger.info(f"Tournament not completed yet. Synced {len(snyced_task_ids)} tasks out of {len(round_tasks)}.")
         else:
             await create_next_round(tournament, completed_round, winners, config, psql_db)
-
-
-async def start_tournament(tournament_id: str, psql_db: PSQLDB):
-    await update_tournament_status(tournament_id, TournamentStatus.ACTIVE, psql_db)
-    logger.info(f"Started tournament {tournament_id}")
-
-
-async def complete_tournament(tournament_id: str, psql_db: PSQLDB):
-    await update_tournament_status(tournament_id, TournamentStatus.COMPLETED, psql_db)
-    logger.info(f"Completed tournament {tournament_id}")
 
 
 async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQLDB, config: Config) -> str:
@@ -755,6 +751,8 @@ async def process_pending_tournaments(config: Config) -> list[str]:
                         await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, config.psql_db)
                         activated_tournaments.append(tournament.tournament_id)
                         logger.info(f"Activated tournament {tournament.tournament_id} with {num_participants} participants")
+                        
+                        await notify_tournament_started(tournament.tournament_id, tournament.tournament_type.value, num_participants, config.discord_url)
                     else:
                         logger.warning(f"Tournament {tournament.tournament_id} has no participants, skipping activation")
 

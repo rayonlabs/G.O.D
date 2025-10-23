@@ -4,11 +4,12 @@ from datetime import timezone
 
 from fiber.chain.models import Node
 
-import validator.core.constants
+import validator.core.constants as core_cst
 import validator.db.constants as cst
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import HotkeyTaskParticipation
 from core.models.tournament_models import HotkeyTournamentParticipation
+from core.models.tournament_models import TaskTrainingAssignment
 from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentGroupData
 from core.models.tournament_models import TournamentPairData
@@ -34,6 +35,29 @@ from validator.utils.util import normalise_float
 
 
 logger = get_logger(__name__)
+
+
+def is_champion_winner(winner_hotkey: str | None, base_winner_hotkey: str | None, champion_hotkey: str) -> bool:
+    """
+    Check if champion_hotkey won the tournament.
+
+    Handles the case where the defending champion defends successfully
+    (winner_hotkey == EMISSION_BURN_HOTKEY but base_winner_hotkey == champion_hotkey).
+
+    Args:
+        winner_hotkey: The tournament's winner_hotkey field
+        base_winner_hotkey: The tournament's base_winner_hotkey field
+        champion_hotkey: The hotkey to check
+
+    Returns:
+        True if champion_hotkey won the tournament
+    """
+    from validator.core.constants import EMISSION_BURN_HOTKEY
+
+    if not winner_hotkey:
+        return False
+
+    return winner_hotkey == champion_hotkey or (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
 
 
 async def create_tournament(tournament: TournamentData, psql_db: PSQLDB) -> str:
@@ -163,7 +187,7 @@ async def add_tournament_tasks(tasks: list[TournamentTask], psql_db: PSQLDB):
 async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData | None:
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1
         """
@@ -175,20 +199,29 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
                 status=result[cst.TOURNAMENT_STATUS],
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
+                winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
             )
         return None
 
 
-async def get_latest_completed_tournament(psql_db: PSQLDB, tournament_type: TournamentType) -> TournamentData | None:
+async def get_latest_completed_tournament(
+    psql_db: PSQLDB, tournament_type: TournamentType, exclude_tournament_id: str | None = None
+) -> TournamentData | None:
     async with await psql_db.connection() as connection:
+        exclude_clause = f"AND {cst.TOURNAMENT_ID} != $2" if exclude_tournament_id else ""
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'completed'
+            {exclude_clause}
             ORDER BY {cst.CREATED_AT} DESC
             LIMIT 1
         """
-        result = await connection.fetchrow(query, tournament_type.value)
+        params = [tournament_type.value]
+        if exclude_tournament_id:
+            params.append(exclude_tournament_id)
+
+        result = await connection.fetchrow(query, *params)
         if result:
             return TournamentData(
                 tournament_id=result[cst.TOURNAMENT_ID],
@@ -196,6 +229,7 @@ async def get_latest_completed_tournament(psql_db: PSQLDB, tournament_type: Tour
                 status=result[cst.TOURNAMENT_STATUS],
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
+                winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
             )
         return None
 
@@ -265,6 +299,19 @@ async def get_tournament_rounds_with_status(status: str, psql_db: PSQLDB) -> lis
             )
             for row in results
         ]
+
+
+async def get_final_round_id(tournament_id: str, psql_db: PSQLDB) -> str | None:
+    """Get the final round ID for a tournament."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.ROUND_ID}
+            FROM {cst.TOURNAMENT_ROUNDS_TABLE}
+            WHERE {cst.TOURNAMENT_ID} = $1 AND {cst.IS_FINAL_ROUND} = true
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, tournament_id)
+        return result[cst.ROUND_ID] if result else None
 
 
 async def get_tournament_tasks(round_id: str, psql_db: PSQLDB) -> list[TournamentTask]:
@@ -618,39 +665,42 @@ async def get_trainers(psql_db: PSQLDB) -> list[TrainerInfo]:
         return list(trainers.values())
 
 
-async def add_tournament_task_hotkey_pairs_for_training(
-    task_hotkey_triples: list[tuple[str, str, datetime]], psql_db: PSQLDB, priority: int = 1
-):
+async def add_tournament_task_hotkey_pairs_for_training(assignments: list[TaskTrainingAssignment], psql_db: PSQLDB):
     """
     Add task-hotkey pairs to the tournament_task_hotkey_trainings table using batch insert.
     Each task-hotkey pair defines a training task that we'll send to a trainer later.
 
     Args:
-        task_hotkey_triples: List of (task_id, hotkey, created_at) tuples
+        assignments: List of TaskTrainingAssignment objects containing task info, repo details, and priority
         psql_db: Database connection
-        priority: Training priority (1=regular tournament tasks, 2=benchmark tasks)
     """
     async with await psql_db.connection() as connection:
         async with connection.transaction():
-            if not task_hotkey_triples:
-                logger.info("No task-hotkey triples to insert")
+            if not assignments:
+                logger.info("No task training assignments to insert")
                 return
 
             query = f"""
                 INSERT INTO {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
-                ({cst.TASK_ID}, {cst.HOTKEY}, {cst.CREATED_AT}, {cst.PRIORITY})
-                SELECT * FROM unnest($1::uuid[], $2::text[], $3::timestamptz[], $4::integer[])
+                ({cst.TASK_ID}, {cst.HOTKEY}, {cst.CREATED_AT}, {cst.PRIORITY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH})
+                SELECT * FROM unnest($1::uuid[], $2::text[], $3::timestamptz[], $4::integer[], $5::text[], $6::text[])
                 ON CONFLICT ({cst.TASK_ID}, {cst.HOTKEY}) DO NOTHING
             """
 
-            task_ids = [triple[0] for triple in task_hotkey_triples]
-            hotkeys = [triple[1] for triple in task_hotkey_triples]
-            timestamps = [triple[2] for triple in task_hotkey_triples]
-            priorities = [priority] * len(task_hotkey_triples)
+            task_ids = [assignment.task_id for assignment in assignments]
+            hotkeys = [assignment.hotkey for assignment in assignments]
+            timestamps = [assignment.created_at for assignment in assignments]
+            priorities = [assignment.priority for assignment in assignments]
+            training_repos = [assignment.training_repo for assignment in assignments]
+            training_commit_hashes = [assignment.training_commit_hash for assignment in assignments]
 
-            await connection.execute(query, task_ids, hotkeys, timestamps, priorities)
+            await connection.execute(query, task_ids, hotkeys, timestamps, priorities, training_repos, training_commit_hashes)
 
-            logger.info(f"Added {len(task_hotkey_triples)} task-hotkey training triples in batch with priority {priority}")
+            priority_counts = {}
+            for assignment in assignments:
+                priority_counts[assignment.priority] = priority_counts.get(assignment.priority, 0) + 1
+
+            logger.info(f"Added {len(assignments)} task training assignments - priorities: {priority_counts}")
 
 
 async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus) -> list[TournamentTaskTraining]:
@@ -668,7 +718,7 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TASK_ID}, {cst.HOTKEY}, {cst.TRAINING_STATUS}, {cst.N_TRAINING_ATTEMPTS},
-                   {cst.CREATED_AT}, {cst.UPDATED_AT}, {cst.PRIORITY}
+                   {cst.CREATED_AT}, {cst.UPDATED_AT}, {cst.PRIORITY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
             FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
             WHERE {cst.TRAINING_STATUS} = $1
             ORDER BY {cst.PRIORITY} ASC, {cst.CREATED_AT} DESC
@@ -698,6 +748,8 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
                         n_training_attempts=row[cst.N_TRAINING_ATTEMPTS],
                         created_at=row[cst.CREATED_AT],
                         updated_at=row[cst.UPDATED_AT],
+                        training_repo=row[cst.TRAINING_REPO],
+                        training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
                     )
                 )
 
@@ -901,8 +953,8 @@ async def get_participants_with_insufficient_stake(tournament_id: str, psql_db: 
 def calculate_boosted_stake(actual_stake: float, completed_entries: int) -> float:
     """Calculate stake with repeat participant bonus."""
     boost_percentage = min(
-        completed_entries * validator.core.constants.TOURNAMENT_REPEAT_BOOST_PERCENTAGE,
-        validator.core.constants.TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE,
+        completed_entries * core_cst.TOURNAMENT_REPEAT_BOOST_PERCENTAGE,
+        core_cst.TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE,
     )
     return actual_stake * (1 + boost_percentage / 100)
 
@@ -1069,12 +1121,7 @@ async def count_champion_consecutive_wins(psql_db: PSQLDB, tournament_type: Tour
             winner = row[cst.WINNER_HOTKEY]
             base_winner = row[cst.BASE_WINNER_HOTKEY]
 
-            # Check if the champion won this tournament
-            # Either directly (winner_hotkey == champion_hotkey)
-            # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
-            if winner == champion_hotkey or (
-                winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey
-            ):
+            if is_champion_winner(winner, base_winner, champion_hotkey):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
@@ -1119,12 +1166,7 @@ async def count_champion_consecutive_wins_at_tournament(
             winner = row[cst.WINNER_HOTKEY]
             base_winner = row[cst.BASE_WINNER_HOTKEY]
 
-            # Check if the champion won this tournament
-            # Either directly (winner_hotkey == champion_hotkey)
-            # Or as the defending champion (winner_hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey == champion_hotkey)
-            if winner == champion_hotkey or (
-                winner == validator.core.constants.EMISSION_BURN_HOTKEY and base_winner == champion_hotkey
-            ):
+            if is_champion_winner(winner, base_winner, champion_hotkey):
                 consecutive_wins += 1
             else:
                 # Stop counting when we hit a tournament won by someone else
@@ -1347,8 +1389,8 @@ async def get_tournament_participation_data(psql_db: PSQLDB) -> list[HotkeyTourn
         for hotkey, participation in participants.items():
             if participation["text"] and participation["image"]:
                 # Participated in both - use tournament type weights
-                text_prop = validator.core.constants.TOURNAMENT_TEXT_WEIGHT
-                image_prop = validator.core.constants.TOURNAMENT_IMAGE_WEIGHT
+                text_prop = core_cst.TOURNAMENT_TEXT_WEIGHT
+                image_prop = core_cst.TOURNAMENT_IMAGE_WEIGHT
             elif participation["text"]:
                 # Only text
                 text_prop = 1.0

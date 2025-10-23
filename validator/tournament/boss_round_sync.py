@@ -55,7 +55,7 @@ async def _postprocess_task_for_tournament(tournament_task: AnyTypeTask, psql_db
         logger.info("Regenerating presigned URL for test_data")
         tournament_task.test_data = await async_minio_client.get_new_presigned_url(tournament_task.test_data)
 
-    if hasattr(tournament_task, 'synthetic_data') and tournament_task.synthetic_data:
+    if hasattr(tournament_task, "synthetic_data") and tournament_task.synthetic_data:
         logger.info("Regenerating presigned URL for synthetic_data")
         tournament_task.synthetic_data = await async_minio_client.get_new_presigned_url(tournament_task.synthetic_data)
 
@@ -71,7 +71,9 @@ async def _postprocess_task_for_tournament(tournament_task: AnyTypeTask, psql_db
             original_count = len(tournament_task.reward_functions)
             tournament_task.reward_functions = manual_reward_functions
             if len(manual_reward_functions) < original_count:
-                logger.info(f"Filtered GRPO task {tournament_task.task_id} reward functions: {original_count} -> {len(manual_reward_functions)} (manual only)")
+                logger.info(
+                    f"Filtered GRPO task {tournament_task.task_id} reward functions: {original_count} -> {len(manual_reward_functions)} (manual only)"
+                )
 
     return tournament_task
 
@@ -96,18 +98,6 @@ async def sync_boss_round_tasks_to_general(
         except Exception as e:
             logger.error(f"Failed to sync task {tournament_task.task_id}: {e}")
             raise  # Re-raise to prevent tournament from completing with incomplete sync
-
-
-async def _schedule_task_sync(tournament_task_id: str, delay_hours: int, psql_db: PSQLDB, config: Config):
-    delay_seconds = delay_hours * 3600
-    logger.info(f"Waiting {delay_hours} hours before syncing task {tournament_task_id}")
-
-    await asyncio.sleep(delay_seconds)
-
-    try:
-        await copy_task_with_new_id(tournament_task_id, psql_db)
-    except Exception as e:
-        logger.error(f"Failed to sync task {tournament_task_id}: {e}")
 
 
 async def copy_historical_task_into_boss_round_tournament(

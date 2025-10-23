@@ -5,7 +5,7 @@ from core.constants import GRPO_DEFAULT_FIELD_PROMPT
 from core.constants import NETUID
 
 
-RAYONLABS_HF_USERNAME = "rayonlabs"
+RAYONLABS_HF_USERNAME = "besimray"  # "rayonlabs"
 
 SUCCESS = "success"
 ACCOUNT_ID = "account_id"
@@ -38,8 +38,8 @@ SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 TRAINING_REPO_ENDPOINT = "/training_repo"
 
 # TODO update when live
-DEV_CONTENT_BASE_URL = "https://dev.content.gradients.io"
-PROD_CONTENT_BASE_URL = "https://content.gradients.io"
+DEV_CONTENT_BASE_URL = "https://gradients-content-service-api-dev.onrender.com"  # "https://dev.content.gradients.io"
+PROD_CONTENT_BASE_URL = "https://gradients-content-service.onrender.com"  # "https://content.gradients.io"
 
 
 # 241 is testnet
@@ -69,8 +69,8 @@ ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
 
 # Synthetic data generation constants - for actual synthetic data creation
 SYNTHETIC_GENERATION_TOTAL = 10  # Total synthetic samples to generate
-SYNTHETIC_FOR_TRAINING = 5      # How many go to training
-SYNTHETIC_FOR_EVAL = 5          # How many go to evaluation
+SYNTHETIC_FOR_TRAINING = 5  # How many go to training
+SYNTHETIC_FOR_EVAL = 5  # How many go to evaluation
 SYNTH_EXAMPLES_FROM_TRAIN = 395
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
@@ -86,8 +86,8 @@ SYNTH_GEN_BATCH_SIZE = 2
 CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 
 # Multi-dataset augmentation
-MIN_DATASETS_FOR_AUGMENTATION = 2
-MAX_DATASETS_FOR_AUGMENTATION = 16
+MIN_DATASETS_FOR_AUGMENTATION = 1
+MAX_DATASETS_FOR_AUGMENTATION = 2
 
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
@@ -237,7 +237,6 @@ AFFINE_REWARD_FN_IDS = [
     "2226678e-df0d-42d0-8adb-551aec0ed88e",  # sat_reward_function
     "dadf301b-14cc-4bb2-9bb8-7d658d29661c",  # abd_reward_function
     "b5008828-8628-4ef5-b3f2-f77580028b67",  # ded_reward_function
-
 ]
 
 # diffusion eval stuff
@@ -288,13 +287,16 @@ SEVEN_DAY_SCORE_WEIGHT = 0.4
 THREE_DAY_SCORE_WEIGHT = 0.3
 ONE_DAY_SCORE_WEIGHT = 0.3
 
-TOURNAMENT_TEXT_WEIGHT = 0.6
-TOURNAMENT_IMAGE_WEIGHT = 0.4
-TOURNAMENT_INTERVAL_HOURS = 24
+TOURNAMENT_TEXT_WEIGHT = 0.15
+TOURNAMENT_IMAGE_WEIGHT = 0.10
+MAX_TEXT_TOURNAMENT_WEIGHT = 0.6
+MAX_IMAGE_TOURNAMENT_WEIGHT = 0.4
+TOURNAMENT_INTERVAL_HOURS = 72
 BURN_REDUCTION_RATE = 5.0
 MAX_BURN_REDUCTION = 0.8
-BASE_REGULAR_WEIGHT = 0.15
-BASE_TOURNAMENT_WEIGHT = 0.525
+EMISSION_MULTIPLIER_THRESHOLD = 0.05
+EMISSION_MULTIPLIER_RATE = 2.0
+EMISSION_BOOST_DECAY_PER_WIN = 0.01
 
 
 # Emission distribution when performance diff occurs
@@ -315,25 +317,25 @@ TRL_DPO_FIELD_CHOSEN = "chosen"
 TRL_DPO_FIELD_REJECTED = "rejected"
 
 # DPO augmentation constants
-DPO_AUGMENTATION_PROB = 0.95
-DPO_RESPONSE_HONEYPOT_PERCENTAGE = 0.5
+DPO_AUGMENTATION_PROB = 0.01
+DPO_RESPONSE_HONEYPOT_PERCENTAGE = 0.01
 
 # Instruct augmentation parameters
-INSTRUCT_AUGMENTATION_PROB = 0.95
-INSTRUCT_RESPONSE_HONEYPOT_PERCENTAGE = 0.5
+INSTRUCT_AUGMENTATION_PROB = 0.01
+INSTRUCT_RESPONSE_HONEYPOT_PERCENTAGE = 0.01
 
 # GRPO augmentation constants
-GRPO_AUGMENTATION_PROB = 0.95
-GRPO_PROMPT_HONEYPOT_PROB = 0.65
-GRPO_WORD_TRANSFORM_PROB = 0.8
+GRPO_AUGMENTATION_PROB = 0.01
+GRPO_PROMPT_HONEYPOT_PROB = 0.01
+GRPO_WORD_TRANSFORM_PROB = 0.01
 
 # Text transform augmentation constants
-TEXT_TRANSFORM_PROB = 0.9
-WORD_TRANSFORMS_PROB = 0.9
-CASE_MODIFICATIONS_PROB = 0.8
-PUNCTUATION_REMOVAL_PROB = 0.5
-REFERENCE_WORD_PLACEMENT_PROB = 0.4
-TEXT_TRANSFORMS_PROB = 0.9
+TEXT_TRANSFORM_PROB = 0.01
+WORD_TRANSFORMS_PROB = 0.01
+CASE_MODIFICATIONS_PROB = 0.01
+PUNCTUATION_REMOVAL_PROB = 0.01
+REFERENCE_WORD_PLACEMENT_PROB = 0.01
+TEXT_TRANSFORMS_PROB = 0.01
 
 # Word transformation weights
 WORD_TRANSFORM_REVERSE_PROB = 0.4
@@ -351,8 +353,8 @@ CASE_MOD_NTH_LETTER_UPPERCASE_PROB = 0.4
 CASE_MOD_ALL_UPPERCASE_PROB = 0.2
 
 # Honeypot row percentages
-WORD_HONEYPOT_INPUT_PERCENTAGE = 0.7
-WORD_HONEYPOT_OUTPUT_PERCENTAGE = 0.7
+WORD_HONEYPOT_INPUT_PERCENTAGE = 0.01
+WORD_HONEYPOT_OUTPUT_PERCENTAGE = 0.01
 
 # Miner performance constants
 MINER_PERFORMANCE_CACHE_TTL = 3600

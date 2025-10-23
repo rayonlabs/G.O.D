@@ -4,154 +4,157 @@
 
 The scoring system uses these key constants (see [`validator/core/constants.py`](../validator/core/constants.py)):
 
-- `BURN_REDUCTION_RATE` - Burn multiplier (determines burn rate per % performance difference)
-- `LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT` - Legacy boost multiplier
-- `TOURNAMENT_TEXT_WEIGHT` - Base text tournament weight
-- `TOURNAMENT_IMAGE_WEIGHT` - Base image tournament weight
-- `BASE_TOURNAMENT_WEIGHT` - Base tournament weight allocation
-- `BASE_REGULAR_WEIGHT` - Base regular weight allocation
+- `TOURNAMENT_TEXT_WEIGHT` - Proportion for text tournaments (0.55 = 55%)
+- `TOURNAMENT_IMAGE_WEIGHT` - Proportion for image tournaments (0.45 = 45%)
+- `TOURNAMENT_PARTICIPATION_WEIGHT` - Weight for active tournament participants
+- `EMISSION_MULTIPLIER_THRESHOLD` - Performance threshold for emission increases
 - `EMISSION_BURN_HOTKEY` - Address that receives burned emissions
-- `MAX_BURN_PROPORTION` - Maximum proportion of weight that can be burned
 
 ## Overview
 
-The Gradient subnet balances regular task performance with tournament results using separated burn dynamics. Text and image miners are treated differently based on how their respective tournaments perform compared to regular tasks.
+The Gradient subnet operates as a **tournament-only system**. All emissions are distributed between:
 
-## How Miners Are Classified
+1. **Tournament winners** (text and image tournaments, calculated separately)
+2. **Active participants** (small reward for tournament participation)
+3. **Burn address** (all remaining weight goes to `EMISSION_BURN_HOTKEY`)
 
-### Tournament Miners
-Miners get classified based on which tournaments they participate in (see [`get_tournament_participation_data`](../validator/db/sql/tournaments.py)):
+There is no legacy miner system - only tournament participants receive rewards.
 
-- **Text-only**: Only participated in text tournaments
-- **Image-only**: Only participated in image tournaments
-- **Both**: Participated in both tournament types (weighted by `TOURNAMENT_TEXT_WEIGHT` and `TOURNAMENT_IMAGE_WEIGHT`)
+## Weight Distribution
 
-### Legacy Miners
+### Base Allocation
 
-Miners who do real time tasks separate from the tournaments. They're classified by their task completion history over the past 7 days - what proportion of their tasks were text vs image (see [`get_weekly_task_participation_data`](../validator/db/sql/tournaments.py)).
+Total weight allocation is calculated as:
 
-
-## Tournament Performance Tracking
-
-The system compares tournament winners against the best legacy miner scores for the same tasks (see [`calculate_performance_difference`](../validator/core/weight_setting.py)). When tournaments underperform, this triggers burn dynamics.
-
-Performance differences are calculated as:
-```
-performance_difference = (tournament_score - best_legacy_score_for_same_task) / best_legacy_score_for_same_task
+```python
+text_base_weight = BASE_TOURNAMENT_WEIGHT * TOURNAMENT_TEXT_WEIGHT
+image_base_weight = BASE_TOURNAMENT_WEIGHT * TOURNAMENT_IMAGE_WEIGHT
+burn_weight = 1.0 - text_base_weight - image_base_weight
 ```
 
-## Separated Burn System
+### Performance-Based Adjustments
 
-### The Core Mechanism
-When tournaments underperform, weight gets redistributed (see [`get_tournament_burn_details_separated`](../validator/core/weight_setting.py)):
+When tournaments perform well against synthetic benchmarks, they receive emission multipliers (see [`calculate_emission_multiplier`](../validator/core/weight_setting.py)):
 
-1. **Tournament miners lose weight** - proportional to their tournament type's underperformance
-2. **Legacy miners gain weight** - they get boosted because their approach outperformed tournaments
-3. **Excess weight goes to burn** - sent to `EMISSION_BURN_HOTKEY`
-
-### Text vs Image Separation
-The key insight is that text and image tournaments are evaluated separately:
-
-- If text tournaments perform poorly but image tournaments perform well, only text miners face penalties
-- Legacy miners get different boosts for their text vs image task work
-- Weight redistribution happens proportionally based on `TOURNAMENT_TEXT_WEIGHT` and `TOURNAMENT_IMAGE_WEIGHT`
-
-### The Burn Rate
-The system uses `BURN_REDUCTION_RATE` as a multiplier:
-```
-burn_proportion = min(MAX_BURN_PROPORTION, abs(performance_difference) * BURN_REDUCTION_RATE)
+```python
+# Only applies if performance exceeds threshold
+if performance_diff > EMISSION_MULTIPLIER_THRESHOLD:
+    emission_increase = (performance_diff - EMISSION_MULTIPLIER_THRESHOLD) * 2.0
+    tournament_weight = base_weight + emission_increase
 ```
 
-This creates strong incentives for tournament performance while capping maximum burn at `MAX_BURN_PROPORTION`.
+When tournaments perform poorly, no increase is applied, and more weight remains with the burn address.
 
-## Weight Application
+## Tournament Weights
 
-### Tournament Miners
-Tournament miners receive weights based on their performance and participation (see [`apply_tournament_weights_separated`](../validator/core/weight_setting.py)):
+### Text and Image Separation
 
-- Their tournament ranking (better performers get more weight)
-- Which tournaments they participated in
-- How well those tournaments performed overall
-- The scaled weight allocation after burn adjustments
+Text and image tournaments are completely independent:
 
-### Legacy Miners
-Legacy miners receive their base performance weight plus boosts (see [`apply_regular_weights_separated`](../validator/core/weight_setting.py)):
+- Text tournament winners receive `text_tournament_weight` distributed by performance
+- Image tournament winners receive `image_tournament_weight` distributed by performance
+- A miner can win both tournaments and receive rewards from each
+
+### Weight Calculation
+
+Within each tournament, weights are distributed based on tournament performance (see [`get_tournament_weights_from_data`](../validator/evaluation/tournament_scoring.py)):
+
+1. Final round determines the winner
+2. Earlier rounds receive progressively smaller allocations
+3. Higher-ranking participants in each round receive more weight
+
+## Participation Rewards
+
+Active tournament participants receive a small fixed reward:
+
+```python
+participation_weight = TOURNAMENT_PARTICIPATION_WEIGHT  # per participant
 ```
-boost = performance_difference * LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT
-```
-- Boosts are calculated from tournament underperformance
-- Applied proportionally to their text vs image task participation over the past 7 days
 
-### Burn Allocation
-All burned weight goes to `EMISSION_BURN_HOTKEY` rather than being lost, maintaining the total emission while redistributing it based on performance.
+This incentivizes participation independent of performance.
+
+### Scaling for Participation
+
+When many participants are active, tournament and burn weights are scaled down proportionally:
+
+```python
+participation_total = len(participants) * TOURNAMENT_PARTICIPATION_WEIGHT
+scale_factor = 1.0 - participation_total
+
+scaled_text_weight = text_tournament_weight * scale_factor
+scaled_image_weight = image_tournament_weight * scale_factor
+scaled_burn_weight = burn_weight * scale_factor
+```
 
 ## Example Scenario
 
-Consider a scenario where:
-- Text tournaments underperform by 14% compared to best legacy miner scores on the same tasks (`text_performance_diff = -0.14`)
-- Image tournaments underperform by 4% compared to best legacy miner scores on the same tasks (`image_performance_diff = -0.04`)
+Starting conditions:
 
-**Burn Calculations (using BURN_REDUCTION_RATE = 5.0, MAX_BURN_PROPORTION = 0.75):**
-```
-text_burn_proportion = min(0.75, 0.14 * 5.0) = 0.70
-image_burn_proportion = min(0.75, 0.04 * 5.0) = 0.20
-```
+- `BASE_TOURNAMENT_WEIGHT = 0.9`
+- `TOURNAMENT_TEXT_WEIGHT = 0.55`
+- `TOURNAMENT_IMAGE_WEIGHT = 0.45`
+- Text tournament performance: Good (exceeds threshold by 0.1)
+- Image tournament performance: Average (no threshold exceeded)
+- 10 active participants
 
-**Weight Redistribution (using BASE_TOURNAMENT_WEIGHT = 0.525, TOURNAMENT_TEXT_WEIGHT = 0.55, TOURNAMENT_IMAGE_WEIGHT = 0.45, BASE_REGULAR_WEIGHT = 0.15, LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25):**
-
-```
-# Calculate tournament burn amounts
-text_tournament_burn = 0.525 * 0.55 * 0.70 = 0.202
-image_tournament_burn = 0.525 * 0.45 * 0.20 = 0.047
-
-# Tournament weights after burn
-text_tournament_weight = (0.525 * 0.55) - 0.202 = 0.087
-image_tournament_weight = (0.525 * 0.45) - 0.047 = 0.189
-
-# Regular weights get base + portion of tournament burn
-text_regular_weight = 0.15 + (0.202 * 0.25) = 0.201
-image_regular_weight = 0.15 + (0.047 * 0.25) = 0.162
-
-# Burn weight gets remainder
-total_tournament_burn = 0.202 + 0.047 = 0.249
-burn_weight = (1 - 0.15 - 0.525) + (0.249 * (1 - 0.25)) = 0.512
-```
-
-**Legacy Boosts (using LEGACY_PERFORM_DIFF_EMISSION_GAIN_PERCENT = 0.25):**
+**Step 1: Calculate base weights**
 
 ```
-text_legacy_boost = -0.14 * 0.25 = -0.035 (3.5% boost applied to individual legacy miners' scores)
-image_legacy_boost = -0.04 * 0.25 = -0.01 (1% boost applied to individual legacy miners' scores)
+text_base_weight = 0.9 * 0.55 = 0.495
+image_base_weight = 0.9 * 0.45 = 0.405
+burn_weight = 1.0 - 0.495 - 0.405 = 0.1
 ```
 
-**Results:**
+**Step 2: Apply performance multipliers**
 
-- Text tournament weight reduced from 0.289 to 0.087 (70% reduction)
-- Image tournament weight reduced from 0.236 to 0.189 (20% reduction)
-- Text regular weight boosted from 0.15 to 0.201 (34% increase)
-- Image regular weight boosted from 0.15 to 0.162 (8% increase)
-- 51.2% of total weight goes to `EMISSION_BURN_HOTKEY`
+```
+text_emission_increase = 0.1 * 2.0 = 0.2
+text_tournament_weight = 0.495 + 0.2 = 0.695
 
+image_emission_increase = 0.0
+image_tournament_weight = 0.405 + 0.0 = 0.405
 
-## Key Benefits
+burn_weight = 1.0 - 0.695 - 0.405 = -0.1 (capped at minimum)
+```
 
-**Performance Incentives**: Tournament underperformance directly reduces tournament miner rewards while boosting legacy miners who outperformed.
+Note: When emission increases exceed available weight, the system caps allocations appropriately.
 
-**Type-Specific Fairness**: Text and image miners aren't penalized for the other type's poor performance.
+**Step 3: Scale for participation**
 
-**Proportional Participation**: Miners participating in both tournaments get appropriately weighted contributions from each.
+```
+participation_total = 10 * 0.01 = 0.1  # (assuming TOURNAMENT_PARTICIPATION_WEIGHT = 0.01)
+scale_factor = 1.0 - 0.1 = 0.9
 
-**Legacy Protection**: Regular task miners get rewarded when their approach outperforms tournaments.
+scaled_text_weight = 0.695 * 0.9 = 0.626
+scaled_image_weight = 0.405 * 0.9 = 0.365
+scaled_burn_weight = -0.1 * 0.9 = -0.09 (capped at 0)
+participation_weights = 0.1
+```
 
-**System Stability**: All weight redistribution is conservative and bounded (max burn at `MAX_BURN_PROPORTION`) to prevent extreme swings.
+**Final Distribution:**
 
-This system creates a competitive balance where tournament participation is rewarded when it produces superior results, but legacy approaches are protected and boosted when tournaments fail to deliver improvements.
+- Text tournament: 62.6%
+- Image tournament: 36.5%
+- Participation: 10%
+- Burn: ~0% (text tournament performed well, consuming most available weight)
+
+## Key Characteristics
+
+**Tournament-Only**: No legacy/regular mining - only tournament participants receive rewards.
+
+**Performance Incentives**: Tournaments that outperform benchmarks receive emission multipliers, increasing their share.
+
+**Burn as Default**: All weight not allocated to tournaments or participation goes to the burn address.
+
+**Type-Specific Rewards**: Text and image tournaments are independent - good performance in one doesn't affect the other.
+
+**Participation Encouraged**: Small guaranteed reward for active participation, independent of performance.
 
 ## Implementation Details
 
-The main entry point is [`get_node_weights_from_period_scores_separated`](../validator/core/weight_setting.py) which orchestrates the entire process. Key functions include:
+The main entry point is [`get_node_weights_from_tournament_audit_data`](../validator/core/weight_setting.py) which orchestrates the entire process. Key functions include:
 
-- [`get_tournament_weights_from_data_separated`](../validator/evaluation/tournament_scoring.py) - Calculates separate text/image tournament weights
-- [`tournament_scores_to_weights`](../validator/evaluation/tournament_scoring.py) - Converts tournament scores to weight distributions
-- [`calculate_final_round_winner`](../validator/evaluation/tournament_scoring.py) - Determines tournament winners
-
+- [`get_tournament_burn_details`](../validator/core/weight_setting.py) - Calculates weight allocations based on performance
+- [`get_tournament_weights_from_data`](../validator/evaluation/tournament_scoring.py) - Distributes weights within tournaments
+- [`apply_tournament_weights`](../validator/core/weight_setting.py) - Applies final weight assignments
+- [`calculate_performance_difference`](../validator/tournament/performance_calculator.py) - Compares tournament vs benchmark performance

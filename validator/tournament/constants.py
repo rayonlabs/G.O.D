@@ -1,5 +1,9 @@
 MAX_TRAINING_ATTEMPTS = 2
 
+# Smart prioritization thresholds for task fetching
+PENDING_QUEUE_THRESHOLD_PER_TYPE = 8  # Fetch tournament tasks when pending per type < this
+PENDING_QUEUE_THRESHOLD_FOR_BENCHMARK = 5  # Fetch benchmark tasks when pending < this
+
 # Orchestrator cycle intervals (in seconds)
 FETCH_TASKS_CYCLE_INTERVAL = 15 * 60  # 20 minutes
 PROCESS_PENDING_TASKS_CYCLE_INTERVAL = 15 * 60  # 20 minutes
@@ -38,8 +42,8 @@ IMAGE_TASKS_PER_GROUP = 1
 TOURNAMENT_GROUP_TARGET_NUM_TASKS = 3
 
 # Final round task counts
-FINAL_ROUND_IMAGE_TASKS = 3
-FINAL_ROUND_TEXT_TASKS = 2
+FINAL_ROUND_IMAGE_TASKS = 6
+FINAL_ROUND_TEXT_TASKS = 6
 
 # Knockout round task counts
 KNOCKOUT_PAIR_TASKS = 1
@@ -56,7 +60,7 @@ MODEL_SIZE_RANGE_MULTIPLIER_MAX = 1.2
 MODEL_PARAMS_TO_BILLIONS = 1e9
 
 # Progressive championship threshold constants
-EXPONENTIAL_BASE_THRESHOLD = 0.20  # Starting threshold for new champions
+EXPONENTIAL_BASE_THRESHOLD = 0.10  # Starting threshold for new champions
 EXPONENTIAL_DECAY_RATE = 0.8  # Decay factor per consecutive win
 EXPONENTIAL_MIN_THRESHOLD = 0.03  # Minimum threshold floor
 
