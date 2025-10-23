@@ -1,3 +1,5 @@
+-- migrate:up
+
 -- Add balance_events table to track all balance changes tied to tournaments
 CREATE TABLE balance_events (
     id SERIAL PRIMARY KEY,
@@ -28,3 +30,6 @@ COMMENT ON COLUMN balance_events.coldkey IS 'Coldkey address affected by this ev
 COMMENT ON COLUMN balance_events.event_type IS 'Type of balance event: participation_fee, refund, transfer_in';
 COMMENT ON COLUMN balance_events.amount_rao IS 'Amount in RAO (positive for credits, negative for debits)';
 COMMENT ON COLUMN balance_events.description IS 'Human-readable description of the event';
+
+-- migrate:down
+DROP TABLE IF EXISTS balance_events;
