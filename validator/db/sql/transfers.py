@@ -485,6 +485,35 @@ async def get_balance_events_by_coldkey(psql_db: PSQLDB, coldkey: str, limit: in
         return []
 
 
+async def add_refund_to_balance(psql_db: PSQLDB, coldkey: str, refund_amount_rao: int) -> bool:
+    """
+    Add refund amount to a coldkey's balance without affecting transfer tracking.
+
+    Args:
+        psql_db: Database connection
+        coldkey: Coldkey SS58 address
+        refund_amount_rao: Refund amount to add in RAO
+
+    Returns:
+        bool: True if refund was added successfully
+    """
+    try:
+        query = """
+        UPDATE coldkey_balances
+        SET balance_rao = balance_rao + $2,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE coldkey = $1
+        """
+
+        async with await psql_db.connection() as connection:
+            result = await connection.execute(query, coldkey, refund_amount_rao)
+            return result == "UPDATE 1"
+
+    except Exception as e:
+        logger.error(f"Failed to add refund to balance for {coldkey}: {e}")
+        return False
+
+
 async def refund_tournament_participants(psql_db: PSQLDB, tournament_id: str) -> int:
     """
     Refund all participation fees for a tournament by creating refund balance events
@@ -514,7 +543,7 @@ async def refund_tournament_participants(psql_db: PSQLDB, tournament_id: str) ->
             )
 
             if refund_event:
-                await update_coldkey_balance(psql_db, event.coldkey, refund_amount, event.created_at)
+                await add_refund_to_balance(psql_db, event.coldkey, refund_amount)
                 refund_count += 1
                 logger.info(f"Refunded {refund_amount:,} RAO to {event.coldkey} for tournament {tournament_id}")
 
