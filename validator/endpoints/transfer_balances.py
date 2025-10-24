@@ -9,6 +9,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 
 from validator.core.config import Config
+from validator.core.dependencies import get_api_key
 from validator.core.dependencies import get_config
 from validator.core.transfer_models import BalanceEventResponse
 from validator.core.transfer_models import ColdkeyBalanceResponse
@@ -228,6 +229,8 @@ def factory_router() -> APIRouter:
         summary="Refund tournament participants",
         description="Refund all participation fees for a tournament",
         tags=["tournaments"],
+        dependencies=[Depends(get_api_key)],
+        include_in_schema=False,
     )
 
     return router
