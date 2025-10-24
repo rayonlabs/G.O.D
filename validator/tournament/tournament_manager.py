@@ -1,4 +1,5 @@
 import asyncio
+import math
 import random
 from datetime import datetime
 from datetime import timezone
@@ -31,13 +32,10 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_node_by_hotkey
 from validator.db.sql.tournaments import add_tournament_participants
-from validator.db.sql.tournaments import calculate_boosted_stake
-from validator.db.sql.tournaments import count_completed_tournament_entries
 from validator.db.sql.tournaments import create_tournament
 from validator.db.sql.tournaments import eliminate_tournament_participants
 from validator.db.sql.tournaments import get_active_tournament
 from validator.db.sql.tournaments import get_latest_tournament_with_created_at
-from validator.db.sql.tournaments import get_participants_with_insufficient_stake
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
@@ -114,9 +112,26 @@ def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
         random.shuffle(pairs)
         return KnockoutRound(pairs=pairs)
     else:
-        hotkeys = [node.hotkey for node in nodes_copy]
-        single_group = Group(member_ids=hotkeys, task_ids=[])
-        return GroupRound(groups=[single_group])
+        num_groups = math.ceil(len(nodes_copy) / t_cst.EXPECTED_GROUP_SIZE)
+
+        if len(nodes_copy) / num_groups < t_cst.MIN_GROUP_SIZE:
+            num_groups = max(1, num_groups - 1)
+
+        groups = [[] for _ in range(num_groups)]
+        base_size = len(nodes_copy) // num_groups
+        remainder = len(nodes_copy) % num_groups
+        group_sizes = [base_size + (1 if i < remainder else 0) for i in range(num_groups)]
+
+        random.shuffle(nodes_copy)
+        idx = 0
+        for g in range(num_groups):
+            group_nodes = nodes_copy[idx : idx + group_sizes[g]]
+            group_hotkeys = [node.hotkey for node in group_nodes]
+            groups[g] = Group(member_ids=group_hotkeys, task_ids=[])
+            idx += group_sizes[g]
+
+        random.shuffle(groups)
+        return GroupRound(groups=groups)
 
 
 async def _create_first_round(
@@ -321,24 +336,11 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
         losers = [p for p in active_participants if p not in winners]
         logger.info(f"Losers to be eliminated: {len(losers)} - {losers}")
 
-        # Check stake requirements for winners
-        insufficient_stake_hotkeys = await get_participants_with_insufficient_stake(tournament.tournament_id, psql_db)
-        logger.info(f"Participants with insufficient stake: {len(insufficient_stake_hotkeys)} - {insufficient_stake_hotkeys}")
-        winners_with_insufficient_stake = [w for w in winners if w in insufficient_stake_hotkeys]
-
-        # Combine all eliminations
-        all_eliminated = losers + winners_with_insufficient_stake
+        all_eliminated = losers
         if all_eliminated:
             await eliminate_tournament_participants(tournament.tournament_id, completed_round.round_id, all_eliminated, psql_db)
-            if winners_with_insufficient_stake:
-                logger.info(
-                    f"Eliminated {len(winners_with_insufficient_stake)} winners for insufficient stake: "
-                    f"{winners_with_insufficient_stake}"
-                )
 
-        # Update winners list to remove those with insufficient stake
-        winners = [w for w in winners if w not in winners_with_insufficient_stake]
-        logger.info(f"Final winners after stake check: {len(winners)} - {winners}")
+        logger.info(f"Final winners: {len(winners)} - {winners}")
 
         if len(winners) == 0:
             logger.warning(
@@ -349,8 +351,10 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
-            
-            await notify_tournament_completed(tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url)
+
+            await notify_tournament_completed(
+                tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
+            )
 
             try:
                 logger.info(f"Creating benchmark tasks for base contestant winner {winner}")
@@ -426,8 +430,10 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
                 await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
                 logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
-  
-                await notify_tournament_completed(tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url)
+
+                await notify_tournament_completed(
+                    tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
+                )
 
                 try:
                     logger.info(f"Creating benchmark tasks for tournament winner {winner}")
@@ -505,7 +511,6 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
             hotkey=base_contestant.hotkey,  # This will be EMISSION_BURN_HOTKEY
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
-            stake_required=0,
         )
         await add_tournament_participants([base_participant], psql_db)
 
@@ -565,34 +570,19 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                     if isinstance(result, Exception):
                         logger.warning(f"Exception pinging {node.hotkey}: {result}")
                     elif result:
-                        completed_entries = await count_completed_tournament_entries(node.hotkey, psql_db)
-                        boosted_stake = calculate_boosted_stake(node.alpha_stake, completed_entries)
-
-                        responding_node = RespondingNode(
-                            node=node, training_repo_response=result, boosted_stake=boosted_stake, actual_stake=node.alpha_stake
-                        )
+                        responding_node = RespondingNode(node=node, training_repo_response=result)
                         responding_nodes.append(responding_node)
-                        logger.info(
-                            f"Node responded with training repo {result.github_repo}@{result.commit_hash}, "
-                            f"stake: {node.alpha_stake:.2f}, boosted: {boosted_stake:.2f}"
-                        )
+                        logger.info(f"Node responded with training repo {result.github_repo}@{result.commit_hash}")
 
         logger.info(f"Got {len(responding_nodes)} responding nodes")
 
-        # Sort by boosted stake (descending) for processing
-        responding_nodes.sort(key=lambda x: x.boosted_stake, reverse=True)
-
-        logger.info(f"Processing {len(responding_nodes)} responding nodes by boosted stake")
+        logger.info(f"Processing {len(responding_nodes)} responding nodes")
 
         logger.info("Validating obfuscation and balance for participants...")
         validated_nodes: list[RespondingNode] = []
-        max_participants = cst.TOURNAMENT_TOP_N_BY_STAKE
 
         for responding_node in responding_nodes:
             with LogContext(node_hotkey=responding_node.node.hotkey):
-                if len(validated_nodes) >= max_participants:
-                    logger.info(f"Reached maximum participants ({max_participants}), stopping selection")
-                    break
                 repo_url = responding_node.training_repo_response.github_repo
                 logger.info(f"Checking obfuscation for {responding_node.node.hotkey}'s repo: {repo_url}")
 
@@ -631,8 +621,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                 )
 
         logger.info(
-            f"Validation complete: {len(validated_nodes)}/{max_participants} participants selected "
-            f"from {len(responding_nodes)} responding nodes"
+            f"Validation complete: {len(validated_nodes)} participants selected " f"from {len(responding_nodes)} responding nodes"
         )
 
         miners_that_accept_and_give_repos = 0
@@ -640,7 +629,8 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         for responding_node in validated_nodes:
             with LogContext(node_hotkey=responding_node.node.hotkey):
                 participant = TournamentParticipant(
-                    tournament_id=tournament_id, hotkey=responding_node.node.hotkey, stake_required=responding_node.actual_stake
+                    tournament_id=tournament_id,
+                    hotkey=responding_node.node.hotkey,
                 )
                 await add_tournament_participants([participant], psql_db)
 
@@ -751,8 +741,10 @@ async def process_pending_tournaments(config: Config) -> list[str]:
                         await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, config.psql_db)
                         activated_tournaments.append(tournament.tournament_id)
                         logger.info(f"Activated tournament {tournament.tournament_id} with {num_participants} participants")
-                        
-                        await notify_tournament_started(tournament.tournament_id, tournament.tournament_type.value, num_participants, config.discord_url)
+
+                        await notify_tournament_started(
+                            tournament.tournament_id, tournament.tournament_type.value, num_participants, config.discord_url
+                        )
                     else:
                         logger.warning(f"Tournament {tournament.tournament_id} has no participants, skipping activation")
 

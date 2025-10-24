@@ -35,7 +35,6 @@ from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_participant
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
-from validator.db.sql.tournaments import is_champion_winner
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament import constants as t_cst
 from validator.tournament.task_creator import create_new_task_of_same_type
@@ -128,7 +127,8 @@ async def replace_tournament_task(
         if original_expected_repo_name:
             await task_sql.set_expected_repo_name(new_task.task_id, node, config.psql_db, original_expected_repo_name)
             logger.info(
-                f"Copied node {node.hotkey} with expected_repo_name {original_expected_repo_name} to replacement task {new_task.task_id}"
+                f"Copied node {node.hotkey} with expected_repo_name {original_expected_repo_name} "
+                f"to replacement task {new_task.task_id}"
             )
         else:
             logger.warning(f"No expected repo name found for node {node.hotkey} in original task {original_task_id}")
@@ -227,7 +227,6 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
                 hotkey=EMISSION_BURN_HOTKEY,
                 training_repo=latest_winner.backup_repo,
                 training_commit_hash=commit_hash,
-                stake_required=0,
             )
         else:
             logger.warning("Could not determine tournament ID for uploaded repo, falling back to original training_repo")
@@ -237,11 +236,11 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
                 hotkey=EMISSION_BURN_HOTKEY,
                 training_repo=latest_winner.training_repo,
                 training_commit_hash=latest_winner.training_commit_hash,
-                stake_required=0,
             )
 
     logger.info(
-        f"No previous tournament winner found for type {tournament_type.value}, using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
+        f"No previous tournament winner found for type {tournament_type.value}, "
+        f"using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
     )
 
     hardcoded_participant = TournamentParticipant(
@@ -249,7 +248,6 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
         hotkey=EMISSION_BURN_HOTKEY,
         training_repo=DEFAULT_PARTICIPANT_REPO,
         training_commit_hash=DEFAULT_PARTICIPANT_COMMIT,
-        stake_required=0,
     )
 
     return hardcoded_participant
@@ -447,14 +445,17 @@ def determine_boss_round_winner(task_winners: list[str], boss_hotkey: str, tourn
     required_wins = (total_tasks // 2) + 1
     if opponent_hotkey and opponent_wins > total_tasks // 2:
         logger.info(
-            f"{tournament_type.value} tournament: Challenger wins boss round with majority: {opponent_wins}/{total_tasks} tasks won (required {required_wins})"
+            f"{tournament_type.value} tournament: Challenger wins boss round with majority: "
+            f"{opponent_wins}/{total_tasks} tasks won (required {required_wins})"
         )
         return opponent_hotkey
     else:
         boss_wins = win_counts.get(boss_hotkey, 0)
         if opponent_hotkey:
             logger.info(
-                f"{tournament_type.value} tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {required_wins}/{total_tasks} to dethrone), boss won {boss_wins}/{total_tasks}"
+                f"{tournament_type.value} tournament: Boss retains title - challenger won "
+                f"{opponent_wins}/{total_tasks} tasks (requires {required_wins}/{total_tasks} to dethrone), "
+                f"boss won {boss_wins}/{total_tasks}"
             )
         else:
             logger.info(f"{tournament_type.value} tournament: Boss retains title by default")
@@ -492,7 +493,8 @@ async def get_knockout_winners(
         # Calculate the progressive threshold
         threshold_percentage = get_progressive_threshold(consecutive_wins)
         logger.info(
-            f"Champion {current_champion} has {consecutive_wins} consecutive wins, using {threshold_percentage * 100:.1f}% threshold"
+            f"Champion {current_champion} has {consecutive_wins} consecutive wins, "
+            f"using {threshold_percentage * 100:.1f}% threshold"
         )
 
         for task in round_tasks:
@@ -568,19 +570,22 @@ async def get_knockout_winners(
                 if boss_loss * boss_multiplier > opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * {boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
+                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * {boss_multiplier:.3f} = "
+                        f"{boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)
                     logger.info(
-                        f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= {boss_loss * boss_multiplier:.6f}"
+                        f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= "
+                        f"{boss_loss * boss_multiplier:.6f}"
                     )
             else:
                 # For other tasks, lower scores are better
                 if boss_loss * boss_divisor < opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} * {boss_divisor:.3f} = {boss_loss * boss_divisor:.6f} < {opponent_loss:.6f}"
+                        f"{task_object.task_type} task: Boss wins (lower is better): "
+                        f"{boss_loss:.6f} * {boss_divisor:.3f} = {boss_loss * boss_divisor:.6f} < {opponent_loss:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)
@@ -601,58 +606,56 @@ async def get_group_winners(
 ) -> list[str]:
     """Get winners from group round based on adjusted loss scores (top 8 performers)."""
     TOP_WINNERS_TO_ADVANCE = 8
+    all_winners = []
 
-    if len(round_tasks) > 1:
-        logger.warning(
-            f"There are {len(round_tasks)} tasks in round {completed_round.round_id}. We are taking the first task only."
-        )
+    for task in round_tasks:
+        group_id = task.group_id
+        task_id = task.task_id
 
-    round_task = round_tasks[0]
-    group_id = round_task.group_id
-    task_id = round_task.task_id
+        logger.info(f"Processing group {group_id} in round {completed_round.round_id}")
 
-    logger.info(f"Processing group {group_id} in round {completed_round.round_id}")
+        participants = await get_tournament_group_members(group_id, psql_db)
+        participant_hotkeys = [p.hotkey for p in participants]
+        logger.info(f"Group {group_id} and task {task_id} have {len(participant_hotkeys)} participants")
 
-    participants = await get_tournament_group_members(group_id, psql_db)
-    participant_hotkeys = [p.hotkey for p in participants]
-    logger.info(f"Group {group_id} and task {task_id} have {len(participant_hotkeys)} participants")
-
-    if not participant_hotkeys:
-        logger.warning(f"Group {group_id} has no participants")
-        return []
-
-    miner_results = await get_task_results_for_ranking(task_id, psql_db)
-    if not miner_results:
-        logger.warning(f"No valid results for task {task_id}")
-        return []
-
-    ranked_results = calculate_miner_ranking_and_scores(miner_results)
-
-    participant_scores = {}
-    for result in ranked_results:
-        hotkey = result.hotkey
-        adjusted_loss = result.adjusted_loss
-
-        if adjusted_loss is None or np.isnan(adjusted_loss):
+        if not participant_hotkeys:
+            logger.warning(f"Group {group_id} has no participants")
             continue
 
-        participant_scores[hotkey] = adjusted_loss
+        miner_results = await get_task_results_for_ranking(task_id, psql_db)
+        if not miner_results:
+            logger.warning(f"No valid results for task {task_id}")
+            continue
 
-    if not participant_scores:
-        logger.warning(f"Group {group_id} has no valid scores - proceeding with no winners")
-        return []
+        ranked_results = calculate_miner_ranking_and_scores(miner_results)
 
-    sorted_participants = sorted(participant_scores.items(), key=lambda x: x[1])
-    logger.info(
-        f"Group {group_id} participants sorted by adjusted loss: {[(hotkey, f'{loss:.6f}') for hotkey, loss in sorted_participants]}"
-    )
+        participant_scores = {}
+        for result in ranked_results:
+            hotkey = result.hotkey
+            adjusted_loss = result.adjusted_loss
 
-    num_to_advance = min(TOP_WINNERS_TO_ADVANCE, len(sorted_participants))
-    group_winners = [hotkey for hotkey, _ in sorted_participants[:num_to_advance]]
+            if adjusted_loss is None or np.isnan(adjusted_loss):
+                continue
 
-    logger.info(f"Group {group_id}: Advancing top {num_to_advance} by adjusted loss: {group_winners}")
+            participant_scores[hotkey] = adjusted_loss
 
-    return group_winners
+        if not participant_scores:
+            logger.warning(f"Group {group_id} has no valid scores - proceeding with no winners")
+            continue
+
+        sorted_participants = sorted(participant_scores.items(), key=lambda x: x[1])
+        logger.info(
+            f"Group {group_id} participants sorted by adjusted loss: "
+            f"{[(hotkey, f'{loss:.6f}') for hotkey, loss in sorted_participants]}"
+        )
+
+        num_to_advance = min(TOP_WINNERS_TO_ADVANCE, len(sorted_participants))
+        group_winners = [hotkey for hotkey, _ in sorted_participants[:num_to_advance]]
+
+        logger.info(f"Group {group_id}: Advancing top {num_to_advance} by adjusted loss: {group_winners}")
+        all_winners.extend(group_winners)
+
+    return all_winners
 
 
 async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLDB, config: Config) -> list[str]:
@@ -683,7 +686,10 @@ async def send_to_discord(webhook: str, message: str):
 
 async def notify_tournament_started(tournament_id: str, tournament_type: str, participants: int, discord_url: str):
     try:
-        message = f"Tournament Started!\nTournament ID: {tournament_id}\nType: {tournament_type}\nParticipants: {participants}\nStatus: ACTIVE"
+        message = (
+            f"Tournament Started!\nTournament ID: {tournament_id}\nType: {tournament_type}\n"
+            f"Participants: {participants}\nStatus: ACTIVE"
+        )
         await send_to_discord(discord_url, message)
     except Exception as e:
         logger.error(f"Failed to send Discord notification for tournament start: {e}")
@@ -691,7 +697,9 @@ async def notify_tournament_started(tournament_id: str, tournament_type: str, pa
 
 async def notify_tournament_completed(tournament_id: str, tournament_type: str, winner: str, discord_url: str):
     try:
-        message = f"Tournament Completed!\nTournament ID: {tournament_id}\nType: {tournament_type}\nWinner: {winner}\nStatus: COMPLETED"
+        message = (
+            f"Tournament Completed!\nTournament ID: {tournament_id}\nType: {tournament_type}\nWinner: {winner}\nStatus: COMPLETED"
+        )
         await send_to_discord(discord_url, message)
     except Exception as e:
         logger.error(f"Failed to send Discord notification for tournament completion: {e}")

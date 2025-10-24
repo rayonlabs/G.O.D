@@ -143,10 +143,7 @@ MINIMUM_MINER_POOL = 1
 # Tournament Start Requirements
 MIN_MINERS_FOR_TOURN = 8
 
-# Tournament Selection by Stake
-TOURNAMENT_TOP_N_BY_STAKE = 32
-TOURNAMENT_REPEAT_BOOST_PERCENTAGE = 5  # 5% boost per previous entry
-TOURNAMENT_MAX_REPEAT_BOOST_PERCENTAGE = 25  # Maximum 25% boost
+
 TOURNAMENT_PARTICIPATION_WEIGHT = 0.0001  # Weight given to active participants
 
 # Tournament weight distribution
