@@ -67,12 +67,12 @@ from validator.tournament.orchestrator import validate_repo_obfuscation
 from validator.tournament.repo_uploader import upload_tournament_participant_repository
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
+from validator.tournament.task_creator import replace_tournament_task
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_latest_tournament_winner_participant
 from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import notify_tournament_completed
 from validator.tournament.utils import notify_tournament_started
-from validator.tournament.utils import replace_tournament_task
 from validator.tournament.utils import send_to_discord
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import LogContext
@@ -347,8 +347,10 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
             await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
             logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
-            
-            await notify_tournament_completed(tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url)
+
+            await notify_tournament_completed(
+                tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
+            )
 
             try:
                 logger.info(f"Creating benchmark tasks for base contestant winner {winner}")
@@ -424,8 +426,10 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
                 await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
                 logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
-  
-                await notify_tournament_completed(tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url)
+
+                await notify_tournament_completed(
+                    tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
+                )
 
                 try:
                     logger.info(f"Creating benchmark tasks for tournament winner {winner}")
@@ -709,8 +713,10 @@ async def process_pending_tournaments(config: Config) -> list[str]:
                         await update_tournament_status(tournament.tournament_id, TournamentStatus.ACTIVE, config.psql_db)
                         activated_tournaments.append(tournament.tournament_id)
                         logger.info(f"Activated tournament {tournament.tournament_id} with {num_participants} participants")
-                        
-                        await notify_tournament_started(tournament.tournament_id, tournament.tournament_type.value, num_participants, config.discord_url)
+
+                        await notify_tournament_started(
+                            tournament.tournament_id, tournament.tournament_type.value, num_participants, config.discord_url
+                        )
                     else:
                         logger.warning(f"Tournament {tournament.tournament_id} has no participants, skipping activation")
 
@@ -885,23 +891,21 @@ async def _notify_discord(message: str, config: Config) -> None:
             logger.error(f"Failed to send Discord notification: {e}")
 
 
-async def _more_than_half_failures(
-    tournament_task: TournamentTask, config: Config
-) -> bool:
+async def _more_than_half_failures(tournament_task: TournamentTask, config: Config) -> bool:
     """
     Check if more than half of the trainings failed and handle Discord notification.
-    
+
     Returns True if majority failure detected, False otherwise.
     """
     trainings = await get_training_status_for_task(tournament_task.task_id, config.psql_db)
     is_more_than_half_failure = count_failed_trainings_percentage(trainings)
-    
+
     if is_more_than_half_failure:
         logger.info(f"More than half of the trainings for task {tournament_task.task_id} failed. Please investigate.")
         message = f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id} has more than half tasks failed, please investigate."
         await _notify_discord(message, config)
         return True
-    
+
     return False
 
 
