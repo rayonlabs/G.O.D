@@ -29,11 +29,9 @@ from validator.core.models import MinerResultsText
 from validator.cycle.util_functions import get_model_num_params
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
-from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.tasks import get_task
-from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import count_champion_consecutive_wins
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament
@@ -44,7 +42,6 @@ from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament import constants as t_cst
-from validator.tournament.task_creator import create_new_task_of_same_type
 from validator.utils.logging import get_logger
 
 
@@ -121,61 +118,6 @@ def get_real_winner_hotkey(winner_hotkey: str | None, base_winner_hotkey: str | 
 
 
 # is_champion_winner has been moved to validator.db.sql.tournaments to avoid circular imports
-
-
-async def replace_tournament_task(
-    original_task_id: str, tournament_id: str, round_id: str, group_id: str | None, pair_id: str | None, config: Config
-) -> str:
-    logger.info(f"Starting task replacement for task {original_task_id}")
-    logger.info(f"Tournament: {tournament_id}, Round: {round_id}, Group: {group_id}, Pair: {pair_id}")
-
-    original_task_obj = await task_sql.get_task(original_task_id, config.psql_db)
-    if not original_task_obj:
-        logger.error(f"Could not find original task {original_task_id}")
-        raise ValueError(f"Original task {original_task_id} not found")
-
-    logger.info(f"Found original task - Type: {original_task_obj.task_type}, Status: {original_task_obj.status}")
-    logger.info(f"Original task model params: {original_task_obj.model_params_count}")
-
-    try:
-        new_task = await create_new_task_of_same_type(original_task_obj, config)
-        logger.info(f"Successfully created new task {new_task.task_id} of type {new_task.task_type}")
-    except Exception as e:
-        logger.error(f"Failed to create new task of type {original_task_obj.task_type}: {str(e)}", exc_info=True)
-        raise
-
-    new_tournament_task = TournamentTask(
-        tournament_id=tournament_id,
-        round_id=round_id,
-        task_id=new_task.task_id,
-        group_id=group_id,
-        pair_id=pair_id,
-    )
-
-    try:
-        await add_tournament_tasks([new_tournament_task], config.psql_db)
-        logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
-    except Exception as e:
-        logger.error(f"Failed to add tournament task to database: {str(e)}", exc_info=True)
-        raise
-
-    original_assigned_nodes = await task_sql.get_nodes_assigned_to_task(original_task_id, config.psql_db)
-    for node in original_assigned_nodes:
-        await task_sql.assign_node_to_task(new_task.task_id, node, config.psql_db)
-
-        original_expected_repo_name = await task_sql.get_expected_repo_name(original_task_id, node.hotkey, config.psql_db)
-        if original_expected_repo_name:
-            await task_sql.set_expected_repo_name(new_task.task_id, node, config.psql_db, original_expected_repo_name)
-            logger.info(
-                f"Copied node {node.hotkey} with expected_repo_name {original_expected_repo_name} to replacement task {new_task.task_id}"
-            )
-        else:
-            logger.warning(f"No expected repo name found for node {node.hotkey} in original task {original_task_id}")
-
-    await task_sql.delete_task(original_task_id, config.psql_db)
-    logger.info(f"Deleted original task {original_task_id} from db.")
-
-    return new_task.task_id
 
 
 async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[MinerResultsText | MinerResultsImage]:
