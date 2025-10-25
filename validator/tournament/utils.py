@@ -7,6 +7,7 @@ import aiohttp
 import httpx
 import numpy as np
 
+from core.models.tournament_models import GpuRequirement
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
@@ -18,6 +19,11 @@ from validator.core.config import Config
 from validator.core.constants import DEFAULT_PARTICIPANT_COMMIT
 from validator.core.constants import DEFAULT_PARTICIPANT_REPO
 from validator.core.constants import EMISSION_BURN_HOTKEY
+from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100
+from validator.core.constants import TOURNAMENT_GRPO_GPU_MULTIPLIER
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
 from validator.db import constants as db_cst
@@ -43,6 +49,27 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int) -> GpuRequirement:
+    if task_type == TaskType.IMAGETASK:
+        return GpuRequirement.A100
+
+    params_b = model_params_count / 1_000_000_000
+
+    if task_type == TaskType.DPOTASK:
+        params_b *= TOURNAMENT_DPO_GPU_MULTIPLIER
+    elif task_type == TaskType.GRPOTASK:
+        params_b *= TOURNAMENT_GRPO_GPU_MULTIPLIER
+
+    if params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100:
+        return GpuRequirement.H100_1X
+    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100:
+        return GpuRequirement.H100_2X
+    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100:
+        return GpuRequirement.H100_4X
+    else:
+        return GpuRequirement.H100_8X
 
 
 def get_progressive_threshold(consecutive_wins: int) -> float:

@@ -5,7 +5,6 @@ from core.models.tournament_models import GroupRound
 from core.models.tournament_models import KnockoutRound
 from core.models.tournament_models import Round
 from core.models.tournament_models import TournamentTask
-from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
@@ -26,6 +25,7 @@ from validator.tasks.synthetic_scheduler import create_synthetic_image_task
 from validator.tasks.synthetic_scheduler import create_synthetic_instruct_text_task
 from validator.tournament import constants as t_cst
 from validator.tournament.boss_round_sync import copy_historical_task_into_boss_round_tournament
+from validator.tournament.utils import get_tournament_gpu_requirement
 from validator.utils.logging import get_logger
 
 

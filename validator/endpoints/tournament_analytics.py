@@ -30,7 +30,6 @@ from core.models.tournament_models import TournamentHistoryResponse
 from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentStatus
 from core.models.tournament_models import TournamentType
-from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskStatus
 from validator.core.config import Config
 from validator.core.constants import LATEST_TOURNAMENTS_CACHE_KEY
@@ -47,6 +46,7 @@ from validator.tournament.performance_calculator import calculate_boss_round_per
 from validator.tournament.performance_calculator import get_tournament_performance_data
 from validator.tournament.tournament_manager import get_tournament_completion_time
 from validator.tournament.tournament_manager import should_start_new_tournament_after_interval
+from validator.tournament.utils import get_tournament_gpu_requirement
 from validator.utils.logging import get_logger
 
 
