@@ -253,7 +253,7 @@ async def get_tournament_gpu_requirements(
         gpu_requirements: Dict[str, Dict[str, float]] = defaultdict(lambda: {"count": 0, "total_hours": 0.0})
 
         for task in unfinished_tasks:
-            gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+            gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
             gpu_type = gpu_req.value
 
             hours = float(task.hours_to_complete) if task.hours_to_complete else 1.0
