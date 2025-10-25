@@ -113,7 +113,6 @@ class TournamentParticipant(BaseModel):
     final_position: int | None = None
     training_repo: str | None = None
     training_commit_hash: str | None = None
-    stake_required: float | None = None
     backup_repo: str | None = None
 
 
@@ -302,8 +301,6 @@ class RespondingNode(BaseModel):
 
     node: Node
     training_repo_response: TrainingRepoResponse
-    boosted_stake: float
-    actual_stake: float
 
 
 class NextTournamentInfo(BaseModel):
@@ -322,7 +319,6 @@ class NextTournamentDates(BaseModel):
 
 class ActiveTournamentParticipant(BaseModel):
     hotkey: str
-    stake_requirement: float
 
 
 class ActiveTournamentInfo(BaseModel):

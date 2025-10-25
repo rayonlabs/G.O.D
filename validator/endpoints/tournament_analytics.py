@@ -390,7 +390,7 @@ async def get_next_tournament_dates(
 async def get_active_tournaments(
     config: Config = Depends(get_config),
 ) -> ActiveTournamentsResponse:
-    """Get currently active tournaments with participants and their stake requirements."""
+    """Get currently active tournaments with participants."""
     try:
 
         async def get_active_tournament_info(tournament_type: TournamentType) -> ActiveTournamentInfo | None:
@@ -404,10 +404,8 @@ async def get_active_tournaments(
             active_participants = [
                 ActiveTournamentParticipant(
                     hotkey=p.hotkey,
-                    stake_requirement=p.stake_required,
                 )
                 for p in participants
-                if p.stake_required is not None
             ]
 
             return ActiveTournamentInfo(

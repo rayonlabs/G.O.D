@@ -23,6 +23,7 @@ from validator.endpoints.health import factory_router as health_router
 from validator.endpoints.tasks import factory_router as tasks_router
 from validator.endpoints.tournament_analytics import factory_router as tournament_analytics_router
 from validator.endpoints.tournament_orchestrator import factory_router as tournament_orchestrator_router
+from validator.endpoints.transfer_balances import factory_router as transfer_balances_router
 from validator.utils.logging import get_logger
 
 
@@ -63,6 +64,7 @@ def factory() -> FastAPI:
     app.include_router(grpo_router())
     app.include_router(tournament_analytics_router())
     app.include_router(tournament_orchestrator_router())
+    app.include_router(transfer_balances_router())
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
