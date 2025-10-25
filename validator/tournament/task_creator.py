@@ -5,7 +5,6 @@ from core.models.tournament_models import GroupRound
 from core.models.tournament_models import KnockoutRound
 from core.models.tournament_models import Round
 from core.models.tournament_models import TournamentTask
-from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
@@ -26,6 +25,7 @@ from validator.tasks.synthetic_scheduler import create_synthetic_image_task
 from validator.tasks.synthetic_scheduler import create_synthetic_instruct_text_task
 from validator.tournament import constants as t_cst
 from validator.tournament.boss_round_sync import copy_historical_task_into_boss_round_tournament
+from validator.tournament.utils import get_tournament_gpu_requirement
 from validator.utils.logging import get_logger
 
 
@@ -112,7 +112,7 @@ async def _create_single_group_image_tasks(
         pair_id=None,
     )
     await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
     logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
 
     return [task]
@@ -145,7 +145,7 @@ async def _create_final_image_tasks(tournament_id: str, round_id: str, config: C
             pair_id=pair_id,
         )
         await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
         logger.info(f"    Image {i + 1}: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
         tasks.append(task)
 
@@ -193,7 +193,7 @@ async def _create_single_knockout_image_task(
         pair_id=pair_id,
     )
     await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
     logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
     return [task]
 
@@ -273,7 +273,7 @@ async def _create_single_group_text_tasks(
         pair_id=None,
     )
     await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
     logger.info(
         f"    Instruct: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req} - Duration: 2 hours"
     )
@@ -353,7 +353,7 @@ async def _create_one_of_each_text_task(tournament_id: str, round_id: str, confi
             pair_id=pair_id,
         )
         await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
         model_size = "BIG" if use_big_model and task_type == TaskType.INSTRUCTTEXTTASK else ""
         logger.info(
             f"  {task_type.value} {model_size}: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}"
@@ -429,7 +429,7 @@ async def _create_probability_based_text_tasks(
             pair_id=pair_id,
         )
         await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
         logger.info(f"    {task.task_type.value}: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}")
         tasks.append(task)
     return tasks

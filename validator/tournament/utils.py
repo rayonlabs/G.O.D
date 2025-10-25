@@ -7,6 +7,7 @@ import aiohttp
 import httpx
 import numpy as np
 
+from core.models.tournament_models import GpuRequirement
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
@@ -18,8 +19,14 @@ from validator.core.config import Config
 from validator.core.constants import DEFAULT_PARTICIPANT_COMMIT
 from validator.core.constants import DEFAULT_PARTICIPANT_REPO
 from validator.core.constants import EMISSION_BURN_HOTKEY
+from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100
+from validator.core.constants import TOURNAMENT_GRPO_GPU_MULTIPLIER
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
+from validator.cycle.util_functions import get_model_num_params
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
 from validator.db.sql import tasks as task_sql
@@ -35,7 +42,6 @@ from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_participant
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
-from validator.db.sql.tournaments import is_champion_winner
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament import constants as t_cst
 from validator.tournament.task_creator import create_new_task_of_same_type
@@ -43,6 +49,39 @@ from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int, model_id: str = None) -> GpuRequirement:
+    if not model_params_count and model_id:
+        logger.info(f"model_params_count is {model_params_count}, fetching from HuggingFace for model {model_id}")
+        try:
+            model_params_count = get_model_num_params(model_id)
+            logger.info(f"Fetched model_params_count: {model_params_count} for model {model_id}")
+        except Exception as e:
+            model_params_count = 0
+
+        if not model_params_count:
+            logger.warning(f"Could not determine model size for {model_id}, defaulting to H100_1X")
+            return GpuRequirement.H100_1X
+
+    if task_type == TaskType.IMAGETASK:
+        return GpuRequirement.A100
+
+    params_b = model_params_count / 1_000_000_000
+
+    if task_type == TaskType.DPOTASK:
+        params_b *= TOURNAMENT_DPO_GPU_MULTIPLIER
+    elif task_type == TaskType.GRPOTASK:
+        params_b *= TOURNAMENT_GRPO_GPU_MULTIPLIER
+
+    if params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100:
+        return GpuRequirement.H100_1X
+    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100:
+        return GpuRequirement.H100_2X
+    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100:
+        return GpuRequirement.H100_4X
+    else:
+        return GpuRequirement.H100_8X
 
 
 def get_progressive_threshold(consecutive_wins: int) -> float:
@@ -691,7 +730,9 @@ async def notify_tournament_started(tournament_id: str, tournament_type: str, pa
 
 async def notify_tournament_completed(tournament_id: str, tournament_type: str, winner: str, discord_url: str):
     try:
-        message = f"Tournament Completed!\nTournament ID: {tournament_id}\nType: {tournament_type}\nWinner: {winner}\nStatus: COMPLETED"
+        message = (
+            f"Tournament Completed!\nTournament ID: {tournament_id}\nType: {tournament_type}\nWinner: {winner}\nStatus: COMPLETED"
+        )
         await send_to_discord(discord_url, message)
     except Exception as e:
         logger.error(f"Failed to send Discord notification for tournament completion: {e}")

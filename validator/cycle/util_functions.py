@@ -7,18 +7,18 @@ from huggingface_hub import HfApi
 
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
-from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import ChatTemplateDatasetType
+from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskStatus
 from validator.core import constants as cst
 from validator.core.models import AnyTextTypeRawTask
+from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
-from validator.core.models import ChatRawTask
 from validator.core.models import InstructTextRawTask
 from validator.tasks.task_prep import prepare_image_task
 from validator.tasks.task_prep import prepare_text_task
