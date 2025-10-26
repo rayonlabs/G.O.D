@@ -49,20 +49,19 @@ logger = get_logger(__name__)
 
 
 def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int, model_id: str = None) -> GpuRequirement:
+    if task_type == TaskType.IMAGETASK:
+        return GpuRequirement.A100
     if not model_params_count and model_id:
         logger.info(f"model_params_count is {model_params_count}, fetching from HuggingFace for model {model_id}")
         try:
             model_params_count = get_model_num_params(model_id)
             logger.info(f"Fetched model_params_count: {model_params_count} for model {model_id}")
-        except Exception as e:
+        except Exception:
             model_params_count = 0
 
         if not model_params_count:
             logger.warning(f"Could not determine model size for {model_id}, defaulting to H100_1X")
             return GpuRequirement.H100_1X
-
-    if task_type == TaskType.IMAGETASK:
-        return GpuRequirement.A100
 
     params_b = model_params_count / 1_000_000_000
 
@@ -222,7 +221,8 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
             )
 
     logger.info(
-        f"No previous tournament winner found for type {tournament_type.value}, using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
+        f"No previous tournament winner found for type {tournament_type.value}, "
+        f"using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
     )
 
     hardcoded_participant = TournamentParticipant(
@@ -428,14 +428,17 @@ def determine_boss_round_winner(task_winners: list[str], boss_hotkey: str, tourn
     required_wins = (total_tasks // 2) + 1
     if opponent_hotkey and opponent_wins > total_tasks // 2:
         logger.info(
-            f"{tournament_type.value} tournament: Challenger wins boss round with majority: {opponent_wins}/{total_tasks} tasks won (required {required_wins})"
+            f"{tournament_type.value} tournament: Challenger wins boss round with majority: "
+            f"{opponent_wins}/{total_tasks} tasks won (required {required_wins})"
         )
         return opponent_hotkey
     else:
         boss_wins = win_counts.get(boss_hotkey, 0)
         if opponent_hotkey:
             logger.info(
-                f"{tournament_type.value} tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {required_wins}/{total_tasks} to dethrone), boss won {boss_wins}/{total_tasks}"
+                f"{tournament_type.value} tournament: Boss retains title - challenger won "
+                f"{opponent_wins}/{total_tasks} tasks (requires {required_wins}/{total_tasks} to dethrone), "
+                f"boss won {boss_wins}/{total_tasks}"
             )
         else:
             logger.info(f"{tournament_type.value} tournament: Boss retains title by default")
@@ -473,7 +476,8 @@ async def get_knockout_winners(
         # Calculate the progressive threshold
         threshold_percentage = get_progressive_threshold(consecutive_wins)
         logger.info(
-            f"Champion {current_champion} has {consecutive_wins} consecutive wins, using {threshold_percentage * 100:.1f}% threshold"
+            f"Champion {current_champion} has {consecutive_wins} consecutive wins, "
+            f"using {threshold_percentage * 100:.1f}% threshold"
         )
 
         for task in round_tasks:
@@ -549,19 +553,22 @@ async def get_knockout_winners(
                 if boss_loss * boss_multiplier > opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * {boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
+                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * "
+                        f"{boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)
                     logger.info(
-                        f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= {boss_loss * boss_multiplier:.6f}"
+                        f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= "
+                        f"{boss_loss * boss_multiplier:.6f}"
                     )
             else:
                 # For other tasks, lower scores are better
                 if boss_loss * boss_divisor < opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} * {boss_divisor:.3f} = {boss_loss * boss_divisor:.6f} < {opponent_loss:.6f}"
+                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} * "
+                        f"{boss_divisor:.3f} = {boss_loss * boss_divisor:.6f} < {opponent_loss:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)
@@ -625,7 +632,8 @@ async def get_group_winners(
 
     sorted_participants = sorted(participant_scores.items(), key=lambda x: x[1])
     logger.info(
-        f"Group {group_id} participants sorted by adjusted loss: {[(hotkey, f'{loss:.6f}') for hotkey, loss in sorted_participants]}"
+        f"Group {group_id} participants sorted by adjusted loss: "
+        f"{[(hotkey, f'{loss:.6f}') for hotkey, loss in sorted_participants]}"
     )
 
     num_to_advance = min(TOP_WINNERS_TO_ADVANCE, len(sorted_participants))
@@ -664,7 +672,10 @@ async def send_to_discord(webhook: str, message: str):
 
 async def notify_tournament_started(tournament_id: str, tournament_type: str, participants: int, discord_url: str):
     try:
-        message = f"Tournament Started!\nTournament ID: {tournament_id}\nType: {tournament_type}\nParticipants: {participants}\nStatus: ACTIVE"
+        message = (
+            f"Tournament Started!\nTournament ID: {tournament_id}\nType: {tournament_type}\n"
+            f"Participants: {participants}\nStatus: ACTIVE"
+        )
         await send_to_discord(discord_url, message)
     except Exception as e:
         logger.error(f"Failed to send Discord notification for tournament start: {e}")
