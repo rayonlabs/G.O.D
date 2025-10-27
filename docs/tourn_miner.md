@@ -20,11 +20,15 @@ To compete in tournaments, miners must meet the following requirements:
    - The miner must expose the `/training_repo/{task_type}` endpoint that returns your training repository details
    - Start your miner with: `task miner`
 
-3. **Sufficient Stake**: You must have enough stake on your hotkey to be in the **top 32 miners by stake**
-   - The tournament system selects participants based on stake rankings
-   - Miners who have participated in previous tournaments receive a stake boost (5% per completed tournament, max 25%)
-   - Your actual stake requirement depends on the current competition but you must be in the top 32 to be eligible
-   - **Important**: Stake must be maintained throughout the entire tournament. Winners who fall below the required stake threshold will be eliminated even after winning rounds
+3. **Sufficient Balance** The tournaments require a small fee to participate. All collected fees are burned
+
+   - The current fee for participanting is 0.2 TAO for text tournaments and 0.15 for image ones. You can always check the current fee using the api endpoint:
+        `curl https://api.gradients.io/tournament/fees`
+   - To get balance you need to transfer TAO from your coldkey to the collection address: `5Ef5JgNv14LY4UEQFHbRQkf8TnegDV3AfAbcsJe5T2w6VQdo`
+   - The balance is credited per coldkey, so all miner hotkeys with the same coldkey will have a shared balance
+   - To get current balance for a coldkey you can use the API:
+    `curl 'https://api.gradients.io/tournament/balance/{coldkey}'`
+   - All collected TAO will be staked for alpha and the **alpha burned**
 
 ## Initial Miner Setup
 
