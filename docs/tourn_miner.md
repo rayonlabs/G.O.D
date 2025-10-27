@@ -283,21 +283,30 @@ Tournaments run continuously with 4-7 day duration and 72-hour gaps between tour
 
 The advantage required to dethrone a champion decreases with each successful defense using an exponential decay formula:
 
-![Championship Defense Thresholds](./images/championship_thresholds.png)
+**Formula:** `threshold = max(EXPONENTIAL_MIN_THRESHOLD, EXPONENTIAL_BASE_THRESHOLD × EXPONENTIAL_DECAY_RATE^(consecutive_wins - 1))`
 
-**Formula:** `threshold = max(EXPONENTIAL_MIN_THRESHOLD, EXPONENTIAL_BASE_THRESHOLD × EXPONENTIAL_DECAY_RATE^consecutive_wins)`
+**Implementation:** See `validator/tournament/utils.py:83-88` - `get_progressive_threshold()`
 
-Where constants (defined in `validator/tournament/constants.py`):
+**Constants** (defined in `validator/tournament/constants.py:63-65`):
 
-- `EXPONENTIAL_BASE_THRESHOLD`: Starting threshold for new champions
-- `EXPONENTIAL_DECAY_RATE`: Decay factor per consecutive win
-- `EXPONENTIAL_MIN_THRESHOLD`: Minimum threshold floor
+- `EXPONENTIAL_BASE_THRESHOLD = 0.10` - Starting threshold (10%) for champions on their first defense
+- `EXPONENTIAL_DECAY_RATE = 0.8` - Decay factor applied per consecutive win
+- `EXPONENTIAL_MIN_THRESHOLD = 0.03` - Minimum threshold floor (3%)
+
+**Example Thresholds:**
+
+- 1st consecutive win: 10.0% threshold
+- 2nd consecutive win: 8.0% threshold
+- 3rd consecutive win: 6.4% threshold
+- 4th consecutive win: 5.1% threshold
+- 5th consecutive win: 4.1% threshold
+- 6th+ consecutive wins: 3.0% threshold (floor)
 
 This system ensures:
 
-- New champions must prove themselves with a significant margin
-- Long-reigning champions become progressively more vulnerable
-- Minimum threshold prevents stagnation
+- New champions start with a significant 10% advantage on their first defense
+- Long-reigning champions become progressively more vulnerable as the threshold decays
+- Minimum 3% threshold floor prevents complete stagnation while still rewarding excellence
 
 ### GPU Requirements
 
