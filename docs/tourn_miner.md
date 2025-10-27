@@ -107,6 +107,12 @@ Your training scripts accept these standardised CLI arguments:
 
 View real-time training logs and metrics at: http://185.141.218.59:3001/d/training-runs/training-runs-dashboard
 
+### Tournament Results
+
+After tournaments complete, view detailed results and rankings at: https://gradients.io/app/research/tournament/{TOURNAMENT_ID}
+
+Replace `{TOURNAMENT_ID}` with the specific tournament ID you participated in.
+
 ## WandB Logging for Your Training Analysis
 
 Include WandB logging so you can analyze your training runs after tournaments complete:
@@ -249,7 +255,7 @@ Test scripts are provided to validate your implementation locally:
 
 ## Tournament Structure
 
-Tournaments run continuously with 4-7 day duration and 24-hour gaps between tournaments. There are separate tournaments for:
+Tournaments run continuously with 4-7 day duration and 72-hour gaps between tournaments. There are separate tournaments for:
 
 - **Text**: Instruct, DPO, GRPO tasks
 - **Image**: SDXL and Flux diffusion tasks
@@ -257,23 +263,21 @@ Tournaments run continuously with 4-7 day duration and 24-hour gaps between tour
 ### Group Stage
 
 - Miners are organized into groups of 6-8 participants
-- Each group competes on 3 tasks
-- Top 1-3 performers from each group advance to knockout rounds
+- Each group competes on 3 tasks (text tournaments: 1 Instruct task; image tournaments: 1 image task; total of 3 required)
+- Top 8 performers overall across all groups advance to knockout rounds
 
 ### Knockout Rounds
 
 - Single elimination format
-- Runs when field is reduced to less than 16 miners
+- Runs when field is reduced to 14 or fewer miners
 - Head-to-head competition
 
 ### Boss Round
 
 - Tournament winner must face defending champion
 - Uses progressive threshold system with exponential decay based on consecutive wins
-- **Tournament-Specific Winning Requirements**:
-  - **Text tournaments**: Challenger wins by majority rule (2/3 or 3/3 tasks)
-  - **Image tournaments**: Challenger must win ALL 3 tasks (perfect sweep) to dethrone the champion
-- Defending champion retains title unless challenger meets the tournament-specific winning requirement
+- **Winning Requirements**: Challenger wins by **majority rule** (4+ out of 6 tasks) for **both text and image tournaments**
+- Defending champion retains title unless challenger wins the majority of tasks
 
 #### Championship Defense Thresholds
 
