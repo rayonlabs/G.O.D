@@ -16,7 +16,6 @@ from core.models.tournament_models import GpuRequirement
 from core.models.tournament_models import TaskTrainingAssignment
 from core.models.tournament_models import TournamentTaskTraining
 from core.models.tournament_models import TournamentType
-from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
@@ -34,6 +33,7 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql
 from validator.db.sql.tournaments import get_tournament_id_by_task_id
 from validator.evaluation.scoring import _get_dataset_type
+from validator.tournament.utils import get_tournament_gpu_requirement
 from validator.utils.logging import LogContext
 from validator.utils.logging import get_logger
 from validator.utils.util import try_db_connections
@@ -255,11 +255,15 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
                 text_tasks_to_process.append(task)
 
     if text_tasks_to_process:
-        logger.info(f"Pending text queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, processing {len(text_tasks_to_process)} text tournament tasks")
+        logger.info(
+            f"Pending text queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, processing {len(text_tasks_to_process)} text tournament tasks"
+        )
         await _process_tasks_for_training(text_tasks_to_process, config, priority=2)
 
     if image_tasks_to_process:
-        logger.info(f"Pending image queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, processing {len(image_tasks_to_process)} image tournament tasks")
+        logger.info(
+            f"Pending image queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, processing {len(image_tasks_to_process)} image tournament tasks"
+        )
         await _process_tasks_for_training(image_tasks_to_process, config, priority=2)
 
     if pending_count < cst.PENDING_QUEUE_THRESHOLD_FOR_BENCHMARK:
@@ -428,7 +432,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 continue
 
             # Determine required GPUs for this task
-            required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+            required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
             logger.info(f"Task {task.task_id} requires {required_gpus.value}")
             suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
@@ -780,6 +784,26 @@ async def _update_all_trainers_gpu_availability(config: Config):
                     await tournament_sql.update_gpu_availability(trainer.trainer_ip, gpus_to_reset, 0, config.psql_db)
                     logger.info(f"Reset {len(gpus_to_reset)} GPUs for trainer {trainer.trainer_ip}: {gpus_to_reset}")
 
+            except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException) as e:
+                # Handle both server errors and unreachable trainers
+                if isinstance(e, httpx.HTTPStatusError):
+                    status_code = e.response.status_code
+                    if 500 <= status_code < 600:
+                        error_msg = f"returned 5xx error ({status_code})"
+                    else:
+                        logger.error(f"HTTP error {status_code} from trainer {trainer.trainer_ip}: {str(e)}")
+                        continue
+                else:
+                    # ConnectError or TimeoutException
+                    error_msg = f"is unreachable ({type(e).__name__})"
+
+                # Common handling for unreachable trainers - set all GPUs to be available in 2 hours
+                all_gpu_ids = [gpu.gpu_id for gpu in trainer.gpus]
+                await tournament_sql.update_gpu_availability(trainer.trainer_ip, all_gpu_ids, 2, config.psql_db)
+                logger.warning(
+                    f"Trainer {trainer.trainer_ip} {error_msg}, setting {len(all_gpu_ids)} GPUs to be available in 2 hours"
+                )
+                continue
             except Exception as e:
                 logger.error(f"Error updating GPU availability for trainer {trainer.trainer_ip}: {str(e)}")
                 continue

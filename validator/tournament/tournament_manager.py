@@ -67,12 +67,12 @@ from validator.tournament.orchestrator import validate_repo_obfuscation
 from validator.tournament.repo_uploader import upload_tournament_participant_repository
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
+from validator.tournament.task_creator import replace_tournament_task
 from validator.tournament.utils import get_base_contestant
 from validator.tournament.utils import get_latest_tournament_winner_participant
 from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import notify_tournament_completed
 from validator.tournament.utils import notify_tournament_started
-from validator.tournament.utils import replace_tournament_task
 from validator.tournament.utils import send_to_discord
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import LogContext

@@ -5,7 +5,6 @@ from core.models.tournament_models import GroupRound
 from core.models.tournament_models import KnockoutRound
 from core.models.tournament_models import Round
 from core.models.tournament_models import TournamentTask
-from core.models.tournament_models import get_tournament_gpu_requirement
 from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_DPO
@@ -26,6 +25,7 @@ from validator.tasks.synthetic_scheduler import create_synthetic_image_task
 from validator.tasks.synthetic_scheduler import create_synthetic_instruct_text_task
 from validator.tournament import constants as t_cst
 from validator.tournament.boss_round_sync import copy_historical_task_into_boss_round_tournament
+from validator.tournament.utils import get_tournament_gpu_requirement
 from validator.utils.logging import get_logger
 
 
@@ -112,7 +112,7 @@ async def _create_single_group_image_tasks(
         pair_id=None,
     )
     await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
     logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
 
     return [task]
@@ -145,7 +145,7 @@ async def _create_final_image_tasks(tournament_id: str, round_id: str, config: C
             pair_id=pair_id,
         )
         await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
         logger.info(f"    Image {i + 1}: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
         tasks.append(task)
 
@@ -193,7 +193,7 @@ async def _create_single_knockout_image_task(
         pair_id=pair_id,
     )
     await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
     logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
     return [task]
 
@@ -273,7 +273,7 @@ async def _create_single_group_text_tasks(
         pair_id=None,
     )
     await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
     logger.info(
         f"    Instruct: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req} - Duration: 2 hours"
     )
@@ -353,7 +353,7 @@ async def _create_one_of_each_text_task(tournament_id: str, round_id: str, confi
             pair_id=pair_id,
         )
         await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
         model_size = "BIG" if use_big_model and task_type == TaskType.INSTRUCTTEXTTASK else ""
         logger.info(
             f"  {task_type.value} {model_size}: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}"
@@ -429,7 +429,7 @@ async def _create_probability_based_text_tasks(
             pair_id=pair_id,
         )
         await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count)
+        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
         logger.info(f"    {task.task_type.value}: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}")
         tasks.append(task)
     return tasks
@@ -593,3 +593,58 @@ async def _create_historical_image_boss_round_tasks(tournament_id: str, round_id
             tasks.append(existing_raw_task)
 
     return tasks
+
+
+async def replace_tournament_task(
+    original_task_id: str, tournament_id: str, round_id: str, group_id: str | None, pair_id: str | None, config: Config
+) -> str:
+    logger.info(f"Starting task replacement for task {original_task_id}")
+    logger.info(f"Tournament: {tournament_id}, Round: {round_id}, Group: {group_id}, Pair: {pair_id}")
+
+    original_task_obj = await task_sql.get_task(original_task_id, config.psql_db)
+    if not original_task_obj:
+        logger.error(f"Could not find original task {original_task_id}")
+        raise ValueError(f"Original task {original_task_id} not found")
+
+    logger.info(f"Found original task - Type: {original_task_obj.task_type}, Status: {original_task_obj.status}")
+    logger.info(f"Original task model params: {original_task_obj.model_params_count}")
+
+    try:
+        new_task = await create_new_task_of_same_type(original_task_obj, config)
+        logger.info(f"Successfully created new task {new_task.task_id} of type {new_task.task_type}")
+    except Exception as e:
+        logger.error(f"Failed to create new task of type {original_task_obj.task_type}: {str(e)}", exc_info=True)
+        raise
+
+    new_tournament_task = TournamentTask(
+        tournament_id=tournament_id,
+        round_id=round_id,
+        task_id=new_task.task_id,
+        group_id=group_id,
+        pair_id=pair_id,
+    )
+
+    try:
+        await add_tournament_tasks([new_tournament_task], config.psql_db)
+        logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
+    except Exception as e:
+        logger.error(f"Failed to add tournament task to database: {str(e)}", exc_info=True)
+        raise
+
+    original_assigned_nodes = await task_sql.get_nodes_assigned_to_task(original_task_id, config.psql_db)
+    for node in original_assigned_nodes:
+        await task_sql.assign_node_to_task(new_task.task_id, node, config.psql_db)
+
+        original_expected_repo_name = await task_sql.get_expected_repo_name(original_task_id, node.hotkey, config.psql_db)
+        if original_expected_repo_name:
+            await task_sql.set_expected_repo_name(new_task.task_id, node, config.psql_db, original_expected_repo_name)
+            logger.info(
+                f"Copied node {node.hotkey} with expected_repo_name {original_expected_repo_name} to replacement task {new_task.task_id}"
+            )
+        else:
+            logger.warning(f"No expected repo name found for node {node.hotkey} in original task {original_task_id}")
+
+    await task_sql.delete_task(original_task_id, config.psql_db)
+    logger.info(f"Deleted original task {original_task_id} from db.")
+
+    return new_task.task_id

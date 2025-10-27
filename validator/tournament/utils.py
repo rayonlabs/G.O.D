@@ -7,6 +7,7 @@ import aiohttp
 import httpx
 import numpy as np
 
+from core.models.tournament_models import GpuRequirement
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
@@ -18,15 +19,19 @@ from validator.core.config import Config
 from validator.core.constants import DEFAULT_PARTICIPANT_COMMIT
 from validator.core.constants import DEFAULT_PARTICIPANT_REPO
 from validator.core.constants import EMISSION_BURN_HOTKEY
+from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100
+from validator.core.constants import TOURNAMENT_GRPO_GPU_MULTIPLIER
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
+from validator.cycle.util_functions import get_model_num_params
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
-from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.tasks import get_task
-from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import count_champion_consecutive_wins
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament
@@ -37,11 +42,42 @@ from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament import constants as t_cst
-from validator.tournament.task_creator import create_new_task_of_same_type
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int, model_id: str = None) -> GpuRequirement:
+    if task_type == TaskType.IMAGETASK:
+        return GpuRequirement.A100
+    if not model_params_count and model_id:
+        logger.info(f"model_params_count is {model_params_count}, fetching from HuggingFace for model {model_id}")
+        try:
+            model_params_count = get_model_num_params(model_id)
+            logger.info(f"Fetched model_params_count: {model_params_count} for model {model_id}")
+        except Exception:
+            model_params_count = 0
+
+        if not model_params_count:
+            logger.warning(f"Could not determine model size for {model_id}, defaulting to H100_1X")
+            return GpuRequirement.H100_1X
+
+    params_b = model_params_count / 1_000_000_000
+
+    if task_type == TaskType.DPOTASK:
+        params_b *= TOURNAMENT_DPO_GPU_MULTIPLIER
+    elif task_type == TaskType.GRPOTASK:
+        params_b *= TOURNAMENT_GRPO_GPU_MULTIPLIER
+
+    if params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100:
+        return GpuRequirement.H100_1X
+    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100:
+        return GpuRequirement.H100_2X
+    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100:
+        return GpuRequirement.H100_4X
+    else:
+        return GpuRequirement.H100_8X
 
 
 def get_progressive_threshold(consecutive_wins: int) -> float:
@@ -81,62 +117,6 @@ def get_real_winner_hotkey(winner_hotkey: str | None, base_winner_hotkey: str | 
 
 
 # is_champion_winner has been moved to validator.db.sql.tournaments to avoid circular imports
-
-
-async def replace_tournament_task(
-    original_task_id: str, tournament_id: str, round_id: str, group_id: str | None, pair_id: str | None, config: Config
-) -> str:
-    logger.info(f"Starting task replacement for task {original_task_id}")
-    logger.info(f"Tournament: {tournament_id}, Round: {round_id}, Group: {group_id}, Pair: {pair_id}")
-
-    original_task_obj = await task_sql.get_task(original_task_id, config.psql_db)
-    if not original_task_obj:
-        logger.error(f"Could not find original task {original_task_id}")
-        raise ValueError(f"Original task {original_task_id} not found")
-
-    logger.info(f"Found original task - Type: {original_task_obj.task_type}, Status: {original_task_obj.status}")
-    logger.info(f"Original task model params: {original_task_obj.model_params_count}")
-
-    try:
-        new_task = await create_new_task_of_same_type(original_task_obj, config)
-        logger.info(f"Successfully created new task {new_task.task_id} of type {new_task.task_type}")
-    except Exception as e:
-        logger.error(f"Failed to create new task of type {original_task_obj.task_type}: {str(e)}", exc_info=True)
-        raise
-
-    new_tournament_task = TournamentTask(
-        tournament_id=tournament_id,
-        round_id=round_id,
-        task_id=new_task.task_id,
-        group_id=group_id,
-        pair_id=pair_id,
-    )
-
-    try:
-        await add_tournament_tasks([new_tournament_task], config.psql_db)
-        logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
-    except Exception as e:
-        logger.error(f"Failed to add tournament task to database: {str(e)}", exc_info=True)
-        raise
-
-    original_assigned_nodes = await task_sql.get_nodes_assigned_to_task(original_task_id, config.psql_db)
-    for node in original_assigned_nodes:
-        await task_sql.assign_node_to_task(new_task.task_id, node, config.psql_db)
-
-        original_expected_repo_name = await task_sql.get_expected_repo_name(original_task_id, node.hotkey, config.psql_db)
-        if original_expected_repo_name:
-            await task_sql.set_expected_repo_name(new_task.task_id, node, config.psql_db, original_expected_repo_name)
-            logger.info(
-                f"Copied node {node.hotkey} with expected_repo_name {original_expected_repo_name} "
-                f"to replacement task {new_task.task_id}"
-            )
-        else:
-            logger.warning(f"No expected repo name found for node {node.hotkey} in original task {original_task_id}")
-
-    await task_sql.delete_task(original_task_id, config.psql_db)
-    logger.info(f"Deleted original task {original_task_id} from db.")
-
-    return new_task.task_id
 
 
 async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[MinerResultsText | MinerResultsImage]:
@@ -570,8 +550,8 @@ async def get_knockout_winners(
                 if boss_loss * boss_multiplier > opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * {boss_multiplier:.3f} = "
-                        f"{boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
+                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * "
+                        f"{boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)

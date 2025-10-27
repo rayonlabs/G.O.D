@@ -5,13 +5,8 @@ import time
 
 
 def rebuild_docker_images():
-    os.system(
-        "docker build -f dockerfiles/validator.dockerfile -t weightswandering/tuning_vali:latest ."
-    )
-    os.system(
-        "docker build -f dockerfiles/validator-diffusion.dockerfile -t diagonalge/tuning_validator_diffusion:latest ."
-    )
-
+    os.system("docker build -f dockerfiles/validator.dockerfile -t weightswandering/tuning_vali:latest .")
+    os.system("docker pull diagonalge/tuning_validator_diffusion:latest")
 
 
 def should_update_local(local_commit: str, remote_commit: str) -> bool:
