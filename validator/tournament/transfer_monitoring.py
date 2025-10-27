@@ -22,7 +22,6 @@ from validator.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Constants for RAO to TAO conversion (for display purposes only)
 RAO_TO_TAO_DIVISOR = 1_000_000_000  # 1 TAO = 1,000,000,000 RAO
 
 
@@ -79,12 +78,10 @@ async def fetch_taostats_transfers(
         params["timestamp_end"] = timestamp_end
 
     try:
-        # Use asyncio to run the synchronous requests call in a thread pool
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, lambda: requests.get(base_url, headers=headers, params=params))
         response.raise_for_status()
 
-        # Parse response with Pydantic
         return TaoStatsTransferResponse.model_validate(response.json())
 
     except requests.exceptions.RequestException as e:
@@ -128,10 +125,8 @@ async def process_transfer_for_balance(psql_db, transfer: TransferData) -> None:
         transfer: Transfer data to process
     """
     try:
-        # transfer.amount_rao is already an int from the conversion function
         amount_rao = transfer.amount_rao
 
-        # Only process the sender's balance since we're tracking how much they sent to our target address
         sender_balance = await get_or_create_coldkey_balance(psql_db, transfer.from_ss58)
         if sender_balance:
             await update_coldkey_balance(
@@ -140,7 +135,6 @@ async def process_transfer_for_balance(psql_db, transfer: TransferData) -> None:
                 amount_rao,  # Amount sent to our target address in RAO
                 transfer.timestamp,
             )
-            # Convert to TAO for logging display
             amount_tao = rao_to_tao(amount_rao)
             logger.debug(
                 f"Updated sender balance for {transfer.from_ss58}: +{amount_rao} RAO ({amount_tao:.9f} TAO) sent to target"
@@ -162,7 +156,6 @@ async def fetch_and_process_transfers(config: Config) -> None:
         return
 
     try:
-        # Get current processing state
         processing_state = await get_transfer_processing_state(config.psql_db)
         if not processing_state:
             logger.error("Failed to get transfer processing state")
@@ -171,13 +164,11 @@ async def fetch_and_process_transfers(config: Config) -> None:
         logger.info(f"Starting transfer processing for address {config.transfer_target_address}")
         logger.info(f"Last processed: {processing_state.last_processed_timestamp}")
 
-        # Calculate timestamp range
         timestamp_start = int(processing_state.last_processed_timestamp.timestamp())
         timestamp_end = int(datetime.now().timestamp())
 
         logger.info(f"Fetching transfers from {processing_state.last_processed_timestamp} to now")
 
-        # Fetch transfers
         response = await fetch_taostats_transfers(
             api_key=config.taostats_api_key,
             network=config.transfer_network,
@@ -189,7 +180,6 @@ async def fetch_and_process_transfers(config: Config) -> None:
 
         logger.info(f"Fetched {len(response.data)} transfers from API")
 
-        # Process each transfer
         new_transfers_count = 0
         skipped_transfers_count = 0
         balance_updates_count = 0
@@ -197,10 +187,8 @@ async def fetch_and_process_transfers(config: Config) -> None:
         latest_block = processing_state.last_processed_block
 
         for taostats_transfer in response.data:
-            # Convert to internal format
             transfer = convert_taostats_to_internal(taostats_transfer)
 
-            # Insert transfer into database
             was_inserted = await insert_transfer(config.psql_db, transfer)
             if was_inserted:
                 new_transfers_count += 1
@@ -208,7 +196,6 @@ async def fetch_and_process_transfers(config: Config) -> None:
                     f"Inserted new transfer: {transfer.id} from {transfer.from_ss58[:20]}... for {transfer.amount_rao} RAO"
                 )
 
-                # Process for balance updates (only for transfers to our target address)
                 if transfer.to_ss58 == config.transfer_target_address:
                     await process_transfer_for_balance(config.psql_db, transfer)
                     balance_updates_count += 1
@@ -219,13 +206,11 @@ async def fetch_and_process_transfers(config: Config) -> None:
                 skipped_transfers_count += 1
                 logger.debug(f"Skipped existing transfer: {transfer.id}")
 
-            # Track latest timestamp and block
             if transfer.timestamp > latest_timestamp:
                 latest_timestamp = transfer.timestamp
             if transfer.block_number > latest_block:
                 latest_block = transfer.block_number
 
-        # Update processing state
         await update_transfer_processing_state(
             config.psql_db,
             latest_timestamp,
@@ -235,7 +220,6 @@ async def fetch_and_process_transfers(config: Config) -> None:
             config.transfer_processing_interval_hours,
         )
 
-        # Log comprehensive statistics
         total_rao_processed = sum(
             convert_taostats_to_internal(taostats_transfer).amount_rao
             for taostats_transfer in response.data
@@ -252,7 +236,6 @@ async def fetch_and_process_transfers(config: Config) -> None:
         logger.info(f"  🕐 Updated to timestamp: {latest_timestamp}")
         logger.info(f"  📦 Updated to block: {latest_block}")
 
-        # Log sender addresses and amounts for endpoint testing
         if balance_updates_count > 0:
             logger.info("📋 Sender addresses with transfers to target (for endpoint testing):")
             for taostats_transfer in response.data:
@@ -278,7 +261,6 @@ async def transfer_monitoring_cycle(config: Config):
         except Exception as e:
             logger.error(f"Error in transfer monitoring cycle: {e}")
 
-        # Sleep for a reasonable interval (e.g., every 5 minutes)
         await asyncio.sleep(300)  # 5 minutes
 
 

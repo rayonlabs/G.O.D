@@ -516,7 +516,8 @@ async def add_refund_to_balance(psql_db: PSQLDB, coldkey: str, refund_amount_rao
 
 async def refund_tournament_participants(psql_db: PSQLDB, tournament_id: str) -> int:
     """
-    Refund all participation fees for a tournament by creating refund balance events
+    Refund all participation fees for a tournament by creating refund balance events.
+    This function is idempotent - it will only refund the net amount (participation fees - existing refunds).
 
     Args:
         psql_db: Database connection
@@ -528,24 +529,42 @@ async def refund_tournament_participants(psql_db: PSQLDB, tournament_id: str) ->
     try:
         participation_events = await get_balance_events_by_tournament(psql_db, tournament_id)
         participation_fees = [event for event in participation_events if event.event_type == "participation_fee"]
+        existing_refunds = [event for event in participation_events if event.event_type == "refund"]
 
+        coldkey_net_refunds = {}
+        
+        for event in participation_fees:
+            coldkey = event.coldkey
+            if coldkey not in coldkey_net_refunds:
+                coldkey_net_refunds[coldkey] = 0
+            coldkey_net_refunds[coldkey] += event.amount_rao
+        
+        for event in existing_refunds:
+            coldkey = event.coldkey
+            if coldkey in coldkey_net_refunds:
+                coldkey_net_refunds[coldkey] -= event.amount_rao
+        
         refund_count = 0
 
-        for event in participation_fees:
-            refund_amount = abs(event.amount_rao)
-            refund_event = await create_balance_event(
-                psql_db=psql_db,
-                tournament_id=tournament_id,
-                coldkey=event.coldkey,
-                event_type="refund",
-                amount_rao=refund_amount,
-                description=f"Refund for participation fee in tournament {tournament_id}",
-            )
+        for coldkey, net_amount in coldkey_net_refunds.items():
+            if net_amount < 0:
+                refund_amount = abs(net_amount)
+                
+                refund_event = await create_balance_event(
+                    psql_db=psql_db,
+                    tournament_id=tournament_id,
+                    coldkey=coldkey,
+                    event_type="refund",
+                    amount_rao=refund_amount,
+                    description=f"Refund for participation fee in tournament {tournament_id}",
+                )
 
-            if refund_event:
-                await add_refund_to_balance(psql_db, event.coldkey, refund_amount)
-                refund_count += 1
-                logger.info(f"Refunded {refund_amount:,} RAO to {event.coldkey} for tournament {tournament_id}")
+                if refund_event:
+                    await add_refund_to_balance(psql_db, coldkey, refund_amount)
+                    refund_count += 1
+                    logger.info(f"Refunded {refund_amount:,} RAO to {coldkey} for tournament {tournament_id}")
+            else:
+                logger.info(f"Skipping {coldkey} - already fully refunded (net: {net_amount:,} RAO)")
 
         logger.info(f"Processed {refund_count} refunds for tournament {tournament_id}")
         return refund_count
