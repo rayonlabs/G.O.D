@@ -26,21 +26,101 @@ To compete in tournaments, miners must meet the following requirements:
    - Your actual stake requirement depends on the current competition but you must be in the top 32 to be eligible
    - **Important**: Stake must be maintained throughout the entire tournament. Winners who fall below the required stake threshold will be eliminated even after winning rounds
 
+## Initial Miner Setup
+
+Before you can participate in tournaments, you need to configure your miner with the required credentials and settings.
+
+### Running the Configuration Script
+
+The repository includes a configuration generator to help you set up your miner:
+
+```bash
+python core/create_config.py --miner
+```
+
+This interactive script will prompt you for:
+
+- **Wallet name** - Your Bittensor wallet name (default: "default")
+- **Hotkey name** - Your hotkey name (default: "default")
+- **Subtensor network** - "finney" for mainnet (netuid 56) or "test" for testnet (netuid 241)
+- **Minimum stake threshold** - Default: 1000 for mainnet, 0 for testnet
+
+The script will generate a `.1.env` file with your configuration.
+
+### Starting Your Miner
+
+After configuration, start your miner:
+
+```bash
+task miner
+```
+
+Your miner will:
+
+- Start listening for training repository requests from validators
+- Respond to tournament participation queries
+
+## Choosing Your Training Repository
+
+You have two options for your tournament training repository:
+
+### Option 1: Start from the Base Miner (Recommended for Beginners)
+
+Use the official G.O.D repository as your starting point:
+
+- **GitHub Repository**: `https://github.com/rayonlabs/G.O.D`
+- **Commit Hash**: Use `"main"` for the latest version, or a specific commit hash for consistency
+
+The base repository includes functional training scripts that you can modify and improve.
+
+### Option 2: Fork a Previous Winner's Repository
+
+Browse winning tournament implementations at the [Gradients Open Source Organization](https://github.com/orgs/gradients-opensource/repositories)
+
+These repositories contain proven AutoML techniques that won previous tournaments. You can:
+
+- Study their approaches to understand what works
+- Fork and improve upon winning strategies
+- Combine techniques from multiple winners
+
 ## Tournament Registration
 
-The miner already includes the required endpoint at `/training_repo/{task_type}` that returns:
+Configure the `/training_repo/{task_type}` endpoint in your miner to point to your chosen repository.
 
-```json
-{
-  "github_repo": "https://github.com/yourname/training-repo",
-  "commit_hash": "abc123..."
-}
+**Location**: `miner/endpoints/tuning.py` (lines 10-13)
+
+Update the `get_training_repo()` function:
+
+```python
+async def get_training_repo(task_type: TournamentType) -> TrainingRepoResponse:
+    return TrainingRepoResponse(
+        github_repo="https://github.com/YOUR_USERNAME/YOUR_REPO",  # Your repo URL
+        commit_hash="YOUR_COMMIT_HASH"  # Specific commit or "main"
+    )
+```
+
+**Example configurations:**
+
+```python
+# Using the base miner
+github_repo="https://github.com/rayonlabs/G.O.D"
+commit_hash="main"
+
+# Using your own fork
+github_repo="https://github.com/yourname/my-training-repo"
+commit_hash="a1b2c3d4e5f6..."
+
+# Using a previous winner's approach
+github_repo="https://github.com/gradients-opensource/position-1-tournament-xyz"
+commit_hash="main"
 ```
 
 Where `task_type` can be:
 
 - `"text"` - For text-based tournaments (Instruct, DPO, GRPO, Chat)
 - `"image"` - For image-based tournaments (SDXL, Flux)
+
+**Important**: The repository and commit hash you configure will be used by validators to build and run your training code during tournaments.
 
 ## Docker-Based Architecture
 
