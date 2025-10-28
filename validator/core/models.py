@@ -12,10 +12,10 @@ from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructTextDatasetType
@@ -494,7 +494,7 @@ class EvaluationArgs(BaseModel):
                 if "field_instruction" in data and "field_input" in data:
                     return InstructTextDatasetType.model_validate(data)
                 elif "chat_column" in data:
-                    return ChatTemplateDatasetType.model_validate(data) # TODO correct?
+                    return ChatTemplateDatasetType.model_validate(data)  # TODO correct?
                 elif "field_chosen" in data:
                     return DpoDatasetType.model_validate(data)
                 elif "reward_functions" in data:
@@ -509,5 +509,9 @@ AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask | ChatRawTas
 AnyTypeRawTask = AnyTextTypeRawTask | ImageRawTask
 AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask | ChatTask
 AnyTypeTaskWithHotkeyDetails = (
-    InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails | ChatTaskWithHotkeyDetails
+    InstructTextTaskWithHotkeyDetails
+    | ImageTaskWithHotkeyDetails
+    | DpoTaskWithHotkeyDetails
+    | GrpoTaskWithHotkeyDetails
+    | ChatTaskWithHotkeyDetails
 )

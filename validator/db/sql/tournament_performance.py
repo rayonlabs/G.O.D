@@ -1,26 +1,7 @@
-from core.models.tournament_models import BossRoundTaskCompletion
 from core.models.tournament_models import BossRoundTaskPair
 from core.models.tournament_models import TaskScore
 from validator.db import constants as cst
 from validator.db.database import PSQLDB
-
-
-async def get_boss_round_synthetic_task_completion(tournament_id: str, psql_db: PSQLDB) -> BossRoundTaskCompletion:
-    async with await psql_db.connection() as connection:
-        query = """
-            SELECT COUNT(*) as total_synth_tasks,
-                   COUNT(CASE WHEN t.status = 'success' THEN 1 END) as completed_synth_tasks
-            FROM boss_round_synced_tasks brst
-            JOIN tasks t ON t.task_id = brst.general_task_id
-            JOIN tasks tournament_task ON tournament_task.task_id = brst.tournament_task_id
-            JOIN tournament_tasks tt ON tt.task_id = tournament_task.task_id
-            JOIN tournament_rounds tr ON tr.round_id = tt.round_id
-            WHERE tr.tournament_id = $1 AND tr.is_final_round = true
-        """
-        result = await connection.fetchrow(query, tournament_id)
-        return BossRoundTaskCompletion(
-            total_synth_tasks=result["total_synth_tasks"], completed_synth_tasks=result["completed_synth_tasks"]
-        )
 
 
 async def get_boss_round_winner_task_pairs(tournament_id: str, psql_db: PSQLDB) -> list[BossRoundTaskPair]:

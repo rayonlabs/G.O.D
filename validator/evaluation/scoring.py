@@ -1,6 +1,5 @@
 import math
 import os
-import re
 from datetime import datetime
 
 import numpy as np
@@ -25,12 +24,7 @@ from validator.core.models import AnyTypeRawTask
 from validator.core.models import MinerResults
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
-from validator.core.models import MiniTaskWithScoringOnly
-from validator.core.models import NodeAggregationResult
-from validator.core.models import PeriodScore
 from validator.core.models import Submission
-from validator.core.models import TaskNode
-from validator.core.models import TaskResults
 from validator.db.sql.submissions_and_scoring import add_submission
 from validator.db.sql.submissions_and_scoring import set_task_node_quality_score
 from validator.db.sql.tasks import get_expected_repo_name
@@ -44,132 +38,6 @@ from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)
-
-
-def get_task_work_score(task: MiniTaskWithScoringOnly) -> float:
-    assert task.hours_to_complete > 0, "Hours to complete must be positive"
-    assert task.model_id, "Model ID must be present"
-
-    hours = task.hours_to_complete
-
-    if getattr(task, "model_params_count", 0) > 0:
-        model_size_billions = min(40, max(1, task.model_params_count // 1_000_000_000))
-    else:
-        model = task.model_id
-        model_size = re.search(r"(\d+)(?=[bB])", model)
-        model_size_billions = min(8, int(model_size.group(1)) if model_size else 1)
-
-    if hours * model_size_billions == 0:
-        logger.error(
-            f"Hours to complete: {hours} and model size in billions: {model_size_billions} for task {task.task_id} "
-            f"and model id: {task.model_id}\nReturning 1 regardless as a failsafe, but please look into this"
-        )
-        return 1
-    return max(1, 2 * np.sqrt(float(hours * model_size_billions)))
-
-
-def calculate_adjusted_task_score(quality_score: float, task_work_score: float) -> float:
-    assert not np.isnan(quality_score), "Quality score cannot be NaN"
-    assert not np.isnan(task_work_score), "Task work score cannot be NaN"
-    return quality_score * task_work_score
-
-
-def update_node_aggregation(
-    node_aggregations: dict[str, NodeAggregationResult], node_score: TaskNode, task_work_score: float
-) -> None:
-    assert isinstance(node_score.hotkey, str)
-    assert not np.isnan(task_work_score), "Task work score cannot be NaN"
-
-    if node_score.hotkey not in node_aggregations:
-        node_aggregations[node_score.hotkey] = NodeAggregationResult(hotkey=node_score.hotkey)
-
-    node_result = node_aggregations[node_score.hotkey]
-    adjusted_score = calculate_adjusted_task_score(node_score.quality_score, task_work_score)
-
-    node_result.summed_adjusted_task_scores += adjusted_score
-    node_result.task_raw_scores.append(node_score.quality_score)
-    node_result.task_work_scores.append(task_work_score)
-
-
-def calculate_node_quality_scores(
-    node_aggregations: dict[str, NodeAggregationResult],
-    weight_multiplier: float,
-) -> list[PeriodScore]:
-    assert node_aggregations, "Node aggregations dictionary cannot be empty"
-
-    final_scores: list[PeriodScore] = []
-
-    for hotkey, node_agg in node_aggregations.items():
-        assert node_agg.task_raw_scores, f"No raw scores available for node {hotkey}"
-
-        node_agg.average_raw_score = float(np.mean(node_agg.task_raw_scores))
-        std_score = float(np.std(node_agg.task_raw_scores))
-
-        if node_agg.average_raw_score < 0:
-            score = 0.0
-        else:
-            score = node_agg.summed_adjusted_task_scores * node_agg.average_raw_score
-
-        node_agg.quality_score = score
-
-        final_scores.append(
-            PeriodScore(
-                hotkey=hotkey,
-                quality_score=score,
-                average_score=node_agg.average_raw_score,
-                std_score=std_score,
-                summed_task_score=node_agg.summed_adjusted_task_scores,
-                weight_multiplier=weight_multiplier,
-            )
-        )
-
-    return final_scores
-
-
-def _normalise_scores(period_scores: list[PeriodScore]) -> list[PeriodScore]:
-    assert period_scores, "Period scores list cannot be empty"
-    valid_scores = [ps.quality_score for ps in period_scores if ps.quality_score is not None]
-    if not valid_scores:
-        raise ValueError("No valid quality scores found in period_scores")
-    max_score = max(valid_scores)
-    if max_score <= 0:
-        for node_period_score in period_scores:
-            node_period_score.normalised_score = 0.0
-        return period_scores
-
-    for node_period_score in period_scores:
-        if node_period_score.quality_score is None or node_period_score.quality_score <= 0:
-            node_period_score.normalised_score = 0.0
-        else:
-            normalised_input = node_period_score.quality_score / max_score
-            sigmoid_part = 1 / (1 + np.exp(-cts.SIGMOID_STEEPNESS * (normalised_input - cts.SIGMOID_SHIFT)))
-            sigmoid_score = pow(sigmoid_part, cts.SIGMOID_POWER)
-            linear_score = normalised_input
-            node_period_score.normalised_score = (cts.SIGMOID_WEIGHT * sigmoid_score) + (cts.LINEAR_WEIGHT * linear_score)
-
-    total_score = sum(ps.normalised_score for ps in period_scores)
-    if total_score > 0:
-        for node_period_score in period_scores:
-            node_period_score.normalised_score = node_period_score.normalised_score / total_score
-
-    return period_scores
-
-
-def get_period_scores_from_results(task_results: list[TaskResults], weight_multiplier: float) -> list[PeriodScore]:
-    if not task_results:
-        return []
-
-    node_aggregations: dict[str, NodeAggregationResult] = {}
-
-    for task_res in task_results:
-        task_work_score = get_task_work_score(task_res.task)
-        for node_score in task_res.node_scores:
-            update_node_aggregation(node_aggregations, node_score, task_work_score)
-
-    final_scores = calculate_node_quality_scores(node_aggregations, weight_multiplier=weight_multiplier)
-    final_scores = _normalise_scores(final_scores)
-
-    return final_scores
 
 
 def calculate_weighted_loss(test_loss: float, synth_loss: float, use_max_of_synth_test: bool = False) -> float:

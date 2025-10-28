@@ -72,12 +72,6 @@ async def get_dataset_column_mapping(dataset_id: str, task_type: TaskType, keypa
         raise ValueError(f"Unsupported task type: {task_type}")
 
 
-def load_prompts() -> Prompts:
-    with open(PROMPT_PATH, "r") as file:
-        prompts_dict = yaml.safe_load(file)
-    return Prompts(**prompts_dict)
-
-
 def standardize_instruct_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
     """Standardize a single instruct/grpo sample to use standard column names."""
     std_sample = {}
@@ -420,5 +414,3 @@ async def load_and_merge_multiple_datasets(dataset_ids: list[str], task: AnyText
 
     logger.info(f"Merged {len(dataset_sizes)} datasets, returning {len(final_samples)} samples")
     return final_samples
-
-

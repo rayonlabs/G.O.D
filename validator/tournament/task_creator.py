@@ -247,42 +247,6 @@ async def _create_single_group_text_tasks(
     return [task]
 
 
-def _get_missing_task_types(existing_group_tasks: list) -> list[TaskType]:
-    existing_types = [task.task_type for task in existing_group_tasks]
-    task_types_to_create = []
-
-    if TaskType.INSTRUCTTEXTTASK not in existing_types:
-        task_types_to_create.append(TaskType.INSTRUCTTEXTTASK)
-    if TaskType.CHATTASK not in existing_types:
-        task_types_to_create.append(TaskType.CHATTASK)
-    if TaskType.DPOTASK not in existing_types:
-        task_types_to_create.append(TaskType.DPOTASK)
-    if TaskType.GRPOTASK not in existing_types:
-        task_types_to_create.append(TaskType.GRPOTASK)
-
-    return task_types_to_create
-
-
-async def _create_final_text_task_by_type(
-    task_type: TaskType,
-    config: Config,
-    small_models: list,
-    big_models: list,
-    instruct_datasets: list,
-    dpo_datasets: list,
-    use_big_model: bool,
-) -> RawTask:
-    if task_type == TaskType.INSTRUCTTEXTTASK:
-        models_to_use = big_models if use_big_model else small_models
-        return await create_synthetic_instruct_text_task(config, models_to_use, instruct_datasets)
-    elif task_type == TaskType.DPOTASK:
-        return await create_synthetic_dpo_task(config, small_models, dpo_datasets)
-    elif task_type == TaskType.GRPOTASK:
-        return await create_synthetic_grpo_task(config, small_models, instruct_datasets)
-    else:
-        raise ValueError(f"Unknown task type: {task_type}")
-
-
 async def _create_probability_based_text_tasks(
     round_data: KnockoutRound, tournament_id: str, round_id: str, config: Config
 ) -> list[RawTask]:

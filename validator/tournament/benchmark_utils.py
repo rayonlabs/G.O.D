@@ -5,7 +5,6 @@ from core.models.tournament_models import TournamentType
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
-from validator.core.models import AnyTypeRawTask
 from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql
 from validator.db.sql.nodes import get_node_by_hotkey
@@ -91,29 +90,6 @@ async def create_benchmark_training_pairs_for_participant(
     except Exception as e:
         logger.error(f"Error creating benchmark training pairs for participant {participant.hotkey}: {str(e)}", exc_info=True)
         raise
-
-
-async def get_available_benchmark_root_tasks_by_type(task_type: TaskType, config: Config) -> List[AnyTypeRawTask]:
-    """
-    Get all available benchmark root tasks of a specific type.
-
-    Args:
-        task_type: The type of tasks to look for
-        config: Configuration object for database access
-
-    Returns:
-        List of benchmark root tasks of the specified type
-    """
-    root_task_ids = await tournament_sql.get_benchmark_root_tasks(task_type, config.psql_db)
-
-    root_tasks = []
-    for task_id in root_task_ids:
-        task = await task_sql.get_task(task_id, config.psql_db)
-        if task:
-            root_tasks.append(task)
-
-    logger.info(f"Found {len(root_tasks)} available benchmark root tasks of type {task_type.value}")
-    return root_tasks
 
 
 async def create_benchmark_tasks_for_tournament_winner(tournament_id: str, winner_hotkey: str, config: Config) -> List[str]:
