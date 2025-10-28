@@ -20,6 +20,7 @@ from validator.db.sql.tournaments import count_champion_consecutive_wins
 from validator.db.sql.tournaments import get_active_tournament_participants
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_full_results
+from validator.db.sql.tournaments import get_tournament_where_champion_first_won
 from validator.db.sql.tournaments import get_weekly_task_participation_data
 from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
 from validator.tournament.performance_calculator import calculate_performance_difference
@@ -356,17 +357,25 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
             if winner_changed:
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
                 logger.info(f"NEW winner - calculated fresh performance difference for {tournament_type}: {performance_diff:.4f}")
-            elif latest_tournament.winning_performance_difference is not None:
-                performance_diff = latest_tournament.winning_performance_difference
-                logger.info(f"SAME winner - using stored performance difference for {tournament_type}: {performance_diff:.4f}")
-            elif (
-                previous_tournament.winning_performance_difference is not None
-                and latest_tournament.winning_performance_difference is None
-            ):
-                performance_diff = previous_tournament.winning_performance_difference
-                logger.info(f"SAME winner - using stored performance difference for {tournament_type}: {performance_diff:.4f}")
             else:
-                performance_diff = 0.0
+                # Champion defended - get performance from when they ACTUALLY won (not from a defense)
+                champion_hotkey = latest_tournament.base_winner_hotkey
+                if champion_hotkey:
+                    champion_win_tournament = await get_tournament_where_champion_first_won(
+                        psql_db, tournament_type, champion_hotkey
+                    )
+                    if champion_win_tournament and champion_win_tournament.winning_performance_difference is not None:
+                        performance_diff = champion_win_tournament.winning_performance_difference
+                        logger.info(
+                            f"SAME winner - using stored performance difference from when {champion_hotkey} first won "
+                            f"(tournament {champion_win_tournament.tournament_id}): {performance_diff:.4f}"
+                        )
+                    else:
+                        logger.warning(f"Could not find tournament where {champion_hotkey} first won for {tournament_type}")
+                        performance_diff = 0.0
+                else:
+                    logger.warning(f"No base_winner_hotkey found for defending champion in {tournament_type}")
+                    performance_diff = 0.0
 
         if performance_diff is None and latest_tournament:
             if latest_tournament.winner_hotkey == cts.EMISSION_BURN_HOTKEY:

@@ -204,6 +204,36 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
         return None
 
 
+async def get_tournament_where_champion_first_won(
+    psql_db: PSQLDB, tournament_type: TournamentType, champion_hotkey: str
+) -> TournamentData | None:
+    """
+    Get the LATEST tournament where the champion's actual hotkey was in the winner_hotkey field.
+    This finds when they actually won (not defended with a burn placeholder).
+    """
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}
+            FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_TYPE} = $1
+              AND {cst.TOURNAMENT_STATUS} = 'completed'
+              AND {cst.WINNER_HOTKEY} = $2
+            ORDER BY {cst.CREATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, tournament_type.value, champion_hotkey)
+        if result:
+            return TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
+                winner_hotkey=result[cst.WINNER_HOTKEY],
+                winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
+            )
+        return None
+
+
 async def get_latest_completed_tournament(
     psql_db: PSQLDB, tournament_type: TournamentType, exclude_tournament_id: str | None = None
 ) -> TournamentData | None:
