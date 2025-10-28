@@ -224,11 +224,6 @@ def list_supported_images(dataset_path: str, extensions: tuple) -> list[str]:
     return [file_name for file_name in os.listdir(dataset_path) if file_name.lower().endswith(extensions)]
 
 
-def read_image_as_base64(image_path: str) -> str:
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
-
-
 def image_to_base64(image: Image.Image) -> str:
     buffer = BytesIO()
     img_format = image.format if image.format else "PNG"

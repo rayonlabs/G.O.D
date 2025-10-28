@@ -210,17 +210,17 @@ def _log_instruct_augmentations(augmentations: dict, dataset) -> None:
     )
 
     # Log word honeypot transformations
-    input_word_transforms = augmentations.get('input_apply_word_transforms', False)
-    output_word_transforms = augmentations.get('output_apply_word_transforms', False)
+    input_word_transforms = augmentations.get("input_apply_word_transforms", False)
+    output_word_transforms = augmentations.get("output_apply_word_transforms", False)
     if input_word_transforms or output_word_transforms:
         logger.info(f"Word Honeypots: input_transforms={input_word_transforms}, output_transforms={output_word_transforms}")
 
         if input_word_transforms:
-            input_transform_type = augmentations.get('input_text_transform_type', 'none')
+            input_transform_type = augmentations.get("input_text_transform_type", "none")
             logger.info(f"  Input word transform: {input_transform_type}")
 
         if output_word_transforms:
-            output_transform_type = augmentations.get('output_text_transform_type', 'none')
+            output_transform_type = augmentations.get("output_text_transform_type", "none")
             logger.info(f"  Output word transform: {output_transform_type}")
 
     if augmentations.get("add_input_honeypot"):
@@ -246,8 +246,8 @@ def _log_grpo_augmentations(augmentations: dict) -> None:
     if augmentations.get("add_prompt_honeypot"):
         logger.info(f"  Prompt UID honeypot: {augmentations['prompt_uid']} (added to all prompts)")
 
-    if augmentations.get('apply_word_transforms'):
-        transform_type = augmentations.get('transform_type', 'none')
+    if augmentations.get("apply_word_transforms"):
+        transform_type = augmentations.get("transform_type", "none")
         logger.info(f"  GRPO word transforms: {transform_type}")
 
 

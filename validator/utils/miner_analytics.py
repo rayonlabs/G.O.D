@@ -322,14 +322,3 @@ async def cache_all_miner_performance(config: Config) -> None:
         logger.error(f"Failed to update miner performance cache: {e}")
 
 
-async def miner_performance_cache_worker(config: Config) -> None:
-    logger.info("Starting miner performance cache worker")
-    
-    while True:
-        try:
-            await cache_all_miner_performance(config)
-            logger.info(f"Sleeping for {CACHE_UPDATE_INTERVAL} seconds until next cache update")
-            await asyncio.sleep(CACHE_UPDATE_INTERVAL)
-        except Exception as e:
-            logger.error(f"Error in miner performance cache worker: {e}")
-            await asyncio.sleep(300)

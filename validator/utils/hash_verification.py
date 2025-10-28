@@ -113,30 +113,6 @@ def calculate_model_hash(repo_id: str, cleanup_cache: bool = True) -> Optional[s
                 logger.warning(f"Failed to clean up cache for {repo_id}: {e}")
 
 
-def verify_model_hash(repo_id: str, expected_hash: str, cleanup_cache: bool = True) -> bool:
-    if not is_valid_model_hash(expected_hash):
-        logger.error(f"Invalid hash format provided for {repo_id}: {expected_hash}")
-        return False
-        
-    logger.info(f"Starting hash verification for {repo_id}")
-    actual_hash = calculate_model_hash(repo_id, cleanup_cache)
-    
-    if actual_hash is None:
-        logger.error(f"Could not calculate hash for verification: {repo_id}")
-        return False
-        
-    matches = actual_hash == expected_hash
-    
-    if matches:
-        logger.info(f"Hash verification PASSED for {repo_id}")
-    else:
-        logger.warning(f"Hash verification FAILED for {repo_id}")
-        logger.warning(f"Expected: {expected_hash}")
-        logger.warning(f"Actual: {actual_hash}")
-        
-    return matches
-
-
 def is_valid_model_hash(model_hash: str) -> bool:
     if not isinstance(model_hash, str):
         return False

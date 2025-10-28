@@ -402,17 +402,6 @@ async def get_table_fields(table_name: str, connection: Connection) -> set[str]:
     return {row["column_name"] for row in rows}
 
 
-async def update_task_status(task_id: str, status: TaskStatus, psql_db: PSQLDB) -> None:
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            UPDATE {cst.TASKS_TABLE}
-            SET {cst.STATUS} = $1
-            WHERE {cst.TASK_ID} = $2
-        """
-        await connection.execute(query, status.value, task_id)
-
-
 async def update_task(updated_task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeRawTask:
     existing_task = await get_task(updated_task.task_id, psql_db)
 
@@ -530,28 +519,6 @@ async def update_task(updated_task: AnyTypeRawTask, psql_db: PSQLDB) -> AnyTypeR
                     await connection.execute(query, updated_task.task_id, updated_task.assigned_miners, NETUID)
 
     return await get_task(updated_task.task_id, psql_db)
-
-
-async def get_test_set_for_task(task_id: str, psql_db: PSQLDB):
-    """Get test data for a task"""
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            SELECT {cst.TEST_DATA} FROM {cst.TASKS_TABLE}
-            WHERE {cst.TASK_ID} = $1
-        """
-        return await connection.fetchval(query, task_id)
-
-
-async def get_synthetic_set_for_task(task_id: str, psql_db: PSQLDB):
-    """Get synthetic data for a task"""
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            SELECT {cst.SYNTHETIC_DATA} FROM {cst.TASKS_TABLE}
-            WHERE {cst.TASK_ID} = $1
-        """
-        return await connection.fetchval(query, task_id)
 
 
 async def get_current_task_stats(psql_db: PSQLDB, include_tournament_tasks=False) -> NetworkStats:
@@ -814,24 +781,6 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
 
     async with await psql_db.connection() as connection:
         return await _get_task_inner(connection)
-
-
-async def get_winning_submissions_for_task(task_id: UUID, psql_db: PSQLDB) -> list[dict]:
-    """Retrieve the winning submission for a task based on the highest quality score in task_nodes."""
-    async with await psql_db.connection() as connection:
-        query = f"""
-            SELECT submissions.repo
-            FROM {cst.SUBMISSIONS_TABLE} submissions
-            JOIN {cst.TASK_NODES_TABLE} task_nodes
-            ON submissions.task_id = task_nodes.task_id
-            AND submissions.hotkey = task_nodes.hotkey
-            AND submissions.netuid = task_nodes.netuid
-            WHERE submissions.task_id = $1
-            ORDER BY task_nodes.quality_score DESC
-            LIMIT 1
-        """
-        rows = await connection.fetch(query, task_id)
-        return [dict(row) for row in rows]
 
 
 async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
@@ -1114,51 +1063,6 @@ async def _create_task_from_data(
     return None
 
 
-async def get_tasks(psql_db: PSQLDB, limit: int = 100, offset: int = 0, include_tournament_tasks=False) -> list[Task]:
-    tournament_tasks_clause = (
-        ""
-        if include_tournament_tasks
-        else f"WHERE {cst.TASK_ID} NOT IN (SELECT {cst.TASK_ID}::uuid FROM {cst.TOURNAMENT_TASKS_TABLE})"
-    )
-
-    # Always exclude benchmark tasks from regular task queries
-    benchmark_tasks_clause = f"""
-        AND {cst.TASK_ID} NOT IN (
-            SELECT {cst.TASK_ID} FROM {cst.BENCHMARK_ROOT_TASKS_TABLE}
-            UNION
-            SELECT {cst.COPY_TASK_ID} FROM {cst.BENCHMARK_TASK_COPIES_TABLE}
-        )
-    """
-
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            WITH victorious_repo AS (
-                SELECT submissions.{cst.TASK_ID}, submissions.{cst.REPO}
-                FROM {cst.SUBMISSIONS_TABLE} submissions
-                JOIN {cst.TASK_NODES_TABLE} task_nodes
-                ON submissions.{cst.TASK_ID} = task_nodes.{cst.TASK_ID}
-                AND submissions.{cst.HOTKEY} = task_nodes.{cst.HOTKEY}
-                AND submissions.{cst.NETUID} = task_nodes.{cst.NETUID}
-                AND task_nodes.{cst.QUALITY_SCORE} IS NOT NULL
-                ORDER BY task_nodes.{cst.QUALITY_SCORE} DESC
-                LIMIT 1
-            )
-            SELECT
-                tasks.*,
-                COALESCE(tasks.training_repo_backup, victorious_repo.{cst.REPO}) as trained_model_repository
-            FROM {cst.TASKS_TABLE} tasks
-            LEFT JOIN victorious_repo ON tasks.{cst.TASK_ID} = victorious_repo.{cst.TASK_ID}
-            {tournament_tasks_clause}
-            {benchmark_tasks_clause}
-            ORDER BY tasks.{cst.CREATED_AT} DESC
-            LIMIT $1 OFFSET $2
-        """
-
-        rows = await connection.fetch(query, limit, offset)
-        return [Task(**dict(row)) for row in rows]
-
-
 async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int = 100, offset: int = 0) -> list[AnyTypeTask]:
     async with await psql_db.connection() as connection:
         connection: Connection
@@ -1364,15 +1268,6 @@ async def get_expected_repo_name(task_id: UUID, hotkey: str, psql_db: PSQLDB) ->
             WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2 AND {cst.NETUID} = $3
         """
         return await connection.fetchval(query, task_id, hotkey, NETUID)
-
-
-async def store_offer_response(task_id: UUID, hotkey: str, offer_response: str, psql_db: PSQLDB) -> None:
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            INSERT INTO {cst.OFFER_RESPONSES_TABLE} ({cst.TASK_ID}, {cst.HOTKEY}, {cst.OFFER_RESPONSE}) VALUES ($1, $2, $3)
-        """
-        await connection.execute(query, task_id, hotkey, offer_response)
 
 
 async def add_image_text_pairs(task_id: UUID, pairs: list[ImageTextPair], psql_db: PSQLDB) -> None:

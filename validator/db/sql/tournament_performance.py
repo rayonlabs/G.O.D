@@ -57,27 +57,6 @@ async def update_tournament_winning_performance(tournament_id: str, winning_perf
         await connection.execute(query, tournament_id, winning_performance_difference)
 
 
-async def get_task_scores_as_models(task_id: str, psql_db: PSQLDB) -> list[TaskScore]:
-    raw_scores = await get_all_scores_and_losses_for_task(task_id, psql_db)
-    return [
-        TaskScore(
-            hotkey=score[cst.HOTKEY],
-            test_loss=score[cst.TEST_LOSS],
-            synth_loss=score[cst.SYNTH_LOSS],
-            quality_score=score[cst.TASK_NODE_QUALITY_SCORE],
-        )
-        for score in raw_scores
-        if (
-            score[cst.TEST_LOSS] is not None
-            and not (isinstance(score[cst.TEST_LOSS], float) and score[cst.TEST_LOSS] != score[cst.TEST_LOSS])
-        )
-        and (
-            score[cst.SYNTH_LOSS] is not None
-            and not (isinstance(score[cst.SYNTH_LOSS], float) and score[cst.SYNTH_LOSS] != score[cst.SYNTH_LOSS])
-        )
-    ]
-
-
 async def get_task_scores_batch(task_ids: list[str], psql_db: PSQLDB) -> dict[str, list[TaskScore]]:
     """Fetch task scores for multiple tasks in a single query to avoid N+1 problem."""
     if not task_ids:
@@ -115,29 +94,3 @@ async def get_task_scores_batch(task_ids: list[str], psql_db: PSQLDB) -> dict[st
         return task_scores
 
 
-async def get_previous_completed_tournament(
-    psql_db: PSQLDB, tournament_type: str, exclude_tournament_id: str = None
-) -> str | None:
-    async with await psql_db.connection() as connection:
-        if exclude_tournament_id:
-            query = """
-                SELECT tournament_id
-                FROM tournaments
-                WHERE tournament_type = $1
-                AND status = 'completed'
-                AND tournament_id != $2
-                ORDER BY created_at DESC
-                LIMIT 1
-            """
-            result = await connection.fetchrow(query, tournament_type, exclude_tournament_id)
-        else:
-            query = """
-                SELECT tournament_id
-                FROM tournaments
-                WHERE tournament_type = $1
-                AND status = 'completed'
-                ORDER BY created_at DESC
-                LIMIT 1
-            """
-            result = await connection.fetchrow(query, tournament_type)
-        return result["tournament_id"] if result else None

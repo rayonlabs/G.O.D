@@ -220,8 +220,6 @@ async def download_and_load_dataset(
     return combined_dataset
 
 
-
-
 def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None, augmentations: dict = None):
     result = []
     total_rows = 0
@@ -752,9 +750,7 @@ async def _generate_dpo_synthetic_data(train_ds, keypair, task) -> tuple:
 
         synth_train_dataset = Dataset.from_list(synth_for_training)
         updated_train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-        logger.info(
-            f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(updated_train_ds)}"
-        )
+        logger.info(f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(updated_train_ds)}")
 
         train_samples = updated_train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
         train_samples_list = [sample for sample in train_samples]
@@ -918,9 +914,7 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
             if isinstance(task, DpoRawTask):
                 train_ds, synthetic_ds = await _generate_dpo_synthetic_data(train_ds, keypair, task)
             else:
-                train_ds, synthetic_ds = await _generate_other_synthetic_data(
-                    train_ds, test_ds, columns_to_sample, keypair, task
-                )
+                train_ds, synthetic_ds = await _generate_other_synthetic_data(train_ds, test_ds, columns_to_sample, keypair, task)
         else:
             logger.info("Skipping synthetic data generation")
     except Exception as e:

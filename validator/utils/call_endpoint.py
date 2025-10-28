@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 def _get_headers_for_signed_https_request(keypair: Keypair):
     nonce = f"{time.time_ns()}"
-    
+
     signature = chain_utils.sign_message(keypair, nonce)
 
     headers = {
@@ -98,6 +98,7 @@ async def process_non_stream_fiber(
         return None
 
     return response.json()
+
 
 async def post_to_nineteen_chat(payload: dict[str, Any], keypair: Keypair) -> str | None:
     response = await _post_to_nineteen_ai(PROMPT_GEN_ENDPOINT, payload, keypair)
@@ -254,17 +255,6 @@ async def sign_up_to_gradients(keypair: Keypair):
         return response.json()
 
 
-async def sign_up_cron_job(keypair: Keypair) -> None:
-    if NETUID != 56:
-        return
-
-    print(f"NETUID: {NETUID}")
-    # In case initial signup fails, we try again every 3 hours
-    while True:
-        await sign_up_to_gradients(keypair)
-        await asyncio.sleep(60 * 60 * 24)  # 3 hours
-
-
 @retry_http_with_backoff
 async def call_content_service(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any] | list[dict[str, Any]]:
     """Make a signed request to the content service."""
@@ -278,10 +268,12 @@ async def call_content_service(endpoint: str, keypair: Keypair, params: dict = N
         return response.json()
 
 
-async def call_content_service_fast(endpoint: str, keypair: Keypair, params: dict = None) -> dict[str, Any] | list[dict[str, Any]]:
+async def call_content_service_fast(
+    endpoint: str, keypair: Keypair, params: dict = None
+) -> dict[str, Any] | list[dict[str, Any]]:
     """Make a signed request to the content service with fast retries for LLM endpoints."""
     from validator.utils.util import retry_http_fast
-    
+
     @retry_http_fast
     async def _make_request():
         headers = _get_headers_for_signed_https_request(keypair)
@@ -289,9 +281,11 @@ async def call_content_service_fast(endpoint: str, keypair: Keypair, params: dic
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(url=endpoint, headers=headers, params=params)
             if response.status_code != 200:
-                logger.error(f"Error in content service response. URL: {endpoint}, Status code: {response.status_code} and response: {response.text}")
+                logger.error(
+                    f"Error in content service response. URL: {endpoint}, Status code: {response.status_code} and response: {response.text}"
+                )
                 response.raise_for_status()
             logger.info(f"Successful request to {endpoint}, response size: {len(response.text)} chars")
             return response.json()
-    
+
     return await _make_request()

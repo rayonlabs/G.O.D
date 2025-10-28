@@ -634,24 +634,6 @@ async def _update_scores(task: AnyTypeRawTask, task_results: list[MinerResultsTe
                 await add_submission(result.submission, psql_db)
 
 
-async def get_repo_creation_time(repo_name: str) -> datetime:
-    try:
-        clean_name = repo_name.replace("https://huggingface.co/", "")
-        parts = clean_name.split("/")
-
-        if len(parts) >= 2:
-            org, model = parts[-2], parts[-1]
-            url = f"https://huggingface.co/api/models/{org}/{model}"
-
-            logger.debug(f"Fetching creation time from: {url}")
-            response = await process_non_stream_get(url, None)
-            if response:
-                return datetime.fromisoformat(response["createdAt"].replace("Z", "+00:00"))
-    except Exception as e:
-        logger.error(f"Error fetching repo creation time for {repo_name}: {e}")
-    return datetime.max
-
-
 def group_by_losses(task_results: list[MinerResults]) -> dict[tuple[float, float], list[tuple[str, str]]]:
     loss_groups: dict[tuple[float, float], list[tuple[str, str]]] = {}
 
