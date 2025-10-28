@@ -20,6 +20,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
+from miner.logic.job_handler import create_reward_funcs_file
+
 import trainer.constants as train_cst
 import trainer.utils.training_paths as train_paths
 from core.config.config_handler import create_dataset_entry
@@ -27,13 +29,12 @@ from core.config.config_handler import save_config
 from core.config.config_handler import update_flash_attention
 from core.dataset_utils import adapt_columns_for_dpo_dataset
 from core.dataset_utils import adapt_columns_for_grpo_dataset
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import TaskType
-from miner.logic.job_handler import create_reward_funcs_file
 
 
 def patch_wandb_symlinks(base_dir: str):
