@@ -120,3 +120,20 @@ def extract_container_error(logs: str) -> str | None:
 
     return None
 
+
+def are_gpus_available(requested_gpu_ids: list[int]) -> bool:
+    """
+    Check if any of the requested GPU IDs are already in use by training tasks.
+    
+    Returns:
+        bool: True if all requested GPUs are available, False otherwise
+    """
+    running_tasks = get_running_tasks()
+    
+    for task in running_tasks:
+        for gpu_id in requested_gpu_ids:
+            if gpu_id in task.gpu_ids:
+                return False
+    
+    return True
+
