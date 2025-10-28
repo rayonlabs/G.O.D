@@ -9,7 +9,10 @@ description = "Validator and Miner for Gradients on Demand"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-authors = [{ name = "namoray", email = "namoray@rayonlabs.ai" }]
+authors = [
+    { name = "Gradients.io", email = "gradientsio@outlook.com" },
+    { name = "namoray", email = "namoray@rayonlabs.ai" },
+]
 dependencies = [
     "opentelemetry-distro==0.47b0",
     "opentelemetry-exporter-otlp-proto-http==1.26.0",
