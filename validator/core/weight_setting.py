@@ -340,7 +340,9 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
 
             winner_changed = False
             if previous_tournament:
-                if previous_tournament.winner_hotkey != latest_tournament.winner_hotkey:
+                # If latest winner is not EMISSION_BURN_HOTKEY, a new challenger won
+                # If it IS EMISSION_BURN_HOTKEY, the defending champion won (use stored performance)
+                if previous_tournament.winner_hotkey != latest_tournament.winner_hotkey and latest_tournament.winner_hotkey != cts.EMISSION_BURN_HOTKEY:
                     winner_changed = True
                     logger.info(
                         f"[{tournament_type}] Winner changed: {previous_tournament.winner_hotkey} → {latest_tournament.winner_hotkey}"
