@@ -63,7 +63,6 @@ from validator.tournament.boss_round_sync import copy_tournament_task_into_gener
 from validator.tournament.boss_round_sync import get_synced_task_id
 from validator.tournament.boss_round_sync import get_synced_task_ids
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
-from validator.tournament.orchestrator import validate_repo_obfuscation
 from validator.tournament.repo_uploader import upload_tournament_participant_repository
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
@@ -74,6 +73,8 @@ from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import notify_tournament_completed
 from validator.tournament.utils import notify_tournament_started
 from validator.tournament.utils import send_to_discord
+from validator.tournament.utils import validate_repo_license
+from validator.tournament.utils import validate_repo_obfuscation
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import LogContext
 from validator.utils.logging import get_logger
@@ -578,7 +579,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
         logger.info(f"Processing {len(responding_nodes)} responding nodes")
 
-        logger.info("Validating obfuscation and balance for participants...")
+        logger.info("Validating obfuscation, license, and balance for participants...")
         validated_nodes: list[RespondingNode] = []
 
         for responding_node in responding_nodes:
@@ -591,6 +592,17 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                 if not is_not_obfuscated:
                     logger.warning(
                         f"Repository {repo_url} failed obfuscation validation for hotkey {responding_node.node.hotkey}. "
+                        f"Excluding from tournament."
+                    )
+                    continue
+
+                logger.info(f"Checking license for {responding_node.node.hotkey}'s repo: {repo_url}")
+
+                has_valid_license = await validate_repo_license(repo_url)
+
+                if not has_valid_license:
+                    logger.warning(
+                        f"Repository {repo_url} failed license validation for hotkey {responding_node.node.hotkey}. "
                         f"Excluding from tournament."
                     )
                     continue
@@ -613,11 +625,10 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                     logger.warning(f"Failed to deduct participation fee for {responding_node.node.hotkey}. Skipping node.")
                     continue
 
-                # Add to validated ndes
                 validated_nodes.append(responding_node)
                 logger.info(
-                    f"Repository {repo_url} passed obfuscation check and balance check for hotkey {responding_node.node.hotkey} "
-                    f"(deducted {participation_fee_rao:,} RAO participation fee)"
+                    f"Repository {repo_url} passed obfuscation, license, and balance checks for hotkey "
+                    f"{responding_node.node.hotkey} (deducted {participation_fee_rao:,} RAO participation fee)"
                 )
 
         logger.info(

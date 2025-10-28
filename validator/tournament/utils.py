@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-
+import os
+import re
+import subprocess
+import tempfile
 from collections import Counter
 
 import aiohttp
@@ -694,3 +697,102 @@ async def notify_organic_task_created(task_id: str, task_type: str, discord_url:
         await send_to_discord(discord_url, message)
     except Exception as e:
         logger.error(f"Failed to send Discord notification for task creation: {e}")
+
+
+async def validate_repo_obfuscation(repo_url: str) -> bool:
+    """
+    Validate that a repository is not obfuscated using the obfuscation detection.
+
+    Args:
+        repo_url: The repository URL to validate
+
+    Returns:
+        bool: True if repo is not obfuscated, False if obfuscated
+    """
+    try:
+        proc = subprocess.run(
+            [t_cst.OBFUSCATION_DETECTION_PATH, "--repo", repo_url],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        logger.info(f"Obfuscation detection output: {proc.stdout}")
+
+        if proc.returncode == 0:
+            logger.info(f"Repo {repo_url} is not obfuscated (exit code 0)")
+            return True
+        else:
+            logger.warning(f"Repo {repo_url} is obfuscated (exit code {proc.returncode})")
+            return False
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Obfuscation detection timed out for repo {repo_url}")
+        return False
+    except Exception as e:
+        logger.error(f"Obfuscation detection failed for repo {repo_url}: {str(e)}")
+        return False
+
+
+async def validate_repo_license(repo_url: str) -> bool:
+    """
+    Validate that a repository has proper MIT license with gradients.io copyright.
+
+    Args:
+        repo_url: The repository URL to validate
+
+    Returns:
+        bool: True if repo has valid license, False otherwise
+    """
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logger.info(f"Cloning repository {repo_url} for license validation")
+
+            clone_proc = subprocess.run(
+                ["git", "clone", repo_url, temp_dir],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            if clone_proc.returncode != 0:
+                logger.error(f"Failed to clone repository {repo_url}: {clone_proc.stderr}")
+                return False
+
+            license_file_path = None
+            for license_filename in ["LICENSE", "LICENSE.md", "license", "license.md", "License", "License.md"]:
+                potential_path = os.path.join(temp_dir, license_filename)
+                if os.path.exists(potential_path):
+                    license_file_path = potential_path
+                    break
+
+            if not license_file_path:
+                logger.warning(
+                    f"License file not found in repository {repo_url} "
+                    f"(checked LICENSE, LICENSE.md, license, license.md, License, License.md)"
+                )
+                return False
+
+            with open(license_file_path, "r", encoding="utf-8") as f:
+                license_content = f.read()
+
+            mit_license_pattern = r"mit\s+license"
+            gradients_copyright_pattern = r"copyright.*?gradients\.io"
+
+            if not re.search(mit_license_pattern, license_content, re.IGNORECASE):
+                logger.warning(f"MIT License not found in license file for repository {repo_url}")
+                return False
+
+            if not re.search(gradients_copyright_pattern, license_content, re.IGNORECASE):
+                logger.warning(f"Gradients.io copyright not found in license file for repository {repo_url}")
+                return False
+
+            logger.info(f"Repository {repo_url} passed license validation")
+            return True
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Repository validation timed out for repo {repo_url}")
+        return False
+    except Exception as e:
+        logger.error(f"Repository validation failed for repo {repo_url}: {str(e)}")
+        return False
