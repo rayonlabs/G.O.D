@@ -22,8 +22,6 @@ from core.models.utility_models import TaskType
 from validator.augmentation.augmentation import load_prompts
 from validator.core.config import Config
 from validator.core.constants import END_OF_REASONING_TAG
-from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
-from validator.core.constants import MIN_DATASETS_FOR_AUGMENTATION
 from validator.core.constants import TEXT_SYNTH_MODEL
 from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
 from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
@@ -201,25 +199,14 @@ def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
     return random.randint(min_hours, max_hours)
 
 
-async def get_multiple_datasets(
+async def get_dataset(
     datasets_generator: AsyncGenerator[Dataset, None],
-    num_datasets: int | None = None,
     task_type: TaskType | None = None,
     keypair: Keypair | None = None,
-) -> list[Dataset]:
-    """Get multiple unique datasets from the generator, validating column availability."""
-    if num_datasets is None:
-        num_datasets = random.randint(MIN_DATASETS_FOR_AUGMENTATION, MAX_DATASETS_FOR_AUGMENTATION)
-
-    selected_datasets = []
-    selected_ids = set()
-    failed_ids = set()
-
-    while len(selected_datasets) < num_datasets:
+) -> Dataset:
+    """Get a single dataset from the generator, validating column availability."""
+    while True:
         dataset = await anext(datasets_generator)
-
-        if dataset.dataset_id in selected_ids or dataset.dataset_id in failed_ids:
-            continue
 
         if task_type and keypair and task_type != TaskType.DPOTASK:
             try:
@@ -229,16 +216,14 @@ async def get_multiple_datasets(
                 logger.info(f"PRE-VALIDATION: Checking column mapping for dataset {dataset.dataset_id}")
                 await call_content_service_fast(url, keypair)
                 logger.info(f"PRE-VALIDATION: Dataset {dataset.dataset_id} column mapping validated successfully")
+                logger.info(f"Selected dataset: {dataset.dataset_id}")
+                return dataset
             except Exception as e:
                 logger.warning(f"Dataset {dataset.dataset_id} failed column validation, skipping: {e}")
-                failed_ids.add(dataset.dataset_id)
                 continue
-
-        selected_datasets.append(dataset)
-        selected_ids.add(dataset.dataset_id)
-
-    logger.info(f"Selected {len(selected_datasets)} unique datasets for task (validated)")
-    return selected_datasets
+        else:
+            logger.info(f"Selected dataset: {dataset.dataset_id}")
+            return dataset
 
 
 def is_chat_format(example: dict[str, Any]) -> bool:
@@ -295,13 +280,11 @@ async def convert_instruct_dataset_to_chat_format(dataset_id: str, input_field: 
     return chat_data
 
 
-async def merge_and_upload_chat_datasets(dataset_ids: list[str], input_field: str, output_field: str) -> str:
-    merged_data = []
-    for ds_id in dataset_ids:
-        merged_data.extend(await convert_instruct_dataset_to_chat_format(ds_id, input_field, output_field))
-    if not merged_data:
+async def convert_and_upload_chat_dataset(dataset_id: str, input_field: str, output_field: str) -> str:
+    chat_data = await convert_instruct_dataset_to_chat_format(dataset_id, input_field, output_field)
+    if not chat_data:
         raise ValueError("Error creating chat dataset - no data")
-    dataset_json, _ = await save_json_to_temp_file(merged_data, prefix="chat_dataset_")
+    dataset_json, _ = await save_json_to_temp_file(chat_data, prefix="chat_dataset_")
     uploaded_url = await upload_file_to_minio(dataset_json, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_chat_data.json")
     if os.path.exists(dataset_json):
         os.remove(dataset_json)
@@ -318,31 +301,28 @@ async def create_synthetic_dpo_task(
     model_id = await anext(models)
     logger.info(f"We picked {model_id}")
 
-    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.DPOTASK, keypair=config.keypair)
+    dataset = await get_dataset(datasets, task_type=TaskType.DPOTASK, keypair=config.keypair)
 
-    primary_dataset = selected_datasets[0]
     logger.info(
-        f"Primary dataset: {primary_dataset.dataset_id} "
-        f"(rows: {primary_dataset.num_rows}, bytes: {primary_dataset.num_bytes_parquet_files})"
+        f"Selected dataset: {dataset.dataset_id} "
+        f"(rows: {dataset.num_rows}, bytes: {dataset.num_bytes_parquet_files})"
     )
 
-    number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
-    assert primary_dataset.dpo_rejected_column, "we should have a reject column"
-    assert primary_dataset.dpo_accepted_column, "we should have a accepted column"
-    assert primary_dataset.dpo_prompt_column, "we should have a prompt column"
-
-    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
+    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
+    assert dataset.dpo_rejected_column, "we should have a reject column"
+    assert dataset.dpo_accepted_column, "we should have a accepted column"
+    assert dataset.dpo_prompt_column, "we should have a prompt column"
 
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
     task = DpoRawTask(
         model_id=model_id,
-        ds=dataset_ids,
+        ds=dataset.dataset_id,
         field_system=None,
-        field_prompt=primary_dataset.dpo_prompt_column,
-        field_chosen=primary_dataset.dpo_accepted_column,
-        field_rejected=primary_dataset.dpo_rejected_column,
+        field_prompt=dataset.dpo_prompt_column,
+        field_chosen=dataset.dpo_accepted_column,
+        field_rejected=dataset.dpo_rejected_column,
         status=TaskStatus.PENDING,
         is_organic=False,
         created_at=current_time,
@@ -350,7 +330,7 @@ async def create_synthetic_dpo_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"New DPO task created with {len(selected_datasets)} datasets")
+    logger.info(f"New DPO task created with dataset {dataset.dataset_id}")
 
     task = await add_task(task, config.psql_db)
 
@@ -457,13 +437,10 @@ async def create_synthetic_grpo_task(
 ) -> RawTask:
     model_id = await anext(models)
 
-    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.GRPOTASK, keypair=config.keypair)
+    dataset = await get_dataset(datasets, task_type=TaskType.GRPOTASK, keypair=config.keypair)
 
-    primary_dataset = selected_datasets[0]
-    number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
-    columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-
-    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
+    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
+    columns = await _get_columns_for_instruct_dataset(dataset.dataset_id, config.keypair)
 
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
@@ -472,7 +449,7 @@ async def create_synthetic_grpo_task(
 
     task = GrpoRawTask(
         model_id=model_id,
-        ds=dataset_ids,
+        ds=dataset.dataset_id,
         field_prompt=columns.field_instruction,
         reward_functions=reward_functions,
         status=TaskStatus.PENDING,
@@ -482,7 +459,7 @@ async def create_synthetic_grpo_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"New GRPO task created with {len(selected_datasets)} datasets")
+    logger.info(f"New GRPO task created with dataset {dataset.dataset_id}")
 
     task = await add_task(task, config.psql_db)
 
@@ -576,21 +553,18 @@ async def create_synthetic_instruct_text_task(
     model_id = await anext(models)
 
     logger.info("INSTRUCT_TASK: Starting dataset selection...")
-    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
-    logger.info(f"INSTRUCT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
+    dataset = await get_dataset(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
+    logger.info(f"INSTRUCT_TASK: Selected dataset: {dataset.dataset_id}")
 
-    primary_dataset = selected_datasets[0]
-    number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
-    columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-
-    dataset_ids = ",".join([d.dataset_id for d in selected_datasets])
+    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
+    columns = await _get_columns_for_instruct_dataset(dataset.dataset_id, config.keypair)
 
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
     task = InstructTextRawTask(
         model_id=model_id,
-        ds=dataset_ids,
+        ds=dataset.dataset_id,
         field_system=None,
         field_instruction=columns.field_instruction,
         field_input=columns.field_input,
@@ -602,7 +576,7 @@ async def create_synthetic_instruct_text_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"INSTRUCT_TASK: Successfully created task with {len(selected_datasets)} datasets")
+    logger.info(f"INSTRUCT_TASK: Successfully created task with dataset {dataset.dataset_id}")
 
     task = await add_task(task, config.psql_db)
     logger.info(f"INSTRUCT_TASK: Task saved to database with ID: {task.task_id}")
@@ -618,19 +592,16 @@ async def create_synthetic_chat_task(
     model_id = await anext(models)
 
     logger.info("CHAT_TASK: Starting dataset selection...")
-    selected_datasets = await get_multiple_datasets(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
-    logger.info(f"CHAT_TASK: Selected datasets: {[d.dataset_id for d in selected_datasets]}")
+    dataset = await get_dataset(datasets, task_type=TaskType.INSTRUCTTEXTTASK, keypair=config.keypair)
+    logger.info(f"CHAT_TASK: Selected dataset: {dataset.dataset_id}")
 
-    primary_dataset = selected_datasets[0]
-    number_of_hours = _get_training_hours_from_num_rows(primary_dataset.num_rows)
-    columns = await _get_columns_for_instruct_dataset(primary_dataset.dataset_id, config.keypair)
-
-    dataset_ids = [d.dataset_id for d in selected_datasets]
+    number_of_hours = _get_training_hours_from_num_rows(dataset.num_rows)
+    columns = await _get_columns_for_instruct_dataset(dataset.dataset_id, config.keypair)
 
     input_field = columns.field_input if columns.field_input else columns.field_instruction
 
-    chat_dataset_url = await merge_and_upload_chat_datasets(
-        dataset_ids, input_field=input_field, output_field=columns.field_output
+    chat_dataset_url = await convert_and_upload_chat_dataset(
+        dataset.dataset_id, input_field=input_field, output_field=columns.field_output
     )
 
     current_time = datetime.utcnow()
@@ -653,7 +624,7 @@ async def create_synthetic_chat_task(
         hours_to_complete=number_of_hours,
         account_id=cst.NULL_ACCOUNT_ID,
     )
-    logger.info(f"CHAT_TASK: Successfully created task with {len(selected_datasets)} datasets")
+    logger.info(f"CHAT_TASK: Successfully created task with dataset {dataset.dataset_id}")
 
     task = await add_task(task, config.psql_db)
     logger.info(f"CHAT_TASK: Task saved to database with ID: {task.task_id}")

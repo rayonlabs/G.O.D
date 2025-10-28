@@ -19,7 +19,6 @@ import validator.core.constants as cst
 from core.models.payload_models import ImageTextPair
 from core.models.utility_models import FileFormat
 from core.utils import download_s3_file
-from validator.augmentation.augmentation import load_and_merge_multiple_datasets
 from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
@@ -453,57 +452,34 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
 
     train_dataset_name = task.training_data if task.training_data else task.ds
 
-    dataset_ids = [ds.strip() for ds in train_dataset_name.split(",")]
-    has_multiple_datasets = len(dataset_ids) > 1
-
     if not task.test_data:
         logger.info(f"Preparing {train_dataset_name}")
 
-        if has_multiple_datasets:
-            merged_samples = await load_and_merge_multiple_datasets(dataset_ids, task, keypair)
-            from datasets import Dataset as HFDataset
+        try:
+            dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
+        except Exception as e:
+            logger.info(f"There was an issue loading the dataset: {e}")
+            raise e
 
-            try:
-                dataset = HFDataset.from_list(merged_samples)
-            except Exception as e:
-                logger.error(f"Error details: {e}", exc_info=True)
-                random.shuffle(merged_samples)
-                for i in range(1000):
-                    logger.error(f"Sample {i}: {merged_samples[i]}")
-                raise e
+        if isinstance(task, InstructTextRawTask):
+            dataset = standardize_column_names(dataset, task)
+        elif isinstance(task, DpoRawTask):
+            dataset = standardize_dpo_column_names(dataset, task)
+        elif isinstance(task, GrpoRawTask):
+            dataset = standardize_grpo_column_names(dataset, task)
 
-            # For merged datasets, update task fields based on what columns actually exist
-            if isinstance(task, InstructTextRawTask):
-                if cst.STANDARD_INPUT_COLUMN not in dataset.column_names:
-                    task.field_input = None
-                if cst.STANDARD_SYSTEM_COLUMN not in dataset.column_names:
-                    task.field_system = None
+        # Subsample dataset (50-100% of original size)
+        original_size = len(dataset)
+        subsample_percentage = random.uniform(0.5, 1.0)
+        subsample_size = int(original_size * subsample_percentage)
+
+        if subsample_size < original_size:
+            logger.info(
+                f"Subsampling dataset from {original_size} to {subsample_size} rows ({subsample_percentage:.1%})"
+            )
+            dataset = dataset.shuffle(seed=42).select(range(subsample_size))
         else:
-            try:
-                dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
-            except Exception as e:
-                logger.info(f"There was an issue loading the dataset: {e}")
-                raise e
-
-            if isinstance(task, InstructTextRawTask):
-                dataset = standardize_column_names(dataset, task)
-            elif isinstance(task, DpoRawTask):
-                dataset = standardize_dpo_column_names(dataset, task)
-            elif isinstance(task, GrpoRawTask):
-                dataset = standardize_grpo_column_names(dataset, task)
-
-            # Subsample when using only a single dataset (50-100% of original size)
-            original_size = len(dataset)
-            subsample_percentage = random.uniform(0.5, 1.0)
-            subsample_size = int(original_size * subsample_percentage)
-
-            if subsample_size < original_size:
-                logger.info(
-                    f"Subsampling single dataset from {original_size} to {subsample_size} rows ({subsample_percentage:.1%})"
-                )
-                dataset = dataset.shuffle(seed=42).select(range(subsample_size))
-            else:
-                logger.info(f"Using full dataset size of {original_size} rows")
+            logger.info(f"Using full dataset size of {original_size} rows")
 
         dataset_dict = await train_test_split(dataset)
         train_ds = dataset_dict["train"]
