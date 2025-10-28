@@ -64,10 +64,10 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair, psql_db=None
 async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> AnyTextTypeRawTask:
     # Store original dataset name for processing
     original_ds_name = task.ds
-    test_data, synth_data, train_data = await prepare_text_task(task, keypair=keypair, psql_db=psql_db)
+    test_data, train_data = await prepare_text_task(task, keypair=keypair, psql_db=psql_db)
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES
-    task.synthetic_data = synth_data
+    task.synthetic_data = None  # TODO: remove from db schema
     task.test_data = test_data
 
     # Update dataset name after processing if multiple datasets were used
