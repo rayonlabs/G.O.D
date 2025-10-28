@@ -98,49 +98,6 @@ async def get_submission(submission_id: UUID, psql_db: PSQLDB) -> Submission | N
         return None
 
 
-async def get_submissions_by_task(task_id: UUID, psql_db: PSQLDB) -> list[Submission]:
-    """Get all submissions for a task"""
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            SELECT * FROM {cst.SUBMISSIONS_TABLE}
-            WHERE {cst.TASK_ID} = $1 AND {cst.NETUID} = $2
-        """
-        rows = await connection.fetch(query, task_id, NETUID)
-        return [Submission(**dict(row)) for row in rows]
-
-
-async def get_node_latest_submission(task_id: str, hotkey: str, psql_db: PSQLDB) -> Submission | None:
-    """Get the latest submission for a node on a task"""
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            SELECT * FROM {cst.SUBMISSIONS_TABLE}
-            WHERE {cst.TASK_ID} = $1
-            AND {cst.HOTKEY} = $2
-            AND {cst.NETUID} = $3
-            ORDER BY {cst.CREATED_ON} DESC
-            LIMIT 1
-        """
-        row = await connection.fetchrow(query, task_id, hotkey, NETUID)
-        if row:
-            return Submission(**dict(row))
-        return None
-
-
-async def submission_repo_is_unique(repo: str, psql_db: PSQLDB) -> bool:
-    """Check if a repository URL is unique"""
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            SELECT 1 FROM {cst.SUBMISSIONS_TABLE}
-            WHERE {cst.REPO} = $1 AND {cst.NETUID} = $2
-            LIMIT 1
-        """
-        result = await connection.fetchval(query, repo, NETUID)
-        return result is None
-
-
 async def set_task_node_quality_score(
     task_id: UUID,
     hotkey: str,
@@ -181,20 +138,6 @@ async def set_task_node_quality_score(
             synth_loss,
             score_reason,
         )
-
-
-async def get_task_node_quality_score(task_id: UUID, hotkey: str, psql_db: PSQLDB) -> float | None:
-    """Get quality score for a node's task submission"""
-    async with await psql_db.connection() as connection:
-        connection: Connection
-        query = f"""
-            SELECT {cst.TASK_NODE_QUALITY_SCORE}
-            FROM {cst.TASK_NODES_TABLE}
-            WHERE {cst.TASK_ID} = $1
-            AND {cst.HOTKEY} = $2
-            AND {cst.NETUID} = $3
-        """
-        return await connection.fetchval(query, task_id, hotkey, NETUID)
 
 
 async def get_all_scores_and_losses_for_task(task_id: UUID, psql_db: PSQLDB) -> list[dict]:

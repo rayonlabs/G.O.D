@@ -76,14 +76,6 @@ def build_docker_image(
         return None, str(e)
 
 
-def build_with_retry(*args, **kwargs):
-    for attempt in range(cst.IMAGE_BUILD_RETRIES):
-        tag, error = build_docker_image(*args, **kwargs)
-        if tag:
-            return tag, None
-        logger.warning(f"Build attempt {attempt+1} failed: {error}")
-    return None, error
-
 def delete_image_and_cleanup(tag: str):
     client = docker.from_env()
     try:

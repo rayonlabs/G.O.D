@@ -183,7 +183,6 @@ class TestSeparatedBurnDynamics:
         # Mock the dependencies
         with (
             pytest.mock.patch("validator.core.weight_setting.get_latest_completed_tournament") as mock_get_tournament,
-            pytest.mock.patch("validator.core.weight_setting.check_boss_round_synthetic_tasks_complete") as mock_check_tasks,
             pytest.mock.patch("validator.core.weight_setting.calculate_performance_difference") as mock_calc_perf,
         ):
             # Setup mocks - different performance for text vs image

@@ -297,11 +297,6 @@ def get_miner_performance_breakdown(hotkey: str, task_results: list[TaskResults]
     return breakdown
 
 
-async def check_boss_round_synthetic_tasks_complete(tournament_id: str, psql_db) -> bool:
-    completion_data = await get_boss_round_synthetic_task_completion(tournament_id, psql_db)
-    return completion_data.total_synth_tasks > 0 and completion_data.total_synth_tasks == completion_data.completed_synth_tasks
-
-
 def calculate_emission_multiplier(performance_diff: float) -> float:
     if performance_diff <= cts.EMISSION_MULTIPLIER_THRESHOLD:
         return 0.0

@@ -38,72 +38,6 @@ from validator.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def get_additional_datasets_for_augmentation(
-    task_type: TaskType, primary_dataset_id: str, keypair: Keypair, num_additional: int = 2
-) -> list[tuple[str, dict[str, str]]]:
-    """
-    Get additional datasets for augmentation based on task type.
-
-    Returns:
-        List of tuples containing (dataset_id, column_mapping)
-    """
-    import random
-
-    from validator.core.models import Dataset
-    from validator.utils.call_endpoint import call_content_service
-
-    additional_datasets = []
-
-    try:
-        # Determine if we need DPO datasets based on task type
-        is_dpo = task_type == TaskType.DPOTASK
-        params = {"dpo": is_dpo}
-
-        # Get random datasets from content service
-        response = await call_content_service(
-            "/datasets/random",  # This will be prefixed with CONTENT_BASE_URL
-            keypair,
-            params=params,
-        )
-
-        if not isinstance(response, list):
-            logger.error(f"Expected list from datasets endpoint, got {type(response)}")
-            return []
-
-        # Filter out the primary dataset and randomly select additional ones
-        available_datasets = [d for d in response if d.get("dataset_id") != primary_dataset_id]
-        random.shuffle(available_datasets)
-
-        for dataset_info in available_datasets[:num_additional]:
-            dataset_id = dataset_info.get("dataset_id")
-            if not dataset_id:
-                continue
-
-            try:
-                if is_dpo:
-                    dataset = Dataset.model_validate(dataset_info)
-                    if dataset.dpo_prompt_column and dataset.dpo_accepted_column and dataset.dpo_rejected_column:
-                        column_mapping = {
-                            "prompt": dataset.dpo_prompt_column,
-                            "chosen": dataset.dpo_accepted_column,
-                            "rejected": dataset.dpo_rejected_column,
-                        }
-                        additional_datasets.append((dataset_id, column_mapping))
-                    else:
-                        logger.warning(f"Dataset {dataset_id} missing DPO columns, skipping")
-                else:
-                    column_mapping = await get_dataset_column_mapping(dataset_id, task_type, keypair)
-                    additional_datasets.append((dataset_id, column_mapping))
-            except Exception as e:
-                logger.warning(f"Failed to process dataset {dataset_id}: {e}")
-                continue
-
-    except Exception as e:
-        logger.error(f"Failed to get additional datasets for augmentation: {e}")
-
-    return additional_datasets
-
-
 async def get_dataset_column_mapping(dataset_id: str, task_type: TaskType, keypair: Keypair) -> dict[str, str]:
     """Get column mapping for a specific dataset based on task type."""
     from validator.core.constants import CONTENT_BASE_URL
@@ -157,40 +91,6 @@ def load_prompts() -> Prompts:
     with open(PROMPT_PATH, "r") as file:
         prompts_dict = yaml.safe_load(file)
     return Prompts(**prompts_dict)
-
-
-def load_and_sample_dataset(dataset_name: str, columns_to_sample: list[str], num_samples: int | None = None) -> list[dict]:
-    """
-    Load and sample from a single dataset.
-
-    Args:
-        dataset_name: Name of the dataset to load
-        columns_to_sample: List of column names to keep
-        num_samples: Number of samples to take (defaults to MAX_AUGMENTATION_SAMPLES)
-
-    Returns:
-        List of sampled data points
-    """
-    try:
-        config_name = get_default_dataset_config(dataset_name)
-        dataset = load_dataset(dataset_name, config_name, trust_remote_code=True, streaming=True)
-    except Exception as e:
-        logger.exception(f"Failed to load dataset {dataset_name}: {e}")
-        raise e
-
-    logger.info(f"Loading dataset: {dataset_name}")
-    train_dataset = dataset["train"]
-
-    filtered_dataset = train_dataset.remove_columns([col for col in train_dataset.column_names if col not in columns_to_sample])
-
-    if num_samples is None:
-        num_samples = MAX_AUGMENTATION_SAMPLES
-    logger.info(f"Taking {num_samples} samples from {dataset_name}")
-
-    sampled_data = filtered_dataset.shuffle(seed=42, buffer_size=1000).take(num_samples)
-
-    sampled_data_list = [sample for sample in sampled_data]
-    return sampled_data_list
 
 
 def standardize_instruct_sample(sample: dict, task: AnyTextTypeRawTask) -> dict:
@@ -535,62 +435,6 @@ async def load_and_merge_multiple_datasets(dataset_ids: list[str], task: AnyText
 
     logger.info(f"Merged {len(dataset_sizes)} datasets, returning {len(final_samples)} samples")
     return final_samples
-
-
-def unstandardize_samples_to_task_columns(samples: list[dict], task: AnyTextTypeRawTask) -> list[dict]:
-    """Convert standardized column names back to task-specific column names.
-
-    For InstructText: Keep standard names (pipeline expects them)
-    For DPO/GRPO: Convert back to task field names
-    """
-    from validator.core.models import DpoRawTask
-    from validator.core.models import GrpoRawTask
-    from validator.core.models import InstructTextRawTask
-
-    # InstructText uses standard columns throughout the pipeline
-    if isinstance(task, InstructTextRawTask):
-        return samples
-
-    unstandardized = []
-
-    for sample in samples:
-        new_sample = {}
-
-        if isinstance(task, GrpoRawTask):
-            # GRPO: Map from standard GRPO prompt column back to field_prompt
-            if STANDARD_GRPO_PROMPT_COLUMN in sample:
-                new_sample[task.field_prompt] = sample[STANDARD_GRPO_PROMPT_COLUMN]
-
-        elif isinstance(task, DpoRawTask):
-            # DPO: Map from standard DPO columns back to task columns
-            if "prompt" in sample:
-                new_sample[task.field_prompt] = sample["prompt"]
-            if "chosen" in sample:
-                new_sample[task.field_chosen] = sample["chosen"]
-            if "rejected" in sample:
-                new_sample[task.field_rejected] = sample["rejected"]
-            if "system" in sample and hasattr(task, "field_system") and task.field_system:
-                new_sample[task.field_system] = sample["system"]
-
-        unstandardized.append(new_sample)
-
-    return unstandardized
-
-
-def create_messages_for_input_generation(
-    reformulated_output: str, description: str, output_field: str, schema: dict, prompts: Prompts
-) -> list[Message]:
-    messages = []
-    system_message = Message(role=Role.SYSTEM, content=prompts.input_field_generation_sys)
-    messages.append(system_message)
-    user_message = Message(
-        role=Role.USER,
-        content=prompts.input_field_generation_user.format(
-            schema=json.dumps(schema), output_field=output_field, output=reformulated_output, description=description
-        ),
-    )
-    messages.append(user_message)
-    return messages
 
 
 def create_messages_for_input_output_reformulation(row: dict, prompts: Prompts) -> list[Message]:

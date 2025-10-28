@@ -83,20 +83,6 @@ def download_from_huggingface(repo_id: str, filename: str, local_dir: str) -> st
         raise e
 
 
-def download_flux_unet(repo_id: str, output_dir: str) -> str:
-    files_metadata = hf_api.list_repo_tree(repo_id=repo_id, repo_type="model")
-    file_path = None
-    for file in files_metadata:
-        if hasattr(file, "size") and file.size is not None:
-            if file.path.endswith(".safetensors") and file.size > 10 * 1024 * 1024 * 1024:
-                file_path = file.path
-                local_path = download_from_huggingface(repo_id, file_path, output_dir)
-    if not file_path:
-        raise FileNotFoundError(f"No valid file found in root of repo '{repo_id}'.")
-
-    return local_path
-
-
 async def download_base_model(repo_id: str, save_root: str) -> str:
     model_name = repo_id.replace("/", "--")
     save_path = os.path.join(save_root, model_name)
