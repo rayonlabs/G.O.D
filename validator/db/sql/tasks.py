@@ -24,9 +24,7 @@ from validator.core.models import ImageTask
 from validator.core.models import InstructTextRawTask
 from validator.core.models import InstructTextTask
 from validator.core.models import NetworkStats
-from validator.core.models import RawTask
 from validator.core.models import RewardFunction
-from validator.core.models import Task
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client

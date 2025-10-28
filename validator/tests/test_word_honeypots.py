@@ -10,7 +10,6 @@ This test suite validates all aspects of the word honeypot system including:
 """
 
 import random
-from typing import Dict, List
 
 import validator.core.constants as cst
 from core.models.utility_models import (
@@ -26,9 +25,7 @@ from validator.augmentation.word_honeypots import (
     apply_case_modification,
     apply_instruct_word_honeypots,
     apply_text_transform,
-    apply_word_honeypot_to_text,
     check_conditional_rule,
-    generate_conditional_rule_config,
     generate_text_transform_config,
     get_words_from_text,
     insert_transformed_word,

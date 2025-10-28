@@ -1,12 +1,9 @@
-from typing import Optional
 
 import validator.core.constants as cts
 from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentScore
-from core.models.tournament_models import TournamentTaskScore
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import TournamentTypeResult
-from core.models.utility_models import TaskType
 from validator.tournament.utils import get_real_winner_hotkey
 from validator.utils.logging import get_logger
 

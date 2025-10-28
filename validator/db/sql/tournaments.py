@@ -2,13 +2,9 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
-from fiber.chain.models import Node
-
-import validator.core.constants as core_cst
 import validator.db.constants as cst
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import HotkeyTaskParticipation
-from core.models.tournament_models import HotkeyTournamentParticipation
 from core.models.tournament_models import TaskTrainingAssignment
 from core.models.tournament_models import TournamentData
 from core.models.tournament_models import TournamentGroupData

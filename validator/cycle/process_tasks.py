@@ -1,16 +1,9 @@
 import asyncio
 import datetime
-import json
-import random
-
-from fiber.chain.models import Node
 
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
-import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
-from core.models.payload_models import MinerTaskOffer
-from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
@@ -23,7 +16,6 @@ from validator.db.database import PSQLDB
 from validator.evaluation.scoring import evaluate_and_score
 from validator.utils.cache_clear import clean_all_hf_datasets_cache
 from validator.utils.cache_clear import manage_models_cache
-from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger

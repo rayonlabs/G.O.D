@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import re
-import time
 import uuid
 
 import docker
@@ -14,20 +13,20 @@ import trainer.utils.training_paths as train_paths
 from core.models.payload_models import TrainerProxyRequest
 from core.models.payload_models import TrainRequestImage
 from core.models.payload_models import TrainRequestText
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import TaskType
 from trainer import constants as cst
 from trainer.tasks import complete_task
 from trainer.tasks import log_task
 from trainer.tasks import update_wandb_url
+from trainer.utils.logging import logger
 from trainer.utils.misc import build_wandb_env
 from trainer.utils.misc import extract_container_error
 from validator.utils.logging import get_all_context_tags
-from trainer.utils.logging import logger
 from validator.utils.logging import stream_container_logs
 from validator.utils.logging import stream_image_build_logs
 
@@ -50,7 +49,12 @@ def calculate_container_resources(gpu_ids: list[int]) -> tuple[str, int]:
 
 
 def build_docker_image(
-    dockerfile_path: str, log_labels: dict[str, str] | None = None,  context_path: str = ".", is_image_task: bool = False, tag: str = None, no_cache: bool = True
+    dockerfile_path: str,
+    log_labels: dict[str, str] | None = None,
+    context_path: str = ".",
+    is_image_task: bool = False,
+    tag: str = None,
+    no_cache: bool = True,
 ) -> tuple[str, str | None]:
     client: docker.DockerClient = docker.from_env()
 
@@ -133,7 +137,7 @@ async def run_trainer_container_image(
 
     max_retries = cst.CONTAINER_START_MAX_RETRIES
     retry_delay = cst.CONTAINER_START_RETRY_DELAY_SECONDS
-    
+
     for attempt in range(max_retries):
         try:
             container: Container = client.containers.run(
@@ -159,10 +163,13 @@ async def run_trainer_container_image(
 
             log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
             return container
-            
+
         except Exception as e:
             if attempt < max_retries - 1:
-                logger.warning(f"Error starting container (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {str(e)[:150]}", extra=log_labels)
+                logger.warning(
+                    f"Error starting container (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {str(e)[:150]}",
+                    extra=log_labels,
+                )
                 await asyncio.sleep(retry_delay)
             else:
                 logger.error(f"Failed to start image trainer container after {max_retries} attempts: {e}", extra=log_labels)
@@ -216,7 +223,7 @@ async def run_trainer_container_text(
 
     max_retries = cst.CONTAINER_START_MAX_RETRIES
     retry_delay = cst.CONTAINER_START_RETRY_DELAY_SECONDS
-    
+
     for attempt in range(max_retries):
         try:
             container: Container = client.containers.run(
@@ -242,10 +249,13 @@ async def run_trainer_container_text(
 
             log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
             return container
-            
+
         except Exception as e:
             if attempt < max_retries - 1:
-                logger.warning(f"Error starting container (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {str(e)[:150]}", extra=log_labels)
+                logger.warning(
+                    f"Error starting container (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {str(e)[:150]}",
+                    extra=log_labels,
+                )
                 await asyncio.sleep(retry_delay)
             else:
                 logger.error(f"Failed to start text trainer container after {max_retries} attempts: {e}", extra=log_labels)
@@ -379,9 +389,7 @@ async def upload_repo_to_hf(
             name=container_name,
         )
 
-        log_streaming_task = asyncio.create_task(
-            asyncio.to_thread(stream_container_logs, container, get_all_context_tags())
-        )
+        log_streaming_task = asyncio.create_task(asyncio.to_thread(stream_container_logs, container, get_all_context_tags()))
 
         result = container.wait()
         logs = container.logs().decode("utf-8", errors="ignore")
@@ -395,8 +403,7 @@ async def upload_repo_to_hf(
 
         if exit_code != 0:
             last_err = extract_container_error(logs) or "unknown error"
-            msg = (f"HF upload failed | exit_code={exit_code} | container={container_name} | "
-                   f"last_error={last_err}")
+            msg = f"HF upload failed | exit_code={exit_code} | container={container_name} | last_error={last_err}"
             await log_task(task_id, hotkey, f"[ERROR] {msg}")
             raise RuntimeError(msg)
 
@@ -412,10 +419,7 @@ async def upload_repo_to_hf(
                     container.kill()
                 container.remove(force=True)
             except Exception as cleanup_err:
-                logger.warning(
-                    f"Failed to remove upload container {container.name}: {cleanup_err}"
-                )
-
+                logger.warning(f"Failed to remove upload container {container.name}: {cleanup_err}")
 
 
 def get_task_type(request: TrainerProxyRequest) -> TaskType:

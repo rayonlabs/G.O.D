@@ -3,7 +3,6 @@ from core.models.tournament_models import BossRoundTaskPair
 from core.models.tournament_models import TaskScore
 from validator.db import constants as cst
 from validator.db.database import PSQLDB
-from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 
 
 async def get_boss_round_synthetic_task_completion(tournament_id: str, psql_db: PSQLDB) -> BossRoundTaskCompletion:

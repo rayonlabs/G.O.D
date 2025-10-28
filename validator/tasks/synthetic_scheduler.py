@@ -8,7 +8,6 @@ from typing import Any
 from typing import AsyncGenerator
 from uuid import UUID
 
-from datasets import load_dataset
 from substrateinterface import Keypair
 
 import validator.core.constants as cst
@@ -21,8 +20,6 @@ from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.augmentation.augmentation import load_prompts
-from validator.evaluation.utils import get_default_dataset_config
-from validator.evaluation.utils import load_default_split
 from validator.core.config import Config
 from validator.core.constants import END_OF_REASONING_TAG
 from validator.core.constants import MAX_DATASETS_FOR_AUGMENTATION
@@ -41,6 +38,8 @@ from validator.db.sql import grpo as grpo_sql
 from validator.db.sql.grpo import get_generic_reward_functions_from_db
 from validator.db.sql.tasks import add_task
 from validator.db.sql.tasks import get_tasks_with_status
+from validator.evaluation.utils import get_default_dataset_config
+from validator.evaluation.utils import load_default_split
 from validator.tasks.diffusion_synth import create_synthetic_image_task
 from validator.utils.call_endpoint import call_content_service
 from validator.utils.llm import convert_to_nineteen_payload
@@ -717,5 +716,3 @@ async def _add_new_task_to_network_if_not_enough(
             else:
                 logger.info("TASK_TYPE_SELECTION: Creating regular GRPO task")
                 await create_synthetic_grpo_task(config, grpo_models_to_use, instruct_datasets)
-
-

@@ -1,7 +1,5 @@
-import asyncio
 import re
 
-from datasets import get_dataset_infos
 from fiber import Keypair
 from huggingface_hub import HfApi
 
@@ -23,7 +21,6 @@ from validator.core.models import InstructTextRawTask
 from validator.tasks.task_prep import prepare_image_task
 from validator.tasks.task_prep import prepare_text_task
 from validator.utils.logging import get_logger
-from validator.utils.minio import async_minio_client
 
 
 logger = get_logger(__name__)

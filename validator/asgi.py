@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 import uvicorn
@@ -43,7 +42,6 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down...")
-    cache_task.cancel()
     await config.psql_db.close()
     await config.redis_db.close()
 
