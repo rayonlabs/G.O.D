@@ -19,6 +19,7 @@ from trainer.tasks import load_task_history
 from trainer.tasks import log_task
 from trainer.tasks import start_task
 from trainer.utils.logging import logger
+from trainer.utils.misc import are_gpus_available
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
 from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
@@ -43,6 +44,12 @@ async def verify_orchestrator_ip(request: Request):
 
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:
+    if not are_gpus_available(req.gpu_ids):
+        raise HTTPException(
+            status_code=409,
+            detail=f"GPU conflict detected. Requested GPUs are already in use by running training tasks."
+        )
+    
     await start_task(req)
 
     try:
