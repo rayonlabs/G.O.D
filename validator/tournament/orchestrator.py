@@ -434,6 +434,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
             # Determine required GPUs for this task
             required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
             logger.info(f"Task {task.task_id} requires {required_gpus.value}")
+            await _update_all_trainers_gpu_availability(config)
             suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
             if not suitable_gpus_result:
