@@ -1,4 +1,5 @@
 import asyncio
+import math
 import random
 from datetime import datetime
 from datetime import timezone
@@ -31,13 +32,10 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql.nodes import get_all_nodes
 from validator.db.sql.nodes import get_node_by_hotkey
 from validator.db.sql.tournaments import add_tournament_participants
-from validator.db.sql.tournaments import calculate_boosted_stake
-from validator.db.sql.tournaments import count_completed_tournament_entries
 from validator.db.sql.tournaments import create_tournament
 from validator.db.sql.tournaments import eliminate_tournament_participants
 from validator.db.sql.tournaments import get_active_tournament
 from validator.db.sql.tournaments import get_latest_tournament_with_created_at
-from validator.db.sql.tournaments import get_participants_with_insufficient_stake
 from validator.db.sql.tournaments import get_tournament
 from validator.db.sql.tournaments import get_tournament_group_members
 from validator.db.sql.tournaments import get_tournament_groups
@@ -57,6 +55,8 @@ from validator.db.sql.tournaments import update_tournament_participant_backup_re
 from validator.db.sql.tournaments import update_tournament_participant_training_repo
 from validator.db.sql.tournaments import update_tournament_status
 from validator.db.sql.tournaments import update_tournament_winner_hotkey
+from validator.db.sql.transfers import deduct_tournament_participation_fee
+from validator.db.sql.transfers import get_coldkey_balance_by_address
 from validator.tournament import constants as t_cst
 from validator.tournament.benchmark_utils import create_benchmark_tasks_for_tournament_winner
 from validator.tournament.boss_round_sync import copy_tournament_task_into_general_miner_pool
@@ -112,9 +112,26 @@ def organise_tournament_round(nodes: list[Node], config: Config) -> Round:
         random.shuffle(pairs)
         return KnockoutRound(pairs=pairs)
     else:
-        hotkeys = [node.hotkey for node in nodes_copy]
-        single_group = Group(member_ids=hotkeys, task_ids=[])
-        return GroupRound(groups=[single_group])
+        num_groups = math.ceil(len(nodes_copy) / t_cst.EXPECTED_GROUP_SIZE)
+
+        if len(nodes_copy) / num_groups < t_cst.MIN_GROUP_SIZE:
+            num_groups = max(1, num_groups - 1)
+
+        groups = [[] for _ in range(num_groups)]
+        base_size = len(nodes_copy) // num_groups
+        remainder = len(nodes_copy) % num_groups
+        group_sizes = [base_size + (1 if i < remainder else 0) for i in range(num_groups)]
+
+        random.shuffle(nodes_copy)
+        idx = 0
+        for g in range(num_groups):
+            group_nodes = nodes_copy[idx : idx + group_sizes[g]]
+            group_hotkeys = [node.hotkey for node in group_nodes]
+            groups[g] = Group(member_ids=group_hotkeys, task_ids=[])
+            idx += group_sizes[g]
+
+        random.shuffle(groups)
+        return GroupRound(groups=groups)
 
 
 async def _create_first_round(
@@ -319,24 +336,11 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
         losers = [p for p in active_participants if p not in winners]
         logger.info(f"Losers to be eliminated: {len(losers)} - {losers}")
 
-        # Check stake requirements for winners
-        insufficient_stake_hotkeys = await get_participants_with_insufficient_stake(tournament.tournament_id, psql_db)
-        logger.info(f"Participants with insufficient stake: {len(insufficient_stake_hotkeys)} - {insufficient_stake_hotkeys}")
-        winners_with_insufficient_stake = [w for w in winners if w in insufficient_stake_hotkeys]
-
-        # Combine all eliminations
-        all_eliminated = losers + winners_with_insufficient_stake
+        all_eliminated = losers
         if all_eliminated:
             await eliminate_tournament_participants(tournament.tournament_id, completed_round.round_id, all_eliminated, psql_db)
-            if winners_with_insufficient_stake:
-                logger.info(
-                    f"Eliminated {len(winners_with_insufficient_stake)} winners for insufficient stake: "
-                    f"{winners_with_insufficient_stake}"
-                )
 
-        # Update winners list to remove those with insufficient stake
-        winners = [w for w in winners if w not in winners_with_insufficient_stake]
-        logger.info(f"Final winners after stake check: {len(winners)} - {winners}")
+        logger.info(f"Final winners: {len(winners)} - {winners}")
 
         if len(winners) == 0:
             logger.warning(
@@ -507,7 +511,6 @@ async def create_basic_tournament(tournament_type: TournamentType, psql_db: PSQL
             hotkey=base_contestant.hotkey,  # This will be EMISSION_BURN_HOTKEY
             training_repo=base_contestant.training_repo,
             training_commit_hash=base_contestant.training_commit_hash,
-            stake_required=0,
         )
         await add_tournament_participants([base_participant], psql_db)
 
@@ -526,6 +529,15 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
         logger.error(f"Tournament {tournament_id} not found")
         return 0
 
+    if tournament.tournament_type == TournamentType.TEXT:
+        participation_fee_rao = t_cst.TOURNAMENT_TEXT_PARTICIPATION_FEE_RAO
+        fee_description = "0.2 TAO"
+    else:  # IMAGE
+        participation_fee_rao = t_cst.TOURNAMENT_IMAGE_PARTICIPATION_FEE_RAO
+        fee_description = "0.15 TAO"
+
+    logger.info(f"Tournament type: {tournament.tournament_type.value}, participation fee: {fee_description}")
+
     while True:
         all_nodes = await get_all_nodes(psql_db)
 
@@ -538,8 +550,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
         logger.info(f"Found {len(eligible_nodes)} eligible nodes in database")
 
-        # Ping all nodes to get responders
-        responding_nodes = []
+        responding_nodes: list[RespondingNode] = []
         batch_size = t_cst.TOURNAMENT_PARTICIPANT_PING_BATCH_SIZE
 
         for i in range(0, len(eligible_nodes), batch_size):
@@ -559,63 +570,80 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                     if isinstance(result, Exception):
                         logger.warning(f"Exception pinging {node.hotkey}: {result}")
                     elif result:
-                        completed_entries = await count_completed_tournament_entries(node.hotkey, psql_db)
-                        boosted_stake = calculate_boosted_stake(node.alpha_stake, completed_entries)
-
-                        responding_node = RespondingNode(
-                            node=node, training_repo_response=result, boosted_stake=boosted_stake, actual_stake=node.alpha_stake
-                        )
+                        responding_node = RespondingNode(node=node, training_repo_response=result)
                         responding_nodes.append(responding_node)
-                        logger.info(
-                            f"Node responded with training repo {result.github_repo}@{result.commit_hash}, "
-                            f"stake: {node.alpha_stake:.2f}, boosted: {boosted_stake:.2f}"
-                        )
+                        logger.info(f"Node responded with training repo {result.github_repo}@{result.commit_hash}")
 
         logger.info(f"Got {len(responding_nodes)} responding nodes")
 
-        # Sort by boosted stake (descending) and take top N
-        responding_nodes.sort(key=lambda x: x.boosted_stake, reverse=True)
-        selected_nodes = responding_nodes[: cst.TOURNAMENT_TOP_N_BY_STAKE]
+        logger.info(f"Processing {len(responding_nodes)} responding nodes")
 
-        logger.info(f"Selected top {len(selected_nodes)} responders by boosted stake")
+        logger.info("Validating obfuscation and balance for participants...")
+        validated_nodes: list[RespondingNode] = []
 
-        # Validate obfuscation for all selected nodes upfront
-        logger.info("Validating obfuscation for selected participants...")
-        validated_nodes = []
-        for responding_node in selected_nodes:
-            repo_url = responding_node.training_repo_response.github_repo
-            logger.info(f"Checking obfuscation for {responding_node.node.hotkey}'s repo: {repo_url}")
+        for responding_node in responding_nodes:
+            with LogContext(node_hotkey=responding_node.node.hotkey):
+                repo_url = responding_node.training_repo_response.github_repo
+                logger.info(f"Checking obfuscation for {responding_node.node.hotkey}'s repo: {repo_url}")
 
-            is_not_obfuscated = await validate_repo_obfuscation(repo_url)
+                is_not_obfuscated = await validate_repo_obfuscation(repo_url)
 
-            if is_not_obfuscated:
-                validated_nodes.append(responding_node)
-                logger.info(f"Repository {repo_url} passed obfuscation check for hotkey {responding_node.node.hotkey}")
-            else:
-                logger.warning(
-                    f"Repository {repo_url} failed obfuscation validation for hotkey {responding_node.node.hotkey}. "
-                    f"Excluding from tournament."
+                if not is_not_obfuscated:
+                    logger.warning(
+                        f"Repository {repo_url} failed obfuscation validation for hotkey {responding_node.node.hotkey}. "
+                        f"Excluding from tournament."
+                    )
+                    continue
+
+                balance = await get_coldkey_balance_by_address(psql_db, responding_node.node.coldkey)
+
+                if not balance or balance.balance_rao < participation_fee_rao:
+                    logger.warning(
+                        f"Skipping {responding_node.node.hotkey} - insufficient balance. "
+                        f"Required: {participation_fee_rao:,} RAO, "
+                        f"Available: {balance.balance_rao if balance else 0:,} RAO"
+                    )
+                    continue
+
+                fee_deducted = await deduct_tournament_participation_fee(
+                    psql_db, responding_node.node.coldkey, participation_fee_rao, tournament_id
                 )
 
-        logger.info(f"Obfuscation validation complete: {len(validated_nodes)}/{len(selected_nodes)} nodes passed")
+                if not fee_deducted:
+                    logger.warning(f"Failed to deduct participation fee for {responding_node.node.hotkey}. Skipping node.")
+                    continue
 
-        # Add validated participants to tournament
+                # Add to validated ndes
+                validated_nodes.append(responding_node)
+                logger.info(
+                    f"Repository {repo_url} passed obfuscation check and balance check for hotkey {responding_node.node.hotkey} "
+                    f"(deducted {participation_fee_rao:,} RAO participation fee)"
+                )
+
+        logger.info(
+            f"Validation complete: {len(validated_nodes)} participants selected " f"from {len(responding_nodes)} responding nodes"
+        )
+
         miners_that_accept_and_give_repos = 0
+
         for responding_node in validated_nodes:
-            participant = TournamentParticipant(
-                tournament_id=tournament_id, hotkey=responding_node.node.hotkey, stake_required=responding_node.actual_stake
-            )
-            await add_tournament_participants([participant], psql_db)
+            with LogContext(node_hotkey=responding_node.node.hotkey):
+                participant = TournamentParticipant(
+                    tournament_id=tournament_id,
+                    hotkey=responding_node.node.hotkey,
+                )
+                await add_tournament_participants([participant], psql_db)
 
-            await update_tournament_participant_training_repo(
-                tournament_id,
-                responding_node.node.hotkey,
-                responding_node.training_repo_response.github_repo,
-                responding_node.training_repo_response.commit_hash,
-                psql_db,
-            )
+                await update_tournament_participant_training_repo(
+                    tournament_id,
+                    responding_node.node.hotkey,
+                    responding_node.training_repo_response.github_repo,
+                    responding_node.training_repo_response.commit_hash,
+                    psql_db,
+                )
 
-            miners_that_accept_and_give_repos += 1
+                miners_that_accept_and_give_repos += 1
+                logger.info(f"Added {responding_node.node.hotkey} to tournament {tournament_id}")
 
         logger.info(f"Successfully populated {miners_that_accept_and_give_repos} participants for tournament {tournament_id}")
 
@@ -902,7 +930,10 @@ async def _more_than_half_failures(tournament_task: TournamentTask, config: Conf
 
     if is_more_than_half_failure:
         logger.info(f"More than half of the trainings for task {tournament_task.task_id} failed. Please investigate.")
-        message = f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id} has more than half tasks failed, please investigate."
+        message = (
+            f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id} "
+            f"has more than half tasks failed, please investigate."
+        )
         await _notify_discord(message, config)
         return True
 
@@ -939,7 +970,10 @@ async def is_tourn_task_completed(
         return True, "Task completed successfully"
 
     elif task_obj.status == TaskStatus.FAILURE.value:
-        discord_message = f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id} has failed, please investigate."
+        discord_message = (
+            f"Warning: Task {tournament_task.task_id} in Tournament Round {tournament_task.round_id} "
+            f"has failed, please investigate."
+        )
         await _notify_discord(discord_message, config)
 
         synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)

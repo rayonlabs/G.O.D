@@ -5,7 +5,7 @@
 > Distributed intelligence for LLM and diffusion model training. Where the world's best AutoML minds compete.
 
 **Tournaments** 🏆
-Competitive events where validators execute miners' open-source training scripts on dedicated infrastructure.
+Competitive events where the validator executes miners' open-source training scripts on dedicated infrastructure.
 
 - **Duration**: 4-7 days per tournament
 - **Frequency**: New tournaments start 72 hours after the previous one ends
