@@ -35,6 +35,7 @@ from validator.core.models import RewardFunction
 from validator.db.sql import grpo as grpo_sql
 from validator.db.sql.grpo import get_generic_reward_functions_from_db
 from validator.db.sql.tasks import add_task
+from validator.tasks.diffusion_synth import create_synthetic_image_task
 from validator.utils.call_endpoint import call_content_service
 from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
