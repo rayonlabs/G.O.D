@@ -55,14 +55,8 @@ GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
 
 
-NUMBER_OF_MINUTES_BETWEEN_SYNTH_TASK_CHECK = 5
-
-
 # data stuff
-TEST_SIZE = 0.1
 TRAIN_TEST_SPLIT_PERCENTAGE = 0.1
-GET_SYNTH_DATA = True
-MAX_AUGMENTATION_SAMPLES = 400  # Max samples for dataset augmentation/merging
 MAX_TEST_DATA_POINTS = 400
 
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
