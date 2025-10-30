@@ -521,9 +521,18 @@ async def get_node_weights_from_tournament_audit_data(
     logger.info(f"Image tournament weight: {tournament_audit_data.image_tournament_weight:.6f}")
     logger.info(f"Total burn weight: {tournament_audit_data.burn_weight:.6f}")
 
+    # Check that base weights sum to 1.0
+    base_weight_sum = tournament_audit_data.text_tournament_weight + tournament_audit_data.image_tournament_weight + tournament_audit_data.burn_weight
+    logger.info(f"Base weights sum (text + image + burn): {base_weight_sum:.10f}")
+    logger.info(f"Base weights sum to 1.0? {abs(base_weight_sum - 1.0) < 0.0001}")
+
     participants: list[str] = tournament_audit_data.participants
     participation_total: float = len(participants) * cts.TOURNAMENT_PARTICIPATION_WEIGHT
     scale_factor: float = 1.0 - participation_total if participation_total > 0 else 1.0
+
+    logger.info(f"Number of participants: {len(participants)}")
+    logger.info(f"Participation total weight: {participation_total:.10f}")
+    logger.info(f"Scale factor (1.0 - participation_total): {scale_factor:.10f}")
 
     scaled_text_tournament_weight: float = tournament_audit_data.text_tournament_weight * scale_factor
     scaled_image_tournament_weight: float = tournament_audit_data.image_tournament_weight * scale_factor
@@ -531,6 +540,11 @@ async def get_node_weights_from_tournament_audit_data(
 
     scaled_text_base_weight: float = cts.TOURNAMENT_TEXT_WEIGHT * scale_factor
     scaled_image_base_weight: float = cts.TOURNAMENT_IMAGE_WEIGHT * scale_factor
+
+    # Check that scaled weights + participation still sum to 1.0
+    scaled_weight_sum = scaled_text_tournament_weight + scaled_image_tournament_weight + scaled_burn_weight + participation_total
+    logger.info(f"Scaled weights sum (scaled_text + scaled_image + scaled_burn + participation): {scaled_weight_sum:.10f}")
+    logger.info(f"Scaled weights sum to 1.0? {abs(scaled_weight_sum - 1.0) < 0.0001}")
 
     text_tournament_weights, image_tournament_weights = get_tournament_weights_from_data(
         tournament_audit_data.text_tournament_data, tournament_audit_data.image_tournament_data
@@ -561,16 +575,36 @@ async def get_node_weights_from_tournament_audit_data(
         image_winner_hotkey,
     )
 
+    # Check sum after tournament weights applied
+    weight_sum_after_tournament = sum(all_node_weights)
+    logger.info(f"Weight sum after tournament weights applied: {weight_sum_after_tournament:.10f}")
+
     for hotkey in participants:
         node_id = hotkey_to_node_id.get(hotkey)
         if node_id is not None:
             all_node_weights[node_id] += cts.TOURNAMENT_PARTICIPATION_WEIGHT
 
+    # Check sum after participation weights added
+    weight_sum_after_participation = sum(all_node_weights)
+    logger.info(f"Weight sum after participation weights added: {weight_sum_after_participation:.10f}")
+
     burn_node_id: int | None = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)
     if burn_node_id is not None:
         all_node_weights[burn_node_id] = scaled_burn_weight
 
+    # Final weight sum check
+    final_weight_sum = sum(all_node_weights)
+    logger.info(f"=== FINAL WEIGHT SUM CHECK ===")
+    logger.info(f"Total weight sum (before normalization): {final_weight_sum:.10f}")
+    logger.info(f"Expected: 1.0")
+    logger.info(f"Difference from 1.0: {abs(final_weight_sum - 1.0):.10f}")
+    logger.info(f"Weights sum to 1.0? {abs(final_weight_sum - 1.0) < 0.0001}")
     logger.info(f"Number of non zero node weights: {sum(1 for weight in all_node_weights if weight != 0)}")
+
+    if abs(final_weight_sum - 1.0) >= 0.0001:
+        logger.warning(f"⚠️  WARNING: Weights DO NOT sum to 1.0! Sum is {final_weight_sum:.10f}")
+    else:
+        logger.info(f"✅ Weights correctly sum to 1.0")
 
     return NodeWeightsResult(node_ids=all_node_ids, node_weights=all_node_weights)
 
