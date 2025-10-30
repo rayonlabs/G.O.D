@@ -313,6 +313,7 @@ class NewTaskWithFixedDatasetsRequest(NewTaskRequestInstructText):
     )
     training_data: str = Field(..., description="The prepared training dataset")
     test_data: str = Field(..., description="The prepared test dataset")
+    synthetic_data: str | None = Field(None, description="Kept for backwards compatibility, not used in business logic")
 
 
 class NewTaskWithCustomDatasetRequest(NewTaskRequestInstructText):

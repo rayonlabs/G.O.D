@@ -122,6 +122,7 @@ class DpoRawTask(RawTask):
     rejected_format: str | None = None
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.DPOTASK
+    synthetic_data: str | None = None
 
 
 class GrpoRawTask(RawTask):
@@ -134,6 +135,7 @@ class GrpoRawTask(RawTask):
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.GRPOTASK
     extra_column: str | None = None
+    synthetic_data: str | None = None
 
     @model_validator(mode="after")
     def validate_reward_functions(self) -> "GrpoRawTask":
@@ -157,6 +159,7 @@ class InstructTextRawTask(RawTask):
     system_format: None = None  # NOTE: Needs updating to be optional once we accept it
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.INSTRUCTTEXTTASK
+    synthetic_data: str | None = None
 
 
 class ChatRawTask(RawTask):
@@ -172,6 +175,7 @@ class ChatRawTask(RawTask):
     chat_assistant_reference: str | None = "assistant"
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.CHATTASK
+    synthetic_data: str | None = None
 
 
 class ImageRawTask(RawTask):
