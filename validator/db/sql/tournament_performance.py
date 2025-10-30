@@ -60,17 +60,10 @@ async def get_task_scores_batch(task_ids: list[str], psql_db: PSQLDB) -> dict[st
 
             # Filter out NaN values
             test_loss = row["test_loss"]
-            synth_loss = row["synth_loss"]
 
-            if (test_loss is not None and not (isinstance(test_loss, float) and test_loss != test_loss)) and (
-                synth_loss is not None and not (isinstance(synth_loss, float) and synth_loss != synth_loss)
-            ):
+            if test_loss is not None and not (isinstance(test_loss, float) and test_loss != test_loss):
                 task_scores[task_id].append(
-                    TaskScore(
-                        hotkey=row["hotkey"], test_loss=test_loss, synth_loss=synth_loss, quality_score=row["quality_score"]
-                    )
+                    TaskScore(hotkey=row["hotkey"], test_loss=test_loss, synth_loss=test_loss, quality_score=row["quality_score"])
                 )
 
         return task_scores
-
-

@@ -312,7 +312,6 @@ class NewTaskWithFixedDatasetsRequest(NewTaskRequestInstructText):
         FileFormat.S3, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
     )
     training_data: str = Field(..., description="The prepared training dataset")
-    synthetic_data: str = Field(..., description="The prepared synthetic dataset")
     test_data: str = Field(..., description="The prepared test dataset")
 
 

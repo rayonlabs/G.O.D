@@ -120,7 +120,6 @@ class DpoRawTask(RawTask):
     prompt_format: str | None = None
     chosen_format: str | None = None
     rejected_format: str | None = None
-    synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.DPOTASK
 
@@ -134,7 +133,6 @@ class GrpoRawTask(RawTask):
     reward_functions: list[RewardFunction]
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.GRPOTASK
-    synthetic_data: str | None = None
     extra_column: str | None = None
 
     @model_validator(mode="after")
@@ -157,7 +155,6 @@ class InstructTextRawTask(RawTask):
     format: str | None = None
     no_input_format: str | None = None
     system_format: None = None  # NOTE: Needs updating to be optional once we accept it
-    synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.INSTRUCTTEXTTASK
 
@@ -173,7 +170,6 @@ class ChatRawTask(RawTask):
     chat_content_field: str | None = "value"
     chat_user_reference: str | None = "user"
     chat_assistant_reference: str | None = "assistant"
-    synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.CHATTASK
 
@@ -359,7 +355,6 @@ class AllNodeStats(BaseModel):
 
 class DatasetUrls(BaseModel):
     test_url: str
-    synthetic_url: str | None = None
     train_url: str
 
 
@@ -372,13 +367,11 @@ class DatasetFiles(BaseModel):
 class DatasetJsons(BaseModel):
     train_data: list[Any]
     test_data: list[Any]
-    synthetic_data: list[Any] = Field(default_factory=list)
 
     def to_json_strings(self) -> dict[str, str]:
         return {
             "train_data": json.dumps(self.train_data),
             "test_data": json.dumps(self.test_data),
-            "synthetic_data": json.dumps(self.synthetic_data) if self.synthetic_data else "",
         }
 
 

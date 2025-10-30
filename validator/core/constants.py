@@ -65,13 +65,6 @@ GET_SYNTH_DATA = True
 MAX_AUGMENTATION_SAMPLES = 400  # Max samples for dataset augmentation/merging
 MAX_TEST_DATA_POINTS = 400
 
-ADDITIONAL_SYNTH_DATA_PERCENTAGE = 1.0  # same size as training set
-
-# Synthetic data generation constants - for actual synthetic data creation
-SYNTHETIC_GENERATION_TOTAL = 10  # Total synthetic samples to generate
-SYNTHETIC_FOR_TRAINING = 5  # How many go to training
-SYNTHETIC_FOR_EVAL = 5  # How many go to evaluation
-SYNTH_EXAMPLES_FROM_TRAIN = 395
 IMAGE_TRAIN_SPLIT_ZIP_NAME = "train_data.zip"
 IMAGE_TEST_SPLIT_ZIP_NAME = "test_data.zip"
 TEMP_PATH_FOR_IMAGES = "/tmp/validator/temp_images"
@@ -179,7 +172,6 @@ MODEL_SIZE_REQUIRING_3_GPUS = 75 * 10**9
 MODEL_SIZE_REQUIRING_4_GPUS = 110 * 10**9
 
 # scoring stuff  - NOTE: Will want to slowly make more exponential now we have auditing
-TEST_SCORE_WEIGHTING = 0.7  # synth will be (1 - this)
 SCORE_PENALTY = -1
 FIRST_PLACE_SCORE = 3
 

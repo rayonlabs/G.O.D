@@ -102,8 +102,8 @@ async def _insert_instruct_text_task(connection: Connection, task: InstructTextR
         INSERT INTO {cst.INSTRUCT_TEXT_TASKS_TABLE}
         ({cst.TASK_ID}, {cst.FIELD_SYSTEM}, {cst.FIELD_INSTRUCTION},
         {cst.FIELD_INPUT}, {cst.FIELD_OUTPUT}, {cst.FORMAT},
-        {cst.NO_INPUT_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FILE_FORMAT})
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        {cst.NO_INPUT_FORMAT}, {cst.FILE_FORMAT})
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     """
     await connection.execute(
         query,
@@ -114,7 +114,6 @@ async def _insert_instruct_text_task(connection: Connection, task: InstructTextR
         task.field_output,
         task.format,
         task.no_input_format,
-        task.synthetic_data,
         task.file_format,
     )
 
@@ -162,8 +161,8 @@ async def _insert_dpo_task(connection: Connection, task: DpoRawTask, task_record
     query = f"""
         INSERT INTO {cst.DPO_TASKS_TABLE}
         ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FIELD_SYSTEM}, {cst.FIELD_CHOSEN}, {cst.FIELD_REJECTED},
-        {cst.PROMPT_FORMAT}, {cst.CHOSEN_FORMAT}, {cst.REJECTED_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FILE_FORMAT})
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        {cst.PROMPT_FORMAT}, {cst.CHOSEN_FORMAT}, {cst.REJECTED_FORMAT}, {cst.FILE_FORMAT})
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     """
     await connection.execute(
         query,
@@ -175,7 +174,6 @@ async def _insert_dpo_task(connection: Connection, task: DpoRawTask, task_record
         task.prompt_format,
         task.chosen_format,
         task.rejected_format,
-        task.synthetic_data,
         task.file_format,
     )
 
@@ -183,15 +181,14 @@ async def _insert_dpo_task(connection: Connection, task: DpoRawTask, task_record
 async def _insert_grpo_task(connection: Connection, task: GrpoRawTask, task_record: dict) -> None:
     query_grpo = f"""
         INSERT INTO {cst.GRPO_TASKS_TABLE}
-        ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FILE_FORMAT}, {cst.SYNTHETIC_DATA}, {cst.FIELD_EXTRA_COLUMN})
-        VALUES ($1, $2, $3, $4, $5)
+        ({cst.TASK_ID}, {cst.FIELD_PROMPT}, {cst.FILE_FORMAT}, {cst.FIELD_EXTRA_COLUMN})
+        VALUES ($1, $2, $3, $4)
     """
     await connection.execute(
         query_grpo,
         task_record[cst.TASK_ID],
         task.field_prompt,
         task.file_format,
-        task.synthetic_data,
         task.extra_column,
     )
 
@@ -296,7 +293,7 @@ async def get_tasks_with_status(
                 specific_query = f"""
                     SELECT t.*, tt.field_system,
                            tt.field_instruction, tt.field_input, tt.field_output,
-                           tt.format, tt.no_input_format, tt.synthetic_data, tt.file_format
+                           tt.format, tt.no_input_format, tt.file_format
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
@@ -311,14 +308,14 @@ async def get_tasks_with_status(
             elif task_type == TaskType.DPOTASK.value:
                 specific_query = f"""
                     SELECT t.*, dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
-                           dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format
+                           dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.file_format
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
                 """
             elif task_type == TaskType.GRPOTASK.value:
                 specific_query = f"""
-                    SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format, gt.extra_column
+                    SELECT t.*, gt.field_prompt, gt.file_format, gt.extra_column
                     FROM {cst.TASKS_TABLE} t
                     LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
                     WHERE t.{cst.TASK_ID} = $1
@@ -327,7 +324,6 @@ async def get_tasks_with_status(
                 specific_query = f"""
                     SELECT
                         t.*,
-                        gt.synthetic_data,
                         gt.file_format,
                         gt.chat_template,
                         gt.chat_column,
@@ -708,7 +704,7 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
             specific_query = f"""
                 SELECT t.*, tt.field_system,
                        tt.field_instruction, tt.field_input, tt.field_output,
-                       tt.format, tt.no_input_format, tt.synthetic_data
+                       tt.format, tt.no_input_format
                 FROM {cst.TASKS_TABLE} t
                 LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
@@ -723,14 +719,14 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
         elif task_type == TaskType.DPOTASK.value:
             specific_query = f"""
                 SELECT t.*, dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
-                       dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format
+                       dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.file_format
                 FROM {cst.TASKS_TABLE} t
                 LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
             """
         elif task_type == TaskType.GRPOTASK.value:
             specific_query = f"""
-                SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format, gt.extra_column
+                SELECT t.*, gt.field_prompt, gt.file_format, gt.extra_column
                 FROM {cst.TASKS_TABLE} t
                 LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
                 WHERE t.{cst.TASK_ID} = $1
@@ -739,7 +735,6 @@ async def get_task(task_id: UUID, psql_db: PSQLDB, connection: Connection | None
             specific_query = f"""
                 SELECT
                     t.*,
-                    gt.synthetic_data,
                     gt.file_format,
                     gt.chat_template,
                     gt.chat_column,
@@ -817,7 +812,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                 SELECT
                     tasks.*,
                     tt.field_system, tt.field_instruction, tt.field_input, tt.field_output,
-                    tt.format, tt.no_input_format, tt.synthetic_data, tt.system_format, tt.file_format,
+                    tt.format, tt.no_input_format, tt.system_format, tt.file_format,
                     COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
                 LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON tasks.{cst.TASK_ID} = tt.{cst.TASK_ID}
@@ -829,7 +824,6 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                 {victorious_repo_cte}
                 SELECT
                     tasks.*,
-                    tt.synthetic_data,
                     tt.file_format,
                     tt.chat_template,
                     tt.chat_column,
@@ -862,7 +856,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                 SELECT
                     tasks.*,
                     dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
-                    dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format,
+                    dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.file_format,
                     COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
                 LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON tasks.{cst.TASK_ID} = dt.{cst.TASK_ID}
@@ -874,7 +868,7 @@ async def get_task_by_id(task_id: UUID, psql_db: PSQLDB) -> AnyTypeTask:
                 {victorious_repo_cte}
                 SELECT
                     tasks.*,
-                    gt.field_prompt, gt.synthetic_data, gt.file_format, gt.extra_column,
+                    gt.field_prompt, gt.file_format, gt.extra_column,
                     COALESCE(tasks.training_repo_backup, victorious_repo.repo) as trained_model_repository
                 FROM {cst.TASKS_TABLE} tasks
                 LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON tasks.{cst.TASK_ID} = gt.{cst.TASK_ID}
@@ -1000,7 +994,7 @@ def _get_specific_query_for_task_type(task_type: str) -> str | None:
         return f"""
             SELECT t.*, tt.field_system,
                    tt.field_instruction, tt.field_input, tt.field_output,
-                   tt.format, tt.no_input_format, tt.synthetic_data
+                   tt.format, tt.no_input_format
             FROM {cst.TASKS_TABLE} t
             LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
             WHERE t.{cst.TASK_ID} = ANY($1)
@@ -1009,7 +1003,7 @@ def _get_specific_query_for_task_type(task_type: str) -> str | None:
         return f"""
             SELECT t.*, ct.chat_template,
                    ct.chat_column, ct.chat_role_field, ct.chat_content_field,
-                   ct.chat_user_reference, ct.chat_assistant_reference, ct.synthetic_data
+                   ct.chat_user_reference, ct.chat_assistant_reference
             FROM {cst.TASKS_TABLE} t
             LEFT JOIN {cst.CHAT_TASKS_TABLE} ct ON t.{cst.TASK_ID} = ct.{cst.TASK_ID}
             WHERE t.{cst.TASK_ID} = ANY($1)
@@ -1024,14 +1018,14 @@ def _get_specific_query_for_task_type(task_type: str) -> str | None:
     elif task_type == TaskType.DPOTASK.value:
         return f"""
             SELECT t.*, dt.field_prompt, dt.field_system, dt.field_chosen, dt.field_rejected,
-                   dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.synthetic_data, dt.file_format
+                   dt.prompt_format, dt.chosen_format, dt.rejected_format, dt.file_format
             FROM {cst.TASKS_TABLE} t
             LEFT JOIN {cst.DPO_TASKS_TABLE} dt ON t.{cst.TASK_ID} = dt.{cst.TASK_ID}
             WHERE t.{cst.TASK_ID} = ANY($1)
         """
     elif task_type == TaskType.GRPOTASK.value:
         return f"""
-            SELECT t.*, gt.field_prompt, gt.synthetic_data, gt.file_format
+            SELECT t.*, gt.field_prompt, gt.file_format
             FROM {cst.TASKS_TABLE} t
             LEFT JOIN {cst.GRPO_TASKS_TABLE} gt ON t.{cst.TASK_ID} = gt.{cst.TASK_ID}
             WHERE t.{cst.TASK_ID} = ANY($1)
@@ -1107,7 +1101,7 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
             if task_type == TaskType.INSTRUCTTEXTTASK.value:
                 instruct_text_query = f"""
                     SELECT field_system, field_instruction, field_input, field_output,
-                           format, no_input_format, synthetic_data
+                           format, no_input_format
                     FROM {cst.INSTRUCT_TEXT_TASKS_TABLE}
                     WHERE {cst.TASK_ID} = $1
                 """
@@ -1119,7 +1113,7 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
             elif task_type == TaskType.CHATTASK.value:
                 chat_query = f"""
                     SELECT chat_template, chat_column, chat_role_field, chat_content_field,
-                           chat_user_reference, chat_assistant_reference, synthetic_data
+                           chat_user_reference, chat_assistant_reference
                     FROM {cst.CHAT_TASKS_TABLE}
                     WHERE {cst.TASK_ID} = $1
                 """
@@ -1143,7 +1137,7 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
             elif task_type == TaskType.DPOTASK.value:
                 dpo_query = f"""
                     SELECT field_prompt, field_system, field_chosen, field_rejected,
-                           prompt_format, chosen_format, rejected_format, synthetic_data, file_format
+                           prompt_format, chosen_format, rejected_format, file_format
                     FROM {cst.DPO_TASKS_TABLE}
                     WHERE {cst.TASK_ID} = $1
                 """
@@ -1153,7 +1147,7 @@ async def get_tasks_by_account_id(psql_db: PSQLDB, account_id: UUID, limit: int 
                 tasks.append(DpoTask(**task_data))
             elif task_type == TaskType.GRPOTASK.value:
                 grpo_query = f"""
-                    SELECT field_prompt, synthetic_data, file_format
+                    SELECT field_prompt, file_format
                     FROM {cst.GRPO_TASKS_TABLE}
                     WHERE {cst.TASK_ID} = $1
                 """
@@ -1480,7 +1474,7 @@ async def get_successful_matching_tasks(
             )
             SELECT t.*, tt.field_system,
                    tt.field_instruction, tt.field_input, tt.field_output,
-                   tt.format, tt.no_input_format, tt.synthetic_data,
+                   tt.format, tt.no_input_format,
                    COALESCE(t.training_repo_backup, vr.{cst.REPO}) as trained_model_repository
             FROM {cst.TASKS_TABLE} t
             LEFT JOIN {cst.INSTRUCT_TEXT_TASKS_TABLE} tt ON t.{cst.TASK_ID} = tt.{cst.TASK_ID}
@@ -1549,9 +1543,6 @@ async def copy_task_for_benchmark(
         if copied_task.test_data:
             logger.info("Regenerating presigned URL for test_data")
             copied_task.test_data = await async_minio_client.get_new_presigned_url(copied_task.test_data)
-            if hasattr(copied_task, "synthetic_data") and copied_task.synthetic_data:
-                logger.info("Setting the synthetic data to the test data")
-                copied_task.synthetic_data = copied_task.test_data
 
         if copied_task.training_data:
             logger.info("Regenerating presigned URL for training_data")

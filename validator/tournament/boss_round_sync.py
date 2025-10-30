@@ -54,10 +54,6 @@ async def _postprocess_task_for_tournament(tournament_task: AnyTypeTask, psql_db
         logger.info("Regenerating presigned URL for test_data")
         tournament_task.test_data = await async_minio_client.get_new_presigned_url(tournament_task.test_data)
 
-    if hasattr(tournament_task, "synthetic_data") and tournament_task.synthetic_data:
-        logger.info("Regenerating presigned URL for synthetic_data")
-        tournament_task.synthetic_data = await async_minio_client.get_new_presigned_url(tournament_task.synthetic_data)
-
     if tournament_task.task_type == TaskType.GRPOTASK:
         manual_reward_functions = [rf for rf in tournament_task.reward_functions if rf.is_manual]
         if not manual_reward_functions:
