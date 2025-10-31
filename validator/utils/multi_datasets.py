@@ -1,12 +1,9 @@
 import json
 
-import yaml
 from datasets import load_dataset
 from fiber import Keypair
 
 from core.models.payload_models import TaskType
-from core.models.utility_models import Prompts
-from validator.core.constants import PROMPT_PATH
 from validator.core.constants import STANDARD_DPO_CHOSEN_COLUMN
 from validator.core.constants import STANDARD_DPO_PROMPT_COLUMN
 from validator.core.constants import STANDARD_DPO_REJECTED_COLUMN

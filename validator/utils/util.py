@@ -10,11 +10,11 @@ from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
 from core.models.payload_models import AnyTypeTaskDetails
+from core.models.payload_models import ChatTaskDetails
 from core.models.payload_models import DpoTaskDetails
 from core.models.payload_models import GrpoTaskDetails
 from core.models.payload_models import ImageTaskDetails
 from core.models.payload_models import InstructTextTaskDetails
-from core.models.payload_models import ChatTaskDetails
 from core.models.tournament_models import TournamentStatus
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType

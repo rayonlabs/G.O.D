@@ -1,14 +1,13 @@
 from typing import List
-from validator.db.database import PSQLDB
-from validator.db import constants as cst
-from validator.db.sql.tournament_performance import get_task_scores_batch
-from core.models.tournament_models import (
-    BenchmarkTaskCopy,
-    BenchmarkInstance, 
-    BenchmarkTimeline, 
-    BenchmarkTimelineResponse
-)
+
+from core.models.tournament_models import BenchmarkInstance
+from core.models.tournament_models import BenchmarkTaskCopy
+from core.models.tournament_models import BenchmarkTimeline
+from core.models.tournament_models import BenchmarkTimelineResponse
 from core.models.utility_models import TaskType
+from validator.db import constants as cst
+from validator.db.database import PSQLDB
+from validator.db.sql.tournament_performance import get_task_scores_batch
 
 
 async def get_all_benchmark_copies(psql_db: PSQLDB) -> List[BenchmarkTaskCopy]:

@@ -9,11 +9,11 @@ from huggingface_hub import hf_hub_download
 from huggingface_hub import snapshot_download
 from transformers import CLIPTokenizer
 
+import trainer.utils.training_paths as train_paths
 from core.models.utility_models import FileFormat
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
 from trainer import constants as cst
-import trainer.utils.training_paths as train_paths
 
 
 hf_api = HfApi()

@@ -1,5 +1,6 @@
 import os
 
+
 FACE_IMAGE_PATH = "validator/tasks/person_synth/ComfyUI/input/person.jpg"
 FACE_IMAGE_URL = "https://thispersondoesnotexist.com/"
 LLAVA_MODEL_PATH = "/app/validator/tasks/person_synth/cache/llava-v1.5-7b"
