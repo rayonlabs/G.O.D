@@ -15,7 +15,7 @@ PROMPT_EXAMPLES = """
     """
 
 
-#prompt stuff
+# prompt stuff
 NUM_PROMPTS = int(os.getenv("NUM_PROMPTS", 15))
 PERSON_PROMPT = f"""
         Here is an image of a person named 'person_name'. Generate {NUM_PROMPTS} different prompts for creating an avatar of the person - make sure their name is listed in the prompt.

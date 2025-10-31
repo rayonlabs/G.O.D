@@ -9,13 +9,7 @@ RAYONLABS_HF_USERNAME = "besimray"  # "rayonlabs"
 
 SUCCESS = "success"
 ACCOUNT_ID = "account_id"
-MESSAGE = "message"
-AMOUNT = "amount"
-UNDELEGATION = "undelegation"
 STAKE = "stake"
-VERIFIED = "verified"
-REDIS_KEY_COLDKEY_STAKE = "coldkey_stake"
-API_KEY = "api_key"
 COLDKEY = "coldkey"
 
 
@@ -32,12 +26,8 @@ NULL_ACCOUNT_ID = "00000000-0000-0000-0000-000000000000"
 START_TRAINING_ENDPOINT = "/start_training/"
 START_TRAINING_IMAGE_ENDPOINT = "/start_training_image/"
 START_TRAINING_GRPO_ENDPOINT = "/start_training_grpo/"
-TASK_OFFER_ENDPOINT = "/task_offer/"
-TASK_OFFER_IMAGE_ENDPOINT = "/task_offer_image/"
-SUBMISSION_ENDPOINT = "/get_latest_model_submission/"
 TRAINING_REPO_ENDPOINT = "/training_repo"
 
-# TODO update when live
 DEV_CONTENT_BASE_URL = "https://gradients-content-service-api-dev.onrender.com"  # "https://dev.content.gradients.io"
 PROD_CONTENT_BASE_URL = "https://gradients-content-service.onrender.com"  # "https://content.gradients.io"
 
@@ -50,8 +40,6 @@ GET_RANDOM_MODELS_ENDPOINT = f"{CONTENT_BASE_URL}/models/random"
 GET_COLUMNS_FOR_DATASET_ENDPOINT = f"{CONTENT_BASE_URL}/dataset/{{dataset}}/columns/suggest"
 GET_IMAGE_MODELS_ENDPOINT = f"{CONTENT_BASE_URL}/images/models"
 
-
-GET_ALL_DATASETS_ID = "dataset_id"
 GET_ALL_MODELS_ID = "model_id"
 
 
@@ -71,7 +59,6 @@ CONTAINER_EVAL_RESULTS_PATH = "/aplp/evaluation_results.json"
 
 _gpu_ids = os.getenv("GPU_IDS", "").strip()
 GPU_IDS = [int(id) for id in _gpu_ids.split(",")] if _gpu_ids else [0]
-PROBABILITY_OF_A_BIG_TEXT_MODEL = 0.05
 
 # we sample datasets with these num_rows ranges equally
 DATASET_BINS_TO_SAMPLE = [
@@ -91,7 +78,6 @@ INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE = {
 
 # text augmentation synth
 TEXT_SYNTH_MODEL = "ArliAI/QwQ-32B-ArliAI-RpR-v1"
-TEXT_SYNTH_WEAKER_MODEL = "llama-3-2-3b"
 TEXT_SYNTH_MODEL_TEMPERATURE = 0.6
 TEXT_SYNTH_MODEL_MAX_TOKENS = 5024
 END_OF_REASONING_TAG = "</think>"
@@ -106,7 +92,6 @@ PERSON_GEN_RETRIES = 3
 # endpoints
 PROMPT_GEN_ENDPOINT = "https://llm.chutes.ai/v1/chat/completions"
 IMAGE_GEN_ENDPOINT = "https://image.chutes.ai/generate"
-GRADIENTS_ENDPOINT = "https://api.gradients.io/validator-signup"
 PROMPT_PATH = "validator/prompts.yml"
 NINETEEN_API_KEY = os.getenv("NINETEEN_API_KEY")
 EMISSION_BURN_HOTKEY = "5GU4Xkd3dCGTU3s8VLcHGc5wsD5M8XyxDca5yDQhYm1mVXFu"
@@ -116,9 +101,6 @@ BOSS_ROUND_HISTORICAL_START_DATE = date(2025, 6, 1)
 BOSS_ROUND_HISTORICAL_END_DATE = date(2025, 8, 1)
 
 MIN_SUCCESSFUL_SCORES_FOR_HISTORICAL_TASK = 2
-
-# Task Stuff
-MINIMUM_MINER_POOL = 1
 
 # Tournament Start Requirements
 MIN_MINERS_FOR_TOURN = 8
@@ -132,11 +114,6 @@ TOURNAMENT_SIMPLE_DECAY_BASE = 0.3  # Base for simple exponential decay (1st=1.0
 
 # General miner pool sizes
 MIN_IDEAL_NUM_MINERS_IN_POOL = 8
-MAX_IDEAL_NUM_MINERS_IN_POOL = 15
-
-# Image-specific miner pool sizes
-MIN_IDEAL_NUM_MINERS_IN_IMAGE_POOL = 15
-MAX_IDEAL_NUM_MINERS_IN_IMAGE_POOL = 25
 
 MIN_IMAGE_COMPETITION_HOURS = 1
 MAX_IMAGE_COMPETITION_HOURS = 2
@@ -165,9 +142,6 @@ FIRST_PLACE_SCORE = 3
 # processing stuff
 MAX_CONCURRENT_MINER_ASSIGNMENTS = 5
 MAX_CONCURRENT_TASK_PREPS = 3
-MAX_CONCURRENT_TRAININGS = 10
-MAX_CONCURRENT_EVALUATIONS = 1
-MAX_TIME_DELAY_TO_FIND_MINERS = 1  # hours
 
 PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT = 0.4
 PERCENTAGE_OF_INSTRUCT_TASKS_THAT_SHOULD_BE_CHAT = 0.5
@@ -194,8 +168,6 @@ PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_LLM = 0.0
 PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_DB = 1 - PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_LLM
 
 # affine grpo synth
-PERCENTAGE_OF_GRPO_TASKS_THAT_SHOULD_BE_AFFINE = 0.6
-ENABLE_AFFINE_GRPO_FOR_LEGACY_JOBS_ONLY = True
 GET_AFFINE_GRPO_DATA_ENDPOINT = f"{PROD_CONTENT_BASE_URL}/affine-grpo-data/latest"  # Force prod for affine data
 AFFINE_REWARD_FN_IDS = [
     "2226678e-df0d-42d0-8adb-551aec0ed88e",  # sat_reward_function
@@ -216,15 +188,8 @@ DIFFUSION_HF_DEFAULT_CKPT_NAME = "last.safetensors"
 DIFFUSION_TEXT_GUIDED_EVAL_WEIGHT = 0.25
 EVAL_DEFAULTS = {"sdxl": {"steps": 20, "cfg": 8, "denoise": 0.9}, "flux": {"steps": 35, "cfg": 100, "denoise": 0.75}}
 
-
 # Max jobs
 MAX_CONCURRENT_JOBS = 60
-MAX_CONCURRENT_SYNTHETIC_JOBS = 10
-## This leaves room for MAX_CONCURRENT_JOBS - MAX_CONCURRENT_SYNTHETIC_JOBS at all times
-
-
-LOGPATH = "/root/G.O.D/validator/logs"
-
 
 # Image generation parameters
 IMAGE_GEN_MODEL = "FLUX.1-schnell"
@@ -266,12 +231,6 @@ TRL_DPO_FIELD_PROMPT = "prompt"
 TRL_DPO_FIELD_CHOSEN = "chosen"
 TRL_DPO_FIELD_REJECTED = "rejected"
 
-# Miner performance constants
-MINER_PERFORMANCE_CACHE_TTL = 3600
-MINER_PERFORMANCE_CACHE_KEY_PREFIX = "miner_performance:"
-DEFAULT_RECENT_SUBMISSIONS_LIMIT = 20
-CHAIN_WEIGHT_DIVISOR = 65535
-
 # Tournament analytics cache constants
 LATEST_TOURNAMENTS_CACHE_TTL = 3600
 LATEST_TOURNAMENTS_CACHE_KEY = "latest_tournaments_details"
@@ -299,11 +258,6 @@ STANDARD_DPO_PROMPT_COLUMN = "prompt"
 STANDARD_DPO_CHOSEN_COLUMN = "chosen"
 STANDARD_DPO_REJECTED_COLUMN = "rejected"
 STANDARD_CHAT_MESSAGES_COLUMN = "conversations"
-STANDARD_CHAT_TEMPLATE = "chatml"
-STANDARD_CHAT_ROLE_USER = "human"
-STANDARD_CHAT_ROLE_ASSISTANT = "gpt"
-STANDARD_CHAT_ROLE_FIELD = "from"
-STANDARD_CHAT_CONTENT_FIELD = "value"
 
 # Trainer endpoints
 
