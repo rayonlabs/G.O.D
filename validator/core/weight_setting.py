@@ -463,10 +463,11 @@ def apply_tournament_weights(
     scaled_image_base_weight: float,
     text_winner_hotkey: str | None,
     image_winner_hotkey: str | None,
-) -> None:
-    """Apply tournament weights with truly text and image weights."""
+) -> float:
+    """Apply tournament weights. Returns the total undistributed weight that should go to burn."""
     logger.info("=== TOURNAMENT WEIGHT CALCULATIONS ===")
 
+    text_distributed = 0.0
     logger.info(f"Processing {len(text_tournament_weights)} text tournament winners")
     for hotkey, weight in text_tournament_weights.items():
         node_id = hotkey_to_node_id.get(hotkey)
@@ -476,6 +477,7 @@ def apply_tournament_weights(
             else:
                 text_contribution = weight * scaled_text_base_weight
             all_node_weights[node_id] = all_node_weights[node_id] + text_contribution
+            text_distributed += text_contribution
 
             logger.info(
                 f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
@@ -485,6 +487,10 @@ def apply_tournament_weights(
                 f"total_weight={all_node_weights[node_id]:.6f}"
             )
 
+    text_undistributed = scaled_text_tournament_weight - text_distributed
+    logger.info(f"Text tournament: allocated={scaled_text_tournament_weight:.10f}, distributed={text_distributed:.10f}, undistributed={text_undistributed:.10f}")
+
+    image_distributed = 0.0
     logger.info(f"Processing {len(image_tournament_weights)} image tournament winners")
     for hotkey, weight in image_tournament_weights.items():
         node_id = hotkey_to_node_id.get(hotkey)
@@ -494,6 +500,7 @@ def apply_tournament_weights(
             else:
                 image_contribution = weight * scaled_image_base_weight
             all_node_weights[node_id] = all_node_weights[node_id] + image_contribution
+            image_distributed += image_contribution
 
             logger.info(
                 f"Node ID {node_id} (hotkey: {hotkey[:8]}...): "
@@ -502,6 +509,14 @@ def apply_tournament_weights(
                 f"image_contribution={image_contribution:.6f}, "
                 f"total_weight={all_node_weights[node_id]:.6f}"
             )
+
+    image_undistributed = scaled_image_tournament_weight - image_distributed
+    logger.info(f"Image tournament: allocated={scaled_image_tournament_weight:.10f}, distributed={image_distributed:.10f}, undistributed={image_undistributed:.10f}")
+
+    total_undistributed = text_undistributed + image_undistributed
+    logger.info(f"Total undistributed weight to add to burn: {total_undistributed:.10f}")
+
+    return total_undistributed
 
 
 async def get_node_weights_from_tournament_audit_data(
@@ -562,7 +577,7 @@ async def get_node_weights_from_tournament_audit_data(
         if image_winner_hotkey == cts.EMISSION_BURN_HOTKEY:
             image_winner_hotkey = tournament_audit_data.image_tournament_data.base_winner_hotkey
 
-    apply_tournament_weights(
+    undistributed_weight = apply_tournament_weights(
         text_tournament_weights,
         image_tournament_weights,
         hotkey_to_node_id,
@@ -588,9 +603,14 @@ async def get_node_weights_from_tournament_audit_data(
     weight_sum_after_participation = sum(all_node_weights)
     logger.info(f"Weight sum after participation weights added: {weight_sum_after_participation:.10f}")
 
+    # Add undistributed tournament weight to burn.
+    # Undistributed weight comes from the gap between the boosted allocation and what's
+    # actually distributed (winner gets boost, non-winners capped at base weight).
+    # This ensures total weights sum to exactly 1.0.
     burn_node_id: int | None = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)
     if burn_node_id is not None:
-        all_node_weights[burn_node_id] = scaled_burn_weight
+        all_node_weights[burn_node_id] = scaled_burn_weight + undistributed_weight
+        logger.info(f"Burn weight: base={scaled_burn_weight:.10f} + undistributed={undistributed_weight:.10f} = total={all_node_weights[burn_node_id]:.10f}")
 
     # Final weight sum check
     final_weight_sum = sum(all_node_weights)
