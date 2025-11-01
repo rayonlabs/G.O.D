@@ -12,18 +12,18 @@ from typing import Optional
 
 import httpx
 
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import TaskType
 from core.utils import download_s3_file
+from validator.core.models import ChatTaskWithHotkeyDetails
 from validator.core.models import DpoTaskWithHotkeyDetails
 from validator.core.models import GrpoTaskWithHotkeyDetails
 from validator.core.models import ImageTaskWithHotkeyDetails
 from validator.core.models import InstructTextTaskWithHotkeyDetails
-from validator.core.models import ChatTaskWithHotkeyDetails
 from validator.evaluation.docker_evaluation import run_evaluation_docker_image
 from validator.evaluation.docker_evaluation import run_evaluation_docker_text
 from validator.utils.logging import get_logger

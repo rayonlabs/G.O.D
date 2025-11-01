@@ -4,17 +4,20 @@ Manual GRPO evaluation script using the actual evaluation container.
 Usage: python -m scripts.manual_grpo_eval <task_id> <model_repo>
 """
 import asyncio
+import os
 import subprocess
 import sys
-import os
 from uuid import UUID
 
 import asyncpg
+from huggingface_hub import snapshot_download
 
 from core import constants as cst
+from core.models.utility_models import FileFormat
+from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import RewardFunction
 from validator.utils.logging import get_logger
-from core.models.utility_models import GrpoDatasetType, RewardFunction, FileFormat
-from huggingface_hub import snapshot_download
+
 
 logger = get_logger(__name__)
 

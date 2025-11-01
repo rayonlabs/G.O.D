@@ -1,6 +1,5 @@
 DEFAULT_IMAGE_DOCKERFILE_PATH = "dockerfiles/standalone-image-trainer.dockerfile"
 DEFAULT_TEXT_DOCKERFILE_PATH = "dockerfiles/standalone-text-trainer.dockerfile"
-TRAINER_CHECKPOINTS_PATH = "/tmp/trainer/checkpoints"
 TEMP_REPO_PATH = "/tmp/trainer/repos/"
 TASKS_FILE_PATH = "trainer/task_history.json"
 VOLUME_NAMES = ["checkpoints", "cache"]
@@ -9,7 +8,6 @@ TRAINER_DOWNLOADER_DOCKER_IMAGE = "diagonalge/trainer-downloader:latest"
 CACHE_CLEANER_DOCKER_IMAGE = "diagonalge/cache-cleaner:latest"
 IMAGE_TASKS_HF_SUBFOLDER_PATH = "checkpoints"
 VECTOR_URL = "http://localhost:8688"  # Vector http_server for logging
-IMAGE_BUILD_RETRIES = 3
 
 # Dynamic resource allocation based on GPU count
 # For 8xH100 with 1440GB RAM and 252 CPUs
@@ -31,7 +29,6 @@ WANDB_LOGS_DIR = "/app/checkpoints/wandb_logs"
 IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH = "/workspace/core/config"
 IMAGE_CONTAINER_CONFIG_SAVE_PATH = "/dataset/configs"
 IMAGE_CONTAINER_IMAGES_PATH = "/dataset/images"
-TEXT_CONTAINER_SAVE_PATH = "/workspace/axolotl/outputs/"
 
 #Directories
 

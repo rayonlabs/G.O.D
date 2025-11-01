@@ -29,9 +29,9 @@ from validator.tasks.task_prep import upload_file_to_minio
 from validator.utils.call_endpoint import post_to_nineteen_image
 from validator.utils.llm import convert_to_nineteen_payload
 from validator.utils.llm import post_to_nineteen_chat_with_reasoning
+from validator.utils.logging import get_all_context_tags
 from validator.utils.logging import get_logger
 from validator.utils.logging import stream_container_logs
-from validator.utils.logging import get_all_context_tags
 from validator.utils.util import retry_with_backoff
 
 

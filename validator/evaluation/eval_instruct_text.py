@@ -1,8 +1,10 @@
+import json
 import os
 import subprocess
 from pathlib import Path
+
 from pydantic import TypeAdapter
-import json
+
 
 # Allow torch.load for transformers 4.46+ security check
 os.environ['TRANSFORMERS_ALLOW_TORCH_LOAD'] = 'true'
@@ -18,9 +20,9 @@ from transformers import AutoTokenizer
 from transformers import Trainer
 from transformers import TrainingArguments
 
+from core.models.utility_models import TextDatasetType
 from validator.core import constants as cst
 from validator.core.models import EvaluationArgs
-from core.models.utility_models import TextDatasetType
 from validator.evaluation.common import ProgressLoggerCallback
 from validator.evaluation.common import _load_and_update_evaluation_config
 from validator.evaluation.common import _log_dataset_and_model_info

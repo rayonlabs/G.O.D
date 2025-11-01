@@ -84,7 +84,6 @@ def create_finetuned_cache_dir():
 @retry_on_5xx()
 def load_model(model_name_or_path: str, is_base_model: bool = False, local_files_only: bool = False) -> AutoModelForCausalLM:
     try:
-
         # For local files, try to use the snapshot path directly
         if local_files_only:
             cache_dir = os.path.expanduser("~/.cache/huggingface")
@@ -99,16 +98,13 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
                         snapshot_path = os.path.join(snapshots_dir, snapshot)
                         files = os.listdir(snapshot_path)
 
-                        has_model_files = any(f.endswith(('.bin', '.safetensors')) for f in files)
-                        has_config = 'config.json' in files
+                        has_model_files = any(f.endswith((".bin", ".safetensors")) for f in files)
+                        has_config = "config.json" in files
 
                         if has_model_files and has_config:
                             try:
                                 model = AutoModelForCausalLM.from_pretrained(
-                                    snapshot_path,
-                                    device_map="auto",
-                                    torch_dtype=torch.bfloat16,
-                                    local_files_only=True
+                                    snapshot_path, device_map="auto", torch_dtype=torch.bfloat16, local_files_only=True
                                 )
                                 return model
                             except Exception as e:
@@ -128,7 +124,7 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
             "device_map": "auto",
             "cache_dir": cache_dir,
             "torch_dtype": torch.bfloat16,
-            "local_files_only": local_files_only
+            "local_files_only": local_files_only,
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
@@ -153,7 +149,6 @@ def load_model(model_name_or_path: str, is_base_model: bool = False, local_files
 @retry_on_5xx()
 def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoTokenizer:
     try:
-
         # For local files, try to use the snapshot path directly
         if local_files_only:
             cache_dir = os.path.expanduser("~/.cache/huggingface")
@@ -167,14 +162,11 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
                     for snapshot in snapshots:
                         snapshot_path = os.path.join(snapshots_dir, snapshot)
                         files = os.listdir(snapshot_path)
-                        tokenizer_files = [f for f in files if 'tokenizer' in f.lower() or f.endswith('.model')]
+                        tokenizer_files = [f for f in files if "tokenizer" in f.lower() or f.endswith(".model")]
 
                         if tokenizer_files:
                             try:
-                                tokenizer = AutoTokenizer.from_pretrained(
-                                    snapshot_path,
-                                    local_files_only=True
-                                )
+                                tokenizer = AutoTokenizer.from_pretrained(snapshot_path, local_files_only=True)
                                 return tokenizer
                             except Exception as e:
                                 logger.warning(f"Failed to load from snapshot {snapshot}: {e}")
@@ -183,7 +175,7 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
         # Fallback to standard loading
         kwargs = {
             "local_files_only": local_files_only,
-            "cache_dir": os.path.expanduser("~/.cache/huggingface") if local_files_only else None
+            "cache_dir": os.path.expanduser("~/.cache/huggingface") if local_files_only else None,
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
@@ -199,7 +191,6 @@ def load_tokenizer(original_model: str, local_files_only: bool = False) -> AutoT
 @retry_on_5xx()
 def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftModelForCausalLM:
     try:
-
         # For local files, try to use the snapshot path directly
         if local_files_only:
             cache_dir = os.path.expanduser("~/.cache/huggingface")
@@ -214,7 +205,7 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
                         snapshot_path = os.path.join(snapshots_dir, snapshot)
                         files = os.listdir(snapshot_path)
 
-                        has_adapter = any('adapter' in f.lower() for f in files)
+                        has_adapter = any("adapter" in f.lower() for f in files)
 
                         if has_adapter:
                             try:
@@ -223,7 +214,7 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
                                     is_trainable=False,
                                     device_map="auto",
                                     torch_dtype=torch.bfloat16,
-                                    local_files_only=True
+                                    local_files_only=True,
                                 )
                                 return model
                             except Exception as e:
@@ -242,7 +233,7 @@ def load_finetuned_model(repo: str, local_files_only: bool = False) -> AutoPeftM
             "device_map": "auto",
             "cache_dir": cache_dir,
             "torch_dtype": torch.bfloat16,
-            "local_files_only": local_files_only
+            "local_files_only": local_files_only,
         }
         if not local_files_only:
             kwargs["token"] = os.environ.get("HUGGINGFACE_TOKEN")
@@ -417,17 +408,11 @@ def calculate_kl_divergence(
 
         # Process dataset in batches
         for i in range(0, len(dataset), batch_size):
-            batch = dataset[i:i + batch_size]
+            batch = dataset[i : i + batch_size]
             prompts = batch[cst.TRL_GRPO_FIELD_PROMPT]
 
             try:
-                inputs = tokenizer(
-                    prompts,
-                    padding=True,
-                    truncation=True,
-                    max_length=max_length,
-                    return_tensors="pt"
-                )
+                inputs = tokenizer(prompts, padding=True, truncation=True, max_length=max_length, return_tensors="pt")
                 inputs = {k: v.cuda() for k, v in inputs.items()}
             except Exception as e:
                 logger.warning(f"Failed to tokenize batch starting at index {i}: {e}")
@@ -447,7 +432,7 @@ def calculate_kl_divergence(
                     finetuned_log_probs = F.log_softmax(finetuned_logits, dim=-1)
 
                     # Calculate KL divergence: KL(original || finetuned)
-                    kl_div = F.kl_div(finetuned_log_probs, original_probs, reduction='none')
+                    kl_div = F.kl_div(finetuned_log_probs, original_probs, reduction="none")
 
                     # Average over sequence length and vocabulary, sum over batch
                     batch_kl = kl_div.sum(dim=-1).mean(dim=-1).sum().item()

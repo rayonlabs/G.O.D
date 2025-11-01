@@ -139,9 +139,8 @@ When tournament reaches final round with single winner:
    - Image tournaments: 6 image tasks
    - Tasks are copied with new IDs while preserving original training data
 2. **Score Comparison**: Tournament miners' results are compared against the best historical scores from general miners
-3. **Winner Determination**: Based on `calculate_final_round_winner()` with 5% margin requirement
-4. **Winning Requirements**: Challenger wins by **majority rule** (4+ out of 6 tasks) for **both text and image tournaments**
-5. **Champion Defense**: Previous winner retains title unless challenger wins the majority of tasks
+3. **Winning Requirements**: Challenger wins by **majority rule** (4+ out of 6 tasks) for **both text and image tournaments**
+4. **Champion Defense**: Previous winner retains title unless challenger wins the majority of tasks
 
 ## Scoring & Weight Distribution
 

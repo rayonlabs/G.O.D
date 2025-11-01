@@ -25,13 +25,6 @@ from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.models.utility_models import ImageModelType
 
 
-def get_model_path(path: str) -> str:
-    if os.path.isdir(path):
-        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-        if len(files) == 1 and files[0].endswith(".safetensors"):
-            return os.path.join(path, files[0])
-    return path
-
 def create_config(task_id, model, model_type, expected_repo_name):
     """Create the diffusion config file"""
     config_template_path = train_paths.get_image_training_config_template_path(model_type)

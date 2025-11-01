@@ -12,8 +12,8 @@ def sat_reward_function(completions, extra_data=None, **kwargs):
     Returns percentage of clauses satisfied for each completion.
     Expects extra_data with task_type='SAT' and 'cls' field.
     """
-    import re
     import json
+    import re
 
     extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 
@@ -98,8 +98,8 @@ def abd_reward_function(completions, extra_data=None, **kwargs):
     Expects extra_data with task_type='ABD', 'program', and 'expected_output'.
     Uses restricted_execution for safe code execution.
     """
-    import re
     import json
+    import re
 
     extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 
@@ -194,8 +194,8 @@ def ded_reward_function(completions, extra_data=None, **kwargs):
     Expects extra_data with task_type='DED', 'solution', and 'premises'.
     Uses restricted_execution for safe code execution.
     """
-    import re
     import json
+    import re
 
     extra_data_list = extra_data if extra_data is not None else kwargs.get('extra_data', [])
 

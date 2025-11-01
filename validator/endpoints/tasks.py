@@ -252,7 +252,6 @@ async def create_task_instruct_text(
             training_repo_backup=result_repo,
             test_data=existing_task.test_data,
             training_data=existing_task.training_data,
-            synthetic_data=existing_task.synthetic_data,
             task_type=TaskType.INSTRUCTTEXTTASK,
             result_model_name=existing_task.result_model_name,
             file_format=existing_task.file_format,
@@ -408,7 +407,6 @@ async def create_task_with_fixed_datasets(
     # NOTE: feels weird to add the task and then update it immediately
     await task_sql.add_task(task, config.psql_db)
     task.training_data = request.training_data
-    task.synthetic_data = request.synthetic_data
     task.test_data = request.test_data
     await task_sql.update_task(task, config.psql_db)
 

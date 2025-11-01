@@ -2,12 +2,15 @@ import json
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
+
 import aiofiles
 
+from core.models.payload_models import TrainerProxyRequest
+from core.models.payload_models import TrainerTaskLog
 from core.models.utility_models import TaskStatus
-from core.models.payload_models import TrainerProxyRequest, TrainerTaskLog
-from validator.utils.logging import get_logger
 from trainer import constants as cst
+from validator.utils.logging import get_logger
+
 
 logger = get_logger(__name__)
 

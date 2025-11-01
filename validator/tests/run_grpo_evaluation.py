@@ -15,22 +15,20 @@ Example:
 """
 
 import argparse
+import asyncio
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 from urllib.parse import urlparse
 
 import aiohttp
-import asyncio
 
 
 async def download_file(url, local_path):
     """Download a file from a URL to a local path."""
     print(f"Downloading {url} to {local_path}...")
-    
+
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status == 200:
@@ -46,9 +44,9 @@ def run_docker_evaluation(dataset_path, original_model, models, dataset_type='{"
     """Run the GRPO evaluation in a Docker container."""
     dataset_dir = os.path.dirname(os.path.abspath(dataset_path))
     dataset_filename = os.path.basename(dataset_path)
-    
+
     print(f"Running GRPO evaluation for models: {models}")
-    
+
     # Map required environment variables
     env = {
         "DATASET": f"/workspace/input_data/{dataset_filename}",
@@ -57,30 +55,40 @@ def run_docker_evaluation(dataset_path, original_model, models, dataset_type='{"
         "DATASET_TYPE": dataset_type,
         "FILE_FORMAT": file_format,
     }
-    
+
     # Build the docker command
     cmd = [
-        "docker", "run", "--rm",
-        "--runtime", "nvidia",
-        "--gpus", "all",
+        "docker",
+        "run",
+        "--rm",
+        "--runtime",
+        "nvidia",
+        "--gpus",
+        "all",
     ]
-    
+
     # Add environment variables
     for key, value in env.items():
         cmd.extend(["-e", f"{key}={value}"])
-    
+
     # Add volume mounts
-    cmd.extend([
-        "-v", f"{dataset_dir}:/workspace/input_data:ro",
-        "-v", f"{os.path.expanduser('~/.cache/huggingface')}:/root/.cache/huggingface:rw",
-        "validator",
-        "python", "-m", "validator.evaluation.eval_grpo"
-    ])
-    
+    cmd.extend(
+        [
+            "-v",
+            f"{dataset_dir}:/workspace/input_data:ro",
+            "-v",
+            f"{os.path.expanduser('~/.cache/huggingface')}:/root/.cache/huggingface:rw",
+            "validator",
+            "python",
+            "-m",
+            "validator.evaluation.eval_grpo",
+        ]
+    )
+
     # Run the docker command
     print("Executing docker command:")
     print(" ".join(cmd))
-    
+
     try:
         subprocess.run(cmd, check=True)
         print("Docker evaluation completed successfully")
@@ -94,27 +102,23 @@ async def main():
     parser.add_argument("dataset_url", help="S3 URL to the dataset")
     parser.add_argument("original_model", help="Original base model to use")
     parser.add_argument("models", help="Comma-separated list of model repos to evaluate")
-    
+
     args = parser.parse_args()
-    
+
     # Create temporary directory for dataset
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
             # Download dataset from S3
             dataset_filename = os.path.basename(urlparse(args.dataset_url).path)
             local_dataset_path = os.path.join(temp_dir, dataset_filename)
-            
+
             await download_file(args.dataset_url, local_dataset_path)
-            
+
             # Run docker evaluation
-            run_docker_evaluation(
-                dataset_path=local_dataset_path,
-                original_model=args.original_model,
-                models=args.models
-            )
-            
+            run_docker_evaluation(dataset_path=local_dataset_path, original_model=args.original_model, models=args.models)
+
             print("GRPO evaluation completed")
-            
+
         except Exception as e:
             print(f"Error: {e}")
             sys.exit(1)

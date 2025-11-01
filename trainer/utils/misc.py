@@ -1,15 +1,15 @@
 import os
+import shutil
 from urllib.parse import urlparse
 
 import pynvml
 from git import GitCommandError
 from git import Repo
-import shutil
 
+import trainer.constants as cst
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
 from trainer.tasks import get_running_tasks
-import trainer.constants as cst
 
 
 def clone_repo(repo_url: str, parent_dir: str, branch: str = None, commit_hash: str = None) -> str:

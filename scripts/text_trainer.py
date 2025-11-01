@@ -7,11 +7,10 @@ import argparse
 import asyncio
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 import sys
-import uuid
-import pathlib
 
 import yaml
 from transformers import AutoTokenizer
@@ -21,6 +20,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
+from miner.logic.job_handler import create_reward_funcs_file
+
 import trainer.constants as train_cst
 import trainer.utils.training_paths as train_paths
 from core.config.config_handler import create_dataset_entry
@@ -28,16 +29,15 @@ from core.config.config_handler import save_config
 from core.config.config_handler import update_flash_attention
 from core.dataset_utils import adapt_columns_for_dpo_dataset
 from core.dataset_utils import adapt_columns_for_grpo_dataset
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import TaskType
-from miner.logic.job_handler import create_reward_funcs_file
 
 
-def patch_wandb_symlinks(base_dir:str):
+def patch_wandb_symlinks(base_dir: str):
     for root, _, files in os.walk(base_dir):
         for name in files:
             full_path = os.path.join(root, name)
@@ -137,21 +137,11 @@ def run_training(config_path):
     training_env["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
     training_env["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
-    training_command = [
-    "accelerate", "launch",
-    "-m", "axolotl.cli.train",
-    config_path
-    ]
+    training_command = ["accelerate", "launch", "-m", "axolotl.cli.train", config_path]
 
     try:
         print("Starting training subprocess...\n", flush=True)
-        process = subprocess.Popen(
-            training_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
-        )
+        process = subprocess.Popen(training_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
         for line in process.stdout:
             print(line, end="", flush=True)
@@ -169,7 +159,6 @@ def run_training(config_path):
         raise RuntimeError(f"Training subprocess failed with exit code {e.returncode}")
 
 
-
 async def main():
     print("---STARTING TEXT TRAINING SCRIPT---", flush=True)
     parser = argparse.ArgumentParser(description="Text Model Training Script")
@@ -177,7 +166,9 @@ async def main():
     parser.add_argument("--model", required=True, help="Model name or path")
     parser.add_argument("--dataset", required=True, help="Dataset path or HF dataset name")
     parser.add_argument("--dataset-type", required=True, help="JSON string of dataset type config")
-    parser.add_argument("--task-type", required=True, choices=["InstructTextTask", "DpoTask", "GrpoTask", "ChatTask"], help="Type of task")
+    parser.add_argument(
+        "--task-type", required=True, choices=["InstructTextTask", "DpoTask", "GrpoTask", "ChatTask"], help="Type of task"
+    )
     parser.add_argument("--file-format", required=True, choices=["csv", "json", "hf", "s3"], help="File format")
     parser.add_argument("--expected-repo-name", help="Expected repository name")
     parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
@@ -221,7 +212,7 @@ async def main():
         args.file_format,
         output_dir,
         args.expected_repo_name,
-        log_wandb=True
+        log_wandb=True,
     )
 
     run_training(config_path)
