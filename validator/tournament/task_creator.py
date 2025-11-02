@@ -15,13 +15,13 @@ from validator.db.sql import tasks as task_sql
 from validator.db.sql.historical_tasks import get_random_historical_task_by_type
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import get_tournament_tasks
+from validator.tasks.diffusion_synth import create_synthetic_image_task
 from validator.tasks.synthetic_scheduler import _get_dpo_datasets
 from validator.tasks.synthetic_scheduler import _get_image_models
 from validator.tasks.synthetic_scheduler import _get_instruct_text_datasets
 from validator.tasks.synthetic_scheduler import _get_text_models
 from validator.tasks.synthetic_scheduler import create_synthetic_dpo_task
 from validator.tasks.synthetic_scheduler import create_synthetic_grpo_task
-from validator.tasks.synthetic_scheduler import create_synthetic_image_task
 from validator.tasks.synthetic_scheduler import create_synthetic_instruct_text_task
 from validator.tournament import constants as t_cst
 from validator.tournament.boss_round_sync import copy_historical_task_into_boss_round_tournament
