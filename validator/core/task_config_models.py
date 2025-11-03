@@ -6,10 +6,10 @@ from pydantic import Field
 from core.models.utility_models import TaskType
 from validator.core import constants as cst
 from validator.core.models import AnyTypeRawTask
+from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
 from validator.core.models import ImageRawTask
-from validator.core.models import ChatRawTask
 from validator.core.models import InstructTextRawTask
 from validator.cycle.util_functions import get_fake_text_dataset_size
 from validator.cycle.util_functions import get_total_image_dataset_size

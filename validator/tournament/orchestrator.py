@@ -864,26 +864,6 @@ async def _move_completed_tasks_to_preevaluation(config: Config):
     logger.info(f"Successfully moved {len(tasks_to_move)} tasks to preevaluation status")
 
 
-async def reset_all_gpu_availability(config: Config):
-    """
-    Manually reset GPU availability for all trainers by setting used_until to NULL.
-    This can be used to fix stuck GPU availability states.
-    """
-    try:
-        logger.info("Manually resetting GPU availability for all trainers")
-        trainers = await tournament_sql.get_trainers(config.psql_db)
-
-        for trainer in trainers:
-            gpu_ids = [gpu.gpu_id for gpu in trainer.gpus]
-            if gpu_ids:
-                await tournament_sql.update_gpu_availability(trainer.trainer_ip, gpu_ids, 0, config.psql_db)
-                logger.info(f"Reset {len(gpu_ids)} GPUs for trainer {trainer.trainer_ip}")
-
-        logger.info("Successfully reset GPU availability for all trainers")
-    except Exception as e:
-        logger.error(f"Error resetting GPU availability: {str(e)}")
-
-
 async def update_all_trainers_gpu_availability_cycle(config: Config):
     """
     Periodically update GPU availability for all trainers.

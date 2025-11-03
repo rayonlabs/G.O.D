@@ -1,7 +1,10 @@
 import os
-import subprocess
 import shutil
-from huggingface_hub import hf_hub_download, snapshot_download
+import subprocess
+
+from huggingface_hub import hf_hub_download
+from huggingface_hub import snapshot_download
+
 
 def clone_repo(repo_url: str, target_dir: str, commit_hash: str | None = None) -> None:
     if not os.path.exists(target_dir) or not os.listdir(target_dir):
