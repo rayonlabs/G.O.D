@@ -1,160 +1,146 @@
 # Scoring System and Weight Distribution
 
-## Constants Reference
-
-The scoring system uses these key constants (see [`validator/core/constants.py`](../validator/core/constants.py)):
-
-- `TOURNAMENT_TEXT_WEIGHT` - Proportion for text tournaments (0.55 = 55%)
-- `TOURNAMENT_IMAGE_WEIGHT` - Proportion for image tournaments (0.45 = 45%)
-- `TOURNAMENT_PARTICIPATION_WEIGHT` - Weight for active tournament participants
-- `EMISSION_MULTIPLIER_THRESHOLD` - Performance threshold for emission increases
-- `EMISSION_BURN_HOTKEY` - Address that receives burned emissions
-
 ## Overview
 
-The Gradient subnet operates as a **tournament-only system**. All emissions are distributed between:
+The Gradient subnet is **100% tournament-based**. Emissions are distributed between:
 
-1. **Tournament winners** (text and image tournaments, calculated separately)
-2. **Active participants** (small reward for tournament participation)
-3. **Burn address** (all remaining weight goes to `EMISSION_BURN_HOTKEY`)
+1. **Tournament champions** (text and image, calculated separately)
+2. **Tournament participants** (0.01% per active participant)
+3. **Burn address** (all remaining weight)
 
-There is no legacy miner system - only tournament participants receive rewards.
+## Key Constants
 
-## Weight Distribution
-
-### Base Allocation
-
-Total weight allocation is calculated as:
+From [`validator/core/constants.py`](../validator/core/constants.py):
 
 ```python
-text_base_weight = BASE_TOURNAMENT_WEIGHT * TOURNAMENT_TEXT_WEIGHT
-image_base_weight = BASE_TOURNAMENT_WEIGHT * TOURNAMENT_IMAGE_WEIGHT
-burn_weight = 1.0 - text_base_weight - image_base_weight
+# Base allocations
+TOURNAMENT_TEXT_WEIGHT = 0.15          # 15% base
+TOURNAMENT_IMAGE_WEIGHT = 0.10         # 10% base
+MAX_TEXT_TOURNAMENT_WEIGHT = 0.6       # 60% maximum
+MAX_IMAGE_TOURNAMENT_WEIGHT = 0.4      # 40% maximum
+
+# Performance boosts
+EMISSION_MULTIPLIER_THRESHOLD = 0.05   # Must exceed 5% to get boost
+EMISSION_MULTIPLIER_RATE = 2.0         # 2x multiplier on excess
+EMISSION_BOOST_DECAY_PER_WIN = 0.01    # -1% per consecutive win
+
+# Within-tournament distribution
+TOURNAMENT_SIMPLE_DECAY_BASE = 0.3     # Exponential decay: 1.0, 0.3, 0.09...
+
+# Participation
+TOURNAMENT_PARTICIPATION_WEIGHT = 0.0001  # 0.01% per participant
 ```
 
-### Performance-Based Adjustments
+## How Weights Are Calculated
 
-When tournaments perform well against synthetic benchmarks, they receive emission multipliers (see [`calculate_emission_multiplier`](../validator/core/weight_setting.py)):
+### 1. Base Allocation
 
 ```python
-# Only applies if performance exceeds threshold
-if performance_diff > EMISSION_MULTIPLIER_THRESHOLD:
-    emission_increase = (performance_diff - EMISSION_MULTIPLIER_THRESHOLD) * 2.0
-    tournament_weight = base_weight + emission_increase
+text_weight = 0.15
+image_weight = 0.10
+burn_weight = 0.75
 ```
 
-When tournaments perform poorly, no increase is applied, and more weight remains with the burn address.
-
-## Tournament Weights
-
-### Text and Image Separation
-
-Text and image tournaments are completely independent:
-
-- Text tournament winners receive `text_tournament_weight` distributed by performance
-- Image tournament winners receive `image_tournament_weight` distributed by performance
-- A miner can win both tournaments and receive rewards from each
-
-### Weight Calculation
-
-Within each tournament, weights are distributed based on tournament performance (see [`get_tournament_weights_from_data`](../validator/evaluation/tournament_scoring.py)):
-
-1. Final round determines the winner
-2. Earlier rounds receive progressively smaller allocations
-3. Higher-ranking participants in each round receive more weight
-
-## Participation Rewards
-
-Active tournament participants receive a small fixed reward:
+### 2. Performance Boost (if winner exceeds threshold)
 
 ```python
-participation_weight = TOURNAMENT_PARTICIPATION_WEIGHT  # per participant
+if performance_diff > 0.05:
+    emission_increase = (performance_diff - 0.05) * 2.0
+
+    # Apply consecutive win decay
+    decay = max(0, consecutive_wins - 1) * 0.01
+    emission_increase = emission_increase - decay
+
+    # Apply MAX cap
+    text_weight = min(0.15 + emission_increase, 0.6)
 ```
 
-This incentivizes participation independent of performance.
+**Result:** Strong performance = higher allocation, weak performance = more burn
 
-### Scaling for Participation
+### 3. Dual Weight System
 
-When many participants are active, tournament and burn weights are scaled down proportionally:
+**Critical:** Champions and non-champions use different weight pools.
+
+- **Champion:** Uses the boosted tournament weight pool (e.g., 0.35 if earned 20% boost)
+- **Non-champions:** Share the base weight pool (0.15 for text, 0.10 for image)
+- Both are then distributed by rank using exponential decay (see below)
+- **Undistributed:** Goes to burn address
+
+### 4. Within-Tournament Distribution
+
+Tournament participants are ranked, then weights are distributed using exponential decay:
 
 ```python
-participation_total = len(participants) * TOURNAMENT_PARTICIPATION_WEIGHT
-scale_factor = 1.0 - participation_total
-
-scaled_text_weight = text_tournament_weight * scale_factor
-scaled_image_weight = image_tournament_weight * scale_factor
-scaled_burn_weight = burn_weight * scale_factor
+weight[rank] = 0.3^(rank - 1)
+# 1st: 1.0, 2nd: 0.3, 3rd: 0.09, 4th: 0.027...
 ```
 
-## Example Scenario
+**Example:** Champion (1st place) with 0.35 boosted pool:
 
-Starting conditions:
+- Champion weight = 1.0 \* 0.35 = 0.35
 
-- `BASE_TOURNAMENT_WEIGHT = 0.9`
-- `TOURNAMENT_TEXT_WEIGHT = 0.55`
-- `TOURNAMENT_IMAGE_WEIGHT = 0.45`
-- Text tournament performance: Good (exceeds threshold by 0.1)
-- Image tournament performance: Average (no threshold exceeded)
-- 10 active participants
+If 3 non-champions share 0.15 base pool at ranks 2nd, 3rd, 4th:
 
-**Step 1: Calculate base weights**
+- 2nd place = 0.3 \* (0.15 / sum_of_decay_weights)
+- 3rd place = 0.09 \* (0.15 / sum_of_decay_weights)
+- 4th place = 0.027 \* (0.15 / sum_of_decay_weights)
 
-```
-text_base_weight = 0.9 * 0.55 = 0.495
-image_base_weight = 0.9 * 0.45 = 0.405
-burn_weight = 1.0 - 0.495 - 0.405 = 0.1
-```
+Where sum_of_decay_weights = 0.3 + 0.09 + 0.027 = 0.417
 
-**Step 2: Apply performance multipliers**
+## Examples
+
+### Strong Performance (first win)
+
+Text champion outperformed runner-up by 15% (performance_diff = 0.15):
 
 ```
-text_emission_increase = 0.1 * 2.0 = 0.2
-text_tournament_weight = 0.495 + 0.2 = 0.695
-
-image_emission_increase = 0.0
-image_tournament_weight = 0.405 + 0.0 = 0.405
-
-burn_weight = 1.0 - 0.695 - 0.405 = -0.1 (capped at minimum)
+Base: 0.15
+Boost: (0.15 - 0.05) * 2.0 = 0.20
+Text champion weight: 0.35
 ```
 
-Note: When emission increases exceed available weight, the system caps allocations appropriately.
+### Long-Reigning Champion (10th win)
 
-**Step 3: Scale for participation**
+Text champion outperformed runner-up by 20% (performance_diff = 0.20):
 
 ```
-participation_total = 10 * 0.01 = 0.1  # (assuming TOURNAMENT_PARTICIPATION_WEIGHT = 0.01)
-scale_factor = 1.0 - 0.1 = 0.9
-
-scaled_text_weight = 0.695 * 0.9 = 0.626
-scaled_image_weight = 0.405 * 0.9 = 0.365
-scaled_burn_weight = -0.1 * 0.9 = -0.09 (capped at 0)
-participation_weights = 0.1
+Base: 0.15
+Raw boost: (0.20 - 0.05) * 2.0 = 0.30
+Decay: 9 wins * 0.01 = 0.09
+Final boost: 0.30 - 0.09 = 0.21
+Text champion weight: 0.36
 ```
 
-**Final Distribution:**
+Despite 20% performance, consecutive wins reduce boost from 0.30 to 0.21.
 
-- Text tournament: 62.6%
-- Image tournament: 36.5%
-- Participation: 10%
-- Burn: ~0% (text tournament performed well, consuming most available weight)
+### Weak Performance (below threshold)
 
-## Key Characteristics
+Champion outperformed runner-up by only 3% (performance_diff = 0.03):
 
-**Tournament-Only**: No legacy/regular mining - only tournament participants receive rewards.
+```
+Text champion weight: 0.15 (no boost - below 5% threshold)
+```
 
-**Performance Incentives**: Tournaments that outperform benchmarks receive emission multipliers, increasing their share.
+## Key Mechanisms
 
-**Burn as Default**: All weight not allocated to tournaments or participation goes to the burn address.
+**Performance Incentives:** Champions with >5% advantage get 2x boost on excess performance
 
-**Type-Specific Rewards**: Text and image tournaments are independent - good performance in one doesn't affect the other.
+**Balance Controls:**
 
-**Participation Encouraged**: Small guaranteed reward for active participation, independent of performance.
+- MAX caps prevent domination (60% text, 40% image)
+- Consecutive win decay (-1% per win) prevents indefinite reign
+- Dual weights ensure only champions benefit from boosts
 
-## Implementation Details
+**Burn as Quality Signal:** Weak performance = high burn rate
 
-The main entry point is [`get_node_weights_from_tournament_audit_data`](../validator/core/weight_setting.py) which orchestrates the entire process. Key functions include:
+**Text/Image Independence:** Tournaments calculated separately - a miner can win both
 
-- [`get_tournament_burn_details`](../validator/core/weight_setting.py) - Calculates weight allocations based on performance
-- [`get_tournament_weights_from_data`](../validator/evaluation/tournament_scoring.py) - Distributes weights within tournaments
-- [`apply_tournament_weights`](../validator/core/weight_setting.py) - Applies final weight assignments
-- [`calculate_performance_difference`](../validator/tournament/performance_calculator.py) - Compares tournament vs benchmark performance
+## Implementation
+
+Main entry point: [`get_node_weights_from_tournament_audit_data`](../validator/core/weight_setting.py)
+
+Key functions:
+
+- [`get_tournament_burn_details`](../validator/core/weight_setting.py) - Calculates allocations with decay and caps
+- [`apply_tournament_weights`](../validator/core/weight_setting.py) - Applies dual weight system
+- [`tournament_scores_to_weights`](../validator/evaluation/tournament_scoring.py) - Within-tournament distribution
