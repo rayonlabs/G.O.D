@@ -117,7 +117,7 @@ async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
 
 
 @simple_retry
-async def start_training_task(trainer_ip_or_url: str, training_request: TrainerProxyRequest, is_organic: bool = False) -> bool:
+async def start_training_task(trainer_ip: str, training_request: TrainerProxyRequest, is_organic: bool = False) -> bool:
     """
     Ask trainer to start training.
 
@@ -139,11 +139,11 @@ async def start_training_task(trainer_ip_or_url: str, training_request: TrainerP
         return False
 
     async with httpx.AsyncClient(timeout=cst.TRAINER_HTTP_TIMEOUT) as client:
+        trainer_ip_with_port = f"{trainer_ip}:8001" if ":" not in trainer_ip else trainer_ip
         if is_organic:
-            url = f"{trainer_ip_or_url.rstrip('/')}/start_training"
+            url = f"http://{trainer_ip_with_port}/start_training"
         else:
-            trainer_ip = f"{trainer_ip_or_url}:8001" if ":" not in trainer_ip_or_url else trainer_ip_or_url
-            url = f"http://{trainer_ip}{PROXY_TRAINING_IMAGE_ENDPOINT}"
+            url = f"http://{trainer_ip_with_port}{PROXY_TRAINING_IMAGE_ENDPOINT}"
 
         logger.info(f"Requesting training from {'dstack server' if is_organic else 'trainer'} at {url}")
         response = await client.post(url, json=validated_request.model_dump())
@@ -160,7 +160,7 @@ async def start_training_task(trainer_ip_or_url: str, training_request: TrainerP
 
 
 @simple_retry
-async def get_training_task_details(trainer_ip_or_url: str, task_id: str, hotkey: str, is_organic: bool = False) -> TrainerTaskLog:
+async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str, is_organic: bool = False) -> TrainerTaskLog:
     """
     Get the details of a training task from a trainer.
 
@@ -173,13 +173,10 @@ async def get_training_task_details(trainer_ip_or_url: str, task_id: str, hotkey
         TrainerTaskLog: The task log from the trainer
     """
     async with httpx.AsyncClient(timeout=cst.TRAINER_HTTP_TIMEOUT) as client:
-        if is_organic:
-            url = f"{trainer_ip_or_url.rstrip('/')}/task/{task_id}"
-        else:
-            trainer_ip = f"{trainer_ip_or_url}:8001" if ":" not in trainer_ip_or_url else trainer_ip_or_url
-            url = f"http://{trainer_ip}{TASK_DETAILS_ENDPOINT.format(task_id=task_id)}"
+        trainer_ip_with_port = f"{trainer_ip}:8001" if ":" not in trainer_ip else trainer_ip
+        url = f"http://{trainer_ip_with_port}{TASK_DETAILS_ENDPOINT.format(task_id=task_id)}"
 
-        logger.debug(f"Getting task details from {'dstack server' if is_organic else 'trainer'} at {url} for task {task_id}")
+        logger.debug(f"Getting task details from trainer at {url} for task {task_id}")
         response = await client.get(url, params={"hotkey": hotkey})
         response.raise_for_status()
 
