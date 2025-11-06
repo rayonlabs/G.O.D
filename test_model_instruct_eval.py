@@ -4,12 +4,11 @@ Test script for instruct evaluation of GPT-OSS-20B model.
 This runs the evaluation in the proper Docker container.
 """
 
-import sys
+import argparse
 import json
 import subprocess
-import argparse
+import sys
 from pathlib import Path
-from uuid import uuid4
 
 
 def create_test_dataset(output_path: Path) -> str:

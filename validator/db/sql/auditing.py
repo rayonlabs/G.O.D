@@ -112,7 +112,6 @@ async def get_recent_tasks(
             itt.field_output,
             itt.format as itt_format,
             itt.no_input_format,
-            itt.synthetic_data as itt_synthetic_data,
             itt.file_format as itt_file_format,
             it.model_type,
             ip.image_text_pairs,
@@ -122,10 +121,8 @@ async def get_recent_tasks(
             dt.prompt_format,
             dt.chosen_format,
             dt.rejected_format,
-            dt.synthetic_data as dpo_synthetic_data,
             dt.file_format as dpo_file_format,
             gt.field_prompt as grpo_field_prompt,
-            gt.synthetic_data as grpo_synthetic_data,
             gt.file_format as grpo_file_format,
             rf.reward_functions,
             ct.chat_template,
@@ -134,7 +131,6 @@ async def get_recent_tasks(
             ct.chat_content_field,
             ct.chat_user_reference,
             ct.chat_assistant_reference,
-            ct.synthetic_data as chat_synthetic_data,
             ct.file_format as chat_file_format
         FROM task_ids 
         JOIN {cst.TASKS_TABLE} t ON t.{cst.TASK_ID} = task_ids.{cst.TASK_ID}
@@ -160,7 +156,6 @@ async def get_recent_tasks(
             if task_type == TaskType.INSTRUCTTEXTTASK.value:
                 task_data["field_system"] = task_data.pop("itt_field_system")
                 task_data["format"] = task_data.pop("itt_format")
-                task_data["synthetic_data"] = task_data.pop("itt_synthetic_data")
                 task_data["file_format"] = task_data.pop("itt_file_format")
                 task = InstructTextTask(**{k: v for k, v in task_data.items() if k in InstructTextTask.model_fields})
             elif task_type == TaskType.IMAGETASK.value:
@@ -184,12 +179,10 @@ async def get_recent_tasks(
                 )
             elif task_type == TaskType.DPOTASK.value:
                 task_data["field_prompt"] = task_data.pop("dpo_field_prompt")
-                task_data["synthetic_data"] = task_data.pop("dpo_synthetic_data")
                 task_data["file_format"] = task_data.pop("dpo_file_format")
                 task = DpoTask(**{k: v for k, v in task_data.items() if k in DpoTask.model_fields})
             elif task_type == TaskType.GRPOTASK.value:
                 task_data["field_prompt"] = task_data.pop("grpo_field_prompt")
-                task_data["synthetic_data"] = task_data.pop("grpo_synthetic_data")
                 task_data["file_format"] = task_data.pop("grpo_file_format")
 
                 reward_functions = []
@@ -204,7 +197,6 @@ async def get_recent_tasks(
 
                 task = GrpoTask(**{k: v for k, v in task_data.items() if k in GrpoTask.model_fields})
             elif task_type == TaskType.CHATTASK.value:
-                task_data["synthetic_data"] = task_data.pop("chat_synthetic_data")
                 task_data["file_format"] = task_data.pop("chat_file_format")
                 task = ChatTask(**{k: v for k, v in task_data.items() if k in ChatTask.model_fields})
             else:

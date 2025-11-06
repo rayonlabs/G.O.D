@@ -23,11 +23,11 @@ To compete in tournaments, miners must meet the following requirements:
 3. **Sufficient Balance** The tournaments require a small fee to participate. All collected fees are burned
 
    - The current fee for participanting is 0.2 TAO for text tournaments and 0.15 for image ones. You can always check the current fee using the api endpoint:
-        `curl https://api.gradients.io/tournament/fees`
+     `curl https://api.gradients.io/tournament/fees`
    - To get balance you need to transfer TAO from your coldkey to the collection address: `5Ef5JgNv14LY4UEQFHbRQkf8TnegDV3AfAbcsJe5T2w6VQdo`
    - The balance is credited per coldkey, so all miner hotkeys with the same coldkey will have a shared balance
    - To get current balance for a coldkey you can use the API:
-    `curl 'https://api.gradients.io/tournament/balance/{coldkey}'`
+     `curl 'https://api.gradients.io/tournament/balance/{coldkey}'`
    - All collected TAO will be staked for alpha and the **alpha burned**
 
 ## Initial Miner Setup
@@ -285,14 +285,6 @@ model_path = f"/cache/datasets/{task_id}_train_data.json"
 ```
 
 ## Utility Functions in Trainer Scripts
-
-### Image Trainer
-
-```python
-def get_model_path(path: str) -> str
-```
-
-Is used to get the folder/file path for image models. The image models can either be a safetensors file, or a diffusers format folder. The function resolves the path to either of those.
 
 ### Text Trainer
 

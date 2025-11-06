@@ -52,8 +52,8 @@ class TestTournamentBurnSeparated:
             assert result.image_performance_diff is None
 
             # Base weights are still allocated (no emission increase)
-            text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
-            image_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
+            text_base = cts.TOURNAMENT_TEXT_WEIGHT
+            image_base = cts.TOURNAMENT_IMAGE_WEIGHT
 
             assert abs(result.text_tournament_weight - text_base) < 0.0001
             assert abs(result.image_tournament_weight - image_base) < 0.0001
@@ -162,11 +162,11 @@ class TestTournamentBurnSeparated:
 
                 # 8% performance > 5% threshold -> 3% excess * 2.0 = 6% emission increase
                 text_emission_increase = (0.08 - cts.EMISSION_MULTIPLIER_THRESHOLD) * 2.0
-                text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
+                text_base = cts.TOURNAMENT_TEXT_WEIGHT
                 expected_text_weight = text_base + text_emission_increase
 
                 # IMAGE base weight is still allocated (no emission increase)
-                image_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
+                image_base = cts.TOURNAMENT_IMAGE_WEIGHT
 
                 assert abs(result.text_tournament_weight - expected_text_weight) < 0.0001
                 assert abs(result.image_tournament_weight - image_base) < 0.0001
@@ -195,11 +195,11 @@ class TestTournamentBurnSeparated:
 
                 # 12% performance > 5% threshold -> 7% excess * 2.0 = 14% emission increase
                 image_emission_increase = (0.12 - cts.EMISSION_MULTIPLIER_THRESHOLD) * 2.0
-                image_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
+                image_base = cts.TOURNAMENT_IMAGE_WEIGHT
                 expected_image_weight = image_base + image_emission_increase
 
                 # TEXT base weight is still allocated (no emission increase)
-                text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
+                text_base = cts.TOURNAMENT_TEXT_WEIGHT
 
                 assert abs(result.text_tournament_weight - text_base) < 0.0001
                 assert abs(result.image_tournament_weight - expected_image_weight) < 0.0001
@@ -242,8 +242,8 @@ class TestTournamentBurnSeparated:
                 text_emission = (0.08 - cts.EMISSION_MULTIPLIER_THRESHOLD) * 2.0
                 image_emission = (0.10 - cts.EMISSION_MULTIPLIER_THRESHOLD) * 2.0
 
-                text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
-                image_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
+                text_base = cts.TOURNAMENT_TEXT_WEIGHT
+                image_base = cts.TOURNAMENT_IMAGE_WEIGHT
 
                 expected_text_weight = text_base + text_emission
                 expected_image_weight = image_base + image_emission
@@ -276,7 +276,7 @@ class TestTournamentBurnSeparated:
 
                 # High performance difference -> large emission increase
                 text_emission = (0.25 - cts.EMISSION_MULTIPLIER_THRESHOLD) * 2.0
-                text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
+                text_base = cts.TOURNAMENT_TEXT_WEIGHT
                 expected_text_weight = text_base + text_emission
 
                 assert abs(result.text_tournament_weight - expected_text_weight) < 0.0001
@@ -300,7 +300,7 @@ class TestTournamentBurnSeparated:
                 # Perfect performance -> no emission increase
                 assert result.text_performance_diff == 0.0
 
-                text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
+                text_base = cts.TOURNAMENT_TEXT_WEIGHT
                 assert abs(result.text_tournament_weight - text_base) < 0.0001
 
     # ========== Test performance below threshold (no emission increase) ==========
@@ -322,8 +322,8 @@ class TestTournamentBurnSeparated:
                 result = await get_tournament_burn_details(mock_psql_db)
 
                 # Performance below threshold -> no emission increase for TEXT
-                text_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_TEXT_WEIGHT
-                image_base = cts.BASE_TOURNAMENT_WEIGHT * cts.TOURNAMENT_IMAGE_WEIGHT
+                text_base = cts.TOURNAMENT_TEXT_WEIGHT
+                image_base = cts.TOURNAMENT_IMAGE_WEIGHT
 
                 assert abs(result.text_tournament_weight - text_base) < 0.0001
                 assert abs(result.image_tournament_weight - image_base) < 0.0001

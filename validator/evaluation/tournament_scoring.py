@@ -1,63 +1,14 @@
-from typing import Optional
 
 import validator.core.constants as cts
 from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentScore
-from core.models.tournament_models import TournamentTaskScore
 from core.models.tournament_models import TournamentType
 from core.models.tournament_models import TournamentTypeResult
-from core.models.utility_models import TaskType
 from validator.tournament.utils import get_real_winner_hotkey
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
-
-
-def calculate_final_round_winner(task: TournamentTaskScore, prev_winner_hotkey: str, task_type: TaskType) -> str | None:
-    if len(task.participant_scores) < 2:
-        return None
-
-    prev_winner_score = None
-    contender_score = None
-    contender_hotkey = None
-
-    for score_data in task.participant_scores:
-        hotkey = score_data.get("hotkey")
-        test_loss = score_data.get("test_loss")
-        synth_loss = score_data.get("synth_loss")
-
-        if not test_loss or not synth_loss:
-            continue
-
-        if hotkey == prev_winner_hotkey:
-            prev_winner_score = (test_loss, synth_loss)
-        elif contender_hotkey is None:
-            contender_hotkey = hotkey
-            contender_score = (test_loss, synth_loss)
-    if prev_winner_score and not contender_score:
-        return prev_winner_hotkey
-    elif contender_score and not prev_winner_score:
-        return contender_hotkey
-    elif not (prev_winner_score and contender_score and contender_hotkey):
-        return None
-
-    prev_test, prev_synth = prev_winner_score
-    cont_test, cont_synth = contender_score
-
-    prev_loss = max(prev_test, prev_synth)
-    cont_loss = max(cont_test, cont_synth)
-
-    if task_type == TaskType.GRPOTASK:
-        if cont_loss > prev_loss * 1.05:
-            return contender_hotkey
-        else:
-            return prev_winner_hotkey
-    else:
-        if cont_loss * 1.05 < prev_loss:
-            return contender_hotkey
-        else:
-            return prev_winner_hotkey
 
 
 def calculate_tournament_type_scores_from_data(

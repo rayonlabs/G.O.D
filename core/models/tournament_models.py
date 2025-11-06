@@ -56,14 +56,6 @@ def generate_round_id(tournament_id: str, round_number: int) -> str:
     return f"{tournament_id}_round_{round_number:03d}"
 
 
-def generate_group_id(round_id: str, group_number: int) -> str:
-    return f"{round_id}_group_{group_number:03d}"
-
-
-def generate_pair_id(round_id: str, pair_number: int) -> str:
-    return f"{round_id}_pair_{pair_number:03d}"
-
-
 class TournamentData(BaseModel):
     tournament_id: str
     tournament_type: TournamentType

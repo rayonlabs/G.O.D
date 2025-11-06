@@ -143,7 +143,6 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
     for score_dict in scores_dicts:
         hotkey = score_dict[db_cst.HOTKEY]
         test_loss = score_dict.get(db_cst.TEST_LOSS)
-        synth_loss = score_dict.get(db_cst.SYNTH_LOSS)
 
         # Skip invalid results
         if test_loss is None or np.isnan(test_loss):
@@ -154,7 +153,7 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
             miner_result = MinerResultsText(
                 hotkey=hotkey,
                 test_loss=test_loss,
-                synth_loss=synth_loss if synth_loss is not None and not np.isnan(synth_loss) else 1000.0,
+                synth_loss=test_loss,
                 is_finetune=True,  # assume all finetuned
                 task_type=task_type,
             )
@@ -163,7 +162,7 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
             miner_result = MinerResultsImage(
                 hotkey=hotkey,
                 test_loss=test_loss,
-                synth_loss=synth_loss if synth_loss is not None and not np.isnan(synth_loss) else 1000.0,
+                synth_loss=test_loss,
                 is_finetune=True,
             )
 
@@ -559,8 +558,7 @@ async def get_knockout_winners(
                 else:
                     task_winners.append(opponent_hotkey)
                     logger.info(
-                        f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= "
-                        f"{boss_loss * boss_multiplier:.6f}"
+                        f"GRPO task: Opponent wins (higher is better): {opponent_loss:.6f} >= {boss_loss * boss_multiplier:.6f}"
                     )
             else:
                 # For other tasks, lower scores are better

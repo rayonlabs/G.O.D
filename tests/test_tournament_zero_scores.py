@@ -49,7 +49,6 @@ def sample_instruct_task():
         field_system="You are a helpful assistant",
         format="### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{output}",
         no_input_format="### Instruction:\n{instruction}\n\n### Response:\n{output}",
-        synthetic_data=None,
     )
 
 

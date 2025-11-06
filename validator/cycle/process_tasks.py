@@ -1,16 +1,9 @@
 import asyncio
 import datetime
-import json
-import random
-
-from fiber.chain.models import Node
 
 import validator.core.constants as cst
 import validator.db.sql.nodes as nodes_sql
-import validator.db.sql.submissions_and_scoring as scores_sql
 import validator.db.sql.tasks as tasks_sql
-from core.models.payload_models import MinerTaskOffer
-from core.models.payload_models import MinerTaskResponse
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
@@ -23,93 +16,12 @@ from validator.db.database import PSQLDB
 from validator.evaluation.scoring import evaluate_and_score
 from validator.utils.cache_clear import clean_all_hf_datasets_cache
 from validator.utils.cache_clear import manage_models_cache
-from validator.utils.call_endpoint import process_non_stream_fiber
 from validator.utils.logging import LogContext
 from validator.utils.logging import add_context_tag
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
-
-
-async def _weighted_random_shuffle(nodes: list[Node], psql_db: PSQLDB) -> list[Node]:
-    """
-    Perform a weighted random shuffle of nodes with priority:
-    1. Highest priority: Nodes that haven't participated today yet (treated as score=1.0)
-    2. Medium priority: Nodes that have participated today (use their actual score)
-    All nodes have a minimum score of 0.01 to ensure even low performers have some (v small) chance.
-    """
-
-    if len(nodes) == 0:
-        return []
-
-    DEFAULT_SCORE_FOR_FIRST_DAILY_COMP = 2.0
-    MIN_SCORE = 0.01
-
-    hotkeys = [node.hotkey for node in nodes]
-    nodes_status = await scores_sql.get_nodes_daily_status(hotkeys, psql_db)
-
-    node_scores = {}
-    for node in nodes:
-        status = nodes_status[node.hotkey]
-
-        if not status["has_participated_today"]:
-            # Nodes that haven't participated today get perfect scores so they will be picked at least once a day
-            node_scores[node.hotkey] = DEFAULT_SCORE_FOR_FIRST_DAILY_COMP
-        elif status["avg_quality_score"] is not None:
-            # Nodes with scores use their actual scores (with minimum threshold)
-            node_scores[node.hotkey] = max(status["avg_quality_score"], MIN_SCORE)
-        else:
-            # fallback
-            node_scores[node.hotkey] = MIN_SCORE
-
-    sorted_nodes = sorted(nodes, key=lambda x: node_scores[x.hotkey], reverse=True)
-
-    # Now we be calcin position-based weights
-    top_node_chance_multiplier = 3  # Top node is 3x more likely than bottom node
-    weights = [
-        top_node_chance_multiplier - i * (top_node_chance_multiplier - 1) / len(sorted_nodes) for i in range(len(sorted_nodes))
-    ]
-
-    shuffled_nodes = []
-    nodes_to_shuffle = sorted_nodes.copy()
-    weights_copy = weights.copy()
-
-    for _ in range(len(sorted_nodes)):
-        if not nodes_to_shuffle:
-            break
-        index = random.choices(range(len(nodes_to_shuffle)), weights=weights_copy, k=1)[0]
-        shuffled_nodes.append(nodes_to_shuffle[index])
-        nodes_to_shuffle.pop(index)
-        weights_copy.pop(index)
-
-    return shuffled_nodes
-
-
-async def _make_offer(node: Node, request: MinerTaskOffer, config: Config) -> MinerTaskResponse:
-    endpoint = cst.TASK_OFFER_IMAGE_ENDPOINT if request.task_type == TaskType.IMAGETASK else cst.TASK_OFFER_ENDPOINT
-    try:
-        response = await process_non_stream_fiber(endpoint, config, node, request.model_dump(), timeout=3)
-        logger.info(f"The response from make {request.task_type} offer for node {node.node_id} was {response}")
-        if response is None or not isinstance(response, dict):
-            logger.warning(f"Received invalid response format from node {node.node_id}: {response}")
-            response = {}
-        return MinerTaskResponse(
-            message=response.get("message", "No message given"),
-            accepted=response.get("accepted", False),
-        )
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decoding error when processing response from node {node.node_id}: {str(e)}")
-        return MinerTaskResponse(
-            message=f"Failed to parse response: {str(e)}",
-            accepted=False,
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error when making offer to node {node.node_id}: {str(e)}")
-        return MinerTaskResponse(
-            message=f"Error during offer: {str(e)}",
-            accepted=False,
-        )
 
 
 async def _select_miner_pool_and_add_to_task(task: AnyTypeRawTask, config: Config) -> AnyTypeRawTask:
