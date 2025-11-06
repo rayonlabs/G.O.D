@@ -123,7 +123,7 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
 
 
     Args:
-        trainer_ip_or_url: IP address of the trainer
+        trainer_ip: IP address of the trainer
         training_request: The training request to send
 
 
