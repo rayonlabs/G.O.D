@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-import os
-import re
 import subprocess
 import tempfile
 from collections import Counter
+from pathlib import Path
 
 import aiohttp
 import httpx
@@ -734,13 +733,13 @@ async def validate_repo_obfuscation(repo_url: str) -> bool:
 
 async def validate_repo_license(repo_url: str) -> bool:
     """
-    Validate that a repository has proper MIT license with gradients.io copyright.
+    Validate that a repository has verbatim LICENSE and NOTICE files matching the current repository.
 
     Args:
         repo_url: The repository URL to validate
 
     Returns:
-        bool: True if repo has valid license, False otherwise
+        bool: True if repo has valid LICENSE and NOTICE files, False otherwise
     """
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -757,32 +756,66 @@ async def validate_repo_license(repo_url: str) -> bool:
                 logger.error(f"Failed to clone repository {repo_url}: {clone_proc.stderr}")
                 return False
 
+            temp_path = Path(temp_dir)
+            current_file_path = Path(__file__).resolve()
+            repo_root = current_file_path.parent.parent.parent
+
+            expected_license_path = repo_root / "LICENSE.md"
+            if not expected_license_path.exists():
+                expected_license_path = repo_root / "LICENSE"
+                if not expected_license_path.exists():
+                    logger.warning(
+                        f"Expected LICENSE file not found in validator repository at "
+                        f"{repo_root / 'LICENSE.md'} or {repo_root / 'LICENSE'}. "
+                        f"Skipping license validation for {repo_url}"
+                    )
+                    return True
+
+            expected_notice_path = repo_root / "NOTICE"
+            if not expected_notice_path.exists():
+                logger.warning(
+                    f"Expected NOTICE file not found in validator repository at {expected_notice_path}. "
+                    f"Skipping license validation for {repo_url}"
+                )
+                return True
+
             license_file_path = None
-            for license_filename in ["LICENSE", "LICENSE.md", "license", "license.md", "License", "License.md"]:
-                potential_path = os.path.join(temp_dir, license_filename)
-                if os.path.exists(potential_path):
+            for license_filename in ["LICENSE.md", "LICENSE", "license.md", "license", "License.md", "License"]:
+                potential_path = temp_path / license_filename
+                if potential_path.exists():
                     license_file_path = potential_path
                     break
 
             if not license_file_path:
                 logger.warning(
                     f"License file not found in repository {repo_url} "
-                    f"(checked LICENSE, LICENSE.md, license, license.md, License, License.md)"
+                    f"(checked LICENSE.md, LICENSE, license.md, license, License.md, License)"
                 )
                 return False
 
-            with open(license_file_path, "r", encoding="utf-8") as f:
-                license_content = f.read()
+            license_content = license_file_path.read_text(encoding="utf-8")
+            expected_license = expected_license_path.read_text(encoding="utf-8")
 
-            mit_license_pattern = r"mit\s+license"
-            gradients_copyright_pattern = r"copyright.*?gradients\.io"
+            expected_license_normalized = "\n".join(line.rstrip() for line in expected_license.splitlines())
+            actual_license_normalized = "\n".join(line.rstrip() for line in license_content.splitlines())
 
-            if not re.search(mit_license_pattern, license_content, re.IGNORECASE):
-                logger.warning(f"MIT License not found in license file for repository {repo_url}")
+            if expected_license_normalized != actual_license_normalized:
+                logger.warning(f"LICENSE file content does not match verbatim for repository {repo_url}")
                 return False
 
-            if not re.search(gradients_copyright_pattern, license_content, re.IGNORECASE):
-                logger.warning(f"Gradients.io copyright not found in license file for repository {repo_url}")
+            notice_file_path = temp_path / "NOTICE"
+            if not notice_file_path.exists():
+                logger.warning(f"NOTICE file not found in repository {repo_url}")
+                return False
+
+            notice_content = notice_file_path.read_text(encoding="utf-8")
+            expected_notice = expected_notice_path.read_text(encoding="utf-8")
+
+            expected_notice_normalized = "\n".join(line.rstrip() for line in expected_notice.splitlines())
+            actual_notice_normalized = "\n".join(line.rstrip() for line in notice_content.splitlines())
+
+            if expected_notice_normalized != actual_notice_normalized:
+                logger.warning(f"NOTICE file content does not match verbatim for repository {repo_url}")
                 return False
 
             logger.info(f"Repository {repo_url} passed license validation")
