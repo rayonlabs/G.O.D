@@ -2,6 +2,8 @@
 
 Steps to set-up the validator.
 
+> **⚠️ IMPORTANT**: We **strongly recommend auditing instead of validating** for most users. Auditing is more cost-effective, easier to set up, and doesn't require expensive GPU infrastructure. See the [Auditing Overview](auditing/auditing.md) and [Auditing Setup Guide](auditing/auditing_setup.md) for details.
+
 If you dont intend to utilise the bandwidth independently of the gradients platform,
 child hotkeying would not be a bad idea at all.
 
@@ -11,10 +13,10 @@ child hotkeying would not be a bad idea at all.
 - Hugging Face account
 - s3 bucket [Backblaze B2 example](s3_setup.md)
 
-
 ## Setup Steps
 
 0. Clone the repo
+
 ```bash
 git clone https://github.com/rayonlabs/G.O.D.git
 cd G.O.D
@@ -47,13 +49,11 @@ task install
 ```
 
 **FOR DEV**
+
 ```bash
 pip install -e '.[dev]'
 pre-commit install
 ```
-
-
-
 
 5. Run the Validator
 
@@ -67,16 +67,13 @@ task autoupdates
 task validator
 ```
 
-
 6. Make sure you have outgoing and incoming connections exposed
 
-Gradients allows anyone in the world to train a model on Bittensor. We communicate to 'api.gradients.io' to facilitate these user requests.
-Technically it will work without this connection, but then the subnet is just synthetics. Make sure to allow it!
-
-
-
+The validator communicates with 'api.gradients.io' for tournament infrastructure (fees, balances, task coordination).
+Ensure your firewall allows outbound HTTPS connections to this domain.
 
 IF YOU ARE DEVVING AND ONLY IF YOU ARE A DEVELOPER, ADD THIS (key needs to be upgraded)
+
 ```bash
 echo "NINETEEN_API_KEY=<your-nineteen-api-key>" >> .vali.env
 ```
