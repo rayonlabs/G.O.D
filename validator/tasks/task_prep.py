@@ -186,6 +186,9 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                 if processed_value != "" and processed_value != []:
                     is_row_empty = False
 
+        if is_chat_task and is_row_empty:
+            continue
+
         result.append(row_dict)
         total_rows += 1
         if is_row_empty:

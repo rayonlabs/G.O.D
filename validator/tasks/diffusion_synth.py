@@ -329,12 +329,8 @@ async def generate_person_synthetic(num_prompts: int) -> tuple[list[ImageTextPai
             if file.is_file() and file.suffix == ".png":
                 txt_path = images_dir / f"{file.stem}.txt"
                 if txt_path.exists() and txt_path.stat().st_size > 0:
-                    img_url = await upload_file_to_minio(
-                        str(file), cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png"
-                    )
-                    txt_url = await upload_file_to_minio(
-                        str(txt_path), cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt"
-                    )
+                    img_url = await upload_file_to_minio(str(file), cst.BUCKET_NAME, f"{os.urandom(8).hex()}.png")
+                    txt_url = await upload_file_to_minio(str(txt_path), cst.BUCKET_NAME, f"{os.urandom(8).hex()}.txt")
                     image_text_pairs.append(ImageTextPair(image_url=img_url, text_url=txt_url))
         if os.path.exists(tmp_dir_path):
             shutil.rmtree(tmp_dir_path)
@@ -365,8 +361,9 @@ async def create_synthetic_image_task(config: Config, models: AsyncGenerator[Ima
             elif attempt < cst.PERSON_GEN_RETRIES - 1:
                 logger.info(f"Person synth generation only produced {len(image_text_pairs)} pairs, trying again...")
             else:
-                logger.warning(f"Person synth generation only produced {len(image_text_pairs)} pairs after {cst.PERSON_GEN_RETRIES} attempts")
-
+                logger.warning(
+                    f"Person synth generation only produced {len(image_text_pairs)} pairs after {cst.PERSON_GEN_RETRIES} attempts"
+                )
 
     if len(image_text_pairs) >= 10:
         task = ImageRawTask(
