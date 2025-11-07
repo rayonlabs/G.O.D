@@ -4,7 +4,7 @@ import traceback
 
 
 # Allow torch.load for transformers 4.46+ security check
-os.environ['TRANSFORMERS_ALLOW_TORCH_LOAD'] = 'true'
+os.environ["TRANSFORMERS_ALLOW_TORCH_LOAD"] = "true"
 
 import torch
 from accelerate.utils import find_executable_batch_size
@@ -65,7 +65,9 @@ def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DpoDatasetType) ->
                 identical_count += 1
 
         if identical_count > 0:
-            logger.warning(f"CRITICAL: Found {identical_count}/{sample_size} samples with identical chosen/rejected, causing random predictions")
+            logger.warning(
+                f"CRITICAL: Found {identical_count}/{sample_size} samples with identical chosen/rejected, causing random predictions"
+            )
 
             if identical_count > 0:
                 example = dataset[sample_indices[0]]
@@ -76,7 +78,7 @@ def _adapt_dpo_columns_to_trl(dataset: Dataset, dataset_type: DpoDatasetType) ->
     column_mapping = {
         dataset_type.field_prompt: cst.TRL_DPO_FIELD_PROMPT,
         dataset_type.field_chosen: cst.TRL_DPO_FIELD_CHOSEN,
-        dataset_type.field_rejected: cst.TRL_DPO_FIELD_REJECTED
+        dataset_type.field_rejected: cst.TRL_DPO_FIELD_REJECTED,
     }
     for src_col, dst_col in column_mapping.items():
         if src_col in dataset.column_names and src_col != dst_col:
@@ -132,7 +134,7 @@ def evaluate_dpo_model(
     finetuned_model: AutoModelForCausalLM,
     reference_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
-    evaluation_args: EvaluationArgs
+    evaluation_args: EvaluationArgs,
 ) -> dict[str, float]:
     evaluation_config.tokenizer_config = tokenizer.name_or_path
     logger.info(f"Config: {evaluation_config}")
@@ -185,16 +187,12 @@ def evaluate_finetuned_dpo_model(
     evaluation_args: EvaluationArgs,
     finetuned_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
-    reference_model: AutoModelForCausalLM
+    reference_model: AutoModelForCausalLM,
 ) -> dict[str, float]:
     evaluation_config = _load_and_update_evaluation_config(
-        evaluation_args=evaluation_args,
-        finetuned_model=finetuned_model,
-        config_path=cst.VALI_CONFIG_PATH
+        evaluation_args=evaluation_args, finetuned_model=finetuned_model, config_path=cst.VALI_CONFIG_PATH
     )
-    return evaluate_dpo_model(
-        evaluation_config, finetuned_model, reference_model, tokenizer, evaluation_args
-    )
+    return evaluate_dpo_model(evaluation_config, finetuned_model, reference_model, tokenizer, evaluation_args)
 
 
 def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
@@ -242,7 +240,6 @@ def evaluate_dpo_repo(evaluation_args: EvaluationArgs) -> None:
         finetuned_model.eval()
         reference_model.eval()
 
-
         results = evaluate_finetuned_dpo_model(
             evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
@@ -278,15 +275,12 @@ def main():
                 original_model=original_model,
                 dataset_type=dataset_type_str,
                 file_format=file_format_str,
-                repo=repo
+                repo=repo,
             )
 
-            subprocess.run([
-                "python",
-                "-m",
-                "validator.evaluation.single_eval_dpo",
-                evaluation_args.model_dump_json()
-            ], check=True)
+            subprocess.run(
+                ["python", "-m", "validator.evaluation.single_eval_dpo", evaluation_args.model_dump_json()], check=True
+            )
             logger.info(f"Subprocess completed for {repo}")
         except subprocess.CalledProcessError as e:
             logger.error(f"Error running subprocess for {repo}: {e}")

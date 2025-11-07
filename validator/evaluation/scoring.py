@@ -40,8 +40,6 @@ from validator.utils.minio import async_minio_client
 logger = get_logger(__name__)
 
 
-
-
 def calculate_miner_ranking_and_scores(
     miner_results: list[MinerResultsText | MinerResultsImage],
 ) -> list[MinerResultsText | MinerResultsImage]:
@@ -633,7 +631,13 @@ async def evaluate_and_score(task: AnyTypeRawTask, gpu_ids: list[int], config: C
     all_scores_zero = all(result.score == 0.0 for result in task_results)
 
     if cts.DELETE_S3_AFTER_COMPLETE:
-        if task.task_type in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK, TaskType.CHATTASK, TaskType.IMAGETASK]:
+        if task.task_type in [
+            TaskType.INSTRUCTTEXTTASK,
+            TaskType.DPOTASK,
+            TaskType.GRPOTASK,
+            TaskType.CHATTASK,
+            TaskType.IMAGETASK,
+        ]:
             files_to_delete = [task.training_data, task.test_data]
         else:
             raise ValueError(f"Unknown task type: {task.task_type}")
