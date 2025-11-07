@@ -545,30 +545,21 @@ async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) ->
     """
     try:
         trainers = await tournament_sql.get_trainers(config.psql_db)
-
-        # Get the number of GPUs required for this task
         required_gpu_count = _get_gpu_count_from_requirement(required_gpus)
 
-        # Track the best trainer and its ratio
         best_trainer = None
         best_gpu_ids = None
         best_ratio = -1.0
-
         for trainer in trainers:
             gpu_ids = _trainer_has_sufficient_gpus(trainer.gpus, required_gpus)
             if gpu_ids:
-                # Count total free GPUs on this trainer
                 free_gpu_count = sum(1 for gpu in trainer.gpus if gpu.available)
-
-                # Calculate utilization ratio
                 ratio = required_gpu_count / free_gpu_count
-
                 logger.info(
                     f"Trainer {trainer.trainer_ip}: {len(gpu_ids)} GPUs available for requirement {required_gpus.value}, "
                     f"{free_gpu_count} total free GPUs, ratio: {ratio:.2f}"
                 )
 
-                # Pick trainer with highest ratio (best utilization)
                 if ratio > best_ratio:
                     best_ratio = ratio
                     best_trainer = trainer.trainer_ip
@@ -592,12 +583,6 @@ async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) ->
 def _get_gpu_count_from_requirement(requirement: GpuRequirement) -> int:
     """
     Get the number of GPUs required for a given GPU requirement.
-
-    Args:
-        requirement: Required GPU specification
-
-    Returns:
-        int: Number of GPUs required
     """
     if requirement == GpuRequirement.A100:
         return 1
