@@ -468,19 +468,6 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
         elif isinstance(task, GrpoRawTask):
             dataset = standardize_grpo_column_names(dataset, task)
 
-        # Subsample dataset (50-100% of original size)
-        original_size = len(dataset)
-        subsample_percentage = random.uniform(0.5, 1.0)
-        subsample_size = int(original_size * subsample_percentage)
-
-        if subsample_size < original_size:
-            logger.info(
-                f"Subsampling dataset from {original_size} to {subsample_size} rows ({subsample_percentage:.1%})"
-            )
-            dataset = dataset.shuffle(seed=42).select(range(subsample_size))
-        else:
-            logger.info(f"Using full dataset size of {original_size} rows")
-
         dataset_dict = await train_test_split(dataset)
         train_ds = dataset_dict["train"]
         test_ds = dataset_dict["test"]
