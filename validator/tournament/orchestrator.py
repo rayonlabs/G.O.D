@@ -530,6 +530,11 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) -> tuple[str, list[int]] | None:
     """
     Check if there are any suitable GPUs across all trainers for the given GPU requirement.
+    Optimizes allocation by selecting the trainer that maximizes the ratio:
+    num_needed_GPUs_for_task / total_free_GPUs_in_trainer
+
+    This ensures tasks are packed efficiently and smaller tasks don't occupy larger trainers
+    unnecessarily.
 
     Args:
         config: Configuration object for database access
@@ -540,12 +545,32 @@ async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) ->
     """
     try:
         trainers = await tournament_sql.get_trainers(config.psql_db)
+        required_gpu_count = _get_gpu_count_from_requirement(required_gpus)
 
+        best_trainer = None
+        best_gpu_ids = None
+        best_ratio = -1.0
         for trainer in trainers:
             gpu_ids = _trainer_has_sufficient_gpus(trainer.gpus, required_gpus)
             if gpu_ids:
-                logger.info(f"Found suitable GPUs on trainer {trainer.trainer_ip} for requirement {required_gpus.value}")
-                return trainer.trainer_ip, gpu_ids
+                free_gpu_count = sum(1 for gpu in trainer.gpus if gpu.available)
+                ratio = required_gpu_count / free_gpu_count
+                logger.info(
+                    f"Trainer {trainer.trainer_ip}: {len(gpu_ids)} GPUs available for requirement {required_gpus.value}, "
+                    f"{free_gpu_count} total free GPUs, ratio: {ratio:.2f}"
+                )
+
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_trainer = trainer.trainer_ip
+                    best_gpu_ids = gpu_ids
+
+        if best_trainer:
+            logger.info(
+                f"Selected trainer {best_trainer} with best utilization ratio {best_ratio:.2f} "
+                f"for requirement {required_gpus.value}"
+            )
+            return best_trainer, best_gpu_ids
 
         logger.info(f"No suitable GPUs found for requirement {required_gpus.value}")
         return None
@@ -553,6 +578,25 @@ async def _check_suitable_gpus(config: Config, required_gpus: GpuRequirement) ->
     except Exception as e:
         logger.error(f"Error checking suitable GPUs: {str(e)}")
         return None
+
+
+def _get_gpu_count_from_requirement(requirement: GpuRequirement) -> int:
+    """
+    Get the number of GPUs required for a given GPU requirement.
+    """
+    if requirement == GpuRequirement.A100:
+        return 1
+    elif requirement == GpuRequirement.H100_1X:
+        return 1
+    elif requirement == GpuRequirement.H100_2X:
+        return 2
+    elif requirement == GpuRequirement.H100_4X:
+        return 4
+    elif requirement == GpuRequirement.H100_8X:
+        return 8
+
+    # Default to 1 if unknown
+    return 1
 
 
 async def _create_training_request(
