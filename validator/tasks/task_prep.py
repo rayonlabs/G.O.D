@@ -156,6 +156,23 @@ async def download_and_load_dataset(
     return combined_dataset
 
 
+def process_chat_row(value, role_field: str, content_field: str):
+    if isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            pass
+
+    if isinstance(value, list):
+        cleaned_messages = []
+        for msg in value:
+            if isinstance(msg, dict) and msg.get(content_field) is not None and msg.get(role_field) is not None:
+                cleaned_messages.append(msg)
+        return cleaned_messages if len(cleaned_messages) > 1 else []
+    else:
+        return value if value is not None else ""
+
+
 def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None):
     result = []
     total_rows = 0
@@ -169,16 +186,9 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
             if col in row:
                 value = row[col]
 
-                # Only parse JSON strings for ChatTask types
-                if is_chat_task and isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
-                    try:
-                        value = json.loads(value)
-                    except json.JSONDecodeError:
-                        pass
-
                 # Ensure consistent data types: strings for non-ChatTask, preserve type for ChatTask
                 if is_chat_task:
-                    processed_value = value if value is not None else ""
+                    processed_value = process_chat_row(value, task.chat_role_field, task.chat_content_field)
                 else:
                     processed_value = str(value) if value is not None else ""
 
