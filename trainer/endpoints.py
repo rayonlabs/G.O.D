@@ -18,7 +18,7 @@ from trainer.tasks import get_task
 from trainer.tasks import load_task_history
 from trainer.tasks import log_task
 from trainer.tasks import start_task
-from trainer.utils.logging import logger
+from trainer.utils.trainer_logging import logger
 from trainer.utils.misc import are_gpus_available
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
