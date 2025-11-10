@@ -166,6 +166,7 @@ class TournamentTaskTraining(BaseModel):
     hotkey: str
     training_status: TrainingStatus
     n_training_attempts: int
+    priority: int
     created_at: datetime
     updated_at: datetime
     training_repo: str | None = None

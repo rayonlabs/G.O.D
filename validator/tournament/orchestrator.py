@@ -428,7 +428,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 pending_training_tasks.pop()
                 continue
 
-            is_organic = oldest_task_training.hotkey == EMISSION_BURN_HOTKEY
+            is_organic = oldest_task_training.priority == 1
             
             # Determine required GPUs for this task
             required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
