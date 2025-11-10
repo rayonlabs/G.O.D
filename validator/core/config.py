@@ -43,7 +43,6 @@ class Config:
     transfer_target_address: str | None = None
     transfer_network: str | None = None
     transfer_processing_interval_hours: int = 24
-    dstack_url: str | None = None
 
 
 _config = None
@@ -106,7 +105,6 @@ def load_config() -> Config:
         transfer_target_address = os.getenv("TRANSFER_TARGET_ADDRESS")
         transfer_network = os.getenv("TRANSFER_NETWORK", "finney")
         transfer_processing_interval_hours = int(os.getenv("TRANSFER_PROCESSING_INTERVAL_HOURS", "24"))
-        dstack_url = os.getenv("DSTACK_URL", None)
 
         _config = Config(
             substrate=substrate,
@@ -127,6 +125,5 @@ def load_config() -> Config:
             transfer_target_address=transfer_target_address,
             transfer_network=transfer_network,
             transfer_processing_interval_hours=transfer_processing_interval_hours,
-            dstack_url=dstack_url,
         )
     return _config

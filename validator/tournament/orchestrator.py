@@ -117,7 +117,7 @@ async def fetch_trainer_gpus(trainer_ip: str) -> list[GPUInfo]:
 
 
 @simple_retry
-async def start_training_task(trainer_ip: str, training_request: TrainerProxyRequest, is_organic: bool = False) -> bool:
+async def start_training_task(trainer_ip: str, training_request: TrainerProxyRequest) -> bool:
     """
     Ask trainer to start training.
 
@@ -131,6 +131,7 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
         bool: True if training started successfully, False otherwise
     """
     try:
+        # Validate the request by converting to dict and back
         validated_request = TrainerProxyRequest.model_validate(training_request.model_dump())
         logger.info("Schema validation passed for training request")
     except Exception as e:
@@ -147,10 +148,13 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
 
         url = f"http://{trainer_ip_with_port}{PROXY_TRAINING_IMAGE_ENDPOINT}"
         logger.info(f"Requesting training from trainer at {url} with payload: {validated_request.model_dump()}")
+
         response = await client.post(url, json=validated_request.model_dump())
         response.raise_for_status()
+
         response_data = response.json()
 
+        # Check for no retry flag
         if response_data.get("no_retry", False):
             logger.warning(
                 f"Error cloning github repository for task {training_request.training_data.task_id} with hotkey {training_request.hotkey}"
@@ -161,7 +165,7 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
 
 
 @simple_retry
-async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str, is_organic: bool = False) -> TrainerTaskLog:
+async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str) -> TrainerTaskLog:
     """
     Get the details of a training task from a trainer.
 
@@ -182,6 +186,7 @@ async def get_training_task_details(trainer_ip: str, task_id: str, hotkey: str, 
 
         url = f"http://{trainer_ip_with_port}{TASK_DETAILS_ENDPOINT.format(task_id=task_id)}"
         logger.debug(f"Getting task details from trainer at {url} for task {task_id}")
+
         response = await client.get(url, params={"hotkey": hotkey})
         response.raise_for_status()
 
@@ -387,8 +392,6 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
     Process tasks from the list and schedule them for training.
     Only pop tasks when we're 100% sure GPUs are available.
     """
-    dstack_url = config.dstack_url
-    
     # Track failed attempts for this scheduling session
     failed_attempts = {}
 
@@ -428,32 +431,22 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 pending_training_tasks.pop()
                 continue
 
-            is_organic = oldest_task_training.hotkey == EMISSION_BURN_HOTKEY
-            
             # Determine required GPUs for this task
             required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
-            
-            if is_organic:
-                logger.info(f"Priority 1 task {task.task_id} requires {required_gpus.value}, routing to dstack server")
-                gpu_count_map = {GpuRequirement.A100: 1, GpuRequirement.H100_1X: 1, GpuRequirement.H100_2X: 2, 
-                                GpuRequirement.H100_4X: 4, GpuRequirement.H100_8X: 8}
-                gpu_ids = list(range(gpu_count_map.get(required_gpus, 1)))
-                trainer_ip = None 
-            else:
-                logger.info(f"Task {task.task_id} requires {required_gpus.value}")
-                await _update_all_trainers_gpu_availability(config)
-                suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
+            logger.info(f"Task {task.task_id} requires {required_gpus.value}")
+            await _update_all_trainers_gpu_availability(config)
+            suitable_gpus_result = await _check_suitable_gpus(config, required_gpus)
 
-                if not suitable_gpus_result:
-                    logger.info(
-                        f"No suitable GPUs found for requirement {required_gpus.value}, skipping this task and continuing with next"
-                    )
+            if not suitable_gpus_result:
+                logger.info(
+                    f"No suitable GPUs found for requirement {required_gpus.value}, skipping this task and continuing with next"
+                )
 
-                    tasks_without_gpus.append(pending_training_tasks.pop())
-                    await asyncio.sleep(1)  # TODO: put in constant or even remove
-                    continue
+                tasks_without_gpus.append(pending_training_tasks.pop())
+                await asyncio.sleep(1)  # TODO: put in constant or even remove
+                continue
 
-                trainer_ip, gpu_ids = suitable_gpus_result
+            trainer_ip, gpu_ids = suitable_gpus_result
 
         try:
             training_task = pending_training_tasks[-1]
@@ -467,12 +460,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                     training_task.training_commit_hash,
                     config,
                 )
-                
-                training_result = await start_training_task(
-                    dstack_url if is_organic else trainer_ip,
-                    training_request,
-                    is_organic=is_organic
-                )
+                training_result = await start_training_task(trainer_ip, training_request)
 
                 if training_result == cst.NO_RETRY_RESULT:
                     logger.warning(f"No retry failure for task {training_task.task.task_id} with hotkey {training_task.hotkey}")
@@ -485,30 +473,21 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                     await tournament_sql.update_tournament_task_training_status(
                         training_task.task.task_id, training_task.hotkey, TrainingStatus.TRAINING, config.psql_db
                     )
-                    
-                    if not is_organic:
-                        await tournament_sql.update_gpu_availability(
-                            trainer_ip, gpu_ids, training_task.task.hours_to_complete, config.psql_db
-                        )
+                    await tournament_sql.update_gpu_availability(
+                        trainer_ip, gpu_ids, training_task.task.hours_to_complete, config.psql_db
+                    )
 
                     pending_training_tasks.pop()
-                    if is_organic:
-                        logger.info(
-                            f"Successfully scheduled organic task {training_task.task.task_id} with hotkey {training_task.hotkey} "
-                            f"for training on dstack server at {dstack_url}"
-                        )
-                    else:
-                        logger.info(
-                            f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} for training "
-                            f"on trainer {trainer_ip} with GPUs {gpu_ids} for {training_task.task.hours_to_complete} hours"
-                        )
+                    logger.info(
+                        f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} for training "
+                        f"on trainer {trainer_ip} with GPUs {gpu_ids} for {training_task.task.hours_to_complete} hours"
+                    )
 
                     logger.info("Waiting 10 seconds before scheduling next task to avoid overwhelming trainers")
                     await asyncio.sleep(10)
 
                 else:
-                    target = f"dstack server at {dstack_url}" if is_organic else f"trainer {trainer_ip}"
-                    logger.error(f"Failed to start training for task {training_task.task.task_id} on {target}")
+                    logger.error(f"Failed to start training for task {training_task.task.task_id} on trainer {trainer_ip}")
                     # Track failed attempts for this scheduling session
                     failed_attempts[task_key] = failed_attempts.get(task_key, 0) + 1
 
@@ -730,8 +709,6 @@ async def _monitor_training_tasks(config: Config):
     """
     Monitor training tasks and update GPU availability based on completion status.
     """
-    dstack_url = config.dstack_url
-    
     # Get all tasks currently in training status
     training_tasks = await tournament_sql.get_tournament_training_tasks(config.psql_db, TrainingStatus.TRAINING)
     logger.info(f"Found {len(training_tasks)} tasks currently in training")
@@ -753,32 +730,26 @@ async def _monitor_training_tasks(config: Config):
             logger.warning(f"Task {training_task.task.task_id} not found in tournament_tasks table - no tournament_id available")
         with LogContext(task_id=str(training_task.task.task_id), hotkey=training_task.hotkey, tournament_id=tournament_id):
             try:
-                is_organic = training_task.hotkey == EMISSION_BURN_HOTKEY
-                
-                if is_organic:
-                    sources = [dstack_url]
-                else:
-                    sources = [trainer.trainer_ip for trainer in trainers]
-
+                # Query all trainers for this task
                 logger.info(
-                    f"Checking task {training_task.task.task_id} with hotkey {training_task.hotkey} on {sources}"
+                    f"Checking task {training_task.task.task_id} with hotkey {training_task.hotkey} "
+                    f"on trainers {[trainer.trainer_ip for trainer in trainers]}"
                 )
                 responses = []
-                for source in sources:
+                for trainer in trainers:
                     try:
                         task_log = await get_training_task_details(
-                            source, str(training_task.task.task_id), training_task.hotkey,
-                            is_organic=is_organic
+                            trainer.trainer_ip, str(training_task.task.task_id), training_task.hotkey
                         )
                         if task_log:
-                            responses.append((source, task_log))
+                            responses.append((trainer.trainer_ip, task_log))
                     except httpx.HTTPStatusError as e:
                         status_code = e.response.status_code
                         if 500 <= status_code < 600:
-                            logger.error(f"Server error ({status_code}) from {source}: {str(e)}")
+                            logger.error(f"Server error ({status_code}) from trainer {trainer.trainer_ip}: {str(e)}")
                         continue
                     except Exception as e:
-                        logger.info(f"Could not get task details from {source}: {str(e)}")
+                        logger.info(f"Could not get task details from trainer {trainer.trainer_ip}: {str(e)}")
                         continue
 
                 if not responses:
