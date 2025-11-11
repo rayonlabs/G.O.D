@@ -136,6 +136,13 @@ def main():
         except Exception as e:
             print(f"Failed to sync W&B logs: {e}", flush=True)
 
+    try:
+        if os.path.isdir(local_folder):
+            shutil.rmtree(local_folder)
+            print(f"Deleted local folder: {local_folder}", flush=True)
+    except Exception as e:
+        print(f"Failed to delete local folder {local_folder}: {e}", flush=True)
+
 
 if __name__ == "__main__":
     main()

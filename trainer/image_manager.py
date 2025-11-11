@@ -23,7 +23,7 @@ from trainer import constants as cst
 from trainer.tasks import complete_task
 from trainer.tasks import log_task
 from trainer.tasks import update_wandb_url
-from trainer.utils.logging import logger
+from trainer.utils.trainer_logging import logger
 from trainer.utils.misc import build_wandb_env
 from trainer.utils.misc import extract_container_error
 from validator.utils.logging import get_all_context_tags
@@ -444,6 +444,9 @@ def get_task_type(request: TrainerProxyRequest) -> TaskType:
 
 
 async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
+    cancelled_exc: asyncio.CancelledError | None = None
+    cancel_log_message: str | None = None
+
     try:
         training_data = task.training_data
         success = False
@@ -575,6 +578,10 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             success = True
             await complete_task(training_data.task_id, task.hotkey, success=success)
 
+    except asyncio.CancelledError as cancel:
+        cancel_log_message = "[INFO] Training cancelled."
+        logger.info("Training cancelled", extra=log_labels)
+        cancelled_exc = cancel
     except Exception as e:
         log_message = f"[ERROR] Job failed: {e}"
         await log_task(training_data.task_id, task.hotkey, log_message)
@@ -582,44 +589,56 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
         await complete_task(training_data.task_id, task.hotkey, success=success)
 
     finally:
-        if container and isinstance(container, Container):
-            try:
-                container.reload()
-                if container.status == "running":
-                    container.kill()
-                container.remove(force=True)
-                await log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
+        async def _final_cleanup():
+            nonlocal success
 
-            except Exception as cleanup_err:
-                await log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
+            if cancel_log_message:
+                await log_task(training_data.task_id, task.hotkey, cancel_log_message)
 
-        logger.info("Cleaning up", extra=log_labels)
-        if tag:
-            delete_image_and_cleanup(tag)
-            logger.info("Cleaned up Docker resources.", extra=log_labels)
-        else:
-            logger.info("No Docker image to clean up.", extra=log_labels)
+            if container and isinstance(container, Container):
+                try:
+                    container.reload()
+                    if container.status == "running":
+                        container.kill()
+                    container.remove(force=True)
+                    await log_task(training_data.task_id, task.hotkey, f"Container {container.name} cleaned up.")
 
-        if success:
-            try:
-                path_in_repo = cst.IMAGE_TASKS_HF_SUBFOLDER_PATH if task_type == TaskType.IMAGETASK else None
-                wandb_token = os.getenv("WANDB_TOKEN") if task_type != TaskType.IMAGETASK else None
-                await upload_repo_to_hf(
-                    task_id=training_data.task_id,
-                    hotkey=task.hotkey,
-                    expected_repo_name=training_data.expected_repo_name,
-                    huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
-                    huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
-                    model=training_data.model,
-                    docker_labels=log_labels,
-                    wandb_token=wandb_token,
-                    path_in_repo=path_in_repo,
-                )
+                except Exception as cleanup_err:
+                    await log_task(training_data.task_id, task.hotkey, f"Error during container cleanup: {cleanup_err}")
 
-                await log_task(training_data.task_id, task.hotkey, "Repo uploaded successfully.")
-            except Exception as upload_err:
-                log_message = f"[ERROR] Upload container failed | ExitCode: Unknown | LastError: {upload_err}"
-                await log_task(training_data.task_id, task.hotkey, log_message)
-                success = False
+            logger.info("Cleaning up", extra=log_labels)
+            if tag:
+                delete_image_and_cleanup(tag)
+                logger.info("Cleaned up Docker resources.", extra=log_labels)
+            else:
+                logger.info("No Docker image to clean up.", extra=log_labels)
 
-        await complete_task(training_data.task_id, task.hotkey, success=success)
+            if success:
+                try:
+                    path_in_repo = cst.IMAGE_TASKS_HF_SUBFOLDER_PATH if task_type == TaskType.IMAGETASK else None
+                    wandb_token = os.getenv("WANDB_TOKEN") if task_type != TaskType.IMAGETASK else None
+                    await upload_repo_to_hf(
+                        task_id=training_data.task_id,
+                        hotkey=task.hotkey,
+                        expected_repo_name=training_data.expected_repo_name,
+                        huggingface_username=os.getenv("HUGGINGFACE_USERNAME"),
+                        huggingface_token=os.getenv("HUGGINGFACE_TOKEN"),
+                        model=training_data.model,
+                        docker_labels=log_labels,
+                        wandb_token=wandb_token,
+                        path_in_repo=path_in_repo,
+                    )
+
+                    await log_task(training_data.task_id, task.hotkey, "Repo uploaded successfully.")
+                except Exception as upload_err:
+                    log_message = f"[ERROR] Upload container failed | ExitCode: Unknown | LastError: {upload_err}"
+                    await log_task(training_data.task_id, task.hotkey, log_message)
+                    success = False
+
+            await complete_task(training_data.task_id, task.hotkey, success=success)
+
+        try:
+            await asyncio.shield(_final_cleanup())
+        finally:
+            if cancelled_exc:
+                raise cancelled_exc
