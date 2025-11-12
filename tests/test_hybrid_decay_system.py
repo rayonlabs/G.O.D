@@ -22,7 +22,7 @@ EMISSION_MULTIPLIER_THRESHOLD = 0.05
 EMISSION_MULTIPLIER_RATE = 2.0
 
 
-def calculate_emission_multiplier(performance_diff: float) -> float:
+def calculate_emission_boost_from_perf(performance_diff: float) -> float:
     """Calculate emission boost from performance."""
     if performance_diff <= EMISSION_MULTIPLIER_THRESHOLD:
         return 0.0
@@ -113,7 +113,7 @@ def test_scenario(
     print(f"First became champion at: {first_championship_time}")
     print()
 
-    emission_boost = calculate_emission_multiplier(performance_diff)
+    emission_boost = calculate_emission_boost_from_perf(performance_diff)
     print(f"Initial emission boost: {emission_boost:.4f} ({emission_boost * 100:.2f}%)")
     print(f"Base weight: {TOURNAMENT_TEXT_WEIGHT:.4f}")
     print()
@@ -122,18 +122,15 @@ def test_scenario(
     print("-" * 100)
 
     for time_label, sim_time, wins_at_time in test_times:
-        old_decay, new_decay, apply_hybrid = calculate_hybrid_decays(
-            first_championship_time, wins_at_time, sim_time
-        )
+        old_decay, new_decay, apply_hybrid = calculate_hybrid_decays(first_championship_time, wins_at_time, sim_time)
 
         final_weight = calculate_tournament_weight_with_decay(
             TOURNAMENT_TEXT_WEIGHT, emission_boost, old_decay, new_decay, apply_hybrid, MAX_TEXT_TOURNAMENT_WEIGHT
         )
 
         days_as_champion = (
-            (sim_time.replace(tzinfo=timezone.utc) - first_championship_time.replace(tzinfo=timezone.utc)).total_seconds()
-            / SECONDS_PER_DAY
-        )
+            sim_time.replace(tzinfo=timezone.utc) - first_championship_time.replace(tzinfo=timezone.utc)
+        ).total_seconds() / SECONDS_PER_DAY
 
         print(
             f"{time_label:<30} {wins_at_time:>4}   {days_as_champion:>6.1f}d  "

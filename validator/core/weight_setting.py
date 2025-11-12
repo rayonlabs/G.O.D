@@ -75,7 +75,7 @@ async def _upload_results_to_s3(config: Config, tournament_audit_data: Tournamen
     return presigned_url
 
 
-def calculate_emission_multiplier(performance_diff: float) -> float:
+def calculate_emission_boost_from_perf(performance_diff: float) -> float:
     if performance_diff <= cts.EMISSION_MULTIPLIER_THRESHOLD:
         return 0.0
 
@@ -250,11 +250,15 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
         elif tournament_type == TournamentType.IMAGE:
             image_performance_diff = performance_diff
 
-    text_emission_increase = calculate_emission_multiplier(text_performance_diff) if text_performance_diff is not None else 0.0
-    image_emission_increase = calculate_emission_multiplier(image_performance_diff) if image_performance_diff is not None else 0.0
+    text_emission_boost_from_perf = (
+        calculate_emission_boost_from_perf(text_performance_diff) if text_performance_diff is not None else 0.0
+    )
+    image_emission_boost_from_perf = (
+        calculate_emission_boost_from_perf(image_performance_diff) if image_performance_diff is not None else 0.0
+    )
 
     logger.info(
-        f"Text emission increase (before decay): {text_emission_increase}, Image emission increase (before decay): {image_emission_increase}"
+        f"Text emission boost from perf (before decay): {text_emission_boost_from_perf}, Image emission boost from perf (before decay): {image_emission_boost_from_perf}"
     )
 
     text_consecutive_wins = 0
@@ -305,7 +309,7 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
     text_tournament_weight = calculate_tournament_weight_with_decay(
         tournament_type=TournamentType.TEXT,
         base_weight=cts.TOURNAMENT_TEXT_WEIGHT,
-        emission_boost=text_emission_increase,
+        emission_boost=text_emission_boost_from_perf,
         old_decay=text_old_decay,
         new_decay=text_new_decay,
         is_pre_cutoff=apply_hybrid_to_text,
@@ -315,7 +319,7 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
     image_tournament_weight = calculate_tournament_weight_with_decay(
         tournament_type=TournamentType.IMAGE,
         base_weight=cts.TOURNAMENT_IMAGE_WEIGHT,
-        emission_boost=image_emission_increase,
+        emission_boost=image_emission_boost_from_perf,
         old_decay=image_old_decay,
         new_decay=image_new_decay,
         is_pre_cutoff=apply_hybrid_to_image,
