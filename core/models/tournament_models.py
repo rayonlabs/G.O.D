@@ -74,6 +74,11 @@ class TournamentData(BaseModel):
         "Calculated as: (defending_champion_score - new_winner_score) / defending_champion_score. "
         "score = loss, so lower is better. Higher diff = better perf = less burn.",
     )
+    updated_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when the tournament was last updated (typically when it completed). "
+        "Used for time-based decay calculations - represents when the champion won/defended.",
+    )
 
 
 class TournamentRoundData(BaseModel):

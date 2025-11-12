@@ -210,7 +210,7 @@ async def get_tournament_where_champion_first_won(
     """
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}, {cst.UPDATED_AT}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1
               AND {cst.TOURNAMENT_STATUS} = 'completed'
@@ -227,6 +227,7 @@ async def get_tournament_where_champion_first_won(
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
                 winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
+                updated_at=result[cst.UPDATED_AT],
             )
         return None
 
@@ -238,7 +239,7 @@ async def get_latest_completed_tournament(
         exclude_clause = f"AND {cst.TOURNAMENT_ID} != $2" if exclude_tournament_id else ""
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS},
-                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}, {cst.UPDATED_AT}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'completed'
             {exclude_clause}
@@ -258,6 +259,7 @@ async def get_latest_completed_tournament(
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
                 winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
+                updated_at=result[cst.UPDATED_AT],
             )
         return None
 
