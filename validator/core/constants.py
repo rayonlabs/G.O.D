@@ -28,8 +28,9 @@ START_TRAINING_IMAGE_ENDPOINT = "/start_training_image/"
 START_TRAINING_GRPO_ENDPOINT = "/start_training_grpo/"
 TRAINING_REPO_ENDPOINT = "/training_repo"
 
-DEV_CONTENT_BASE_URL = "https://gradients-content-service-api-dev.onrender.com"  # "https://dev.content.gradients.io"
-PROD_CONTENT_BASE_URL = "https://gradients-content-service.onrender.com"  # "https://content.gradients.io"
+DEV_CONTENT_BASE_URL = "https://dev.content.gradients.io"
+PROD_CONTENT_BASE_URL = "https://content.gradients.io"
+
 
 
 # 241 is testnet
