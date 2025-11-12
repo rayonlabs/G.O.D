@@ -115,7 +115,10 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
             if previous_tournament:
                 # If latest winner is not EMISSION_BURN_HOTKEY, a new challenger won
                 # If it IS EMISSION_BURN_HOTKEY, the defending champion won (use stored performance)
-                if previous_tournament.winner_hotkey != latest_tournament.winner_hotkey and latest_tournament.winner_hotkey != cts.EMISSION_BURN_HOTKEY:
+                if (
+                    previous_tournament.winner_hotkey != latest_tournament.winner_hotkey
+                    and latest_tournament.winner_hotkey != cts.EMISSION_BURN_HOTKEY
+                ):
                     winner_changed = True
                     logger.info(
                         f"[{tournament_type}] Winner changed: {previous_tournament.winner_hotkey} → {latest_tournament.winner_hotkey}"
@@ -260,7 +263,9 @@ def apply_tournament_weights(
             )
 
     text_undistributed = scaled_text_tournament_weight - text_distributed
-    logger.info(f"Text tournament: allocated={scaled_text_tournament_weight:.10f}, distributed={text_distributed:.10f}, undistributed={text_undistributed:.10f}")
+    logger.info(
+        f"Text tournament: allocated={scaled_text_tournament_weight:.10f}, distributed={text_distributed:.10f}, undistributed={text_undistributed:.10f}"
+    )
 
     image_distributed = 0.0
     logger.info(f"Processing {len(image_tournament_weights)} image tournament winners")
@@ -283,7 +288,9 @@ def apply_tournament_weights(
             )
 
     image_undistributed = scaled_image_tournament_weight - image_distributed
-    logger.info(f"Image tournament: allocated={scaled_image_tournament_weight:.10f}, distributed={image_distributed:.10f}, undistributed={image_undistributed:.10f}")
+    logger.info(
+        f"Image tournament: allocated={scaled_image_tournament_weight:.10f}, distributed={image_distributed:.10f}, undistributed={image_undistributed:.10f}"
+    )
 
     total_undistributed = text_undistributed + image_undistributed
     logger.info(f"Total undistributed weight to add to burn: {total_undistributed:.10f}")
@@ -309,7 +316,11 @@ async def get_node_weights_from_tournament_audit_data(
     logger.info(f"Total burn weight: {tournament_audit_data.burn_weight:.6f}")
 
     # Check that base weights sum to 1.0
-    base_weight_sum = tournament_audit_data.text_tournament_weight + tournament_audit_data.image_tournament_weight + tournament_audit_data.burn_weight
+    base_weight_sum = (
+        tournament_audit_data.text_tournament_weight
+        + tournament_audit_data.image_tournament_weight
+        + tournament_audit_data.burn_weight
+    )
     logger.info(f"Base weights sum (text + image + burn): {base_weight_sum:.10f}")
     logger.info(f"Base weights sum to 1.0? {abs(base_weight_sum - 1.0) < 0.0001}")
 
@@ -382,7 +393,9 @@ async def get_node_weights_from_tournament_audit_data(
     burn_node_id: int | None = hotkey_to_node_id.get(cts.EMISSION_BURN_HOTKEY)
     if burn_node_id is not None:
         all_node_weights[burn_node_id] = scaled_burn_weight + undistributed_weight
-        logger.info(f"Burn weight: base={scaled_burn_weight:.10f} + undistributed={undistributed_weight:.10f} = total={all_node_weights[burn_node_id]:.10f}")
+        logger.info(
+            f"Burn weight: base={scaled_burn_weight:.10f} + undistributed={undistributed_weight:.10f} = total={all_node_weights[burn_node_id]:.10f}"
+        )
 
     # Final weight sum check
     final_weight_sum = sum(all_node_weights)
