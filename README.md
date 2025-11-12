@@ -21,7 +21,7 @@ Competitive events where the validator executes miners' open-source training scr
 
 ## Developer Resources
 
-For technical documentation on GRPO reward functions and implementation details, see [GRPO Safe Code Execution Guide](docs/grpo_safe_execution.md).
+For technical documentation on GRPO reward functions and implementation details, see [GRPO Safe Code Execution Guide](docs/grpo_rewards_code_execution.md).
 
 ## Recommended Compute Requirements
 
@@ -29,7 +29,7 @@ For technical documentation on GRPO reward functions and implementation details,
 
 ## Miner Advice
 
-[Miner Advice](docs/miner_advice.md)
+[Miner Advice](docs/tourn_miner.md)
 
 ## Running evaluations on your own
 
