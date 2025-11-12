@@ -4,7 +4,7 @@ import time
 
 
 # Allow torch.load for transformers 4.46+ security check
-os.environ['TRANSFORMERS_ALLOW_TORCH_LOAD'] = 'true'
+os.environ["TRANSFORMERS_ALLOW_TORCH_LOAD"] = "true"
 
 from accelerate.utils import find_executable_batch_size
 from axolotl.utils.dict import DictDefault
@@ -65,7 +65,7 @@ def evaluate_grpo_model(
     evaluation_config: DictDefault,
     finetuned_model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
-    evaluation_args: EvaluationArgs
+    evaluation_args: EvaluationArgs,
 ) -> dict[str, float]:
     evaluation_config.tokenizer_config = tokenizer.name_or_path
     logger.info(f"Config: {evaluation_config}")
@@ -99,7 +99,7 @@ def evaluate_grpo_model(
         reward_weight = reward_weights_list[i]
         reward_funcs_callable.append(reward_func_callable)
 
-        func_name = getattr(reward_function, 'name', f"reward_func_{i}")
+        func_name = getattr(reward_function, "name", f"reward_func_{i}")
         weighted_name = f"{func_name}_weight_{reward_weight:.2f}"
         reward_func_names.append(weighted_name)
         reward_weights.append(reward_weight)
@@ -115,6 +115,7 @@ def evaluate_grpo_model(
 
     if extra_column_data is not None:
         import json
+
         parsed_extra_data = []
         for item in extra_column_data:
             if isinstance(item, str):
@@ -129,10 +130,12 @@ def evaluate_grpo_model(
         extra_column_data = parsed_extra_data
 
     for i, (original_func, func_name, weight) in enumerate(zip(reward_funcs_callable, reward_func_names, reward_weights)):
+
         def create_wrapper(original_func, func_name, weight):
             supports_extra = supports_extra_data(original_func)
 
             if supports_extra and has_extra_column:
+
                 def wrapper(completions, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions")
 
@@ -154,10 +157,13 @@ def evaluate_grpo_model(
                         avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
                         avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
                         total_count = len(captured_rewards[func_name])
-                        logger.info(f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}")
+                        logger.info(
+                            f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}"
+                        )
 
                     return weighted_results
             else:
+
                 def wrapper(completions, **kwargs):
                     logger.debug(f"🔧 Calling {func_name} with {len(completions)} completions (no extra_data)")
                     raw_results = original_func(completions)
@@ -169,7 +175,9 @@ def evaluate_grpo_model(
                         avg_raw = sum(raw_results) / len(raw_results) if raw_results else 0
                         avg_weighted = sum(weighted_results) / len(weighted_results) if weighted_results else 0
                         total_count = len(captured_rewards[func_name])
-                        logger.info(f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}")
+                        logger.info(
+                            f"🏆 {func_name}: batch_avg_raw={avg_raw:.4f}, batch_avg_weighted={avg_weighted:.4f}, total_samples={total_count}"
+                        )
 
                     return weighted_results
 
@@ -218,7 +226,9 @@ def evaluate_grpo_model(
             raw_reward_list = raw_rewards.get(name, [])
             final_raw_rewards[name] = sum(raw_reward_list) / len(raw_reward_list) if raw_reward_list else 0
 
-            logger.info(f"🏆 {name}: avg_raw={final_raw_rewards[name]:.4f}, avg_weighted={final_weighted_rewards[name]:.4f}, samples={len(captured_reward_list)}")
+            logger.info(
+                f"🏆 {name}: avg_raw={final_raw_rewards[name]:.4f}, avg_weighted={final_weighted_rewards[name]:.4f}, samples={len(captured_reward_list)}"
+            )
 
     total_avg_reward = sum(final_weighted_rewards.values())
     logger.info(f"🎯 TOTAL AVERAGE WEIGHTED REWARD: {total_avg_reward:.4f}")
@@ -244,9 +254,7 @@ def evaluate_finetuned_grpo_model(
     tokenizer: AutoTokenizer,
 ) -> dict[str, float]:
     evaluation_config = _load_and_update_evaluation_config(
-        evaluation_args=evaluation_args,
-        finetuned_model=finetuned_model,
-        config_path=cst.VALI_CONFIG_PATH
+        evaluation_args=evaluation_args, finetuned_model=finetuned_model, config_path=cst.VALI_CONFIG_PATH
     )
     return evaluate_grpo_model(evaluation_config, finetuned_model, tokenizer, evaluation_args)
 
@@ -260,8 +268,6 @@ def evaluate_grpo_repo(evaluation_args: EvaluationArgs) -> None:
     if repo in results_dict:
         logger.info(f"Skipping {repo} as it's already evaluated")
         return
-
-
 
     try:
         tokenizer = load_tokenizer(evaluation_args.original_model, local_files_only=True)
@@ -326,7 +332,7 @@ def main():
                 original_model=original_model,
                 dataset_type=dataset_type_str,
                 file_format=file_format_str,
-                repo=repo
+                repo=repo,
             )
 
             max_retries = 3
@@ -335,12 +341,11 @@ def main():
                 try:
                     start_time = time.monotonic()
                     # Launching subprocess to purge memory
-                    subprocess.run([
-                        "python",
-                        "-m",
-                        "validator.evaluation.single_eval_grpo",
-                        evaluation_args.model_dump_json()
-                    ], check=True, timeout=timeout_seconds)
+                    subprocess.run(
+                        ["python", "-m", "validator.evaluation.single_eval_grpo", evaluation_args.model_dump_json()],
+                        check=True,
+                        timeout=timeout_seconds,
+                    )
                     elapsed = time.monotonic() - start_time
                     logger.info(f"GRPO subprocess completed for {repo} in {elapsed:.2f} seconds")
                     break
@@ -353,12 +358,11 @@ def main():
 
             # Now run KL divergence calculation in separate subprocess
             logger.info(f"Starting KL divergence calculation for {repo}")
-            subprocess.run([
-                "python",
-                "-m",
-                "validator.evaluation.single_eval_kl_divergence",
-                evaluation_args.model_dump_json()
-            ], check=True, timeout=timeout_seconds)
+            subprocess.run(
+                ["python", "-m", "validator.evaluation.single_eval_kl_divergence", evaluation_args.model_dump_json()],
+                check=True,
+                timeout=timeout_seconds,
+            )
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Error running GRPO subprocess for {repo}: {e}")

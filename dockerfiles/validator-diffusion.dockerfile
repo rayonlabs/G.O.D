@@ -16,6 +16,9 @@ RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ComfyUI &&
 RUN pip install -r ComfyUI/requirements.txt
 RUN cd ComfyUI/custom_nodes && \
     git clone --depth 1 https://github.com/Acly/comfyui-tooling-nodes && \
+    cd comfyui-tooling-nodes && \
+    git fetch --depth 1 origin e10daee9edea458fc709f60e725970a25567fca4 && \
+    git checkout e10daee9edea458fc709f60e725970a25567fca4 && \
     cd ..
 
 RUN wget -O /app/validator/evaluation/ComfyUI/models/text_encoders/clip_l.safetensors \

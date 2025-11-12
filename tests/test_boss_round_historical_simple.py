@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """Simplified test file for boss round historical functionality."""
 
-import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
+from unittest.mock import patch
+from uuid import UUID
+from uuid import uuid4
+
+import pytest
+
+import validator.core.constants as cst
 
 # Use same import pattern as other test files
-from core.models.utility_models import TaskStatus, TaskType
-from validator.core.constants import NULL_ACCOUNT_ID
-import validator.core.constants as cst
+from core.models.utility_models import TaskStatus
+from core.models.utility_models import TaskType
 
 
 class TestHistoricalTaskSelection:
@@ -396,10 +401,8 @@ class TestIntegrationFlow:
     async def test_complete_boss_round_historical_flow(self, mock_psql_db):
         """Test the complete flow from historical task selection to tournament execution."""
         from validator.db.sql.historical_tasks import get_random_historical_task_by_type
-        from validator.tournament.boss_round_sync import (
-            copy_historical_task_into_boss_round_tournament,
-            get_synced_task_id
-        )
+        from validator.tournament.boss_round_sync import copy_historical_task_into_boss_round_tournament
+        from validator.tournament.boss_round_sync import get_synced_task_id
         
         print("\n=== COMPLETE BOSS ROUND HISTORICAL FLOW TEST ===")
         
@@ -531,8 +534,8 @@ class TestHistoricalTasksWithPartialExisting:
     @pytest.mark.asyncio
     async def test_create_text_boss_round_with_partial_existing(self, mock_config):
         """Test creating text boss round when 1 task already exists."""
-        from validator.tournament.task_creator import _create_historical_text_boss_round_tasks
         from core.models.tournament_models import TournamentTask
+        from validator.tournament.task_creator import _create_historical_text_boss_round_tasks
         
         tournament_id = str(uuid4())
         round_id = str(uuid4())
@@ -601,8 +604,8 @@ class TestHistoricalTasksWithPartialExisting:
     @pytest.mark.asyncio
     async def test_create_image_boss_round_with_partial_existing(self, mock_config):
         """Test creating image boss round when 2 tasks already exist."""
-        from validator.tournament.task_creator import _create_historical_image_boss_round_tasks
         from core.models.tournament_models import TournamentTask
+        from validator.tournament.task_creator import _create_historical_image_boss_round_tasks
         
         tournament_id = str(uuid4())
         round_id = str(uuid4())
@@ -752,8 +755,6 @@ class TestRealFunctionIntegration:
     async def test_real_boss_round_task_copy_flow(self, mock_psql_db):
         """Test the actual task copying function with minimal mocking."""
         from validator.tournament.boss_round_sync import copy_historical_task_into_boss_round_tournament
-        from validator.db.sql.tasks import add_task
-        from validator.db.sql.tournaments import add_tournament_tasks
         
         print("\n=== REAL BOSS ROUND TASK COPY FLOW ===")
         
@@ -854,8 +855,8 @@ class TestRealFunctionIntegration:
     @pytest.mark.asyncio
     async def test_real_text_boss_round_creation_logic(self, mock_psql_db):
         """Test the actual boss round creation logic with real task_creator functions."""
-        from validator.tournament.task_creator import _create_historical_text_boss_round_tasks
         from core.models.tournament_models import TournamentTask
+        from validator.tournament.task_creator import _create_historical_text_boss_round_tasks
         
         print("\n=== REAL TEXT BOSS ROUND CREATION LOGIC ===")
         

@@ -18,7 +18,8 @@ from trainer.tasks import get_task
 from trainer.tasks import load_task_history
 from trainer.tasks import log_task
 from trainer.tasks import start_task
-from trainer.utils.logging import logger
+from trainer.utils.trainer_logging import logger
+from trainer.utils.misc import are_gpus_available
 from trainer.utils.misc import clone_repo
 from trainer.utils.misc import get_gpu_info
 from validator.core.constants import GET_GPU_AVAILABILITY_ENDPOINT
@@ -33,13 +34,22 @@ load_task_history()
 async def verify_orchestrator_ip(request: Request):
     """Verify request comes from orchestrator IP"""
     client_ip = request.client.host
-    allowed_ip = os.getenv("ORCHESTRATOR_IP", "185.141.218.59")
-    if client_ip != allowed_ip and client_ip != "127.0.0.1":
+    allowed_ips_str = os.getenv("ORCHESTRATOR_IPS", os.getenv("ORCHESTRATOR_IP", "185.141.218.59"))
+    allowed_ips = [ip.strip() for ip in allowed_ips_str.split(",")]
+    allowed_ips.append("127.0.0.1")  # Always allow localhost
+
+    if client_ip not in allowed_ips:
         raise HTTPException(status_code=403, detail="Access forbidden")
     return client_ip
 
 
 async def start_training(req: TrainerProxyRequest) -> JSONResponse:
+    if not are_gpus_available(req.gpu_ids):
+        raise HTTPException(
+            status_code=409,
+            detail=f"GPU conflict detected. Requested GPUs are already in use by running training tasks."
+        )
+    
     await start_task(req)
 
     try:

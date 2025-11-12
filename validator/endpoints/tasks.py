@@ -43,6 +43,7 @@ from validator.db.sql import submissions_and_scoring as submissions_and_scoring_
 from validator.db.sql import tasks as task_sql
 from validator.db.sql import tournaments as tournament_sql
 from validator.db.sql.nodes import get_all_nodes
+from validator.tournament.utils import notify_organic_task_created
 from validator.utils.logging import get_logger
 from validator.utils.util import convert_task_to_task_details
 from validator.utils.util import hide_sensitive_data_till_finished
@@ -119,6 +120,9 @@ async def create_task_dpo(
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    if config.discord_url:
+        await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
+    
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -158,6 +162,10 @@ async def create_task_grpo(
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    
+    if config.discord_url:
+        await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
+    
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -191,6 +199,10 @@ async def create_task_chat(
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    
+    if config.discord_url:
+        await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
+    
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -240,7 +252,6 @@ async def create_task_instruct_text(
             training_repo_backup=result_repo,
             test_data=existing_task.test_data,
             training_data=existing_task.training_data,
-            synthetic_data=existing_task.synthetic_data,
             task_type=TaskType.INSTRUCTTEXTTASK,
             result_model_name=existing_task.result_model_name,
             file_format=existing_task.file_format,
@@ -248,6 +259,10 @@ async def create_task_instruct_text(
         )
 
         new_task = await task_sql.add_task(new_task, config.psql_db)
+        
+        if config.discord_url:
+            await notify_organic_task_created(str(new_task.task_id), new_task.task_type.value, config.discord_url)
+        
         return NewTaskResponse(
             success=True, task_id=new_task.task_id, created_at=new_task.created_at, account_id=new_task.account_id
         )
@@ -284,6 +299,10 @@ async def create_task_instruct_text(
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    
+    if config.discord_url:
+        await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
+    
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -318,6 +337,10 @@ async def create_task_image(
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+
+    if config.discord_url:
+        await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
+    
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -384,11 +407,14 @@ async def create_task_with_fixed_datasets(
     # NOTE: feels weird to add the task and then update it immediately
     await task_sql.add_task(task, config.psql_db)
     task.training_data = request.training_data
-    task.synthetic_data = request.synthetic_data
     task.test_data = request.test_data
     await task_sql.update_task(task, config.psql_db)
 
     logger.info(task.task_id)
+    
+    if config.discord_url:
+        await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
+    
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -571,6 +597,9 @@ async def create_benchmark_root_task_from_existing(
         )
 
         logger.info(f"Created benchmark root task {copied_task.task_id} from original task {task_id}")
+        
+        if config.discord_url:
+            await notify_organic_task_created(str(copied_task.task_id), copied_task.task_type.value, config.discord_url, is_benchmark=True)
 
         return NewTaskResponse(
             success=True, task_id=copied_task.task_id, created_at=copied_task.created_at, account_id=copied_task.account_id

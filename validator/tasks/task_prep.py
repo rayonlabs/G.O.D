@@ -1,5 +1,4 @@
 import ast
-import asyncio
 import json
 import os
 import random
@@ -17,14 +16,9 @@ from datasets import load_dataset
 from fiber import Keypair
 
 import validator.core.constants as cst
-from core.models.payload_models import DpoDatasetColumnsResponse
 from core.models.payload_models import ImageTextPair
 from core.models.utility_models import FileFormat
 from core.utils import download_s3_file
-from validator.augmentation.augmentation import generate_augmented_text_dataset
-from validator.augmentation.augmentation import generate_dpo_reformulation
-from validator.augmentation.augmentation import load_and_merge_multiple_datasets
-from validator.augmentation.augmentation import load_prompts
 from validator.core.models import AnyTextTypeRawTask
 from validator.core.models import ChatRawTask
 from validator.core.models import DpoRawTask
@@ -32,19 +26,7 @@ from validator.core.models import GrpoRawTask
 from validator.core.models import InstructTextRawTask
 from validator.db.sql.tasks import update_task
 from validator.evaluation.utils import get_default_dataset_config
-from validator.utils.augmentation import _apply_dpo_augmentations
-from validator.utils.augmentation import _apply_grpo_augmentations
-from validator.utils.augmentation import _apply_instruct_augmentations
-from validator.utils.augmentation import _generate_dpo_augmentation_config
-from validator.utils.augmentation import _generate_grpo_augmentation_config
-from validator.utils.augmentation import _generate_instruct_augmentation_config
 from validator.utils.cache_clear import delete_dataset_from_cache
-from validator.utils.logging import _log_dpo_augmentations
-from validator.utils.logging import _log_dpo_examples
-from validator.utils.logging import _log_grpo_augmentations
-from validator.utils.logging import _log_grpo_examples
-from validator.utils.logging import _log_instruct_augmentations
-from validator.utils.logging import _log_instruct_examples
 from validator.utils.logging import get_logger
 from validator.utils.reward_functions import validate_reward_function
 from validator.utils.util import save_json_to_temp_file
@@ -157,52 +139,6 @@ def train_test_split_image(dataset_path: str) -> tuple[str, str]:
     return test_zip_path, train_zip_path
 
 
-def adapt_synthetic_columns(synthetic_data: list[dict] | list[DpoDatasetColumnsResponse], task: AnyTextTypeRawTask) -> list[dict]:
-    """
-    Transform synthetic data based on task type.
-
-    Args:
-        synthetic_data: List of synthetic data points
-        task: The task instance that determines how to transform the data
-
-    Returns:
-        Transformed synthetic data
-    """
-    if isinstance(task, InstructTextRawTask):
-        return synthetic_data
-    elif isinstance(task, DpoRawTask):
-        return [validate_and_transform_dpo(data, task) for data in synthetic_data]
-    elif isinstance(task, GrpoRawTask):
-        return synthetic_data
-    elif isinstance(task, ChatRawTask):
-        return synthetic_data
-    else:
-        raise ValueError(f"Unsupported task type: {type(task).__name__}")
-
-
-async def get_additional_synth_data(
-    dataset: Dataset, columns_to_sample: list[str], keypair: Keypair, task: AnyTextTypeRawTask
-) -> list[dict]:
-    num_samples = min(
-        cst.SYNTHETIC_GENERATION_TOTAL,
-        int(len(dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
-    )
-    logger.info(f"Generating {num_samples} additional synthetic data points")
-    sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
-    sampled_data = sampled_data.remove_columns([col for col in sampled_data.column_names if col not in columns_to_sample])
-    # NOTE: Need to do something if errors, without trying to then generate synthetic data
-    try:
-        sampled_data_list = list(sampled_data)
-    except Exception as e:
-        logger.info(f"There is an issue with this sample data for some reason. dataset: {sampled_data}; error: {e}")
-        return None
-
-    synthetic_data = await generate_augmented_text_dataset(sampled_data_list, keypair=keypair, task_type=task.task_type)
-    synthetic_data = adapt_synthetic_columns(synthetic_data, task)
-
-    return synthetic_data
-
-
 async def download_and_load_dataset(
     dataset_name: str, file_format: FileFormat, max_file_size_bytes: int = cst.MAX_FILE_SIZE_BYTES
 ) -> Dataset:
@@ -220,21 +156,28 @@ async def download_and_load_dataset(
     return combined_dataset
 
 
+def process_chat_row(value, role_field: str, content_field: str):
+    if isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            pass
+
+    if isinstance(value, list):
+        cleaned_messages = []
+        for msg in value:
+            if isinstance(msg, dict) and msg.get(content_field) is not None and msg.get(role_field) is not None:
+                cleaned_messages.append(msg)
+        return cleaned_messages if len(cleaned_messages) > 1 else []
+    else:
+        return value if value is not None else ""
 
 
-def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None, augmentations: dict = None):
+def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTypeRawTask = None):
     result = []
     total_rows = 0
     fully_empty_rows = 0
     is_chat_task = isinstance(task, ChatRawTask)
-
-    if augmentations:
-        if isinstance(task, DpoRawTask):
-            _log_dpo_augmentations(augmentations, dataset)
-        elif isinstance(task, InstructTextRawTask):
-            _log_instruct_augmentations(augmentations, dataset)
-        elif isinstance(task, GrpoRawTask):
-            _log_grpo_augmentations(augmentations)
 
     for idx, row in enumerate(dataset):
         row_dict = {}
@@ -243,16 +186,9 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
             if col in row:
                 value = row[col]
 
-                # Only parse JSON strings for ChatTask types
-                if is_chat_task and isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
-                    try:
-                        value = json.loads(value)
-                    except json.JSONDecodeError:
-                        pass
-
                 # Ensure consistent data types: strings for non-ChatTask, preserve type for ChatTask
                 if is_chat_task:
-                    processed_value = value if value is not None else ""
+                    processed_value = process_chat_row(value, task.chat_role_field, task.chat_content_field)
                 else:
                     processed_value = str(value) if value is not None else ""
 
@@ -260,17 +196,8 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
                 if processed_value != "" and processed_value != []:
                     is_row_empty = False
 
-        # Apply DPO augmentations
-        if isinstance(task, DpoRawTask) and augmentations:
-            row_dict = _apply_dpo_augmentations(row_dict, augmentations, idx)
-
-        # Apply Instruct augmentations
-        if isinstance(task, InstructTextRawTask) and augmentations:
-            row_dict = _apply_instruct_augmentations(row_dict, augmentations, idx)
-
-        # Apply GRPO augmentations
-        if isinstance(task, GrpoRawTask) and augmentations:
-            row_dict = _apply_grpo_augmentations(row_dict, augmentations, idx)
+        if is_chat_task and is_row_empty:
+            continue
 
         result.append(row_dict)
         total_rows += 1
@@ -281,14 +208,6 @@ def change_to_json_format(dataset: Dataset, columns: list[str], task: AnyTextTyp
         raise ValueError(f"More than 80% of rows are fully empty ({fully_empty_rows}/{total_rows} rows)")
 
     result = _validate_dpo_data(result, task)
-
-    # Log examples of augmented data
-    if isinstance(task, DpoRawTask) and result:
-        _log_dpo_examples(result)
-    elif isinstance(task, InstructTextRawTask) and augmentations and result:
-        _log_instruct_examples(result)
-    elif isinstance(task, GrpoRawTask) and augmentations and result:
-        _log_grpo_examples(result)
 
     return result
 
@@ -317,54 +236,10 @@ def _validate_dpo_data(result: list[dict], task: AnyTextTypeRawTask) -> list[dic
     return filtered_result
 
 
-def assign_some_of_the_train_to_synth(train_dataset: Dataset, is_dpo: bool = False):
-    if not isinstance(train_dataset, Dataset):
-        raise TypeError("train_dataset must be an instance of datasets.Dataset")
-    if len(train_dataset) == 0:
-        raise ValueError("Cannot split an empty dataset")
-
-    try:
-        dataset_length = len(train_dataset)
-
-        if is_dpo:
-            # For both DPO and instruct text tasks, use SYNTH_EXAMPLES_FROM_TRAIN constant
-            num_synthetic_samples = cst.SYNTH_EXAMPLES_FROM_TRAIN
-            synthetic_dataset = train_dataset.shuffle(seed=42).select(range(num_synthetic_samples))
-            remaining_train_dataset = train_dataset
-
-            logger.info(
-                f"Using max(synth,test) approach: Sampling {num_synthetic_samples} examples WITH REPLACEMENT from train set. "
-                f"Original train size: {dataset_length}, "
-                f"Training size (unchanged): {len(remaining_train_dataset)}, "
-                f"Synthetic size: {len(synthetic_dataset)}"
-            )
-        else:
-            num_synthetic_samples = min(
-                cst.SYNTHETIC_GENERATION_TOTAL,
-                int(len(train_dataset) * cst.ADDITIONAL_SYNTH_DATA_PERCENTAGE),
-            )
-            split_index = dataset_length - num_synthetic_samples
-            synthetic_dataset = train_dataset.select(range(split_index, dataset_length))
-            remaining_train_dataset = train_dataset.select(range(split_index))
-
-            logger.info(
-                f"Taking {num_synthetic_samples} samples from the train set to be synthetic data. "
-                f"Original size: {dataset_length}, "
-                f"Training size: {len(remaining_train_dataset)}, "
-                f"Synthetic size: {len(synthetic_dataset)}"
-            )
-    except Exception as e:
-        logger.info(f"There was an issue with the split {e} ")
-        raise e
-
-    return remaining_train_dataset, synthetic_dataset
-
-
 async def _process_and_upload_datasets(
     task: AnyTextTypeRawTask,
     train_dataset,
     test_dataset,
-    synthetic_data,
     columns_to_sample,
     should_reupload_train,
     should_reupload_test,
@@ -373,31 +248,14 @@ async def _process_and_upload_datasets(
 ):
     files_to_delete = []
     logger.info("Processing and uploading datasets to MinIO storage")
-    logger.info(f"Train dataset: {train_dataset}\nTest dataset: {test_dataset}\nSynthetic data: {synthetic_data}")
+    logger.info(f"Train dataset: {train_dataset}\nTest dataset: {test_dataset}")
     logger.info(f"Columns to sample: {columns_to_sample}")
     logger.info(f"Should reupload train: {should_reupload_train}, test: {should_reupload_test}")
     logger.info(f"Dataset HF name: {ds_hf_name}")
 
-    augmentations = None
-    # Only apply augmentations for synthetic tasks (not organic)
-    if not task.is_organic:
-        max_dataset_size = max(len(train_dataset), len(test_dataset))
-        if isinstance(task, DpoRawTask):
-            augmentations = _generate_dpo_augmentation_config(max_dataset_size)
-            logger.info(f"Generated DPO augmentation config for synthetic dataset size {max_dataset_size}")
-            logger.info(f"DPO obfuscation config: {augmentations}")
-        elif isinstance(task, InstructTextRawTask):
-            augmentations = _generate_instruct_augmentation_config(max_dataset_size, train_dataset)
-            logger.info(f"Generated Instruct augmentation config for synthetic dataset size {max_dataset_size}")
-            logger.info(f"Instruct obfuscation config: {augmentations}")
-        elif isinstance(task, GrpoRawTask):
-            augmentations = _generate_grpo_augmentation_config(max_dataset_size)
-            logger.info(f"Generated GRPO augmentation config for synthetic dataset size {max_dataset_size}")
-            logger.info(f"GRPO obfuscation config: {augmentations}")
-
     try:
         if should_reupload_train:
-            train_data_json = change_to_json_format(train_dataset, columns_to_sample, task, augmentations)
+            train_data_json = change_to_json_format(train_dataset, columns_to_sample, task)
 
             await _validate_and_filter_grpo_reward_functions(task, train_data_json, psql_db)
 
@@ -410,35 +268,23 @@ async def _process_and_upload_datasets(
         else:
             train_json_url = train_dataset
         if should_reupload_test:
-            test_data_json = change_to_json_format(test_dataset, columns_to_sample, task, augmentations)
+            test_data_json = change_to_json_format(test_dataset, columns_to_sample, task)
             test_json_path, test_json_size = await save_json_to_temp_file(test_data_json, prefix="test_data_")
             files_to_delete.append(test_json_path)
             await _check_file_size(test_json_size, "test_data")
             test_json_url = await upload_file_to_minio(test_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_test_data.json")
         else:
             test_json_url = test_dataset
-        if synthetic_data:
-            synthetic_data_json = change_to_json_format(synthetic_data, columns_to_sample, task, augmentations)
-            synth_json_path, synth_json_size = await save_json_to_temp_file(synthetic_data_json, prefix="synth_data_")
-            files_to_delete.append(synth_json_path)
-            await _check_file_size(synth_json_size, "synth_data")
-            synth_json_url = await upload_file_to_minio(
-                synth_json_path, cst.BUCKET_NAME, f"{os.urandom(8).hex()}_synth_data.json"
-            )
-        else:
-            synth_json_url = None
     except Exception as e:
         logger.error(f"There was a problem going to json {e}")
         raise e
 
-    logger.info(f"Train json url: {train_json_url}\nTest json url: {test_json_url}\nSynth json url: {synth_json_url}")
+    logger.info(f"Train json url: {train_json_url}\nTest json url: {test_json_url}")
 
     if not train_json_url:
         raise Exception("Failed to upload training data to MinIO storage")
     if not test_json_url:
         raise Exception("Failed to upload test data to MinIO storage")
-    if not synth_json_url and synthetic_data:
-        raise Exception("Failed to upload synthetic data to MinIO storage")
 
     for file_path in files_to_delete:
         if os.path.exists(file_path):
@@ -449,7 +295,6 @@ async def _process_and_upload_datasets(
 
     return (
         test_json_url.strip('"'),
-        synth_json_url.strip('"') if synth_json_url else None,
         train_json_url.strip('"'),
     )
 
@@ -533,133 +378,6 @@ def pick_columns_to_sample(task: AnyTextTypeRawTask, dataset: Dataset = None) ->
     return columns_to_sample
 
 
-def validate_and_transform_dpo(data: DpoDatasetColumnsResponse, task: DpoRawTask) -> dict:
-    assert isinstance(data, DpoDatasetColumnsResponse)
-    return {
-        cst.STANDARD_DPO_PROMPT_COLUMN: data.field_prompt,
-        cst.STANDARD_DPO_CHOSEN_COLUMN: data.field_chosen,
-        cst.STANDARD_DPO_REJECTED_COLUMN: data.field_rejected,
-    }
-
-
-async def generate_synthetic_dpo_data(dataset: Dataset, keypair: Keypair, task: DpoRawTask) -> list[dict]:
-    prompt_field = cst.STANDARD_DPO_PROMPT_COLUMN
-    logger.info(f"Generating synthetic DPO data from the standardized field {prompt_field}")
-
-    num_samples = min(cst.SYNTHETIC_GENERATION_TOTAL * 2, len(dataset))
-
-    sampled_data = dataset.shuffle(seed=42).select(range(num_samples))
-    prompts = sampled_data[prompt_field]
-
-    # Create dict with standardized key for generate_dpo_reformulation
-    prompts_for_gen = [{cst.STANDARD_DPO_PROMPT_COLUMN: prompt} for prompt in prompts]
-
-    prompts_obj = load_prompts()
-    logger.info(f"Attempting to generate {cst.SYNTHETIC_GENERATION_TOTAL} synthetic DPO samples")
-
-    synthetic_dataset = []
-    json_errors = 0
-    generic_errors = 0
-    consecutive_errors = 0
-    max_consecutive_errors = 10
-    max_retry_attempts = 3
-    max_batch_retries = 2
-
-    total_batches = (len(prompts_for_gen) + cst.SYNTH_GEN_BATCH_SIZE - 1) // cst.SYNTH_GEN_BATCH_SIZE
-    batch_idx = 0
-
-    while len(synthetic_dataset) < cst.SYNTHETIC_GENERATION_TOTAL and batch_idx < len(prompts_for_gen):
-        end_idx = min(batch_idx + cst.SYNTH_GEN_BATCH_SIZE, len(prompts_for_gen))
-        batch = prompts_for_gen[batch_idx:end_idx]
-        current_batch = (batch_idx // cst.SYNTH_GEN_BATCH_SIZE) + 1
-
-        for retry in range(max_batch_retries):
-            if retry > 0:
-                logger.info(f"Retrying batch {current_batch}/{total_batches} (attempt {retry + 1}/{max_batch_retries})")
-
-            logger.info(f"Processing batch {current_batch}/{total_batches} ({len(batch)} samples)")
-
-            batch_tasks = []
-            for prompt in batch:
-
-                async def process_with_retry(p):
-                    for attempt in range(max_retry_attempts):
-                        try:
-                            result = await generate_dpo_reformulation(p, prompts_obj, keypair)
-                            return result
-                        except Exception as e:
-                            if attempt < max_retry_attempts - 1:
-                                logger.info(f"Retrying prompt after error: {e}")
-                            else:
-                                raise
-                    return None
-
-                batch_tasks.append(process_with_retry(prompt))
-
-            results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-
-            batch_results = []
-            batch_error_count = 0
-
-            for idx, result in enumerate(results):
-                if isinstance(result, Exception):
-                    if isinstance(result, json.JSONDecodeError):
-                        json_errors += 1
-                    else:
-                        generic_errors += 1
-                    consecutive_errors += 1
-                    batch_error_count += 1
-
-                    if consecutive_errors >= max_consecutive_errors:
-                        logger.error(f"Maximum consecutive errors reached when generating synthetic DPO dataset. Error: {result}")
-                        consecutive_errors = 0
-                else:
-                    if idx == 0:
-                        logger.info(f"Batch {current_batch} example - Input: {batch[idx]}")
-                        logger.info(f"Batch {current_batch} example - Output: {result}")
-                        logger.info(f"DPO Fields - prompt: '{result.field_prompt[:100]}...'")
-                        logger.info(f"DPO Fields - chosen: '{result.field_chosen[:100]}...'")
-                        logger.info(f"DPO Fields - rejected: '{result.field_rejected[:100]}...'")
-                    consecutive_errors = 0
-
-                    dpo_item = validate_and_transform_dpo(result, task)
-                    batch_results.append(dpo_item)
-
-            synthetic_dataset.extend(batch_results)
-
-            if batch_results:
-                logger.info(
-                    f"Batch {current_batch}/{total_batches} complete. "
-                    f"Generated {len(batch_results)}/{len(batch)} samples successfully"
-                )
-
-                if len(batch_results) >= len(batch) * 0.7 or batch_error_count < 3:
-                    break
-
-        batch_idx = end_idx
-        logger.info(f"Progress: {len(synthetic_dataset)}/{cst.SYNTHETIC_GENERATION_TOTAL} synthetic samples generated")
-
-    logger.info(
-        f"Finished generating synthetic data. Got {len(synthetic_dataset)} samples total. "
-        f"JSON errors: {json_errors}, Other errors: {generic_errors}"
-    )
-
-    if len(synthetic_dataset) < cst.SYNTHETIC_GENERATION_TOTAL:
-        missing_samples = cst.SYNTHETIC_GENERATION_TOTAL - len(synthetic_dataset)
-        logger.warning(
-            f"Could only generate {len(synthetic_dataset)}/{cst.SYNTHETIC_GENERATION_TOTAL} "
-            f"synthetic samples. Adding {missing_samples} samples from training data."
-        )
-
-        additional_train_samples = dataset.shuffle(seed=84).select(range(missing_samples))
-        additional_train_list = [sample for sample in additional_train_samples]
-
-        logger.info(f"Added {len(additional_train_list)} samples from training data to supplement synthetic dataset")
-        synthetic_dataset.extend(additional_train_list)
-
-    return synthetic_dataset
-
-
 def standardize_column_names(dataset: Dataset, task: InstructTextRawTask) -> Dataset:
     column_mapping = {}
 
@@ -741,142 +459,27 @@ def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Datase
     return dataset
 
 
-async def _generate_dpo_synthetic_data(train_ds, keypair, task) -> tuple:
-    """Generate synthetic data for DPO tasks."""
-    logger.info("DPO task: Generating synthetic dataset using TEXT_SYNTH_MODEL and TEXT_SYNTH_WEAKER_MODEL")
-    synthetic_data_list = await asyncio.wait_for(generate_synthetic_dpo_data(train_ds, keypair, task), timeout=300)
-
-    if synthetic_data_list and len(synthetic_data_list) >= cst.SYNTHETIC_GENERATION_TOTAL:
-        synth_for_training = synthetic_data_list[: cst.SYNTHETIC_FOR_TRAINING]
-        synth_for_eval = synthetic_data_list[cst.SYNTHETIC_FOR_TRAINING :]
-
-        synth_train_dataset = Dataset.from_list(synth_for_training)
-        updated_train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-        logger.info(
-            f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(updated_train_ds)}"
-        )
-
-        train_samples = updated_train_ds.shuffle(seed=42).select(range(cst.SYNTH_EXAMPLES_FROM_TRAIN))
-        train_samples_list = [sample for sample in train_samples]
-
-        synthetic_ds = synth_for_eval + train_samples_list
-        logger.info(
-            f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples "
-            f"and {len(train_samples_list)} examples from training data"
-        )
-        return updated_train_ds, synthetic_ds
-    else:
-        logger.info("Not enough synthetic data generated, falling back to sampling from train")
-        _, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=True)
-        return train_ds, synthetic_ds
-
-
-async def _generate_other_synthetic_data(train_ds, test_ds, columns_to_sample, keypair, task) -> tuple:
-    """Generate synthetic data for tasks."""
-    logger.info("Generating synthetic data for text task")
-    synthetic_ds = await get_additional_synth_data(test_ds, columns_to_sample, keypair, task=task)
-
-    # Print an example from synthetic data for inspection
-    if synthetic_ds and len(synthetic_ds) > 0:
-        example = synthetic_ds[0]
-        logger.info(f"Example synthetic data point for task: {example}")
-
-    # Always mix training data into synthetic evaluation and put some synth in training
-    if synthetic_ds and len(synthetic_ds) > 0:
-        if len(synthetic_ds) >= cst.SYNTHETIC_GENERATION_TOTAL:
-            # Original logic for large synthetic datasets
-            synth_for_training = synthetic_ds[: cst.SYNTHETIC_FOR_TRAINING]
-            synth_for_eval = synthetic_ds[cst.SYNTHETIC_FOR_TRAINING :]
-        else:
-            # For smaller datasets, use 1/3 for training, 2/3 for evaluation
-            split_point = len(synthetic_ds) // 3
-            synth_for_training = synthetic_ds[:split_point]
-            synth_for_eval = synthetic_ds[split_point:]
-
-        # Add synthetic data to training set
-        updated_train_ds = train_ds
-        if len(synth_for_training) > 0:
-            synth_train_dataset = Dataset.from_list(synth_for_training)
-            updated_train_ds = concatenate_datasets([train_ds, synth_train_dataset])
-            logger.info(
-                f"Training dataset size after adding {len(synth_for_training)} synthetic examples: {len(updated_train_ds)}"
-            )
-
-        # Always sample from training data for synthetic evaluation to prevent gaming
-        train_samples = updated_train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(updated_train_ds))))
-        train_samples_list = [sample for sample in train_samples]
-
-        final_synthetic_ds = synth_for_eval + train_samples_list
-        logger.info(
-            f"Created synthetic evaluation dataset with {len(synth_for_eval)} synthetic examples "
-            f"and {len(train_samples_list)} examples from training data"
-        )
-        return updated_train_ds, final_synthetic_ds
-    else:
-        # Fallback: if no synthetic data, sample from training data
-        logger.info("No synthetic data available, sampling from training data for evaluation")
-        train_samples = train_ds.shuffle(seed=42).select(range(min(cst.SYNTH_EXAMPLES_FROM_TRAIN, len(train_ds))))
-        synthetic_ds = [sample for sample in train_samples]
-        return train_ds, synthetic_ds
-
-
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> tuple[str, str, str]:
     should_reupload_train = FileFormat.S3 == task.file_format
     should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
 
     train_dataset_name = task.training_data if task.training_data else task.ds
 
-    dataset_ids = [ds.strip() for ds in train_dataset_name.split(",")]
-    has_multiple_datasets = len(dataset_ids) > 1
-
     if not task.test_data:
         logger.info(f"Preparing {train_dataset_name}")
 
-        if has_multiple_datasets:
-            merged_samples = await load_and_merge_multiple_datasets(dataset_ids, task, keypair)
-            from datasets import Dataset as HFDataset
+        try:
+            dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
+        except Exception as e:
+            logger.info(f"There was an issue loading the dataset: {e}")
+            raise e
 
-            try:
-                dataset = HFDataset.from_list(merged_samples)
-            except Exception as e:
-                logger.error(f"Error details: {e}", exc_info=True)
-                random.shuffle(merged_samples)
-                for i in range(1000):
-                    logger.error(f"Sample {i}: {merged_samples[i]}")
-                raise e
-
-            # For merged datasets, update task fields based on what columns actually exist
-            if isinstance(task, InstructTextRawTask):
-                if cst.STANDARD_INPUT_COLUMN not in dataset.column_names:
-                    task.field_input = None
-                if cst.STANDARD_SYSTEM_COLUMN not in dataset.column_names:
-                    task.field_system = None
-        else:
-            try:
-                dataset = await download_and_load_dataset(train_dataset_name, task.file_format)
-            except Exception as e:
-                logger.info(f"There was an issue loading the dataset: {e}")
-                raise e
-
-            if isinstance(task, InstructTextRawTask):
-                dataset = standardize_column_names(dataset, task)
-            elif isinstance(task, DpoRawTask):
-                dataset = standardize_dpo_column_names(dataset, task)
-            elif isinstance(task, GrpoRawTask):
-                dataset = standardize_grpo_column_names(dataset, task)
-
-            # Subsample when using only a single dataset (50-100% of original size)
-            original_size = len(dataset)
-            subsample_percentage = random.uniform(0.5, 1.0)
-            subsample_size = int(original_size * subsample_percentage)
-
-            if subsample_size < original_size:
-                logger.info(
-                    f"Subsampling single dataset from {original_size} to {subsample_size} rows ({subsample_percentage:.1%})"
-                )
-                dataset = dataset.shuffle(seed=42).select(range(subsample_size))
-            else:
-                logger.info(f"Using full dataset size of {original_size} rows")
+        if isinstance(task, InstructTextRawTask):
+            dataset = standardize_column_names(dataset, task)
+        elif isinstance(task, DpoRawTask):
+            dataset = standardize_dpo_column_names(dataset, task)
+        elif isinstance(task, GrpoRawTask):
+            dataset = standardize_grpo_column_names(dataset, task)
 
         dataset_dict = await train_test_split(dataset)
         train_ds = dataset_dict["train"]
@@ -911,33 +514,10 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
     if any(col not in train_ds.column_names for col in columns_to_sample):
         raise ValueError(f"Column {columns_to_sample} not found in train dataset")
 
-    synthetic_ds = []
-    try:
-        if cst.GET_SYNTH_DATA:
-            logger.info("Generating additional synthetic data")
-            if isinstance(task, DpoRawTask):
-                train_ds, synthetic_ds = await _generate_dpo_synthetic_data(train_ds, keypair, task)
-            else:
-                train_ds, synthetic_ds = await _generate_other_synthetic_data(
-                    train_ds, test_ds, columns_to_sample, keypair, task
-                )
-        else:
-            logger.info("Skipping synthetic data generation")
-    except Exception as e:
-        logger.info(f"Synthetic dataset gen is down, moving part of the train over: {e}")
-        is_dpo = isinstance(task, DpoRawTask) or isinstance(task, InstructTextRawTask)
-        train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=is_dpo)
-
-    if synthetic_ds is None:
-        logger.info("There was not enough synthetic data created, using train samples instead")
-        is_dpo = isinstance(task, DpoRawTask) or isinstance(task, InstructTextRawTask)
-        train_ds, synthetic_ds = assign_some_of_the_train_to_synth(train_ds, is_dpo=is_dpo)
-
     return await _process_and_upload_datasets(
         task,
         train_ds,
         test_ds if should_reupload_test else task.test_data,
-        synthetic_ds,
         columns_to_sample,
         should_reupload_train,
         should_reupload_test,

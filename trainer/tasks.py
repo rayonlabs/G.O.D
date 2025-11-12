@@ -2,12 +2,15 @@ import json
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
+
 import aiofiles
 
+from core.models.payload_models import TrainerProxyRequest
+from core.models.payload_models import TrainerTaskLog
 from core.models.utility_models import TaskStatus
-from core.models.payload_models import TrainerProxyRequest, TrainerTaskLog
-from validator.utils.logging import get_logger
 from trainer import constants as cst
+from validator.utils.logging import get_logger
+
 
 logger = get_logger(__name__)
 
@@ -25,6 +28,7 @@ async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
         existing_task.status = TaskStatus.TRAINING
         existing_task.started_at = datetime.utcnow()
         existing_task.finished_at = None
+        existing_task.gpu_ids = task.gpu_ids
         await save_task_history()
         return task_id, hotkey
 
@@ -81,18 +85,12 @@ def get_recent_tasks(hours: float = 1.0) -> list[TrainerTaskLog]:
     cutoff = datetime.utcnow() - timedelta(hours=hours)
 
     recent_tasks = [
-        task for task in task_history
-        if (task.started_at and task.started_at >= cutoff) or
-           (task.finished_at and task.finished_at >= cutoff)
+        task
+        for task in task_history
+        if (task.started_at and task.started_at >= cutoff) or (task.finished_at and task.finished_at >= cutoff)
     ]
 
-    recent_tasks.sort(
-        key=lambda t: max(
-            t.finished_at or datetime.min,
-            t.started_at or datetime.min
-        ),
-        reverse=True
-    )
+    recent_tasks.sort(key=lambda t: max(t.finished_at or datetime.min, t.started_at or datetime.min), reverse=True)
 
     return recent_tasks
 

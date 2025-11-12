@@ -180,7 +180,7 @@ async def get_tournament_performance_data(tournament_id: str, psql_db) -> list[T
 
         for score in tournament_scores:
             if score.hotkey == winner_hotkey_for_lookup:
-                winner_tournament_score = max(score.test_loss, score.synth_loss)
+                winner_tournament_score = score.test_loss
                 logger.info(f"Winner tournament score for {task_pair.winner_hotkey}: {winner_tournament_score}")
                 break
 
@@ -188,10 +188,10 @@ async def get_tournament_performance_data(tournament_id: str, psql_db) -> list[T
             task_type = TaskType(task_pair.task_type)
 
             if task_type == TaskType.GRPOTASK:
-                best_synthetic_score = max(max(score.test_loss, score.synth_loss) for score in synthetic_scores)
+                best_synthetic_score = max(score.test_loss for score in synthetic_scores)
                 logger.info(f"Best synthetic score (GRPO - higher is better): {best_synthetic_score}")
             else:
-                best_synthetic_score = min(max(score.test_loss, score.synth_loss) for score in synthetic_scores)
+                best_synthetic_score = min(score.test_loss for score in synthetic_scores)
                 logger.info(f"Best synthetic score (lower is better): {best_synthetic_score}")
 
         if winner_tournament_score is not None and best_synthetic_score is not None:
@@ -261,7 +261,7 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
         logger.info("No task pairs found, returning 0.0 performance difference")
         median_performance_diff = 0.0
     else:
-        performance_differences = [data.performance_difference for data in performance_data]
+        performance_differences = [data.performance_difference for data in performance_data if data.performance_difference is not None]
         median_performance_diff = statistics.median(performance_differences) if performance_differences else 0.0
         logger.info(f"Median performance difference: {median_performance_diff} from {len(performance_differences)} task pairs")
 

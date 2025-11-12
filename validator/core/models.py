@@ -12,10 +12,10 @@ from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
+from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 from core.models.utility_models import ImageTextPair
 from core.models.utility_models import InstructTextDatasetType
@@ -120,9 +120,9 @@ class DpoRawTask(RawTask):
     prompt_format: str | None = None
     chosen_format: str | None = None
     rejected_format: str | None = None
-    synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.DPOTASK
+    synthetic_data: str | None = None
 
 
 class GrpoRawTask(RawTask):
@@ -134,8 +134,8 @@ class GrpoRawTask(RawTask):
     reward_functions: list[RewardFunction]
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.GRPOTASK
-    synthetic_data: str | None = None
     extra_column: str | None = None
+    synthetic_data: str | None = None
 
     @model_validator(mode="after")
     def validate_reward_functions(self) -> "GrpoRawTask":
@@ -157,9 +157,9 @@ class InstructTextRawTask(RawTask):
     format: str | None = None
     no_input_format: str | None = None
     system_format: None = None  # NOTE: Needs updating to be optional once we accept it
-    synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.INSTRUCTTEXTTASK
+    synthetic_data: str | None = None
 
 
 class ChatRawTask(RawTask):
@@ -173,9 +173,9 @@ class ChatRawTask(RawTask):
     chat_content_field: str | None = "value"
     chat_user_reference: str | None = "user"
     chat_assistant_reference: str | None = "assistant"
-    synthetic_data: str | None = None
     file_format: FileFormat = FileFormat.HF
     task_type: TaskType = TaskType.CHATTASK
+    synthetic_data: str | None = None
 
 
 class ImageRawTask(RawTask):
@@ -359,7 +359,6 @@ class AllNodeStats(BaseModel):
 
 class DatasetUrls(BaseModel):
     test_url: str
-    synthetic_url: str | None = None
     train_url: str
 
 
@@ -372,13 +371,11 @@ class DatasetFiles(BaseModel):
 class DatasetJsons(BaseModel):
     train_data: list[Any]
     test_data: list[Any]
-    synthetic_data: list[Any] = Field(default_factory=list)
 
     def to_json_strings(self) -> dict[str, str]:
         return {
             "train_data": json.dumps(self.train_data),
             "test_data": json.dumps(self.test_data),
-            "synthetic_data": json.dumps(self.synthetic_data) if self.synthetic_data else "",
         }
 
 
@@ -494,7 +491,7 @@ class EvaluationArgs(BaseModel):
                 if "field_instruction" in data and "field_input" in data:
                     return InstructTextDatasetType.model_validate(data)
                 elif "chat_column" in data:
-                    return ChatTemplateDatasetType.model_validate(data) # TODO correct?
+                    return ChatTemplateDatasetType.model_validate(data)  # TODO correct?
                 elif "field_chosen" in data:
                     return DpoDatasetType.model_validate(data)
                 elif "reward_functions" in data:
@@ -509,5 +506,9 @@ AnyTextTypeRawTask = InstructTextRawTask | DpoRawTask | GrpoRawTask | ChatRawTas
 AnyTypeRawTask = AnyTextTypeRawTask | ImageRawTask
 AnyTypeTask = InstructTextTask | DpoTask | ImageTask | GrpoTask | ChatTask
 AnyTypeTaskWithHotkeyDetails = (
-    InstructTextTaskWithHotkeyDetails | ImageTaskWithHotkeyDetails | DpoTaskWithHotkeyDetails | GrpoTaskWithHotkeyDetails | ChatTaskWithHotkeyDetails
+    InstructTextTaskWithHotkeyDetails
+    | ImageTaskWithHotkeyDetails
+    | DpoTaskWithHotkeyDetails
+    | GrpoTaskWithHotkeyDetails
+    | ChatTaskWithHotkeyDetails
 )

@@ -1,9 +1,12 @@
-import logging
 import json
-import requests
+import logging
 import socket
 import time
+
+import requests
+
 from trainer.constants import VECTOR_URL
+
 
 HOSTNAME = socket.gethostname()
 

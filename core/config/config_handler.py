@@ -1,10 +1,8 @@
 import os
-import uuid
 
 import toml
 import yaml
 from fiber.logging_utils import get_logger
-from transformers import AutoTokenizer
 
 import core.constants as cst
 from core.models.utility_models import ChatTemplateDatasetType
@@ -56,22 +54,6 @@ def create_dataset_entry(
 def update_flash_attention(config: dict, model: str):
     # You might want to make this model-dependent
     config["flash_attention"] = False
-    return config
-
-
-def update_model_info(config: dict, model: str, job_id: str = "", expected_repo_name: str | None = None, dataset_type: TextDatasetType | None = None):
-    logger.info("WE ARE UPDATING THE MODEL INFO")
-    tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
-    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
-        config["special_tokens"] = {"pad_token": tokenizer.eos_token}
-
-    config["base_model"] = model
-    config["wandb_runid"] = job_id
-    config["wandb_name"] = job_id
-
-    if not isinstance(dataset_type, GrpoDatasetType):
-        config["hub_model_id"] = f"{cst.HUGGINGFACE_USERNAME}/{expected_repo_name or str(uuid.uuid4())}"
-
     return config
 
 

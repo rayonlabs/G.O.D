@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
-
+import subprocess
+import tempfile
 from collections import Counter
+from pathlib import Path
 
 import aiohttp
 import httpx
 import numpy as np
 
+from core.models.tournament_models import GpuRequirement
 from core.models.tournament_models import RoundType
 from core.models.tournament_models import TournamentParticipant
 from core.models.tournament_models import TournamentRoundData
@@ -18,15 +21,19 @@ from validator.core.config import Config
 from validator.core.constants import DEFAULT_PARTICIPANT_COMMIT
 from validator.core.constants import DEFAULT_PARTICIPANT_REPO
 from validator.core.constants import EMISSION_BURN_HOTKEY
+from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100
+from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100
+from validator.core.constants import TOURNAMENT_GRPO_GPU_MULTIPLIER
 from validator.core.models import MinerResultsImage
 from validator.core.models import MinerResultsText
+from validator.cycle.util_functions import get_model_num_params
 from validator.db import constants as db_cst
 from validator.db.database import PSQLDB
-from validator.db.sql import tasks as task_sql
 from validator.db.sql.submissions_and_scoring import get_all_scores_and_losses_for_task
 from validator.db.sql.submissions_and_scoring import get_task_winner
 from validator.db.sql.tasks import get_task
-from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import count_champion_consecutive_wins
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament
@@ -35,14 +42,44 @@ from validator.db.sql.tournaments import get_tournament_groups
 from validator.db.sql.tournaments import get_tournament_participant
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.db.sql.tournaments import get_training_status_for_task_and_hotkeys
-from validator.db.sql.tournaments import is_champion_winner
 from validator.evaluation.scoring import calculate_miner_ranking_and_scores
 from validator.tournament import constants as t_cst
-from validator.tournament.task_creator import create_new_task_of_same_type
 from validator.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int, model_id: str = None) -> GpuRequirement:
+    if task_type == TaskType.IMAGETASK:
+        return GpuRequirement.A100
+    if not model_params_count and model_id:
+        logger.info(f"model_params_count is {model_params_count}, fetching from HuggingFace for model {model_id}")
+        try:
+            model_params_count = get_model_num_params(model_id)
+            logger.info(f"Fetched model_params_count: {model_params_count} for model {model_id}")
+        except Exception:
+            model_params_count = 0
+
+        if not model_params_count:
+            logger.warning(f"Could not determine model size for {model_id}, defaulting to H100_1X")
+            return GpuRequirement.H100_1X
+
+    params_b = model_params_count / 1_000_000_000
+
+    if task_type == TaskType.DPOTASK:
+        params_b *= TOURNAMENT_DPO_GPU_MULTIPLIER
+    elif task_type == TaskType.GRPOTASK:
+        params_b *= TOURNAMENT_GRPO_GPU_MULTIPLIER
+
+    if params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100:
+        return GpuRequirement.H100_1X
+    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100:
+        return GpuRequirement.H100_2X
+    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100:
+        return GpuRequirement.H100_4X
+    else:
+        return GpuRequirement.H100_8X
 
 
 def get_progressive_threshold(consecutive_wins: int) -> float:
@@ -84,61 +121,6 @@ def get_real_winner_hotkey(winner_hotkey: str | None, base_winner_hotkey: str | 
 # is_champion_winner has been moved to validator.db.sql.tournaments to avoid circular imports
 
 
-async def replace_tournament_task(
-    original_task_id: str, tournament_id: str, round_id: str, group_id: str | None, pair_id: str | None, config: Config
-) -> str:
-    logger.info(f"Starting task replacement for task {original_task_id}")
-    logger.info(f"Tournament: {tournament_id}, Round: {round_id}, Group: {group_id}, Pair: {pair_id}")
-
-    original_task_obj = await task_sql.get_task(original_task_id, config.psql_db)
-    if not original_task_obj:
-        logger.error(f"Could not find original task {original_task_id}")
-        raise ValueError(f"Original task {original_task_id} not found")
-
-    logger.info(f"Found original task - Type: {original_task_obj.task_type}, Status: {original_task_obj.status}")
-    logger.info(f"Original task model params: {original_task_obj.model_params_count}")
-
-    try:
-        new_task = await create_new_task_of_same_type(original_task_obj, config)
-        logger.info(f"Successfully created new task {new_task.task_id} of type {new_task.task_type}")
-    except Exception as e:
-        logger.error(f"Failed to create new task of type {original_task_obj.task_type}: {str(e)}", exc_info=True)
-        raise
-
-    new_tournament_task = TournamentTask(
-        tournament_id=tournament_id,
-        round_id=round_id,
-        task_id=new_task.task_id,
-        group_id=group_id,
-        pair_id=pair_id,
-    )
-
-    try:
-        await add_tournament_tasks([new_tournament_task], config.psql_db)
-        logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
-    except Exception as e:
-        logger.error(f"Failed to add tournament task to database: {str(e)}", exc_info=True)
-        raise
-
-    original_assigned_nodes = await task_sql.get_nodes_assigned_to_task(original_task_id, config.psql_db)
-    for node in original_assigned_nodes:
-        await task_sql.assign_node_to_task(new_task.task_id, node, config.psql_db)
-
-        original_expected_repo_name = await task_sql.get_expected_repo_name(original_task_id, node.hotkey, config.psql_db)
-        if original_expected_repo_name:
-            await task_sql.set_expected_repo_name(new_task.task_id, node, config.psql_db, original_expected_repo_name)
-            logger.info(
-                f"Copied node {node.hotkey} with expected_repo_name {original_expected_repo_name} to replacement task {new_task.task_id}"
-            )
-        else:
-            logger.warning(f"No expected repo name found for node {node.hotkey} in original task {original_task_id}")
-
-    await task_sql.delete_task(original_task_id, config.psql_db)
-    logger.info(f"Deleted original task {original_task_id} from db.")
-
-    return new_task.task_id
-
-
 async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[MinerResultsText | MinerResultsImage]:
     """
     Fetch task results from database and convert to MinerResults objects for ranking.
@@ -160,7 +142,6 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
     for score_dict in scores_dicts:
         hotkey = score_dict[db_cst.HOTKEY]
         test_loss = score_dict.get(db_cst.TEST_LOSS)
-        synth_loss = score_dict.get(db_cst.SYNTH_LOSS)
 
         # Skip invalid results
         if test_loss is None or np.isnan(test_loss):
@@ -171,7 +152,7 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
             miner_result = MinerResultsText(
                 hotkey=hotkey,
                 test_loss=test_loss,
-                synth_loss=synth_loss if synth_loss is not None and not np.isnan(synth_loss) else 1000.0,
+                synth_loss=test_loss,
                 is_finetune=True,  # assume all finetuned
                 task_type=task_type,
             )
@@ -180,7 +161,7 @@ async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[Mi
             miner_result = MinerResultsImage(
                 hotkey=hotkey,
                 test_loss=test_loss,
-                synth_loss=synth_loss if synth_loss is not None and not np.isnan(synth_loss) else 1000.0,
+                synth_loss=test_loss,
                 is_finetune=True,
             )
 
@@ -227,7 +208,6 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
                 hotkey=EMISSION_BURN_HOTKEY,
                 training_repo=latest_winner.backup_repo,
                 training_commit_hash=commit_hash,
-                stake_required=0,
             )
         else:
             logger.warning("Could not determine tournament ID for uploaded repo, falling back to original training_repo")
@@ -237,11 +217,11 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
                 hotkey=EMISSION_BURN_HOTKEY,
                 training_repo=latest_winner.training_repo,
                 training_commit_hash=latest_winner.training_commit_hash,
-                stake_required=0,
             )
 
     logger.info(
-        f"No previous tournament winner found for type {tournament_type.value}, using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
+        f"No previous tournament winner found for type {tournament_type.value}, "
+        f"using hardcoded base winner: {EMISSION_BURN_HOTKEY}"
     )
 
     hardcoded_participant = TournamentParticipant(
@@ -249,7 +229,6 @@ async def get_base_contestant(psql_db: PSQLDB, tournament_type: TournamentType, 
         hotkey=EMISSION_BURN_HOTKEY,
         training_repo=DEFAULT_PARTICIPANT_REPO,
         training_commit_hash=DEFAULT_PARTICIPANT_COMMIT,
-        stake_required=0,
     )
 
     return hardcoded_participant
@@ -447,14 +426,17 @@ def determine_boss_round_winner(task_winners: list[str], boss_hotkey: str, tourn
     required_wins = (total_tasks // 2) + 1
     if opponent_hotkey and opponent_wins > total_tasks // 2:
         logger.info(
-            f"{tournament_type.value} tournament: Challenger wins boss round with majority: {opponent_wins}/{total_tasks} tasks won (required {required_wins})"
+            f"{tournament_type.value} tournament: Challenger wins boss round with majority: "
+            f"{opponent_wins}/{total_tasks} tasks won (required {required_wins})"
         )
         return opponent_hotkey
     else:
         boss_wins = win_counts.get(boss_hotkey, 0)
         if opponent_hotkey:
             logger.info(
-                f"{tournament_type.value} tournament: Boss retains title - challenger won {opponent_wins}/{total_tasks} tasks (requires {required_wins}/{total_tasks} to dethrone), boss won {boss_wins}/{total_tasks}"
+                f"{tournament_type.value} tournament: Boss retains title - challenger won "
+                f"{opponent_wins}/{total_tasks} tasks (requires {required_wins}/{total_tasks} to dethrone), "
+                f"boss won {boss_wins}/{total_tasks}"
             )
         else:
             logger.info(f"{tournament_type.value} tournament: Boss retains title by default")
@@ -492,7 +474,8 @@ async def get_knockout_winners(
         # Calculate the progressive threshold
         threshold_percentage = get_progressive_threshold(consecutive_wins)
         logger.info(
-            f"Champion {current_champion} has {consecutive_wins} consecutive wins, using {threshold_percentage * 100:.1f}% threshold"
+            f"Champion {current_champion} has {consecutive_wins} consecutive wins, "
+            f"using {threshold_percentage * 100:.1f}% threshold"
         )
 
         for task in round_tasks:
@@ -568,7 +551,8 @@ async def get_knockout_winners(
                 if boss_loss * boss_multiplier > opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * {boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
+                        f"GRPO task: Boss wins (higher is better): {boss_loss:.6f} * "
+                        f"{boss_multiplier:.3f} = {boss_loss * boss_multiplier:.6f} > {opponent_loss:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)
@@ -580,7 +564,8 @@ async def get_knockout_winners(
                 if boss_loss * boss_divisor < opponent_loss:
                     task_winners.append(boss_hotkey)
                     logger.info(
-                        f"{task_object.task_type} task: Boss wins (lower is better): {boss_loss:.6f} * {boss_divisor:.3f} = {boss_loss * boss_divisor:.6f} < {opponent_loss:.6f}"
+                        f"{task_object.task_type} task: Boss wins (lower is better): "
+                        f"{boss_loss:.6f} * {boss_divisor:.3f} = {boss_loss * boss_divisor:.6f} < {opponent_loss:.6f}"
                     )
                 else:
                     task_winners.append(opponent_hotkey)
@@ -601,58 +586,56 @@ async def get_group_winners(
 ) -> list[str]:
     """Get winners from group round based on adjusted loss scores (top 8 performers)."""
     TOP_WINNERS_TO_ADVANCE = 8
+    all_winners = []
 
-    if len(round_tasks) > 1:
-        logger.warning(
-            f"There are {len(round_tasks)} tasks in round {completed_round.round_id}. We are taking the first task only."
-        )
+    for task in round_tasks:
+        group_id = task.group_id
+        task_id = task.task_id
 
-    round_task = round_tasks[0]
-    group_id = round_task.group_id
-    task_id = round_task.task_id
+        logger.info(f"Processing group {group_id} in round {completed_round.round_id}")
 
-    logger.info(f"Processing group {group_id} in round {completed_round.round_id}")
+        participants = await get_tournament_group_members(group_id, psql_db)
+        participant_hotkeys = [p.hotkey for p in participants]
+        logger.info(f"Group {group_id} and task {task_id} have {len(participant_hotkeys)} participants")
 
-    participants = await get_tournament_group_members(group_id, psql_db)
-    participant_hotkeys = [p.hotkey for p in participants]
-    logger.info(f"Group {group_id} and task {task_id} have {len(participant_hotkeys)} participants")
-
-    if not participant_hotkeys:
-        logger.warning(f"Group {group_id} has no participants")
-        return []
-
-    miner_results = await get_task_results_for_ranking(task_id, psql_db)
-    if not miner_results:
-        logger.warning(f"No valid results for task {task_id}")
-        return []
-
-    ranked_results = calculate_miner_ranking_and_scores(miner_results)
-
-    participant_scores = {}
-    for result in ranked_results:
-        hotkey = result.hotkey
-        adjusted_loss = result.adjusted_loss
-
-        if adjusted_loss is None or np.isnan(adjusted_loss):
+        if not participant_hotkeys:
+            logger.warning(f"Group {group_id} has no participants")
             continue
 
-        participant_scores[hotkey] = adjusted_loss
+        miner_results = await get_task_results_for_ranking(task_id, psql_db)
+        if not miner_results:
+            logger.warning(f"No valid results for task {task_id}")
+            continue
 
-    if not participant_scores:
-        logger.warning(f"Group {group_id} has no valid scores - proceeding with no winners")
-        return []
+        ranked_results = calculate_miner_ranking_and_scores(miner_results)
 
-    sorted_participants = sorted(participant_scores.items(), key=lambda x: x[1])
-    logger.info(
-        f"Group {group_id} participants sorted by adjusted loss: {[(hotkey, f'{loss:.6f}') for hotkey, loss in sorted_participants]}"
-    )
+        participant_scores = {}
+        for result in ranked_results:
+            hotkey = result.hotkey
+            adjusted_loss = result.adjusted_loss
 
-    num_to_advance = min(TOP_WINNERS_TO_ADVANCE, len(sorted_participants))
-    group_winners = [hotkey for hotkey, _ in sorted_participants[:num_to_advance]]
+            if adjusted_loss is None or np.isnan(adjusted_loss):
+                continue
 
-    logger.info(f"Group {group_id}: Advancing top {num_to_advance} by adjusted loss: {group_winners}")
+            participant_scores[hotkey] = adjusted_loss
 
-    return group_winners
+        if not participant_scores:
+            logger.warning(f"Group {group_id} has no valid scores - proceeding with no winners")
+            continue
+
+        sorted_participants = sorted(participant_scores.items(), key=lambda x: x[1])
+        logger.info(
+            f"Group {group_id} participants sorted by adjusted loss: "
+            f"{[(hotkey, f'{loss:.6f}') for hotkey, loss in sorted_participants]}"
+        )
+
+        num_to_advance = min(TOP_WINNERS_TO_ADVANCE, len(sorted_participants))
+        group_winners = [hotkey for hotkey, _ in sorted_participants[:num_to_advance]]
+
+        logger.info(f"Group {group_id}: Advancing top {num_to_advance} by adjusted loss: {group_winners}")
+        all_winners.extend(group_winners)
+
+    return all_winners
 
 
 async def get_round_winners(completed_round: TournamentRoundData, psql_db: PSQLDB, config: Config) -> list[str]:
@@ -679,3 +662,168 @@ async def send_to_discord(webhook: str, message: str):
         payload = {"content": message}
         response = await client.post(webhook, json=payload)
         return response
+
+
+async def notify_tournament_started(tournament_id: str, tournament_type: str, participants: int, discord_url: str):
+    try:
+        message = (
+            f"Tournament Started!\nTournament ID: {tournament_id}\nType: {tournament_type}\n"
+            f"Participants: {participants}\nStatus: ACTIVE"
+        )
+        await send_to_discord(discord_url, message)
+    except Exception as e:
+        logger.error(f"Failed to send Discord notification for tournament start: {e}")
+
+
+async def notify_tournament_completed(tournament_id: str, tournament_type: str, winner: str, discord_url: str):
+    try:
+        message = (
+            f"Tournament Completed!\nTournament ID: {tournament_id}\nType: {tournament_type}\nWinner: {winner}\nStatus: COMPLETED"
+        )
+        await send_to_discord(discord_url, message)
+    except Exception as e:
+        logger.error(f"Failed to send Discord notification for tournament completion: {e}")
+
+
+async def notify_organic_task_created(task_id: str, task_type: str, discord_url: str, is_benchmark: bool = False):
+    try:
+        if is_benchmark:
+            message = f"New Benchmark Task Created!\nTask ID: {task_id}\nType: {task_type}"
+        else:
+            message = f"New Organic Task Created!\nTask ID: {task_id}\nType: {task_type}"
+        await send_to_discord(discord_url, message)
+    except Exception as e:
+        logger.error(f"Failed to send Discord notification for task creation: {e}")
+
+
+async def validate_repo_obfuscation(repo_url: str) -> bool:
+    """
+    Validate that a repository is not obfuscated using the obfuscation detection.
+
+    Args:
+        repo_url: The repository URL to validate
+
+    Returns:
+        bool: True if repo is not obfuscated, False if obfuscated
+    """
+    try:
+        proc = subprocess.run(
+            [t_cst.OBFUSCATION_DETECTION_PATH, "--repo", repo_url],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        logger.info(f"Obfuscation detection output: {proc.stdout}")
+
+        if proc.returncode == 0:
+            logger.info(f"Repo {repo_url} is not obfuscated (exit code 0)")
+            return True
+        else:
+            logger.warning(f"Repo {repo_url} is obfuscated (exit code {proc.returncode})")
+            return False
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Obfuscation detection timed out for repo {repo_url}")
+        return False
+    except Exception as e:
+        logger.error(f"Obfuscation detection failed for repo {repo_url}: {str(e)}")
+        return False
+
+
+async def validate_repo_license(repo_url: str) -> bool:
+    """
+    Validate that a repository has verbatim LICENSE and NOTICE files matching the current repository.
+
+    Args:
+        repo_url: The repository URL to validate
+
+    Returns:
+        bool: True if repo has valid LICENSE and NOTICE files, False otherwise
+    """
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logger.info(f"Cloning repository {repo_url} for license validation")
+
+            clone_proc = subprocess.run(
+                ["git", "clone", repo_url, temp_dir],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            if clone_proc.returncode != 0:
+                logger.error(f"Failed to clone repository {repo_url}: {clone_proc.stderr}")
+                return False
+
+            temp_path = Path(temp_dir)
+            current_file_path = Path(__file__).resolve()
+            repo_root = current_file_path.parent.parent.parent
+
+            expected_license_path = repo_root / "LICENSE.md"
+            if not expected_license_path.exists():
+                expected_license_path = repo_root / "LICENSE"
+                if not expected_license_path.exists():
+                    logger.warning(
+                        f"Expected LICENSE file not found in validator repository at "
+                        f"{repo_root / 'LICENSE.md'} or {repo_root / 'LICENSE'}. "
+                        f"Skipping license validation for {repo_url}"
+                    )
+                    return True
+
+            expected_notice_path = repo_root / "NOTICE"
+            if not expected_notice_path.exists():
+                logger.warning(
+                    f"Expected NOTICE file not found in validator repository at {expected_notice_path}. "
+                    f"Skipping license validation for {repo_url}"
+                )
+                return True
+
+            license_file_path = None
+            for license_filename in ["LICENSE.md", "LICENSE", "license.md", "license", "License.md", "License"]:
+                potential_path = temp_path / license_filename
+                if potential_path.exists():
+                    license_file_path = potential_path
+                    break
+
+            if not license_file_path:
+                logger.warning(
+                    f"License file not found in repository {repo_url} "
+                    f"(checked LICENSE.md, LICENSE, license.md, license, License.md, License)"
+                )
+                return False
+
+            license_content = license_file_path.read_text(encoding="utf-8")
+            expected_license = expected_license_path.read_text(encoding="utf-8")
+
+            expected_license_normalized = "\n".join(line.rstrip() for line in expected_license.splitlines())
+            actual_license_normalized = "\n".join(line.rstrip() for line in license_content.splitlines())
+
+            if expected_license_normalized != actual_license_normalized:
+                logger.warning(f"LICENSE file content does not match verbatim for repository {repo_url}")
+                return False
+
+            notice_file_path = temp_path / "NOTICE"
+            if not notice_file_path.exists():
+                logger.warning(f"NOTICE file not found in repository {repo_url}")
+                return False
+
+            notice_content = notice_file_path.read_text(encoding="utf-8")
+            expected_notice = expected_notice_path.read_text(encoding="utf-8")
+
+            expected_notice_normalized = "\n".join(line.rstrip() for line in expected_notice.splitlines())
+            actual_notice_normalized = "\n".join(line.rstrip() for line in notice_content.splitlines())
+
+            if expected_notice_normalized != actual_notice_normalized:
+                logger.warning(f"NOTICE file content does not match verbatim for repository {repo_url}")
+                return False
+
+            logger.info(f"Repository {repo_url} passed license validation")
+            return True
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Repository validation timed out for repo {repo_url}")
+        return False
+    except Exception as e:
+        logger.error(f"Repository validation failed for repo {repo_url}: {str(e)}")
+        return False

@@ -1,11 +1,11 @@
-import os
-import subprocess
-import re
 import glob
-import wandb
-import shutil
 import json
+import os
+import re
+import shutil
+import subprocess
 
+import wandb
 from huggingface_hub import HfApi
 from huggingface_hub import login
 
@@ -135,6 +135,13 @@ def main():
             sync_wandb_logs(cache_dir=wandb_logs_path)
         except Exception as e:
             print(f"Failed to sync W&B logs: {e}", flush=True)
+
+    try:
+        if os.path.isdir(local_folder):
+            shutil.rmtree(local_folder)
+            print(f"Deleted local folder: {local_folder}", flush=True)
+    except Exception as e:
+        print(f"Failed to delete local folder {local_folder}: {e}", flush=True)
 
 
 if __name__ == "__main__":

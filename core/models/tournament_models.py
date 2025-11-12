@@ -12,11 +12,6 @@ from pydantic import field_validator
 from core.models.payload_models import TrainingRepoResponse
 from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
-from validator.core.constants import TOURNAMENT_DPO_GPU_MULTIPLIER
-from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100
-from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100
-from validator.core.constants import TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100
-from validator.core.constants import TOURNAMENT_GRPO_GPU_MULTIPLIER
 from validator.core.models import AnyTypeRawTask
 
 
@@ -59,35 +54,6 @@ def generate_tournament_id() -> str:
 
 def generate_round_id(tournament_id: str, round_number: int) -> str:
     return f"{tournament_id}_round_{round_number:03d}"
-
-
-def generate_group_id(round_id: str, group_number: int) -> str:
-    return f"{round_id}_group_{group_number:03d}"
-
-
-def generate_pair_id(round_id: str, pair_number: int) -> str:
-    return f"{round_id}_pair_{pair_number:03d}"
-
-
-def get_tournament_gpu_requirement(task_type: TaskType, model_params_count: int) -> GpuRequirement:
-    if task_type == TaskType.IMAGETASK:
-        return GpuRequirement.A100
-
-    params_b = model_params_count / 1_000_000_000
-
-    if task_type == TaskType.DPOTASK:
-        params_b *= TOURNAMENT_DPO_GPU_MULTIPLIER
-    elif task_type == TaskType.GRPOTASK:
-        params_b *= TOURNAMENT_GRPO_GPU_MULTIPLIER
-
-    if params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_2X_H100:
-        return GpuRequirement.H100_1X
-    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_4X_H100:
-        return GpuRequirement.H100_2X
-    elif params_b <= TOURNAMENT_GPU_THRESHOLD_FOR_8X_H100:
-        return GpuRequirement.H100_4X
-    else:
-        return GpuRequirement.H100_8X
 
 
 class TournamentData(BaseModel):
@@ -139,7 +105,6 @@ class TournamentParticipant(BaseModel):
     final_position: int | None = None
     training_repo: str | None = None
     training_commit_hash: str | None = None
-    stake_required: float | None = None
     backup_repo: str | None = None
 
 
@@ -328,8 +293,6 @@ class RespondingNode(BaseModel):
 
     node: Node
     training_repo_response: TrainingRepoResponse
-    boosted_stake: float
-    actual_stake: float
 
 
 class NextTournamentInfo(BaseModel):
@@ -348,7 +311,6 @@ class NextTournamentDates(BaseModel):
 
 class ActiveTournamentParticipant(BaseModel):
     hotkey: str
-    stake_requirement: float
 
 
 class ActiveTournamentInfo(BaseModel):

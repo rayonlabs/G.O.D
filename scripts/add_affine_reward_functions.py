@@ -3,17 +3,16 @@
 Script to add the new affine reward functions to the database via API endpoint.
 """
 import asyncio
-import os
-import requests
 import inspect
+import os
 
-from validator.utils.affine_reward_functions import (
-    sat_reward_function,
-    abd_reward_function, 
-    ded_reward_function
-)
-from validator.core import constants as cst
 import asyncpg
+import requests
+
+from validator.core import constants as cst
+from validator.utils.affine_reward_functions import abd_reward_function
+from validator.utils.affine_reward_functions import ded_reward_function
+from validator.utils.affine_reward_functions import sat_reward_function
 
 
 def load_env_file():

@@ -20,27 +20,127 @@ To compete in tournaments, miners must meet the following requirements:
    - The miner must expose the `/training_repo/{task_type}` endpoint that returns your training repository details
    - Start your miner with: `task miner`
 
-3. **Sufficient Stake**: You must have enough stake on your hotkey to be in the **top 32 miners by stake**
-   - The tournament system selects participants based on stake rankings
-   - Miners who have participated in previous tournaments receive a stake boost (5% per completed tournament, max 25%)
-   - Your actual stake requirement depends on the current competition but you must be in the top 32 to be eligible
-   - **Important**: Stake must be maintained throughout the entire tournament. Winners who fall below the required stake threshold will be eliminated even after winning rounds
+3. **Sufficient Balance** The tournaments require a small fee to participate. All collected fees are burned
+
+   - The current fee for participanting is 0.2 TAO for text tournaments and 0.15 for image ones. You can always check the current fee using the api endpoint:
+     `curl https://api.gradients.io/tournament/fees`
+   - To get balance you need to transfer TAO from your coldkey to the collection address: `5Ef5JgNv14LY4UEQFHbRQkf8TnegDV3AfAbcsJe5T2w6VQdo`
+   - The balance is credited per coldkey, so all miner hotkeys with the same coldkey will have a shared balance
+   - To get current balance for a coldkey you can use the API:
+     `curl 'https://api.gradients.io/tournament/balance/{coldkey}'`
+   - All collected TAO will be staked for alpha and the **alpha burned**
+
+4. **Valid License Files**: Your training repository must include verbatim LICENSE and NOTICE files
+
+   - The repository must contain a LICENSE file (accepted names: `LICENSE.md`, `LICENSE`, `license.md`, `license`, `License.md`, or `License`) that matches exactly the LICENSE file from the G.O.D validator repository
+   - The repository must contain a `NOTICE` file that matches exactly the NOTICE file from the G.O.D validator repository
+   - These files are validated verbatim (character-for-character match) during tournament registration
+   - Repositories without matching LICENSE and NOTICE files will be excluded from tournament participation
+   - You can find the required LICENSE and NOTICE files in the [G.O.D repository](https://github.com/rayonlabs/G.O.D)
+
+5. **No Code Obfuscation**: Your training repository must not contain obfuscated code
+
+   - All code in your repository must be readable and not obfuscated
+   - The validator automatically checks repositories for obfuscation during tournament registration
+   - examples of obfuscated code files are: .bin, .pyc, .dll and similar files containing machine code or anything resembling that.
+   - Repositories with obfuscated code will be excluded from tournament participation
+   - This ensures transparency and allows the community to learn from winning implementations
+
+## Initial Miner Setup
+
+Before you can participate in tournaments, you need to configure your miner with the required credentials and settings.
+
+### Running the Configuration Script
+
+The repository includes a configuration generator to help you set up your miner:
+
+```bash
+python core/create_config.py --miner
+```
+
+This interactive script will prompt you for:
+
+- **Wallet name** - Your Bittensor wallet name (default: "default")
+- **Hotkey name** - Your hotkey name (default: "default")
+- **Subtensor network** - "finney" for mainnet (netuid 56) or "test" for testnet (netuid 241)
+- **Minimum stake threshold** - Default: 1000 for mainnet, 0 for testnet
+
+The script will generate a `.1.env` file with your configuration.
+
+### Starting Your Miner
+
+After configuration, start your miner:
+
+```bash
+task miner
+```
+
+Your miner will:
+
+- Start listening for training repository requests from validators
+- Respond to tournament participation queries
+
+## Choosing Your Training Repository
+
+You have two options for your tournament training repository:
+
+### Option 1: Start from the Base Miner (Recommended for Beginners)
+
+Use the official G.O.D repository as your starting point:
+
+- **GitHub Repository**: `https://github.com/rayonlabs/G.O.D`
+- **Commit Hash**: Use `"main"` for the latest version, or a specific commit hash for consistency
+
+The base repository includes functional training scripts that you can modify and improve.
+
+### Option 2: Fork a Previous Winner's Repository
+
+Browse winning tournament implementations at the [Gradients Open Source Organization](https://github.com/orgs/gradients-opensource/repositories)
+
+These repositories contain proven AutoML techniques that won previous tournaments. You can:
+
+- Study their approaches to understand what works
+- Fork and improve upon winning strategies
+- Combine techniques from multiple winners
 
 ## Tournament Registration
 
-The miner already includes the required endpoint at `/training_repo/{task_type}` that returns:
+Configure the `/training_repo/{task_type}` endpoint in your miner to point to your chosen repository.
 
-```json
-{
-  "github_repo": "https://github.com/yourname/training-repo",
-  "commit_hash": "abc123..."
-}
+**Location**: `miner/endpoints/tuning.py` (lines 10-13)
+
+Update the `get_training_repo()` function:
+
+```python
+async def get_training_repo(task_type: TournamentType) -> TrainingRepoResponse:
+    return TrainingRepoResponse(
+        github_repo="https://github.com/YOUR_USERNAME/YOUR_REPO",  # Your repo URL
+        commit_hash="YOUR_COMMIT_HASH"  # Specific commit or "main"
+    )
+```
+
+**Example configurations:**
+
+```python
+# Using the base miner
+github_repo="https://github.com/rayonlabs/G.O.D"
+commit_hash="main"
+
+# Using your own fork
+github_repo="https://github.com/yourname/my-training-repo"
+commit_hash="a1b2c3d4e5f6..."
+
+# Using a previous winner's approach
+github_repo="https://github.com/gradients-opensource/position-1-tournament-xyz"
+commit_hash="main"
 ```
 
 Where `task_type` can be:
 
 - `"text"` - For text-based tournaments (Instruct, DPO, GRPO, Chat)
 - `"image"` - For image-based tournaments (SDXL, Flux)
+
+**Important**: The repository and commit hash you configure will be used by validators to build and run your training code during tournaments.
 
 ## Docker-Based Architecture
 
@@ -106,6 +206,12 @@ Your training scripts accept these standardised CLI arguments:
 ### Grafana Dashboard
 
 View real-time training logs and metrics at: http://185.141.218.59:3001/d/training-runs/training-runs-dashboard
+
+### Tournament Results
+
+After tournaments complete, view detailed results and rankings at: https://gradients.io/app/research/tournament/{TOURNAMENT_ID}
+
+Replace `{TOURNAMENT_ID}` with the specific tournament ID you participated in.
 
 ## WandB Logging for Your Training Analysis
 
@@ -196,14 +302,6 @@ model_path = f"/cache/datasets/{task_id}_train_data.json"
 
 ## Utility Functions in Trainer Scripts
 
-### Image Trainer
-
-```python
-def get_model_path(path: str) -> str
-```
-
-Is used to get the folder/file path for image models. The image models can either be a safetensors file, or a diffusers format folder. The function resolves the path to either of those.
-
 ### Text Trainer
 
 ```python
@@ -249,7 +347,7 @@ Test scripts are provided to validate your implementation locally:
 
 ## Tournament Structure
 
-Tournaments run continuously with 4-7 day duration and 24-hour gaps between tournaments. There are separate tournaments for:
+Tournaments run continuously with 4-7 day duration and 72-hour gaps between tournaments. There are separate tournaments for:
 
 - **Text**: Instruct, DPO, GRPO tasks
 - **Image**: SDXL and Flux diffusion tasks
@@ -257,43 +355,50 @@ Tournaments run continuously with 4-7 day duration and 24-hour gaps between tour
 ### Group Stage
 
 - Miners are organized into groups of 6-8 participants
-- Each group competes on 3 tasks
-- Top 1-3 performers from each group advance to knockout rounds
+- Each group competes on 3 tasks (text tournaments: 1 Instruct task; image tournaments: 1 image task; total of 3 required)
+- Top 8 performers overall across all groups advance to knockout rounds
 
 ### Knockout Rounds
 
 - Single elimination format
-- Runs when field is reduced to less than 16 miners
+- Runs when field is reduced to 14 or fewer miners
 - Head-to-head competition
 
 ### Boss Round
 
 - Tournament winner must face defending champion
 - Uses progressive threshold system with exponential decay based on consecutive wins
-- **Tournament-Specific Winning Requirements**:
-  - **Text tournaments**: Challenger wins by majority rule (2/3 or 3/3 tasks)
-  - **Image tournaments**: Challenger must win ALL 3 tasks (perfect sweep) to dethrone the champion
-- Defending champion retains title unless challenger meets the tournament-specific winning requirement
+- **Winning Requirements**: Challenger wins by **majority rule** (4+ out of 6 tasks) for **both text and image tournaments**
+- Defending champion retains title unless challenger wins the majority of tasks
 
 #### Championship Defense Thresholds
 
 The advantage required to dethrone a champion decreases with each successful defense using an exponential decay formula:
 
-![Championship Defense Thresholds](./images/championship_thresholds.png)
+**Formula:** `threshold = max(EXPONENTIAL_MIN_THRESHOLD, EXPONENTIAL_BASE_THRESHOLD × EXPONENTIAL_DECAY_RATE^(consecutive_wins - 1))`
 
-**Formula:** `threshold = max(EXPONENTIAL_MIN_THRESHOLD, EXPONENTIAL_BASE_THRESHOLD × EXPONENTIAL_DECAY_RATE^consecutive_wins)`
+**Implementation:** See `validator/tournament/utils.py:83-88` - `get_progressive_threshold()`
 
-Where constants (defined in `validator/tournament/constants.py`):
+**Constants** (defined in `validator/tournament/constants.py:63-65`):
 
-- `EXPONENTIAL_BASE_THRESHOLD`: Starting threshold for new champions
-- `EXPONENTIAL_DECAY_RATE`: Decay factor per consecutive win
-- `EXPONENTIAL_MIN_THRESHOLD`: Minimum threshold floor
+- `EXPONENTIAL_BASE_THRESHOLD = 0.10` - Starting threshold (10%) for champions on their first defense
+- `EXPONENTIAL_DECAY_RATE = 0.8` - Decay factor applied per consecutive win
+- `EXPONENTIAL_MIN_THRESHOLD = 0.03` - Minimum threshold floor (3%)
+
+**Example Thresholds:**
+
+- 1st consecutive win: 10.0% threshold
+- 2nd consecutive win: 8.0% threshold
+- 3rd consecutive win: 6.4% threshold
+- 4th consecutive win: 5.1% threshold
+- 5th consecutive win: 4.1% threshold
+- 6th+ consecutive wins: 3.0% threshold (floor)
 
 This system ensures:
 
-- New champions must prove themselves with a significant margin
-- Long-reigning champions become progressively more vulnerable
-- Minimum threshold prevents stagnation
+- New champions start with a significant 10% advantage on their first defense
+- Long-reigning champions become progressively more vulnerable as the threshold decays
+- Minimum 3% threshold floor prevents complete stagnation while still rewarding excellence
 
 ### GPU Requirements
 

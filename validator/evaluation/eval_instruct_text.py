@@ -1,11 +1,13 @@
+import json
 import os
 import subprocess
 from pathlib import Path
+
 from pydantic import TypeAdapter
-import json
+
 
 # Allow torch.load for transformers 4.46+ security check
-os.environ['TRANSFORMERS_ALLOW_TORCH_LOAD'] = 'true'
+os.environ["TRANSFORMERS_ALLOW_TORCH_LOAD"] = "true"
 
 import torch
 from accelerate.utils import find_executable_batch_size
@@ -18,9 +20,9 @@ from transformers import AutoTokenizer
 from transformers import Trainer
 from transformers import TrainingArguments
 
+from core.models.utility_models import TextDatasetType
 from validator.core import constants as cst
 from validator.core.models import EvaluationArgs
-from core.models.utility_models import TextDatasetType
 from validator.evaluation.common import ProgressLoggerCallback
 from validator.evaluation.common import _load_and_update_evaluation_config
 from validator.evaluation.common import _log_dataset_and_model_info
@@ -115,9 +117,7 @@ def evaluate_finetuned_model(
     tokenizer: AutoTokenizer,
 ) -> dict[str, float]:
     evaluation_config = _load_and_update_evaluation_config(
-        evaluation_args=evaluation_args,
-        finetuned_model=finetuned_model,
-        config_path=cst.VALI_CONFIG_PATH
+        evaluation_args=evaluation_args, finetuned_model=finetuned_model, config_path=cst.VALI_CONFIG_PATH
     )
     return evaluate_instruct_text_model(evaluation_config, finetuned_model, tokenizer)
 
@@ -154,7 +154,6 @@ def evaluate_repo(evaluation_args: EvaluationArgs) -> None:
         log_memory_stats()
         finetuned_model.eval()
 
-
         results = evaluate_finetuned_model(
             evaluation_args=evaluation_args,
             finetuned_model=finetuned_model,
@@ -177,7 +176,7 @@ def main():
     dataset_type_str = os.environ.get("DATASET_TYPE", "")
     file_format_str = os.environ.get("FILE_FORMAT")
     models_str = os.environ.get("MODELS", "")  # Comma-separated list of LoRA repos
-    
+
     if not all([dataset, original_model, file_format_str, models_str]):
         logger.error("Missing required environment variables.")
         exit(1)
@@ -190,20 +189,13 @@ def main():
     for repo in repos:
         try:
             evaluation_args = EvaluationArgs(
-                dataset=dataset,
-                original_model=original_model,
-                dataset_type=dataset_type,
-                file_format=file_format_str,
-                repo=repo
+                dataset=dataset, original_model=original_model, dataset_type=dataset_type, file_format=file_format_str, repo=repo
             )
 
             # Launching subprocess to purge memory: https://github.com/huggingface/transformers/issues/26571
-            subprocess.run([
-                "python",
-                "-m",
-                "validator.evaluation.single_eval_instruct_text",
-                evaluation_args.model_dump_json()
-            ], check=True)
+            subprocess.run(
+                ["python", "-m", "validator.evaluation.single_eval_instruct_text", evaluation_args.model_dump_json()], check=True
+            )
             logger.info(f"Subprocess completed for {repo}")
         except subprocess.CalledProcessError as e:
             logger.error(f"Error running subprocess for {repo}: {e}")
