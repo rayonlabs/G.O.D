@@ -322,6 +322,14 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
         logger.info(f"Tournament: {tournament.tournament_id}, Status: {tournament.status}")
         logger.info(f"Completed Round: {completed_round.round_id}, Round #: {completed_round.round_number}")
         logger.info(f"Is Final Round: {completed_round.is_final_round}")
+
+        if tournament.winner_hotkey:
+            logger.info(
+                f"Tournament {tournament.tournament_id} already has winner {tournament.winner_hotkey}. "
+                f"Skipping advance (tournament completed, awaiting manual status update)."
+            )
+            return
+        
         logger.info(f"Advancing tournament {tournament.tournament_id} from round {completed_round.round_id}")
 
         winners = await get_round_winners(completed_round, psql_db, config)
@@ -350,8 +358,8 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             # Keep EMISSION_BURN_HOTKEY as the winner when defending champion wins by default
             winner = cst.EMISSION_BURN_HOTKEY
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
-            await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
-            logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
+            # await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
+            logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}. Please update DB manually.")
 
             await notify_tournament_completed(
                 tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
@@ -429,8 +437,8 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                     logger.info("Not all synced tasks are complete, tournament remains active")
                     return
                 await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
-                await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
-                logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
+                # await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
+                logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}. Please update DB manually.")
 
                 await notify_tournament_completed(
                     tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
