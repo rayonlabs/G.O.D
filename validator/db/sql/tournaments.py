@@ -232,6 +232,50 @@ async def get_tournament_where_champion_first_won(
         return None
 
 
+async def get_last_tournament_before_current_champion(
+    psql_db: PSQLDB, tournament_type: TournamentType, current_champion_hotkey: str
+) -> TournamentData | None:
+    """
+    Get the last tournament completed before the current champion started their reign.
+    This represents the previous champion's final tournament.
+
+    Returns None if:
+    - Current champion never won
+    - No tournament exists before current champion's first win
+    """
+    first_win_tournament = await get_tournament_where_champion_first_won(psql_db, tournament_type, current_champion_hotkey)
+
+    if not first_win_tournament or not first_win_tournament.updated_at:
+        return None
+
+    # Get the tournament completed immediately before the current champion's first win
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS},
+                   {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}, {cst.UPDATED_AT}
+            FROM {cst.TOURNAMENTS_TABLE}
+            WHERE {cst.TOURNAMENT_TYPE} = $1
+              AND {cst.TOURNAMENT_STATUS} = 'completed'
+              AND {cst.UPDATED_AT} < $2
+            ORDER BY {cst.UPDATED_AT} DESC
+            LIMIT 1
+        """
+        result = await connection.fetchrow(query, tournament_type.value, first_win_tournament.updated_at)
+
+        if result:
+            return TournamentData(
+                tournament_id=result[cst.TOURNAMENT_ID],
+                tournament_type=result[cst.TOURNAMENT_TYPE],
+                status=result[cst.TOURNAMENT_STATUS],
+                base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
+                winner_hotkey=result[cst.WINNER_HOTKEY],
+                winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
+                updated_at=result[cst.UPDATED_AT],
+            )
+        else:
+            return None
+
+
 async def get_latest_completed_tournament(
     psql_db: PSQLDB, tournament_type: TournamentType, exclude_tournament_id: str | None = None
 ) -> TournamentData | None:
