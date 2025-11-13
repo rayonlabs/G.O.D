@@ -135,6 +135,31 @@ def get_real_tournament_winner(tournament: TournamentData | TournamentResultsWit
     return winner
 
 
+def did_winner_change(previous_tournament: TournamentData | None, latest_tournament: TournamentData) -> bool:
+    """
+    Determine if the tournament winner changed between two tournaments.
+
+    Returns True if:
+    - No previous tournament exists (first tournament)
+    - Latest winner is not EMISSION_BURN_HOTKEY and differs from previous winner
+
+    Returns:
+        True if winner changed, False if same winner defended
+    """
+    if not previous_tournament:
+        return True
+
+    # If latest winner is not EMISSION_BURN_HOTKEY, a new challenger won
+    # If it IS EMISSION_BURN_HOTKEY, the defending champion won
+    if (
+        previous_tournament.winner_hotkey != latest_tournament.winner_hotkey
+        and latest_tournament.winner_hotkey != EMISSION_BURN_HOTKEY
+    ):
+        return True
+
+    return False
+
+
 async def get_task_results_for_ranking(task_id: str, psql_db: PSQLDB) -> list[MinerResultsText | MinerResultsImage]:
     """
     Fetch task results from database and convert to MinerResults objects for ranking.

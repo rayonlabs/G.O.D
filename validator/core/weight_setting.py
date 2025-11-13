@@ -274,23 +274,7 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
                 psql_db, tournament_type, exclude_tournament_id=latest_tournament.tournament_id
             )
 
-            winner_changed = False
-            if previous_tournament:
-                # If latest winner is not EMISSION_BURN_HOTKEY, a new challenger won
-                # If it IS EMISSION_BURN_HOTKEY, the defending champion won (use stored performance)
-                if (
-                    previous_tournament.winner_hotkey != latest_tournament.winner_hotkey
-                    and latest_tournament.winner_hotkey != cts.EMISSION_BURN_HOTKEY
-                ):
-                    winner_changed = True
-                    logger.info(
-                        f"[{tournament_type}] Winner changed: {previous_tournament.winner_hotkey} → {latest_tournament.winner_hotkey}"
-                    )
-                else:
-                    logger.info(f"[{tournament_type}] Same winner defended: {latest_tournament.winner_hotkey}")
-            else:
-                winner_changed = True
-                logger.info(f"[{tournament_type}] First tournament winner: {latest_tournament.winner_hotkey}")
+            winner_changed = did_winner_change(previous_tournament, latest_tournament)
 
             if winner_changed:
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
