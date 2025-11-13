@@ -37,6 +37,17 @@ async def update_tournament_winning_performance(tournament_id: str, winning_perf
         await connection.execute(query, tournament_id, winning_performance_difference)
 
 
+async def update_tournament_innovation_incentive(tournament_id: str, innovation_incentive: float, psql_db: PSQLDB):
+    """Store innovation_incentive for a tournament winner."""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENTS_TABLE}
+            SET {cst.INNOVATION_INCENTIVE} = $2
+            WHERE {cst.TOURNAMENT_ID} = $1
+        """
+        await connection.execute(query, tournament_id, innovation_incentive)
+
+
 async def get_task_scores_batch(task_ids: list[str], psql_db: PSQLDB) -> dict[str, list[TaskScore]]:
     """Fetch task scores for multiple tasks in a single query to avoid N+1 problem."""
     if not task_ids:
