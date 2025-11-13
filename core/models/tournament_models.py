@@ -74,11 +74,11 @@ class TournamentData(BaseModel):
         "Calculated as: (defending_champion_score - new_winner_score) / defending_champion_score. "
         "score = loss, so lower is better. Higher diff = better perf = less burn.",
     )
-    innovation_incentive: float | None = Field(
+    previous_final_emission: float | None = Field(
         default=None,
-        description="Innovation incentive earned by this tournament's winner. "
-        "Calculated as: base_weight - previous_champion_final_emission. "
-        "Rewards new champions for dethroning decayed champions. Only set when NEW champion wins (not defenses).",
+        description="Final emission weight of the previous champion at the time they were dethroned. "
+        "Stored as raw data to allow flexible calculation of innovation_incentive formulas. "
+        "Only set when a NEW champion wins (not defenses). Used to calculate innovation rewards.",
     )
     updated_at: datetime | None = Field(
         default=None,

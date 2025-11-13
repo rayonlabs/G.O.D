@@ -37,15 +37,15 @@ async def update_tournament_winning_performance(tournament_id: str, winning_perf
         await connection.execute(query, tournament_id, winning_performance_difference)
 
 
-async def update_tournament_innovation_incentive(tournament_id: str, innovation_incentive: float, psql_db: PSQLDB):
-    """Store innovation_incentive for a tournament winner."""
+async def update_tournament_previous_final_emission(tournament_id: str, previous_final_emission: float, psql_db: PSQLDB):
+    """Store previous_final_emission for a tournament winner."""
     async with await psql_db.connection() as connection:
         query = f"""
             UPDATE {cst.TOURNAMENTS_TABLE}
-            SET {cst.INNOVATION_INCENTIVE} = $2
+            SET {cst.PREVIOUS_FINAL_EMISSION} = $2
             WHERE {cst.TOURNAMENT_ID} = $1
         """
-        await connection.execute(query, tournament_id, innovation_incentive)
+        await connection.execute(query, tournament_id, previous_final_emission)
 
 
 async def get_task_scores_batch(task_ids: list[str], psql_db: PSQLDB) -> dict[str, list[TaskScore]]:

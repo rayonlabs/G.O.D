@@ -185,7 +185,7 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS},
                    {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE},
-                   {cst.INNOVATION_INCENTIVE}
+                   {cst.PREVIOUS_FINAL_EMISSION}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_ID} = $1
         """
@@ -198,7 +198,7 @@ async def get_tournament(tournament_id: str, psql_db: PSQLDB) -> TournamentData 
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
                 winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
-                innovation_incentive=result[cst.INNOVATION_INCENTIVE],
+                previous_final_emission=result[cst.PREVIOUS_FINAL_EMISSION],
             )
         return None
 
@@ -212,7 +212,7 @@ async def get_tournament_where_champion_first_won(
     """
     async with await psql_db.connection() as connection:
         query = f"""
-            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}, {cst.INNOVATION_INCENTIVE}, {cst.UPDATED_AT}
+            SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS}, {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE}, {cst.PREVIOUS_FINAL_EMISSION}, {cst.UPDATED_AT}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1
               AND {cst.TOURNAMENT_STATUS} = 'completed'
@@ -229,7 +229,7 @@ async def get_tournament_where_champion_first_won(
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
                 winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
-                innovation_incentive=result[cst.INNOVATION_INCENTIVE],
+                previous_final_emission=result[cst.PREVIOUS_FINAL_EMISSION],
                 updated_at=result[cst.UPDATED_AT],
             )
         return None
@@ -256,7 +256,7 @@ async def get_last_tournament_before_current_champion(
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS},
                    {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE},
-                   {cst.INNOVATION_INCENTIVE}, {cst.UPDATED_AT}
+                   {cst.PREVIOUS_FINAL_EMISSION}, {cst.UPDATED_AT}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1
               AND {cst.TOURNAMENT_STATUS} = 'completed'
@@ -274,7 +274,7 @@ async def get_last_tournament_before_current_champion(
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
                 winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
-                innovation_incentive=result[cst.INNOVATION_INCENTIVE],
+                previous_final_emission=result[cst.PREVIOUS_FINAL_EMISSION],
                 updated_at=result[cst.UPDATED_AT],
             )
         else:
@@ -289,7 +289,7 @@ async def get_latest_completed_tournament(
         query = f"""
             SELECT {cst.TOURNAMENT_ID}, {cst.TOURNAMENT_TYPE}, {cst.TOURNAMENT_STATUS},
                    {cst.BASE_WINNER_HOTKEY}, {cst.WINNER_HOTKEY}, {cst.WINNING_PERFORMANCE_DIFFERENCE},
-                   {cst.INNOVATION_INCENTIVE}, {cst.UPDATED_AT}
+                   {cst.PREVIOUS_FINAL_EMISSION}, {cst.UPDATED_AT}
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1 AND {cst.TOURNAMENT_STATUS} = 'completed'
             {exclude_clause}
@@ -309,7 +309,7 @@ async def get_latest_completed_tournament(
                 base_winner_hotkey=result[cst.BASE_WINNER_HOTKEY],
                 winner_hotkey=result[cst.WINNER_HOTKEY],
                 winning_performance_difference=result[cst.WINNING_PERFORMANCE_DIFFERENCE],
-                innovation_incentive=result[cst.INNOVATION_INCENTIVE],
+                previous_final_emission=result[cst.PREVIOUS_FINAL_EMISSION],
                 updated_at=result[cst.UPDATED_AT],
             )
         return None
