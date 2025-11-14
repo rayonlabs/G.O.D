@@ -994,36 +994,7 @@ async def is_tourn_task_completed(
             f"has failed, please investigate."
         )
         await _notify_discord(discord_message, config)
-
-        synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
-        if synced_task_id:
-            synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
-            if synced_task_obj.status == TaskStatus.SUCCESS.value:
-                logger.info(
-                    f"Tournament task {tournament_task.task_id} failed, but synced task {synced_task_id} "
-                    "completed successfully. Ignoring..."
-                )
-                return True, "Tournament task failed, but synced task completed successfully."
-            if synced_task_obj.status == TaskStatus.FAILURE.value:
-                logger.info(
-                    f"Both tournament and synced tasks failed (tournament: {tournament_task.task_id}, "
-                    f"synced: {synced_task_id}). Replacing..."
-                )
-                new_task_id = await replace_tournament_task(
-                    tournament_task.task_id,
-                    tournament_task.tournament_id,
-                    tournament_task.round_id,
-                    tournament_task.group_id,
-                    tournament_task.pair_id,
-                    config,
-                )
-                return False, f"Both tournament and synced tasks failed. Replaced with a new task {new_task_id}."
-            else:
-                return False, "Synced task is not completed. Status: " + synced_task_obj.status
-        else:
-            logger.info(f"Tournament task {tournament_task.task_id} failed. Copying to main cycle...")
-            await copy_tournament_task_into_general_miner_pool(tournament_task.task_id, config.psql_db)
-            return False, "Tournament task failed. Synced to main cycle."
+        return False, "Task failed"
 
     elif task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
         logger.info(f"Task {task_obj.task_id} failed during preparation, creating replacement immediately.")
