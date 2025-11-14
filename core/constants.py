@@ -49,7 +49,7 @@ HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 WANDB_TOKEN = os.getenv("WANDB_TOKEN")
 
 HUGGINGFACE_USERNAME = os.getenv("HUGGINGFACE_USERNAME")
-RAYONLABS_HF_USERNAME = "besimray"  # "rayonlabs"
+RAYONLABS_HF_USERNAME = "gradients-io-tournaments" # "besimray"  # "rayonlabs"
 
 # DPO default dataset type
 DPO_DEFAULT_DATASET_TYPE = "chatml.default"
