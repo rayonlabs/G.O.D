@@ -675,7 +675,7 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
                         updated_at=row[cst.UPDATED_AT],
                         training_repo=row[cst.TRAINING_REPO],
                         training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
-                        priority=row.get(cst.PRIORITY, 1),
+                        priority=row[cst.PRIORITY],
                     )
                 )
 

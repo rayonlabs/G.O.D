@@ -485,14 +485,14 @@ async def _monitor_dstack_tasks(config: Config):
     logger.info(f"Completed monitoring cycle, processed {len(organic_tasks)} tasks")
 
 
-async def run_dstack_orchestrator_cycles():
+async def run_dstack_orchestrator_cycle():
     """
-    Main entry point for dstack orchestrator cycles.
+    Main entry point for dstack orchestrator cycle.
     """
     config = load_config()
     await try_db_connections(config)
     
-    logger.info("Starting dstack orchestrator cycles for organic tasks")
+    logger.info("Starting dstack orchestrator cycle for organic tasks")
     await asyncio.gather(
         fetch_organic_tasks_ready_to_train(config),
         process_pending_organic_tasks(config),

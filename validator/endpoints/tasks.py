@@ -195,7 +195,7 @@ async def create_task_chat(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        backend=backend,
+        backend=Backend(request.backend),
         task_type=TaskType.CHATTASK,
         result_model_name=request.result_model_name,
     )
@@ -296,7 +296,7 @@ async def create_task_instruct_text(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        backend=backend,
+        backend=Backend(request.backend),
         task_type=TaskType.INSTRUCTTEXTTASK,
         result_model_name=request.result_model_name,
     )
@@ -337,7 +337,7 @@ async def create_task_image(
         task_type=TaskType.IMAGETASK,
         result_model_name=request.result_model_name,
         model_type=request.model_type,
-        backend=backend,
+        backend=Backend(request.backend),
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -377,7 +377,7 @@ async def create_text_task_with_custom_dataset(
         result_model_name=request.result_model_name,
         training_data=request.training_data,
         test_data=request.test_data,
-        backend=backend,
+        backend=Backend(request.backend),
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -408,7 +408,7 @@ async def create_task_with_fixed_datasets(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        backend=backend,
+        backend=Backend(request.backend),
         result_model_name=request.result_model_name,
     )
 
