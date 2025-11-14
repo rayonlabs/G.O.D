@@ -771,10 +771,17 @@ async def validate_repo_license(repo_url: str) -> bool:
                     )
                     return True
 
-            expected_notice_path = repo_root / "NOTICE"
-            if not expected_notice_path.exists():
+            expected_notice_path = None
+            for notice_filename in ["NOTICE", "NOTICE.txt", "notice.txt", "Notice.txt", "notice", "Notice"]:
+                potential_path = repo_root / notice_filename
+                if potential_path.exists():
+                    expected_notice_path = potential_path
+                    break
+
+            if not expected_notice_path:
                 logger.warning(
-                    f"Expected NOTICE file not found in validator repository at {expected_notice_path}. "
+                    f"Expected NOTICE file not found in validator repository at {repo_root} "
+                    f"(checked NOTICE, NOTICE.txt, notice.txt, Notice.txt, notice, Notice). "
                     f"Skipping license validation for {repo_url}"
                 )
                 return True
@@ -803,9 +810,18 @@ async def validate_repo_license(repo_url: str) -> bool:
                 logger.warning(f"LICENSE file content does not match verbatim for repository {repo_url}")
                 return False
 
-            notice_file_path = temp_path / "NOTICE"
-            if not notice_file_path.exists():
-                logger.warning(f"NOTICE file not found in repository {repo_url}")
+            notice_file_path = None
+            for notice_filename in ["NOTICE", "NOTICE.txt", "notice.txt", "Notice.txt", "notice", "Notice"]:
+                potential_path = temp_path / notice_filename
+                if potential_path.exists():
+                    notice_file_path = potential_path
+                    break
+
+            if not notice_file_path:
+                logger.warning(
+                    f"NOTICE file not found in repository {repo_url} "
+                    f"(checked NOTICE, NOTICE.txt, notice.txt, Notice.txt, notice, Notice)"
+                )
                 return False
 
             notice_content = notice_file_path.read_text(encoding="utf-8")
