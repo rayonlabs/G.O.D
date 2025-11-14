@@ -18,6 +18,7 @@ from core.models.tournament_models import TournamentType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
+from core.models.utility_models import Backend
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
@@ -195,9 +196,9 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
             pending_text_count += 1
 
     logger.info(f"Pending by type - Text: {pending_text_count}, Image: {pending_image_count}")
-
+    
     organic_tasks = await task_sql.get_tasks_with_status(
-        TaskStatus.READY, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude"
+        TaskStatus.READY, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude", backend=Backend.OBLIVUS.value
     )
     logger.info(f"Found {len(organic_tasks)} organic (non-tournament, non-benchmark) tasks ready for training")
     await _process_tasks_for_training(organic_tasks, config, priority=1)

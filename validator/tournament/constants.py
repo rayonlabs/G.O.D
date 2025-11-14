@@ -19,6 +19,10 @@ TOURNAMENT_PENDING_ROUND_CYCLE_INTERVAL = 15 * 60
 # Retry intervals (in seconds)
 TRAINING_START_RETRY_INTERVAL = 1 * 60  # 15 minutes
 
+# Dstack orchestrator retry settings
+DSTACK_RETRY_DELAY_MINUTES = 30
+DSTACK_MAX_RETRIES = 2
+
 # Trainer requests
 TRAINER_HTTP_TIMEOUT = 30.0  # seconds
 EXPECTED_TRAINING_START_MESSAGE = "Started Training!"

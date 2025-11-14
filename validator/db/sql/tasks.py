@@ -57,13 +57,15 @@ async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dic
         {cst.TRAINING_DATA},
         {cst.CREATED_AT},
         {cst.TASK_TYPE},
+        {cst.BACKEND},
         {cst.RESULT_MODEL_NAME},
         {cst.TRAINING_REPO_BACKUP},
         {cst.STARTED_AT},
         {cst.TERMINATION_AT})
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
     """
+    backend_value = task.backend.value if task.backend and hasattr(task.backend, 'value') else (task.backend if task.backend else None)
     return await connection.fetchrow(
         query_tasks,
         task.account_id,
@@ -76,6 +78,7 @@ async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dic
         task.training_data,
         task.created_at,
         task.task_type.value,
+        backend_value,
         task.result_model_name,
         task.training_repo_backup,
         task.started_at,
@@ -242,6 +245,7 @@ async def get_tasks_with_status(
     include_not_ready_tasks: bool = False,
     tournament_filter: Literal["all", "only", "exclude"] = "all",
     benchmark_filter: Literal["include", "exclude", "only"] = "exclude",
+    backend: str | None = None,
 ) -> list[AnyTypeRawTask]:
     if (benchmark_filter == "include" or benchmark_filter == "only") and tournament_filter == "only":
         raise ValueError(f"Cannot include benchmark tasks and only tournament tasks: {benchmark_filter} and {tournament_filter}")
@@ -275,16 +279,26 @@ async def get_tasks_with_status(
             )
         """
 
+    if backend:
+            backend_clause = f"AND ({cst.BACKEND} = $2 OR {cst.BACKEND} IS NULL)"
+            query_params = [status.value, backend]
+    else:
+        backend_clause = ""
+        query_params = [status.value]
+        
+
     async with await psql_db.connection() as connection:
         connection: Connection
+        
         base_query = f"""
             SELECT * FROM {cst.TASKS_TABLE}
             WHERE {cst.STATUS} = $1
             {delay_timestamp_clause}
             {tournament_tasks_clause}
             {benchmark_tasks_clause}
+            {backend_clause}
         """
-        base_rows = await connection.fetch(base_query, status.value)
+        base_rows = await connection.fetch(base_query, *query_params)
 
         tasks = []
         for row in base_rows:

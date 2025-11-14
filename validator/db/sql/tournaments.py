@@ -675,6 +675,7 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
                         updated_at=row[cst.UPDATED_AT],
                         training_repo=row[cst.TRAINING_REPO],
                         training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
+                        priority=row.get(cst.PRIORITY, 1),
                     )
                 )
 
@@ -702,6 +703,30 @@ async def update_tournament_task_training_status(task_id: str, hotkey: str, stat
 
         await connection.execute(query, task_id, hotkey, status)
         logger.info(f"Marked task-hotkey pair ({task_id}, {hotkey}) as {status}")
+
+
+async def update_dstack_runname(task_id: str, hotkey: str, runname: str, psql_db: PSQLDB):
+    """Update the dstack runname for a specific task-hotkey pair"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            SET {cst.DSTACK_RUNNAME} = $3, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
+        """
+        await connection.execute(query, task_id, hotkey, runname)
+        logger.info(f"Updated dstack runname for task {task_id}, hotkey {hotkey} to {runname}")
+
+
+async def get_dstack_runname(task_id: str, hotkey: str, psql_db: PSQLDB) -> str | None:
+    """Get the dstack runname for a specific task-hotkey pair"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.DSTACK_RUNNAME}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
+        """
+        result = await connection.fetchval(query, task_id, hotkey)
+        return result
 
 
 async def get_training_status_for_task_and_hotkeys(task_id: str, hotkeys: list[str], psql_db: PSQLDB) -> dict[str, str]:
@@ -1240,3 +1265,43 @@ async def get_weekly_task_participation_data(psql_db: PSQLDB) -> list[HotkeyTask
 
         logger.info(f"Found weekly task participation for {len(result)} hotkeys over 7 days")
         return result
+
+
+async def get_tournament_training_tasks_by_task_id(task_id: str, psql_db: PSQLDB) -> list[TournamentTaskTraining]:
+    """Get all training tasks for a specific task_id"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.TASK_ID}, {cst.HOTKEY}, {cst.TRAINING_STATUS}, {cst.N_TRAINING_ATTEMPTS},
+                   {cst.CREATED_AT}, {cst.UPDATED_AT}, {cst.PRIORITY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            WHERE {cst.TASK_ID} = $1
+            ORDER BY {cst.PRIORITY} ASC, {cst.CREATED_AT} DESC
+        """
+        results = await connection.fetch(query, task_id)
+        
+        if not results:
+            return []
+        
+        # Get the task object
+        task = await task_sql.get_task(task_id, psql_db)
+        if not task:
+            logger.warning(f"Task {task_id} not found")
+            return []
+        
+        tournament_tasks = []
+        for row in results:
+            tournament_tasks.append(
+                TournamentTaskTraining(
+                    task=task,
+                    hotkey=row[cst.HOTKEY],
+                    training_status=row[cst.TRAINING_STATUS],
+                    n_training_attempts=row[cst.N_TRAINING_ATTEMPTS],
+                    created_at=row[cst.CREATED_AT],
+                    updated_at=row[cst.UPDATED_AT],
+                    training_repo=row[cst.TRAINING_REPO],
+                    training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
+                    priority=row.get(cst.PRIORITY, 1),
+                )
+            )
+        
+        return tournament_tasks
