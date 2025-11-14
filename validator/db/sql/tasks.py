@@ -65,7 +65,6 @@ async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dic
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
     """
-    backend_value = task.backend.value if task.backend and hasattr(task.backend, 'value') else (task.backend if task.backend else None)
     return await connection.fetchrow(
         query_tasks,
         task.account_id,
@@ -78,7 +77,7 @@ async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dic
         task.training_data,
         task.created_at,
         task.task_type.value,
-        backend_value,
+        task.backend.value if task.backend else None,
         task.result_model_name,
         task.training_repo_backup,
         task.started_at,
