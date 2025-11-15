@@ -21,7 +21,7 @@ TRAINING_START_RETRY_INTERVAL = 1 * 60  # 15 minutes
 
 # Dstack orchestrator retry settings
 DSTACK_RETRY_DELAY_MINUTES = 30
-DSTACK_MAX_RETRIES = 2
+DSTACK_MAX_RETRIES = 3
 
 # Trainer requests
 TRAINER_HTTP_TIMEOUT = 30.0  # seconds
