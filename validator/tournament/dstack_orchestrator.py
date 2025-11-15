@@ -69,7 +69,11 @@ async def submit_dstack_run(task_config: dict) -> str:
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(request_url, headers=headers, json=task_config)
-        response.raise_for_status()
+        if response.status_code != 200:
+            error_detail = response.text
+            logger.error(f"dstack API error ({response.status_code}): {error_detail}")
+            logger.error(f"Request payload: {task_config}")
+            response.raise_for_status()
         result = response.json()
         run_name = result.get("run_spec", {}).get("run_name") or result.get("run_name")
         logger.info(f"Submitted dstack run: {run_name}")
@@ -284,6 +288,9 @@ async def _create_dstack_request(
     logger.info(f"Creating dstack request for task {task.task_id} with run name {run_name}")
     
     expected_repo_name = await task_sql.get_expected_repo_name(task.task_id, EMISSION_BURN_HOTKEY, config.psql_db)
+    # For organic tasks, generate a default repo name if not found
+    if not expected_repo_name:
+        expected_repo_name = f"organic_{task.task_id}"
     
     required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
     gpu_count = _get_gpu_count_from_requirement(required_gpus)
@@ -330,6 +337,7 @@ async def _create_dstack_request(
                 "run_name": run_name,
                 "configuration": {
                     "type": "task",
+                    "name": expected_repo_name,
                     "image": docker_image,
                     "env": task_env,
                     "resources": {
