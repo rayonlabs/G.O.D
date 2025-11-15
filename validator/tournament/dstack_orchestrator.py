@@ -24,6 +24,7 @@ from validator.core.constants import DSTACK_RUNS_GET_ENDPOINT
 from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.core.models import AnyTypeRawTask
 from validator.db.sql import tasks as task_sql
+from core.models.utility_models import Backend
 from validator.db.sql import tournaments as tournament_sql
 from validator.evaluation.scoring import _get_dataset_type
 from validator.tournament.utils import get_tournament_gpu_requirement
@@ -124,7 +125,6 @@ async def _fetch_organic_tasks_ready_to_train(config: Config):
     These will be scheduled on dstack.
     """
     # Get organic tasks that are ready for training (filter by backend="runpod")
-    from core.models.utility_models import Backend
     organic_tasks = await task_sql.get_tasks_with_status(
         TaskStatus.READY, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude", backend=Backend.RUNPOD.value
     )
@@ -171,7 +171,7 @@ async def process_pending_organic_tasks(config: Config):
                 TrainingStatus.PENDING,
             )
             
-            organic_tasks = [t for t in pending_training_tasks if t.priority == 1]
+            organic_tasks = [t for t in pending_training_tasks if t.priority == 1 and t.backend == Backend.RUNPOD.value]
             
             logger.info(f"Fetched {len(organic_tasks)} pending organic tasks")
             
