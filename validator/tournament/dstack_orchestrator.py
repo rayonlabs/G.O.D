@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import random
 from datetime import datetime
@@ -316,7 +317,8 @@ async def _create_dstack_request(
         task_env["DATASET"] = task.training_data
         dataset_type = _get_dataset_type(task)
         if dataset_type:
-            task_env["DATASET_TYPE"] = dataset_type.value if hasattr(dataset_type, 'value') else str(dataset_type)
+            dataset_type_dict = dataset_type.model_dump() if hasattr(dataset_type, 'model_dump') else dataset_type.dict()
+            task_env["DATASET_TYPE"] = json.dumps(dataset_type_dict)
         task_env["FILE_FORMAT"] = "s3"
     
     huggingface_token = os.getenv("HUGGINGFACE_TOKEN")
