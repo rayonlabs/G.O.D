@@ -171,7 +171,7 @@ async def process_pending_organic_tasks(config: Config):
                 TrainingStatus.PENDING,
             )
             
-            organic_tasks = [t for t in pending_training_tasks if t.priority == 1 and t.backend == Backend.RUNPOD.value]
+            organic_tasks = [t for t in pending_training_tasks if t.priority == 1 and t.task.backend.value == Backend.RUNPOD.value]
             
             logger.info(f"Fetched {len(organic_tasks)} pending organic tasks")
             
@@ -405,7 +405,7 @@ async def _monitor_dstack_tasks(config: Config):
     - If done, mark as success
     """
     training_tasks = await tournament_sql.get_tournament_training_tasks(config.psql_db, TrainingStatus.TRAINING)
-    organic_tasks = [t for t in training_tasks if t.priority == 1 and t.backend == Backend.RUNPOD.value]
+    organic_tasks = [t for t in training_tasks if t.priority == 1 and t.task.backend.value == Backend.RUNPOD.value]
     
     logger.info(f"Found {len(organic_tasks)} organic tasks currently in training on dstack")
     
