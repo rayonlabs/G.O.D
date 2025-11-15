@@ -502,5 +502,5 @@ async def run_dstack_orchestrator_cycle():
 
 if __name__ == "__main__":
     load_dotenv(".vali.env", override=True)
-    asyncio.run(run_dstack_orchestrator_cycles())
+    asyncio.run(run_dstack_orchestrator_cycle())
 
