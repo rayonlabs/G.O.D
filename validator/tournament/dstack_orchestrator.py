@@ -229,7 +229,7 @@ async def schedule_organic_tasks_for_dstack(pending_training_tasks: list, config
                     continue
             
             try:
-                run_name = _generate_dstack_run_name(str(task.task_id))
+                run_name = _generate_dstack_run_name(str(task.task_id), oldest_task_training.n_training_attempts)
                 
                 dstack_config = await _create_dstack_request(
                     task, run_name, config
@@ -263,25 +263,10 @@ async def schedule_organic_tasks_for_dstack(pending_training_tasks: list, config
     logger.info(f"Completed scheduling cycle, {len(pending_training_tasks)} tasks remaining")
 
 
-def _generate_dstack_run_name(task_id: str) -> str:
-    """
-    Generate a dstack run name that matches regex: ^[a-z][a-z0-9-]{1,40}$
-    Must start with lowercase letter, only lowercase letters/numbers/hyphens, max 40 chars
-    """
-    unique_number = random.randint(1000, 999999)
-    normalized_task_id = task_id.lower()
-    normalized_task_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in normalized_task_id)
-    while '--' in normalized_task_id:
-        normalized_task_id = normalized_task_id.replace('--', '-')
-    
-    base_name = f"{normalized_task_id}-{unique_number}"
-    if base_name and not base_name[0].isalpha():
-        base_name = 'task-' + base_name
-    
-    run_name = base_name[:40]
-    run_name = run_name.rstrip('-')
-    if not run_name or not run_name[0].isalpha():
-        run_name = f"task-{unique_number}"[:40]
+def _generate_dstack_run_name(task_id: str, attempt_number: int = 0) -> str:
+    normalized_task_id = task_id.lower().replace('-', '')
+    task_id_part = normalized_task_id[:37]
+    run_name = f"a{attempt_number}-{task_id_part}"[:40]
     
     return run_name
 
