@@ -337,7 +337,7 @@ async def _create_dstack_request(
                 "run_name": run_name,
                 "configuration": {
                     "type": "task",
-                    "name": expected_repo_name,
+                    "name": "organic",
                     "image": docker_image,
                     "env": task_env,
                     "resources": {
