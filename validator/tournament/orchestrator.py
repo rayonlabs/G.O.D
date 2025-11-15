@@ -343,13 +343,20 @@ async def process_pending_tournament_tasks(config: Config):
                 TrainingStatus.PENDING,
             )
 
-            logger.info(f"Fetched {len(pending_training_tasks)} pending tournament tasks")
+            # Filter out tasks with backend="runpod" - those are handled by dstack orchestrator
+            # Only process tasks with backend="oblivus" or backend IS NULL (for backward compatibility)
+            tournament_tasks = [
+                t for t in pending_training_tasks
+                if t.task.backend is None or t.task.backend.value == Backend.OBLIVUS.value
+            ]
 
-            if not pending_training_tasks:
+            logger.info(f"Fetched {len(pending_training_tasks)} pending training tasks, {len(tournament_tasks)}")
+
+            if not tournament_tasks:
                 await asyncio.sleep(cst.PROCESS_PENDING_TASKS_CYCLE_INTERVAL)
                 continue
 
-            await schedule_tasks_for_training(pending_training_tasks, config)
+            await schedule_tasks_for_training(tournament_tasks, config)
         except Exception as e:
             logger.error(f"Error in process_pending_tournament_tasks cycle: {str(e)}", exc_info=True)
             await asyncio.sleep(cst.PROCESS_PENDING_TASKS_CYCLE_INTERVAL)
@@ -684,9 +691,17 @@ async def _monitor_training_tasks(config: Config):
     """
     # Get all tasks currently in training status
     training_tasks = await tournament_sql.get_tournament_training_tasks(config.psql_db, TrainingStatus.TRAINING)
-    logger.info(f"Found {len(training_tasks)} tasks currently in training")
+    
+    # Filter out tasks with backend="runpod" - those are handled by dstack orchestrator
+    # Only monitor tasks with backend="oblivus" or backend IS NULL (for backward compatibility)
+    tournament_tasks = [
+        t for t in training_tasks
+        if t.task.backend is None or t.task.backend.value == Backend.OBLIVUS.value
+    ]
+    
+    logger.info(f"Found {len(training_tasks)} tasks in training, {len(tournament_tasks)}")
 
-    if not training_tasks:
+    if not tournament_tasks:
         logger.info("No tasks in training, skipping monitoring cycle")
         return
 
@@ -697,7 +712,7 @@ async def _monitor_training_tasks(config: Config):
     trainers = await tournament_sql.get_trainers(config.psql_db)
 
     # Check each training task
-    for training_task in training_tasks:
+    for training_task in tournament_tasks:
         tournament_id = await get_tournament_id_by_task_id(training_task.task.task_id, config.psql_db)
         if tournament_id is None:
             logger.warning(f"Task {training_task.task.task_id} not found in tournament_tasks table - no tournament_id available")
