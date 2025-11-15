@@ -203,6 +203,11 @@ class TrainingStatus(str, Enum):
     FAILURE = "failure"
 
 
+class Backend(str, Enum):
+    OBLIVUS = "oblivus"
+    RUNPOD = "runpod"
+
+
 class GPUInfo(BaseModel):
     gpu_id: int = Field(..., description="GPU ID")
     gpu_type: GPUType = Field(..., description="GPU Type")

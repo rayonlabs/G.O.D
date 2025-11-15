@@ -14,6 +14,7 @@ from pydantic import model_validator
 
 from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
+from core.models.utility_models import Backend
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
@@ -103,6 +104,7 @@ class RawTask(BaseModel):
     n_eval_attempts: int = 0
     task_type: TaskType
     model_params_count: int = 0
+    backend: Backend | None = None
 
     # Turn off protected namespace for model
     model_config = ConfigDict(protected_namespaces=())

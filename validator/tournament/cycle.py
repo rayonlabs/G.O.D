@@ -1,6 +1,7 @@
 import asyncio
 
 from validator.core.config import load_config
+from validator.tournament.dstack_orchestrator import run_dstack_orchestrator_cycle
 from validator.tournament.tournament_manager import process_active_tournaments
 from validator.tournament.tournament_manager import process_pending_rounds
 from validator.tournament.tournament_manager import process_pending_tournaments
@@ -28,7 +29,7 @@ async def cycle():
         # this advances the tournament till completion
         process_active_tournaments(config),
         # this automatically creates new tournaments when previous ones complete
-        process_tournament_scheduling(config),
+        process_tournament_scheduling(config)
     )
 
 

@@ -18,6 +18,7 @@ from core.models.tournament_models import TournamentType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GPUInfo
 from core.models.utility_models import GPUType
+from core.models.utility_models import Backend
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from core.models.utility_models import TrainingStatus
@@ -195,9 +196,9 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
             pending_text_count += 1
 
     logger.info(f"Pending by type - Text: {pending_text_count}, Image: {pending_image_count}")
-
+    
     organic_tasks = await task_sql.get_tasks_with_status(
-        TaskStatus.READY, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude"
+        TaskStatus.READY, config.psql_db, tournament_filter="exclude", benchmark_filter="exclude", backend=Backend.OBLIVUS.value
     )
     logger.info(f"Found {len(organic_tasks)} organic (non-tournament, non-benchmark) tasks ready for training")
     await _process_tasks_for_training(organic_tasks, config, priority=1)
@@ -342,13 +343,20 @@ async def process_pending_tournament_tasks(config: Config):
                 TrainingStatus.PENDING,
             )
 
-            logger.info(f"Fetched {len(pending_training_tasks)} pending tournament tasks")
+            # Filter out tasks with backend="runpod" - those are handled by dstack orchestrator
+            # Only process tasks with backend="oblivus" or backend IS NULL (for backward compatibility)
+            tournament_tasks = [
+                t for t in pending_training_tasks
+                if t.task.backend is None or t.task.backend.value == Backend.OBLIVUS.value
+            ]
 
-            if not pending_training_tasks:
+            logger.info(f"Fetched {len(pending_training_tasks)} pending training tasks, {len(tournament_tasks)}")
+
+            if not tournament_tasks:
                 await asyncio.sleep(cst.PROCESS_PENDING_TASKS_CYCLE_INTERVAL)
                 continue
 
-            await schedule_tasks_for_training(pending_training_tasks, config)
+            await schedule_tasks_for_training(tournament_tasks, config)
         except Exception as e:
             logger.error(f"Error in process_pending_tournament_tasks cycle: {str(e)}", exc_info=True)
             await asyncio.sleep(cst.PROCESS_PENDING_TASKS_CYCLE_INTERVAL)
@@ -683,9 +691,17 @@ async def _monitor_training_tasks(config: Config):
     """
     # Get all tasks currently in training status
     training_tasks = await tournament_sql.get_tournament_training_tasks(config.psql_db, TrainingStatus.TRAINING)
-    logger.info(f"Found {len(training_tasks)} tasks currently in training")
+    
+    # Filter out tasks with backend="runpod" - those are handled by dstack orchestrator
+    # Only monitor tasks with backend="oblivus" or backend IS NULL (for backward compatibility)
+    tournament_tasks = [
+        t for t in training_tasks
+        if t.task.backend is None or t.task.backend.value == Backend.OBLIVUS.value
+    ]
+    
+    logger.info(f"Found {len(training_tasks)} tasks in training, {len(tournament_tasks)}")
 
-    if not training_tasks:
+    if not tournament_tasks:
         logger.info("No tasks in training, skipping monitoring cycle")
         return
 
@@ -696,7 +712,7 @@ async def _monitor_training_tasks(config: Config):
     trainers = await tournament_sql.get_trainers(config.psql_db)
 
     # Check each training task
-    for training_task in training_tasks:
+    for training_task in tournament_tasks:
         tournament_id = await get_tournament_id_by_task_id(training_task.task.task_id, config.psql_db)
         if tournament_id is None:
             logger.warning(f"Task {training_task.task.task_id} not found in tournament_tasks table - no tournament_id available")
