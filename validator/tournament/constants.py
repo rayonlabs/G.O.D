@@ -21,7 +21,10 @@ TRAINING_START_RETRY_INTERVAL = 1 * 60  # 15 minutes
 
 # Dstack orchestrator retry settings
 DSTACK_RETRY_DELAY_MINUTES = 30
-DSTACK_MAX_RETRIES = 3
+DSTACK_MAX_RETRIES = 2
+
+# Dstack regions
+DSTACK_REGIONS = ["CA-MTL-3", "CA-MTL-1", "AP-JP-1", "US-KS-2", "US-GA-2", "US-CA-2"]
 
 # Trainer requests
 TRAINER_HTTP_TIMEOUT = 30.0  # seconds

@@ -81,7 +81,7 @@ async def submit_dstack_run(task_config: dict) -> str:
         return run_name
 
 
-async def get_dstack_run_status(run_name: str) -> DstackRunStatus:
+async def get_dstack_run_status(run_name: str) -> tuple[DstackRunStatus, dict]:
     """
     Get status of a dstack run using runs/get endpoint
     
@@ -89,7 +89,7 @@ async def get_dstack_run_status(run_name: str) -> DstackRunStatus:
         run_name: Name of the run to check
     
     Returns:
-        DstackRunStatus: Parsed run status information
+        Tuple of (DstackRunStatus, raw_response_data): Parsed status and full response data
     """
     dstack_config = load_dstack_config()
     dstack_url = dstack_config['url']
@@ -107,7 +107,31 @@ async def get_dstack_run_status(run_name: str) -> DstackRunStatus:
         response = await client.post(request_url, headers=headers, json={"run_name": run_name})
         response.raise_for_status()
         response_data = response.json()
-        return DstackRunStatus.model_validate(response_data)
+        return DstackRunStatus.model_validate(response_data), response_data
+
+
+def _extract_region_from_response(response_data: dict) -> str | None:
+    try:
+        if "latest_job_submission" in response_data:
+            latest = response_data["latest_job_submission"]
+            if "job_provisioning_data" in latest:
+                provisioning = latest["job_provisioning_data"]
+                if "region" in provisioning:
+                    return provisioning["region"]
+        
+        if "jobs" in response_data and isinstance(response_data["jobs"], list) and len(response_data["jobs"]) > 0:
+            job = response_data["jobs"][0]
+            if "job_submissions" in job and isinstance(job["job_submissions"], list) and len(job["job_submissions"]) > 0:
+                submission = job["job_submissions"][0]
+                if "job_provisioning_data" in submission:
+                    provisioning = submission["job_provisioning_data"]
+                    if "region" in provisioning:
+                        return provisioning["region"]
+            
+    except Exception as e:
+        logger.warning(f"Failed to extract region from response: {str(e)}")
+    
+    return None
 
 
 async def fetch_organic_tasks_ready_to_train(config: Config):
@@ -232,8 +256,23 @@ async def schedule_organic_tasks_for_dstack(pending_training_tasks: list, config
             try:
                 run_name = _generate_dstack_run_name(str(task.task_id), oldest_task_training.n_training_attempts)
                 
+                excluded_region = None
+                if oldest_task_training.n_training_attempts > 0:
+                    previous_attempt = oldest_task_training.n_training_attempts - 1
+                    previous_run_name = _generate_dstack_run_name(str(task.task_id), previous_attempt)
+                    try:
+                        _, previous_response_data = await get_dstack_run_status(previous_run_name)
+                        excluded_region = _extract_region_from_response(previous_response_data)
+                        if excluded_region:
+                            logger.info(
+                                f"Excluding region {excluded_region} from attempt {oldest_task_training.n_training_attempts + 1} "
+                                f"(used in previous attempt {previous_attempt})"
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to get region from previous run {previous_run_name}: {str(e)}")
+                
                 dstack_config = await _create_dstack_request(
-                    task, run_name, config
+                    task, run_name, config, excluded_region=excluded_region
                 )
                 
                 submitted_run_name = await submit_dstack_run(dstack_config)
@@ -276,6 +315,7 @@ async def _create_dstack_request(
     task: AnyTypeRawTask,
     run_name: str,
     config: Config,
+    excluded_region: str | None = None,
 ) -> dict:
     """
     Create a dstack request configuration based on the task type.
@@ -285,22 +325,27 @@ async def _create_dstack_request(
         task: The task to create a request for
         run_name: The unique run name for this task
         config: Configuration object for database access
+        excluded_region: Region to exclude from the regions list (for retries)
     
     Returns:
         dict: dstack task configuration dict
     """
     logger.info(f"Creating dstack request for task {task.task_id} with run name {run_name}")
     
+    regions = cst.DSTACK_REGIONS.copy()
+    if excluded_region and excluded_region in regions:
+        regions.remove(excluded_region)
+        logger.info(f"Excluded region {excluded_region} from regions list. Available regions: {regions}")
+
+    
     expected_repo_name = await task_sql.get_expected_repo_name(task.task_id, EMISSION_BURN_HOTKEY, config.psql_db)
-    # For organic tasks, generate a default repo name if not found
+
     if not expected_repo_name:
         expected_repo_name = f"organic_{task.task_id}"
     
     required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
     gpu_count = _get_gpu_count_from_requirement(required_gpus)
     gpu_name = _get_gpu_name_from_requirement(required_gpus)
-    
-    timeout_seconds = int(task.hours_to_complete * 3600)
     
     task_env = {
         "TASK_ID": str(task.task_id),
@@ -357,8 +402,7 @@ async def _create_dstack_request(
                             "size": "1000GB"
                         }
                     },
-                    "regions": ["CA-MTL-3", "CA-MTL-1", "AP-JP-1", "US-KS-2", "US-GA-2", "US-CA-2"],
-                    "max_duration": timeout_seconds
+                    "regions": regions
                 }
             }
         },
@@ -440,7 +484,7 @@ async def _monitor_dstack_tasks(config: Config):
                     )
                     continue
                 
-                run_status = await get_dstack_run_status(run_name)
+                run_status, _ = await get_dstack_run_status(run_name)
                 status_str = run_status.get_status().lower()
                 
                 logger.info(
