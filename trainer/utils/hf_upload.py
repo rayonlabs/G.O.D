@@ -52,6 +52,28 @@ def patch_model_metadata(output_dir: str, base_model_id: str):
         pass
 
             
+def is_folder_empty_or_metadata_only(folder_path: str) -> bool:
+    """Check if folder is empty or only contains small metadata files like .gitattributes."""
+    if not os.path.isdir(folder_path):
+        return True
+    
+    items = os.listdir(folder_path)
+    if not items:
+        return True
+    
+    metadata_files = {'.git', '.gitattributes', '.gitignore', '.gitkeep'}
+    for item in items:
+        item_path = os.path.join(folder_path, item)
+        if os.path.isdir(item_path):
+            if item != '.git':
+                return False
+        elif item not in metadata_files:
+            if os.path.getsize(item_path) > 1024:
+                return False
+    
+    return True
+
+
 def sync_wandb_logs(cache_dir: str):
     sync_root = os.path.join(cache_dir, "wandb")
     run_dirs = glob.glob(os.path.join(sync_root, "offline-run-*"))
@@ -108,6 +130,9 @@ def main():
 
     if not os.path.isdir(local_folder):
         raise FileNotFoundError(f"Local folder {local_folder} does not exist")
+
+    if is_folder_empty_or_metadata_only(local_folder):
+        raise ValueError(f"Local folder {local_folder} is empty or only contains metadata files. Nothing to upload.")
 
     patch_model_metadata(local_folder, model)
 
