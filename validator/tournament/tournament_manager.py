@@ -365,13 +365,6 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
             )
 
-            try:
-                logger.info(f"Creating benchmark tasks for base contestant winner {winner}")
-                benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(tournament.tournament_id, winner, config)
-                logger.info(f"Created {len(benchmark_task_ids)} benchmark tasks for base contestant winner {winner}")
-            except Exception as e:
-                logger.error(f"Error creating benchmark tasks for base contestant winner {winner}: {str(e)}")
-
             await upload_participant_repository(tournament.tournament_id, tournament.tournament_type, winner, 1, config, psql_db)
             return
 
@@ -445,15 +438,6 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 )
 
                 try:
-                    logger.info(f"Creating benchmark tasks for tournament winner {winner}")
-                    benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(
-                        tournament.tournament_id, winner, config
-                    )
-                    logger.info(f"Created {len(benchmark_task_ids)} benchmark tasks for tournament winner {winner}")
-                except Exception as e:
-                    logger.error(f"Error creating benchmark tasks for tournament winner {winner}: {str(e)}")
-
-                try:
                     participant1, participant2 = await get_final_round_participants(completed_round, psql_db)
                     logger.info(f"Final round participants from DB: {participant1}, {participant2}")
                     logger.info(f"Winner determined by get_round_winners: {winner}")
@@ -470,6 +454,14 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                         logger.info(f"Challenger {winner} won")
                         position_1_upload = winner
                         position_2_upload = cst.EMISSION_BURN_HOTKEY
+                        try:
+                            logger.info(f"Creating benchmark tasks for tournament winner {winner}")
+                            benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(
+                                tournament.tournament_id, winner, config
+                            )
+                            logger.info(f"Created {len(benchmark_task_ids)} benchmark tasks for tournament winner {winner}")
+                        except Exception as e:
+                            logger.error(f"Error creating benchmark tasks for tournament winner {winner}: {str(e)}")
 
                     logger.info(f"Uploading position 1 repository for hotkey: {position_1_upload}")
                     await upload_participant_repository(
