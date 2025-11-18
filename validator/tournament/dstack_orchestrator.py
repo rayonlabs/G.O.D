@@ -300,7 +300,7 @@ async def _create_dstack_request(
     gpu_count = _get_gpu_count_from_requirement(required_gpus)
     gpu_name = _get_gpu_name_from_requirement(required_gpus)
     
-    timeout_seconds = int(task.hours_to_complete * 3600)
+    timeout_seconds = int(task.hours_to_complete * 3600) + 3600 # Add 1 hour for provisioning/download/upload
     
     task_env = {
         "TASK_ID": str(task.task_id),
