@@ -1,0 +1,51 @@
+# task-status-transitions.mdc
+
+Implement clear task status transitions with validation and proper state management.
+
+### Bad
+```python
+# Direct status updates
+task.status = "training"
+
+# Mixing status concerns
+def process_task():
+    task.status = "running"
+    do_work()
+    task.status = "complete"
+```
+
+### Good
+```python
+class TaskStatus(str, Enum):
+    PENDING = "pending"
+    READY = "ready" 
+    TRAINING = "training"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+async def transition_task_status(
+    task_id: str,
+    from_status: TaskStatus,
+    to_status: TaskStatus
+) -> None:
+    async with task_lock:
+        task = await get_task(task_id)
+        if task.status != from_status:
+            raise InvalidStateTransition()
+            
+        await update_task_status(
+            task_id=task_id,
+            status=to_status,
+            updated_at=datetime.utcnow()
+        )
+        
+        await log_status_change(task_id, from_status, to_status)
+```
+
+### Explanation
+- Use enums for task status
+- Validate state transitions
+- Update status atomically
+- Log status changes
+- Handle race conditions
+- Keep status logic separate from business logic
