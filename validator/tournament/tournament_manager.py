@@ -59,10 +59,6 @@ from validator.db.sql.transfers import deduct_tournament_participation_fee
 from validator.db.sql.transfers import get_coldkey_balance_by_address
 from validator.tournament import constants as t_cst
 from validator.tournament.benchmark_utils import create_benchmark_tasks_for_tournament_winner
-from validator.tournament.boss_round_sync import copy_tournament_task_into_general_miner_pool
-from validator.tournament.boss_round_sync import get_synced_task_id
-from validator.tournament.boss_round_sync import get_synced_task_ids
-from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
 from validator.tournament.repo_uploader import upload_tournament_participant_repository
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
@@ -386,100 +382,55 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             task_ids = [task.task_id for task in round_tasks]
             logger.info(f"Tournament task IDs: {task_ids}")
 
-            snyced_task_ids = await get_synced_task_ids(task_ids, psql_db)
-            logger.info(f"Found {len(snyced_task_ids)} synced task IDs: {snyced_task_ids}")
+            await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
+            # await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
+            logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}. Please update DB manually.")
 
-            if len(snyced_task_ids) == 0:
-                logger.info("No synced tasks found, initiating sync to general tasks")
-                await sync_boss_round_tasks_to_general(tournament.tournament_id, completed_round, psql_db, config)
-            elif len(snyced_task_ids) < len(round_tasks):
-                # Some but not all tasks synced - sync the missing ones
-                logger.info(f"Only {len(snyced_task_ids)} of {len(round_tasks)} tasks synced, syncing missing tasks...")
-                for task in round_tasks:
-                    synced_id = await get_synced_task_id(task.task_id, psql_db)
-                    if not synced_id:
-                        logger.info(f"Syncing missing task {task.task_id} to general")
-                        await copy_tournament_task_into_general_miner_pool(task.task_id, psql_db)
-                return  # Wait for next cycle to check completion
-            elif len(snyced_task_ids) >= len(round_tasks):
-                logger.info(f"All {len(round_tasks)} tasks have been synced, checking their status...")
+            await notify_tournament_completed(
+                tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
+            )
 
-                all_tasks_complete = True
-                for i, synced_task_id in enumerate(snyced_task_ids):
-                    logger.info(f"Checking synced task {i + 1}/{len(snyced_task_ids)}: {synced_task_id}")
-                    task = await task_sql.get_task(synced_task_id, psql_db)
+            try:
+                participant1, participant2 = await get_final_round_participants(completed_round, psql_db)
+                logger.info(f"Final round participants from DB: {participant1}, {participant2}")
+                logger.info(f"Winner determined by get_round_winners: {winner}")
+                logger.info(f"Tournament base_winner_hotkey (previous champion): {tournament.base_winner_hotkey}")
 
-                    if not task:
-                        logger.error(f"Could not find synced task {synced_task_id} in database!")
-                        all_tasks_complete = False
-                        break
+                # Simple logic: EMISSION_BURN_HOTKEY is the defending champion
+                if winner == cst.EMISSION_BURN_HOTKEY:
+                    # Defending champion won - upload EMISSION_BURN_HOTKEY to position 1
+                    logger.info("Defending champion (EMISSION_BURN_HOTKEY) won")
+                    position_1_upload = cst.EMISSION_BURN_HOTKEY
+                    position_2_upload = participant1  # The challenger who lost
+                else:
+                    # Challenger won - upload winner to position 1, EMISSION_BURN_HOTKEY to position 2
+                    logger.info(f"Challenger {winner} won")
+                    position_1_upload = winner
+                    position_2_upload = cst.EMISSION_BURN_HOTKEY
+                    try:
+                        logger.info(f"Creating benchmark tasks for tournament winner {winner}")
+                        benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(
+                            tournament.tournament_id, winner, config
+                        )
+                        logger.info(f"Created {len(benchmark_task_ids)} benchmark tasks for tournament winner {winner}")
+                    except Exception as e:
+                        logger.error(f"Error creating benchmark tasks for tournament winner {winner}: {str(e)}")
 
-                    logger.info(
-                        f"Synced task {synced_task_id} status: {task.status}, comparing with "
-                        f"SUCCESS={TaskStatus.SUCCESS.value}, FAILURE={TaskStatus.FAILURE.value}"
-                    )
-
-                    if task.status == TaskStatus.SUCCESS.value or task.status == TaskStatus.FAILURE.value:
-                        logger.info(f"Task {synced_task_id} finished with status {task.status}")
-                    else:
-                        logger.info(f"Tournament not completed yet. Synced task {synced_task_id} has status: {task.status}.")
-                        all_tasks_complete = False
-                        break
-
-                if not all_tasks_complete:
-                    logger.info("Not all synced tasks are complete, tournament remains active")
-                    return
-                await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
-                # await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
-                logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}. Please update DB manually.")
-
-                await notify_tournament_completed(
-                    tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
+                logger.info(f"Uploading position 1 repository for hotkey: {position_1_upload}")
+                await upload_participant_repository(
+                    tournament.tournament_id, tournament.tournament_type, position_1_upload, 1, config, psql_db
                 )
 
-                try:
-                    participant1, participant2 = await get_final_round_participants(completed_round, psql_db)
-                    logger.info(f"Final round participants from DB: {participant1}, {participant2}")
-                    logger.info(f"Winner determined by get_round_winners: {winner}")
-                    logger.info(f"Tournament base_winner_hotkey (previous champion): {tournament.base_winner_hotkey}")
-
-                    # Simple logic: EMISSION_BURN_HOTKEY is the defending champion
-                    if winner == cst.EMISSION_BURN_HOTKEY:
-                        # Defending champion won - upload EMISSION_BURN_HOTKEY to position 1
-                        logger.info("Defending champion (EMISSION_BURN_HOTKEY) won")
-                        position_1_upload = cst.EMISSION_BURN_HOTKEY
-                        position_2_upload = participant1  # The challenger who lost
-                    else:
-                        # Challenger won - upload winner to position 1, EMISSION_BURN_HOTKEY to position 2
-                        logger.info(f"Challenger {winner} won")
-                        position_1_upload = winner
-                        position_2_upload = cst.EMISSION_BURN_HOTKEY
-                        try:
-                            logger.info(f"Creating benchmark tasks for tournament winner {winner}")
-                            benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(
-                                tournament.tournament_id, winner, config
-                            )
-                            logger.info(f"Created {len(benchmark_task_ids)} benchmark tasks for tournament winner {winner}")
-                        except Exception as e:
-                            logger.error(f"Error creating benchmark tasks for tournament winner {winner}: {str(e)}")
-
-                    logger.info(f"Uploading position 1 repository for hotkey: {position_1_upload}")
-                    await upload_participant_repository(
-                        tournament.tournament_id, tournament.tournament_type, position_1_upload, 1, config, psql_db
-                    )
-
-                    logger.info(f"Uploading position 2 repository for hotkey: {position_2_upload}")
-                    await upload_participant_repository(
-                        tournament.tournament_id, tournament.tournament_type, position_2_upload, 2, config, psql_db
-                    )
-                except Exception as e:
-                    logger.error(f"Error determining final round participants: {e}")
-                    await upload_participant_repository(
-                        tournament.tournament_id, tournament.tournament_type, winner, 1, config, psql_db
-                    )
-                return
-            else:
-                logger.info(f"Tournament not completed yet. Synced {len(snyced_task_ids)} tasks out of {len(round_tasks)}.")
+                logger.info(f"Uploading position 2 repository for hotkey: {position_2_upload}")
+                await upload_participant_repository(
+                    tournament.tournament_id, tournament.tournament_type, position_2_upload, 2, config, psql_db
+                )
+            except Exception as e:
+                logger.error(f"Error determining final round participants: {e}")
+                await upload_participant_repository(
+                    tournament.tournament_id, tournament.tournament_type, winner, 1, config, psql_db
+                )
+            return
         else:
             await create_next_round(tournament, completed_round, winners, config, psql_db)
 
@@ -957,7 +908,7 @@ async def is_tourn_task_completed(
     """
     Checks if the tournament task is completed.
     If completed successfully, checks if majority trainings failed.
-    If completed with failure, syncs it to main cycle.
+    If completed with failure, notifies via Discord.
     If completed with prep task failure, creates a replacement immediately.
     If not completed, returns False.
 
@@ -967,17 +918,6 @@ async def is_tourn_task_completed(
     if task_obj.status == TaskStatus.SUCCESS.value:
         if await _more_than_half_failures(tournament_task, config):
             return False, "More than half of the trainings failed"
-
-        if final_round:
-            synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
-            if synced_task_id:
-                synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
-                if synced_task_obj.status in [TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value]:
-                    return True, "Synced task is completed"
-                else:
-                    return False, "Synced task is not completed"
-            else:
-                return False, "No synced task found for final round task"
         return True, "Task completed successfully"
 
     elif task_obj.status == TaskStatus.FAILURE.value:
@@ -986,36 +926,7 @@ async def is_tourn_task_completed(
             f"has failed, please investigate."
         )
         await _notify_discord(discord_message, config)
-
-        synced_task_id = await get_synced_task_id(tournament_task.task_id, config.psql_db)
-        if synced_task_id:
-            synced_task_obj = await task_sql.get_task(synced_task_id, config.psql_db)
-            if synced_task_obj.status == TaskStatus.SUCCESS.value:
-                logger.info(
-                    f"Tournament task {tournament_task.task_id} failed, but synced task {synced_task_id} "
-                    "completed successfully. Ignoring..."
-                )
-                return True, "Tournament task failed, but synced task completed successfully."
-            if synced_task_obj.status == TaskStatus.FAILURE.value:
-                logger.info(
-                    f"Both tournament and synced tasks failed (tournament: {tournament_task.task_id}, "
-                    f"synced: {synced_task_id}). Replacing..."
-                )
-                new_task_id = await replace_tournament_task(
-                    tournament_task.task_id,
-                    tournament_task.tournament_id,
-                    tournament_task.round_id,
-                    tournament_task.group_id,
-                    tournament_task.pair_id,
-                    config,
-                )
-                return False, f"Both tournament and synced tasks failed. Replaced with a new task {new_task_id}."
-            else:
-                return False, "Synced task is not completed. Status: " + synced_task_obj.status
-        else:
-            logger.info(f"Tournament task {tournament_task.task_id} failed. Copying to main cycle...")
-            await copy_tournament_task_into_general_miner_pool(tournament_task.task_id, config.psql_db)
-            return False, "Tournament task failed. Synced to main cycle."
+        return False, "Tournament task failed."
 
     elif task_obj.status == TaskStatus.PREP_TASK_FAILURE.value:
         logger.info(f"Task {task_obj.task_id} failed during preparation, creating replacement immediately.")
