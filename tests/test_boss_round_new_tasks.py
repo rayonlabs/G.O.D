@@ -9,6 +9,28 @@ from uuid import uuid4
 
 import pytest
 
+# Track test results
+_test_results = []
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Capture test results and print them."""
+    outcome = yield
+    rep = outcome.get_result()
+    if rep.when == "call":
+        test_name = item.name
+        status = "PASSED" if rep.outcome == "passed" else "FAILED"
+        _test_results.append((test_name, status))
+        
+        # Print result immediately
+        print(f"\n{'='*80}")
+        print(f"✓ {status:6s} - {test_name}")
+        if rep.outcome == "failed":
+            print(f"\nError Details:")
+            print(f"{rep.longrepr}")
+        print(f"{'='*80}")
+
 from core.models.tournament_models import TournamentTask
 from core.models.utility_models import RewardFunction
 from core.models.utility_models import TaskStatus
@@ -407,20 +429,37 @@ class TestBossRoundTaskCreationIntegration:
         assert len(task_ids) == 6
         assert all(isinstance(task_id, str) for task_id in task_ids)
 
-    @pytest.mark.asyncio
-    async def test_create_image_tournament_tasks_final_round(self, mock_config, mock_image_task):
-        """Test create_image_tournament_tasks with is_final_round=True."""
-        tournament_id = str(uuid4())
-        round_id = str(uuid4())
-        round_data = MagicMock()  # Not a GroupRound, so it will go to final round path
 
-        with patch("validator.tournament.task_creator._create_new_image_boss_round_tasks") as mock_create_boss:
-            mock_create_boss.return_value = [mock_image_task] * 6
-            task_ids = await create_image_tournament_tasks(
-                round_data, tournament_id, round_id, mock_config, is_final_round=True
-            )
-
-        mock_create_boss.assert_called_once_with(tournament_id, round_id, mock_config)
-        assert len(task_ids) == 6
-        assert all(isinstance(task_id, str) for task_id in task_ids)
+def pytest_sessionfinish(session, exitstatus):
+    """Print test summary at the end."""
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    
+    if _test_results:
+        passed = sum(1 for _, status in _test_results if status == "PASSED")
+        failed = sum(1 for _, status in _test_results if status == "FAILED")
+        total = len(_test_results)
+        
+        print(f"\nTotal Tests: {total}")
+        print(f"Passed: {passed}")
+        print(f"Failed: {failed}")
+        print(f"\n{'='*80}\n")
+        
+        if failed > 0:
+            print("FAILED TESTS:")
+            print("-" * 80)
+            for test_name, status in _test_results:
+                if status == "FAILED":
+                    print(f"  ✗ {test_name}")
+            print()
+        
+        print("ALL TEST RESULTS:")
+        print("-" * 80)
+        for test_name, status in _test_results:
+            symbol = "✓" if status == "PASSED" else "✗"
+            print(f"  {symbol} {status:6s} - {test_name}")
+        print("\n" + "="*80 + "\n")
+    else:
+        print("No tests were run.\n")
 

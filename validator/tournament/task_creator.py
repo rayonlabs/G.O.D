@@ -378,7 +378,8 @@ async def _create_new_text_boss_round_tasks(tournament_id: str, round_id: str, c
     task_types = [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]
     tasks_per_type = t_cst.FINAL_ROUND_TEXT_TASKS // len(task_types)
 
-    models = _get_text_models(config.keypair)
+    standard_models = _get_text_models(config.keypair)
+    big_models = _get_text_models(config.keypair, smallest_size_b=12.0, largest_size_b=71.0)
     instruct_datasets = _get_instruct_text_datasets(config.keypair)
     dpo_datasets = _get_dpo_datasets(config.keypair)
 
@@ -395,6 +396,11 @@ async def _create_new_text_boss_round_tasks(tournament_id: str, round_id: str, c
     for task_type in task_types:
         existing_count = existing_task_type_counts.get(task_type.value, 0)
         for i in range(tasks_per_type - existing_count):
+            rand_val = random.random()
+            if rand_val < t_cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
+                models = big_models
+            else:
+                models = standard_models
             task = await _create_single_new_text_task(task_type, tournament_id, round_id, pair_id, config, models, instruct_datasets, dpo_datasets)
             if task:
                 tasks.append(task)
