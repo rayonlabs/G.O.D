@@ -9,6 +9,7 @@ from pydantic import Field
 from pydantic import model_validator
 
 from core import constants as cst
+from core.models.tournament_models import TournamentBurnData
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
@@ -516,3 +517,20 @@ class AddRewardFunctionRequest(BaseModel):
 
 # Type alias for task details types
 AnyTypeTaskDetails = InstructTextTaskDetails | ChatTaskDetails| ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
+
+
+class MinerEmissionWeight(BaseModel):
+    hotkey: str
+    rank: int
+    weight: float
+
+
+class TournamentEmissionWeights(BaseModel):
+    tournament_type: str
+    top_miners: list[MinerEmissionWeight]
+
+
+class TounamentWeightsResponse(BaseModel):
+    burn_data: TournamentBurnData
+    text_tournament_weights: TournamentEmissionWeights
+    image_tournament_weights: TournamentEmissionWeights
