@@ -170,6 +170,7 @@ class TournamentTaskTraining(BaseModel):
     updated_at: datetime
     training_repo: str | None = None
     training_commit_hash: str | None = None
+    priority: int = 1  # Training priority: 1=organic, 2=tournament, 3=benchmark
 
 
 class TournamentTaskScore(BaseModel):

@@ -10,6 +10,7 @@ pm2 delete validator_cycle || true
 pm2 delete weight_setter || true
 pm2 delete tournament_orchestrator || true
 pm2 delete tournament_cycle || true
+pm2 delete dstack_orchestrator || true
 
 # Load variables from .vali.env
 set -a # Automatically export all variables
@@ -80,4 +81,18 @@ pm2 start \
     --service_name tournament_cycle \
     python -u -m validator.tournament.cycle" \
     --name tournament_cycle
+
+# start the dstack orchestrator (separate from tournament_cycle for easier log viewing)
+OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf" \
+OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4317" \
+OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED="true" \
+OTEL_PYTHON_LOG_CORRELATION="true" \
+pm2 start \
+    "opentelemetry-instrument \
+    --logs_exporter otlp \
+    --traces_exporter none \
+    --metrics_exporter otlp \
+    --service_name dstack_orchestrator \
+    python -u -m validator.tournament.dstack_orchestrator" \
+    --name dstack_orchestrator
 
