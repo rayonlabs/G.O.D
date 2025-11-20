@@ -1,11 +1,9 @@
 from fastapi import APIRouter
 from fastapi import Depends
 
-from core.models.payload_models import MinerEmissionWeight
-from core.models.payload_models import PerformanceResponse
-from core.models.payload_models import TournamentEmissionWeights
+from core.models.tournament_models import MinerEmissionWeight
 from core.models.tournament_models import TournamentBurnData
-from core.models.tournament_models import TournamentType
+from core.models.tournament_models import TournamentWeightsResponse
 from validator.core.constants import EMISSION_BURN_HOTKEY
 from validator.core.config import Config
 from validator.core.dependencies import get_config
@@ -14,15 +12,14 @@ from validator.core.weight_setting import get_tournament_burn_details
 from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
 
 
-router = APIRouter(tags=["performance"])
+router = APIRouter(tags=["Performance Data"])
 
 
 def _get_top_ranked_miners(
     weights: dict[str, float],
-    tournament_type: str,
     base_winner_hotkey: str | None = None,
     limit: int = 5,
-) -> TournamentEmissionWeights:
+) -> list[MinerEmissionWeight]:
     real_hotkey_weights = {}
     for hotkey, weight in weights.items():
         if hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey:
@@ -33,15 +30,13 @@ def _get_top_ranked_miners(
 
     sorted_miners = sorted(real_hotkey_weights.items(), key=lambda x: x[1], reverse=True)[:limit]
 
-    top_miners = [
+    return [
         MinerEmissionWeight(hotkey=hotkey, rank=idx + 1, weight=weight) for idx, (hotkey, weight) in enumerate(sorted_miners)
     ]
 
-    return TournamentEmissionWeights(tournament_type=tournament_type, top_miners=top_miners)
-
 
 @router.get("/performance/latest-tournament-weights")
-async def get_latest_tournament_weights(config: Config = Depends(get_config)) -> PerformanceResponse:
+async def get_latest_tournament_weights(config: Config = Depends(get_config)) -> TournamentWeightsResponse:
     burn_data: TournamentBurnData = await get_tournament_burn_details(config.psql_db)
 
     tournament_audit_data = await build_tournament_audit_data(config.psql_db)
@@ -58,17 +53,13 @@ async def get_latest_tournament_weights(config: Config = Depends(get_config)) ->
     if tournament_audit_data.image_tournament_data:
         image_base_winner_hotkey = tournament_audit_data.image_tournament_data.base_winner_hotkey
 
-    text_emission_weights = _get_top_ranked_miners(
-        text_tournament_weights, TournamentType.TEXT.value, text_base_winner_hotkey, limit=5
-    )
-    image_emission_weights = _get_top_ranked_miners(
-        image_tournament_weights, TournamentType.IMAGE.value, image_base_winner_hotkey, limit=5
-    )
+    text_top_miners = _get_top_ranked_miners(text_tournament_weights, text_base_winner_hotkey, limit=5)
+    image_top_miners = _get_top_ranked_miners(image_tournament_weights, image_base_winner_hotkey, limit=5)
 
-    return PerformanceResponse(
+    return TournamentWeightsResponse(
         burn_data=burn_data,
-        text_tournament_weights=text_emission_weights,
-        image_tournament_weights=image_emission_weights,
+        text_top_miners=text_top_miners,
+        image_top_miners=image_top_miners,
     )
 
 

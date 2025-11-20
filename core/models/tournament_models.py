@@ -438,3 +438,14 @@ class NodeWeightsResult(BaseModel):
     def to_tuple(self) -> tuple[list[int], list[float]]:
         """Convert to tuple format for compatibility with existing code"""
         return self.node_ids, self.node_weights
+
+class MinerEmissionWeight(BaseModel):
+    hotkey: str
+    rank: int
+    weight: float
+
+
+class TournamentWeightsResponse(BaseModel):
+    burn_data: TournamentBurnData
+    text_top_miners: list[MinerEmissionWeight]
+    image_top_miners: list[MinerEmissionWeight]
