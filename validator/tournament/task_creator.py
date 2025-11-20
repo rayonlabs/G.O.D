@@ -101,7 +101,7 @@ async def _create_single_group_image_tasks(
 
     task = await _create_single_image_task_with_retry(config, image_models, 0, group_index)
     await _create_and_register_tournament_task(
-        task, tournament_id, round_id, config, group_id=group_id, log_prefix="    "
+        task, tournament_id, round_id, config, group_id=group_id
     )
 
     return [task]
@@ -141,7 +141,7 @@ async def _create_single_knockout_image_task(
     logger.info(f"    Pair {pair_index + 1} has no tasks, creating {t_cst.KNOCKOUT_PAIR_TASKS}")
     task = await _create_single_image_task_with_retry(config, image_models, 0, pair_index)
     await _create_and_register_tournament_task(
-        task, tournament_id, round_id, config, pair_id=pair_id, log_prefix="    "
+        task, tournament_id, round_id, config, pair_id=pair_id
     )
     return [task]
 
@@ -204,7 +204,6 @@ async def _create_and_register_tournament_task(
     config: Config,
     group_id: str | None = None,
     pair_id: str | None = None,
-    log_prefix: str = "",
 ) -> None:
     """Create a TournamentTask, register it in the database, and log the creation."""
     tournament_task = TournamentTask(
@@ -219,12 +218,12 @@ async def _create_and_register_tournament_task(
     
     # Format log message based on task type
     if task.task_type == TaskType.IMAGETASK:
-        logger.info(f"{log_prefix}Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
+        logger.info(f"Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
     else:
         dataset_info = f" - Dataset: {task.ds}" if hasattr(task, 'ds') and task.ds else ""
         duration_info = f" - Duration: {task.hours_to_complete} hours" if hasattr(task, 'hours_to_complete') and task.hours_to_complete else ""
         task_type_info = f"{task.task_type.value}: " if hasattr(task.task_type, 'value') else ""
-        logger.info(f"{log_prefix}{task_type_info}{task.task_id} - Model: {task.model_id}{dataset_info} - GPU: {gpu_req}{duration_info}")
+        logger.info(f"{task_type_info}{task.task_id} - Model: {task.model_id}{dataset_info} - GPU: {gpu_req}{duration_info}")
 
 
 async def _create_group_text_tasks(
@@ -272,7 +271,7 @@ async def _create_single_group_text_tasks(
     await task_sql.update_task(task, config.psql_db)
 
     await _create_and_register_tournament_task(
-        task, tournament_id, round_id, config, group_id=group_id, log_prefix="    "
+        task, tournament_id, round_id, config, group_id=group_id
     )
 
     return [task]
@@ -317,7 +316,7 @@ async def _create_probability_based_text_tasks(
         task = await _create_single_probability_task(config, models, instruct_datasets, dpo_datasets, instruct_prob, dpo_prob)
 
         await _create_and_register_tournament_task(
-            task, tournament_id, round_id, config, pair_id=pair_id, log_prefix="    "
+            task, tournament_id, round_id, config, pair_id=pair_id
         )
         tasks.append(task)
     return tasks
@@ -419,7 +418,7 @@ async def _create_single_new_text_task(
         
         task = await _create_task_by_type(task_type, config, models, instruct_datasets, dpo_datasets)
         await _create_and_register_tournament_task(
-            task, tournament_id, round_id, config, pair_id=pair_id, log_prefix="Created boss round "
+            task, tournament_id, round_id, config, pair_id=pair_id
         )
         return task
     except Exception as e:
@@ -449,7 +448,7 @@ async def _create_new_image_boss_round_tasks(tournament_id: str, round_id: str, 
         try:
             task = await _create_single_image_task_with_retry(config, image_models, i, is_final=True)
             await _create_and_register_tournament_task(
-                task, tournament_id, round_id, config, pair_id=pair_id, log_prefix=f"Created boss round image task {i + 1}/{num_needed}: "
+                task, tournament_id, round_id, config, pair_id=pair_id
             )
             tasks.append(task)
         except Exception as e:
@@ -482,7 +481,7 @@ async def replace_tournament_task(
 
     try:
         await _create_and_register_tournament_task(
-            new_task, tournament_id, round_id, config, group_id=group_id, pair_id=pair_id, log_prefix="Created replacement task "
+            new_task, tournament_id, round_id, config, group_id=group_id, pair_id=pair_id
         )
         logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
     except Exception as e:
