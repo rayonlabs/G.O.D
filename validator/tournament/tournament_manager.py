@@ -63,7 +63,6 @@ from validator.tournament.boss_round_sync import copy_tournament_task_into_gener
 from validator.tournament.boss_round_sync import get_synced_task_id
 from validator.tournament.boss_round_sync import get_synced_task_ids
 from validator.tournament.boss_round_sync import sync_boss_round_tasks_to_general
-from validator.tournament.orchestrator import validate_repo_obfuscation
 from validator.tournament.repo_uploader import upload_tournament_participant_repository
 from validator.tournament.task_creator import create_image_tournament_tasks
 from validator.tournament.task_creator import create_text_tournament_tasks
@@ -74,6 +73,8 @@ from validator.tournament.utils import get_round_winners
 from validator.tournament.utils import notify_tournament_completed
 from validator.tournament.utils import notify_tournament_started
 from validator.tournament.utils import send_to_discord
+from validator.tournament.utils import validate_repo_license
+from validator.tournament.utils import validate_repo_obfuscation
 from validator.utils.call_endpoint import process_non_stream_fiber_get
 from validator.utils.logging import LogContext
 from validator.utils.logging import get_logger
@@ -321,6 +322,14 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
         logger.info(f"Tournament: {tournament.tournament_id}, Status: {tournament.status}")
         logger.info(f"Completed Round: {completed_round.round_id}, Round #: {completed_round.round_number}")
         logger.info(f"Is Final Round: {completed_round.is_final_round}")
+
+        if tournament.winner_hotkey:
+            logger.info(
+                f"Tournament {tournament.tournament_id} already has winner {tournament.winner_hotkey}. "
+                f"Skipping advance (tournament completed, awaiting manual status update)."
+            )
+            return
+        
         logger.info(f"Advancing tournament {tournament.tournament_id} from round {completed_round.round_id}")
 
         winners = await get_round_winners(completed_round, psql_db, config)
@@ -349,19 +358,12 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
             # Keep EMISSION_BURN_HOTKEY as the winner when defending champion wins by default
             winner = cst.EMISSION_BURN_HOTKEY
             await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
-            await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
-            logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
+            # await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
+            logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}. Please update DB manually.")
 
             await notify_tournament_completed(
                 tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
             )
-
-            try:
-                logger.info(f"Creating benchmark tasks for base contestant winner {winner}")
-                benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(tournament.tournament_id, winner, config)
-                logger.info(f"Created {len(benchmark_task_ids)} benchmark tasks for base contestant winner {winner}")
-            except Exception as e:
-                logger.error(f"Error creating benchmark tasks for base contestant winner {winner}: {str(e)}")
 
             await upload_participant_repository(tournament.tournament_id, tournament.tournament_type, winner, 1, config, psql_db)
             return
@@ -428,21 +430,12 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                     logger.info("Not all synced tasks are complete, tournament remains active")
                     return
                 await update_tournament_winner_hotkey(tournament.tournament_id, winner, psql_db)
-                await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
-                logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}.")
+                # await update_tournament_status(tournament.tournament_id, TournamentStatus.COMPLETED, psql_db)
+                logger.info(f"Tournament {tournament.tournament_id} completed with winner: {winner}. Please update DB manually.")
 
                 await notify_tournament_completed(
                     tournament.tournament_id, tournament.tournament_type.value, winner, config.discord_url
                 )
-
-                try:
-                    logger.info(f"Creating benchmark tasks for tournament winner {winner}")
-                    benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(
-                        tournament.tournament_id, winner, config
-                    )
-                    logger.info(f"Created {len(benchmark_task_ids)} benchmark tasks for tournament winner {winner}")
-                except Exception as e:
-                    logger.error(f"Error creating benchmark tasks for tournament winner {winner}: {str(e)}")
 
                 try:
                     participant1, participant2 = await get_final_round_participants(completed_round, psql_db)
@@ -461,6 +454,14 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                         logger.info(f"Challenger {winner} won")
                         position_1_upload = winner
                         position_2_upload = cst.EMISSION_BURN_HOTKEY
+                        try:
+                            logger.info(f"Creating benchmark tasks for tournament winner {winner}")
+                            benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(
+                                tournament.tournament_id, winner, config
+                            )
+                            logger.info(f"Created {len(benchmark_task_ids)} benchmark tasks for tournament winner {winner}")
+                        except Exception as e:
+                            logger.error(f"Error creating benchmark tasks for tournament winner {winner}: {str(e)}")
 
                     logger.info(f"Uploading position 1 repository for hotkey: {position_1_upload}")
                     await upload_participant_repository(
@@ -578,7 +579,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
 
         logger.info(f"Processing {len(responding_nodes)} responding nodes")
 
-        logger.info("Validating obfuscation and balance for participants...")
+        logger.info("Validating obfuscation, license, and balance for participants...")
         validated_nodes: list[RespondingNode] = []
 
         for responding_node in responding_nodes:
@@ -591,6 +592,17 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                 if not is_not_obfuscated:
                     logger.warning(
                         f"Repository {repo_url} failed obfuscation validation for hotkey {responding_node.node.hotkey}. "
+                        f"Excluding from tournament."
+                    )
+                    continue
+
+                logger.info(f"Checking license for {responding_node.node.hotkey}'s repo: {repo_url}")
+
+                has_valid_license = await validate_repo_license(repo_url)
+
+                if not has_valid_license:
+                    logger.warning(
+                        f"Repository {repo_url} failed license validation for hotkey {responding_node.node.hotkey}. "
                         f"Excluding from tournament."
                     )
                     continue
@@ -613,11 +625,10 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                     logger.warning(f"Failed to deduct participation fee for {responding_node.node.hotkey}. Skipping node.")
                     continue
 
-                # Add to validated ndes
                 validated_nodes.append(responding_node)
                 logger.info(
-                    f"Repository {repo_url} passed obfuscation check and balance check for hotkey {responding_node.node.hotkey} "
-                    f"(deducted {participation_fee_rao:,} RAO participation fee)"
+                    f"Repository {repo_url} passed obfuscation, license, and balance checks for hotkey "
+                    f"{responding_node.node.hotkey} (deducted {participation_fee_rao:,} RAO participation fee)"
                 )
 
         logger.info(

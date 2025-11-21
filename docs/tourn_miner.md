@@ -30,6 +30,22 @@ To compete in tournaments, miners must meet the following requirements:
      `curl 'https://api.gradients.io/tournament/balance/{coldkey}'`
    - All collected TAO will be staked for alpha and the **alpha burned**
 
+4. **Valid License Files**: Your training repository must include verbatim LICENSE and NOTICE files
+
+   - The repository must contain a LICENSE file (accepted names: `LICENSE.md`, `LICENSE`, `license.md`, `license`, `License.md`, or `License`) that matches exactly the LICENSE file from the G.O.D validator repository
+   - The repository must contain a `NOTICE` file that matches exactly the NOTICE file from the G.O.D validator repository
+   - These files are validated verbatim (character-for-character match) during tournament registration
+   - Repositories without matching LICENSE and NOTICE files will be excluded from tournament participation
+   - You can find the required LICENSE and NOTICE files in the [G.O.D repository](https://github.com/rayonlabs/G.O.D)
+
+5. **No Code Obfuscation**: Your training repository must not contain obfuscated code
+
+   - All code in your repository must be readable and not obfuscated
+   - The validator automatically checks repositories for obfuscation during tournament registration
+   - examples of obfuscated code files are: .bin, .pyc, .dll and similar files containing machine code or anything resembling that.
+   - Repositories with obfuscated code will be excluded from tournament participation
+   - This ensures transparency and allows the community to learn from winning implementations
+
 ## Initial Miner Setup
 
 Before you can participate in tournaments, you need to configure your miner with the required credentials and settings.

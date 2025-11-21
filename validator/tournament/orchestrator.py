@@ -1,5 +1,4 @@
 import asyncio
-import subprocess
 
 import httpx
 from dotenv import load_dotenv
@@ -47,42 +46,6 @@ simple_retry = retry(
     wait=wait_exponential(multiplier=2, min=4, max=10),
     reraise=True,
 )
-
-
-async def validate_repo_obfuscation(repo_url: str) -> bool:
-    """
-    Validate that a repository is not obfuscated using the obfuscation detection.
-
-    Args:
-        repo_url: The repository URL to validate
-
-    Returns:
-        bool: True if repo is not obfuscated, False if obfuscated
-    """
-
-    try:
-        proc = subprocess.run(
-            [cst.OBFUSCATION_DETECTION_PATH, "--repo", repo_url],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-
-        logger.info(f"Obfuscation detection output: {proc.stdout}")
-
-        if proc.returncode == 0:
-            logger.info(f"Repo {repo_url} is not obfuscated (exit code 0)")
-            return True
-        else:
-            logger.warning(f"Repo {repo_url} is obfuscated (exit code {proc.returncode})")
-            return False
-
-    except subprocess.TimeoutExpired:
-        logger.error(f"Obfuscation detection timed out for repo {repo_url}")
-        return False
-    except Exception as e:
-        logger.error(f"Obfuscation detection failed for repo {repo_url}: {str(e)}")
-        return False
 
 
 @simple_retry
@@ -157,7 +120,8 @@ async def start_training_task(trainer_ip: str, training_request: TrainerProxyReq
         # Check for no retry flag
         if response_data.get("no_retry", False):
             logger.warning(
-                f"Error cloning github repository for task {training_request.training_data.task_id} with hotkey {training_request.hotkey}"
+                f"Error cloning github repository for task {training_request.training_data.task_id} "
+                f"with hotkey {training_request.hotkey}"
             )
             return cst.NO_RETRY_RESULT
 
@@ -256,13 +220,15 @@ async def _fetch_tournament_tasks_ready_to_train(config: Config):
 
     if text_tasks_to_process:
         logger.info(
-            f"Pending text queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, processing {len(text_tasks_to_process)} text tournament tasks"
+            f"Pending text queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, "
+            f"processing {len(text_tasks_to_process)} text tournament tasks"
         )
         await _process_tasks_for_training(text_tasks_to_process, config, priority=2)
 
     if image_tasks_to_process:
         logger.info(
-            f"Pending image queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, processing {len(image_tasks_to_process)} image tournament tasks"
+            f"Pending image queue below {cst.PENDING_QUEUE_THRESHOLD_PER_TYPE}, "
+            f"processing {len(image_tasks_to_process)} image tournament tasks"
         )
         await _process_tasks_for_training(image_tasks_to_process, config, priority=2)
 
@@ -354,7 +320,8 @@ async def _process_tasks_for_training(tasks: list[AnyTypeRawTask], config: Confi
 
     if tasks_without_nodes:
         logger.warning(
-            f"Found {len(tasks_without_nodes)} tasks with priority {priority} without assigned nodes: {[str(t.task_id) for t in tasks_without_nodes]}"
+            f"Found {len(tasks_without_nodes)} tasks with priority {priority} without assigned nodes: "
+            f"{[str(t.task_id) for t in tasks_without_nodes]}"
         )
 
     if assignments:
@@ -408,7 +375,8 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
             if oldest_task_training.n_training_attempts >= cst.MAX_TRAINING_ATTEMPTS:
                 logger.warning(
-                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts ({oldest_task_training.n_training_attempts}), marking as failed"
+                    f"Task {task.task_id} with hotkey {oldest_task_training.hotkey} has exceeded max attempts "
+                    f"({oldest_task_training.n_training_attempts}), marking as failed"
                 )
 
                 await tournament_sql.update_tournament_task_training_status(
@@ -417,9 +385,8 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                 pending_training_tasks.pop()
                 continue
 
-            # Get training repo and commit hash directly from the TournamentTaskTraining object
+            # Get training repo directly from the TournamentTaskTraining object
             training_repo = oldest_task_training.training_repo
-            training_commit_hash = oldest_task_training.training_commit_hash
 
             if training_repo is None:
                 logger.error(
@@ -479,8 +446,9 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
                     pending_training_tasks.pop()
                     logger.info(
-                        f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} for training "
-                        f"on trainer {trainer_ip} with GPUs {gpu_ids} for {training_task.task.hours_to_complete} hours"
+                        f"Successfully scheduled task {training_task.task.task_id} with hotkey {training_task.hotkey} "
+                        f"for training on trainer {trainer_ip} with GPUs {gpu_ids} "
+                        f"for {training_task.task.hours_to_complete} hours"
                     )
 
                     logger.info("Waiting 10 seconds before scheduling next task to avoid overwhelming trainers")
@@ -493,7 +461,8 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
                     if failed_attempts[task_key] >= 10 and failed_attempts[task_key] % 10 == 0:
                         logger.warning(
-                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has failed {failed_attempts[task_key]} scheduling attempts - this may indicate a persistent issue"
+                            f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has failed "
+                            f"{failed_attempts[task_key]} scheduling attempts - this may indicate a persistent issue"
                         )
                     else:
                         logger.info(
@@ -509,12 +478,13 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
 
             if failed_attempts[task_key] >= 10 and failed_attempts[task_key] % 10 == 0:
                 logger.warning(
-                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has failed {failed_attempts[task_key]} scheduling attempts due to exception - this may indicate a persistent issue"
+                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has failed "
+                    f"{failed_attempts[task_key]} scheduling attempts due to exception - this may indicate a persistent issue"
                 )
             else:
                 logger.info(
-                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed due to exception, scheduling attempt "
-                    f"{failed_attempts[task_key]}, will retry"
+                    f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} failed due to exception, "
+                    f"scheduling attempt {failed_attempts[task_key]}, will retry"
                 )
             await asyncio.sleep(cst.TRAINING_START_RETRY_INTERVAL)
             continue
@@ -627,10 +597,12 @@ async def _create_training_request(
     if training_repo is None:
         logger.error(f"No training repository found for hotkey {hotkey} in tournament_participants table")
         logger.error(
-            "This hotkey may not be registered as a tournament participant or the training repo was not properly set during tournament registration"
+            "This hotkey may not be registered as a tournament participant or the training repo was not properly set "
+            "during tournament registration"
         )
         raise ValueError(
-            f"No training repository found for hotkey {hotkey}. This hotkey may not be registered as a tournament participant or the training repo was not properly set during tournament registration."
+            f"No training repository found for hotkey {hotkey}. This hotkey may not be registered as a tournament "
+            f"participant or the training repo was not properly set during tournament registration."
         )
 
     if task.task_type == TaskType.IMAGETASK:

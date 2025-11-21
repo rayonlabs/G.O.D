@@ -24,8 +24,8 @@ The biggest benefit, is that it allows just one validator to run the validator c
 
 **Auditing endpoints**:
 
-1. Have an endpoint to retrieve the most recent X tasks and their headline details for a given hotkey, with filtering by hotkey, [here](../validator/endpoints/auditing.py#L10)
-2. Have an endpoint to retrieve full details for a specific task, [here](../validator/endpoints/auditing.py#L16)
+1. Have an endpoint to retrieve the most recent X tasks and their headline details for a given hotkey, with filtering by hotkey, [here](../../validator/endpoints/auditing.py#L27)
+2. Have an endpoint to retrieve full details for a specific task, [here](../../validator/endpoints/auditing.py#L34)
 3. Have a script to send a synthetic job and ping the endpoint 24 hours later to verify its presence in the scoring API.
 4. Have a script get the validator on chain weights set and pull the explanations and check they match
 

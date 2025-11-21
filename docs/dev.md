@@ -43,6 +43,6 @@ To test validator and miner communication locally:
 
 3. [Optional] add a dependency to only accept requests from your specific dev vali IP address.
 
-4. Start a validator in another terminal in dev mode: [Validator Setup Guide](docs/validator_setup.md).
+4. Start a validator in another terminal in dev mode: [Validator Setup Guide](validator_setup.md).
 
 5. [Optional] Use the `Python Debugger: Validator Cycle` configuration in `.vscode/launch.json` to attach to the validator and debug the connection using your preset breakpoints.
