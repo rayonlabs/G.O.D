@@ -261,7 +261,9 @@ async def calculate_performance_difference(tournament_id: str, psql_db) -> float
         logger.info("No task pairs found, returning 0.0 performance difference")
         median_performance_diff = 0.0
     else:
-        performance_differences = [data.performance_difference for data in performance_data if data.performance_difference is not None]
+        performance_differences = [
+            data.performance_difference for data in performance_data if data.performance_difference is not None
+        ]
         median_performance_diff = statistics.median(performance_differences) if performance_differences else 0.0
         logger.info(f"Median performance difference: {median_performance_diff} from {len(performance_differences)} task pairs")
 
