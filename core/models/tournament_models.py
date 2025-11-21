@@ -74,6 +74,17 @@ class TournamentData(BaseModel):
         "Calculated as: (defending_champion_score - new_winner_score) / defending_champion_score. "
         "score = loss, so lower is better. Higher diff = better perf = less burn.",
     )
+    previous_final_emission: float | None = Field(
+        default=None,
+        description="Final emission weight of the previous champion at the time they were dethroned. "
+        "Stored as raw data to allow flexible calculation of innovation_incentive formulas. "
+        "Only set when a NEW champion wins (not defenses). Used to calculate innovation rewards.",
+    )
+    updated_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when the tournament was last updated (typically when it completed). "
+        "Used for time-based decay calculations - represents when the champion won/defended.",
+    )
 
 
 class TournamentRoundData(BaseModel):
