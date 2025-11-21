@@ -222,6 +222,10 @@ EMISSION_DAILY_TIME_DECAY_RATE = 0.002  # 0.2%/day is equivalent to old decay of
 EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 17)
 SECONDS_PER_DAY = 86400.0
 
+ALPHA_PER_SECOND = 1.0 / 12.0
+MINER_ALPHA_SHARE = 0.41
+DAILY_ALPHA_TO_MINERS = ALPHA_PER_SECOND * SECONDS_PER_DAY * MINER_ALPHA_SHARE
+
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
 CACHE_MAX_LOOKUP_DAYS = 30  # Maximum number of days to look back for usage data

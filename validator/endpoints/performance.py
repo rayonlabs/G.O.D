@@ -1,38 +1,21 @@
 from fastapi import APIRouter
 from fastapi import Depends
 
-from core.models.tournament_models import MinerEmissionWeight
+import validator.core.constants as cts
 from core.models.tournament_models import TournamentBurnData
+from core.models.tournament_models import TournamentType
 from core.models.tournament_models import TournamentWeightsResponse
-from validator.core.constants import EMISSION_BURN_HOTKEY
+from core.models.tournament_models import WeightProjectionResponse
 from validator.core.config import Config
 from validator.core.dependencies import get_config
 from validator.core.weight_setting import build_tournament_audit_data
 from validator.core.weight_setting import get_tournament_burn_details
 from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
+from validator.tournament.performance_utils import calculate_tournament_projection
+from validator.tournament.performance_utils import get_top_ranked_miners
 
 
 router = APIRouter(tags=["Performance Data"])
-
-
-def _get_top_ranked_miners(
-    weights: dict[str, float],
-    base_winner_hotkey: str | None = None,
-    limit: int = 5,
-) -> list[MinerEmissionWeight]:
-    real_hotkey_weights = {}
-    for hotkey, weight in weights.items():
-        if hotkey == EMISSION_BURN_HOTKEY and base_winner_hotkey:
-            real_hotkey = base_winner_hotkey
-        else:
-            real_hotkey = hotkey
-        real_hotkey_weights[real_hotkey] = weight
-
-    sorted_miners = sorted(real_hotkey_weights.items(), key=lambda x: x[1], reverse=True)[:limit]
-
-    return [
-        MinerEmissionWeight(hotkey=hotkey, rank=idx + 1, weight=weight) for idx, (hotkey, weight) in enumerate(sorted_miners)
-    ]
 
 
 @router.get("/performance/latest-tournament-weights")
@@ -53,13 +36,41 @@ async def get_latest_tournament_weights(config: Config = Depends(get_config)) ->
     if tournament_audit_data.image_tournament_data:
         image_base_winner_hotkey = tournament_audit_data.image_tournament_data.base_winner_hotkey
 
-    text_top_miners = _get_top_ranked_miners(text_tournament_weights, text_base_winner_hotkey, limit=5)
-    image_top_miners = _get_top_ranked_miners(image_tournament_weights, image_base_winner_hotkey, limit=5)
+    text_top_miners = get_top_ranked_miners(text_tournament_weights, text_base_winner_hotkey, limit=5)
+    image_top_miners = get_top_ranked_miners(image_tournament_weights, image_base_winner_hotkey, limit=5)
 
     return TournamentWeightsResponse(
         burn_data=burn_data,
         text_top_miners=text_top_miners,
         image_top_miners=image_top_miners,
+    )
+
+
+@router.get("/performance/weight-projection")
+async def get_weight_projection(
+    percentage_improvement: float,
+    config: Config = Depends(get_config),
+) -> WeightProjectionResponse:
+    text_projection = await calculate_tournament_projection(
+        config.psql_db,
+        TournamentType.TEXT,
+        percentage_improvement,
+        cts.TOURNAMENT_TEXT_WEIGHT,
+        cts.MAX_TEXT_TOURNAMENT_WEIGHT,
+    )
+
+    image_projection = await calculate_tournament_projection(
+        config.psql_db,
+        TournamentType.IMAGE,
+        percentage_improvement,
+        cts.TOURNAMENT_IMAGE_WEIGHT,
+        cts.MAX_IMAGE_TOURNAMENT_WEIGHT,
+    )
+
+    return WeightProjectionResponse(
+        percentage_improvement=percentage_improvement,
+        text_projection=text_projection,
+        image_projection=image_projection,
     )
 
 

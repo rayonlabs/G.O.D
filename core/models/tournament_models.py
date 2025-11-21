@@ -74,17 +74,6 @@ class TournamentData(BaseModel):
         "Calculated as: (defending_champion_score - new_winner_score) / defending_champion_score. "
         "score = loss, so lower is better. Higher diff = better perf = less burn.",
     )
-    previous_final_emission: float | None = Field(
-        default=None,
-        description="Final emission weight of the previous champion at the time they were dethroned. "
-        "Stored as raw data to allow flexible calculation of innovation_incentive formulas. "
-        "Only set when a NEW champion wins (not defenses). Used to calculate innovation rewards.",
-    )
-    updated_at: datetime | None = Field(
-        default=None,
-        description="Timestamp when the tournament was last updated (typically when it completed). "
-        "Used for time-based decay calculations - represents when the champion won/defended.",
-    )
 
 
 class TournamentRoundData(BaseModel):
@@ -460,3 +449,22 @@ class TournamentWeightsResponse(BaseModel):
     burn_data: TournamentBurnData
     text_top_miners: list[MinerEmissionWeight]
     image_top_miners: list[MinerEmissionWeight]
+
+
+class WeightProjection(BaseModel):
+    days: int
+    weight: float
+    daily_alpha: float
+
+
+class TournamentProjection(BaseModel):
+    tournament_type: str
+    current_champion_decay: float
+    initial_weight: float
+    projections: list[WeightProjection]
+
+
+class WeightProjectionResponse(BaseModel):
+    percentage_improvement: float
+    text_projection: TournamentProjection
+    image_projection: TournamentProjection
