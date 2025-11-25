@@ -2,7 +2,7 @@ import asyncio
 import sys
 from uuid import UUID
 
-from validator.core.config import get_config
+from validator.core.config import load_config
 from validator.db import constants as cst
 from validator.db.database import PSQLDB
 from validator.utils.logging import get_logger
@@ -136,10 +136,13 @@ async def main():
         sys.exit(1)
 
     # Initialize database connection
-    config = await get_config()
+    config = load_config()
     psql_db = config.psql_db
 
     try:
+        # Connect to database
+        await psql_db.connect()
+        
         if action == "replace":
             await replace_task(task_id, psql_db)
         elif action == "retry":
