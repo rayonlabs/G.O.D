@@ -76,7 +76,7 @@ async def retry_task(task_id: str, psql_db: PSQLDB) -> None:
 
 
 async def allow_task(task_id: str, psql_db: PSQLDB) -> None:
-    """Set task status to SUCCESS to allow tournament to proceed despite failure."""
+    """Set round status to COMPLETED to allow tournament to proceed despite task failure."""
     try:
         # Validate task_id is a valid UUID
         UUID(task_id)
@@ -85,23 +85,36 @@ async def allow_task(task_id: str, psql_db: PSQLDB) -> None:
         return
 
     async with await psql_db.connection() as connection:
-        # Update task status to SUCCESS (allows tournament to proceed)
-        # Winner determination will handle missing results gracefully
-        update_query = f"""
-            UPDATE {cst.TASKS_TABLE}
-            SET {cst.STATUS} = $1, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
-            WHERE {cst.TASK_ID} = $2
+        # First, get the round_id for this task
+        get_round_query = f"""
+            SELECT {cst.ROUND_ID}
+            FROM {cst.TOURNAMENT_TASKS_TABLE}
+            WHERE {cst.TASK_ID} = $1
+            LIMIT 1
         """
-        result = await connection.execute(update_query, "success", task_id)
+        round_id = await connection.fetchval(get_round_query, task_id)
+        
+        if not round_id:
+            logger.error(f"Task {task_id} not found in tournament_tasks table.")
+            return
+        
+        # Update round status to COMPLETED (allows tournament to proceed)
+        # Winner determination will handle missing results gracefully
+        update_round_query = f"""
+            UPDATE {cst.TOURNAMENT_ROUNDS_TABLE}
+            SET {cst.ROUND_STATUS} = $1, {cst.COMPLETED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.ROUND_ID} = $2
+        """
+        result = await connection.execute(update_round_query, "completed", round_id)
         
         # asyncpg returns string like "UPDATE 1" or "UPDATE 0" - check if any rows were affected
         rows_affected = int(result.split()[-1]) if result.split()[-1].isdigit() else 0
         if rows_affected == 0:
-            logger.error(f"Task {task_id} not found in database.")
+            logger.error(f"Round {round_id} not found in database.")
             return
         
         logger.info(
-            f"Successfully set task {task_id} status to success. "
+            f"Successfully set round {round_id} status to completed. "
             f"Tournament will proceed - winner determination will handle missing results."
         )
 
@@ -112,7 +125,7 @@ async def main():
         print("Actions: replace, retry, allow")
         print("  replace - Set task status to prep_task_failure (triggers automatic replacement)")
         print("  retry   - Reset task to training status and reset all training attempts")
-        print("  allow   - Set task status to success (allows tournament to proceed despite failure)")
+        print("  allow   - Set round status to completed (allows tournament to proceed despite task failure)")
         sys.exit(1)
 
     task_id = sys.argv[1]
