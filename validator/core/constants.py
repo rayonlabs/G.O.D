@@ -217,7 +217,7 @@ EMISSION_MULTIPLIER_THRESHOLD = 0.05
 EMISSION_MULTIPLIER_RATE = 2.0
 EMISSION_BOOST_DECAY_PER_WIN = 0.01  # Deprecated - kept for backwards compatibility
 # Time-based decay settings (replaces consecutive wins decay)
-EMISSION_DAILY_TIME_DECAY_RATE = 0.002  # 0.2%/day is equivalent to old decay of 1%/5 days
+EMISSION_DAILY_TIME_DECAY_RATE = 0.0035  # 0.35%/day
 EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 1)
 SECONDS_PER_DAY = 86400.0
 
