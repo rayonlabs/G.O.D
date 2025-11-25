@@ -52,9 +52,6 @@ from validator.utils.util import upload_file_to_minio
 logger = get_logger(__name__)
 
 
-TIME_PER_BLOCK: int = 500
-
-
 async def _upload_results_to_s3(config: Config, tournament_audit_data: TournamentAuditData) -> None:
     class DateTimeEncoder(json.JSONEncoder):
         def default(self, obj):
