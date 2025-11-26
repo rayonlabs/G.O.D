@@ -473,3 +473,16 @@ class WeightProjectionResponse(BaseModel):
     percentage_improvement: float
     text_projection: TournamentProjection
     image_projection: TournamentProjection
+
+
+class MultiWeightProjectionResponse(BaseModel):
+    projections: list[WeightProjectionResponse]
+
+
+class BossBattleResponse(BaseModel):
+    """Response for boss battle performance differences"""
+    
+    text_tournament_id: str | None
+    text_performance_differences: list[TaskPerformanceDifference]
+    image_tournament_id: str | None
+    image_performance_differences: list[TaskPerformanceDifference]

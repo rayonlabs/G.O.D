@@ -108,6 +108,16 @@ async def calculate_tournament_projection(
     )
     total_emission_boost = emission_boost_from_perf + innovation_incentive
 
+    initial_weight = calculate_tournament_weight_with_decay(
+        tournament_type=tournament_type,
+        base_weight=base_weight,
+        emission_boost=total_emission_boost,
+        old_decay=0.0,
+        new_decay=0.0,
+        apply_hybrid=False,
+        max_weight=max_weight,
+    )
+
     projection_days = [1, 7, 30, 90]
 
     projections = []
@@ -124,19 +134,9 @@ async def calculate_tournament_projection(
             max_weight=max_weight,
         )
 
-        daily_alpha = cts.DAILY_ALPHA_TO_MINERS * future_weight
+        cumulative_alpha = days * cts.DAILY_ALPHA_TO_MINERS * (initial_weight + future_weight) / 2.0
 
-        projections.append(WeightProjection(days=days, weight=future_weight, daily_alpha=daily_alpha))
-
-    initial_weight = calculate_tournament_weight_with_decay(
-        tournament_type=tournament_type,
-        base_weight=base_weight,
-        emission_boost=total_emission_boost,
-        old_decay=0.0,
-        new_decay=0.0,
-        apply_hybrid=False,
-        max_weight=max_weight,
-    )
+        projections.append(WeightProjection(days=days, weight=future_weight, daily_alpha=cumulative_alpha))
 
     return TournamentProjection(
         tournament_type=tournament_type.value,
