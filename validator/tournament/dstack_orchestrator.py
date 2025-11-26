@@ -479,6 +479,9 @@ async def _monitor_dstack_tasks(config: Config):
                         await tournament_sql.update_tournament_task_training_status(
                             training_task.task.task_id, training_task.hotkey, TrainingStatus.FAILURE, config.psql_db
                         )
+                        task = training_task.task
+                        task.status = TaskStatus.FAILURE
+                        await task_sql.update_task(task, config.psql_db)
                     else:
                         logger.info(
                             f"Task {training_task.task.task_id} will be retried after 30 minutes "
