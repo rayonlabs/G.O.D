@@ -13,15 +13,14 @@ from core.models.tournament_models import TournamentResultsWithWinners
 from core.models.tournament_models import TournamentType
 from validator.db.sql.auditing import store_latest_scores_url
 from validator.db.sql.tournaments import count_champion_consecutive_wins
-from validator.db.sql.tournaments import count_champion_consecutive_wins_at_tournament
 from validator.db.sql.tournaments import get_active_tournament_participants
-from validator.db.sql.tournaments import get_last_tournament_before_current_champion
 from validator.db.sql.tournaments import get_latest_completed_tournament
 from validator.db.sql.tournaments import get_tournament_full_results
 from validator.db.sql.tournaments import get_tournament_where_champion_first_won
 from validator.db.sql.tournaments import get_weekly_task_participation_data
 from validator.evaluation.tournament_scoring import get_tournament_weights_from_data
 from validator.tournament.performance_calculator import calculate_performance_difference
+from validator.tournament.utils import did_winner_change
 from validator.tournament.utils import get_real_tournament_winner
 
 
@@ -52,9 +51,6 @@ from validator.utils.util import upload_file_to_minio
 logger = get_logger(__name__)
 
 
-TIME_PER_BLOCK: int = 500
-
-
 async def _upload_results_to_s3(config: Config, tournament_audit_data: TournamentAuditData) -> None:
     class DateTimeEncoder(json.JSONEncoder):
         def default(self, obj):
@@ -78,7 +74,10 @@ async def _upload_results_to_s3(config: Config, tournament_audit_data: Tournamen
     return presigned_url
 
 
-def calculate_emission_boost_from_perf(performance_diff: float) -> float:
+def calculate_emission_boost_from_perf(performance_diff: float | None) -> float:
+    if performance_diff is None:
+        logger.warning("performance_diff is None, cannot calculate emission boost.")
+        return 0.0
     if performance_diff <= cts.EMISSION_MULTIPLIER_THRESHOLD:
         return 0.0
 
@@ -172,79 +171,37 @@ def calculate_hybrid_decays(
         return (0.0, new_decay, False)
 
 
-async def calculate_innovation_incentive(
-    psql_db, tournament_type: TournamentType, base_weight: float, max_weight: float
-) -> float:
+def get_base_weight_by_tournament_type(tournament_type: TournamentType) -> float:
+    """Get the base weight for a tournament type."""
+    if tournament_type == TournamentType.TEXT:
+        return cts.TOURNAMENT_TEXT_WEIGHT
+    elif tournament_type == TournamentType.IMAGE:
+        return cts.TOURNAMENT_IMAGE_WEIGHT
+    else:
+        raise ValueError(f"Unknown tournament type: {tournament_type}")
+
+
+def get_max_weight_by_tournament_type(tournament_type: TournamentType) -> float:
+    """Get the max weight for a tournament type."""
+    if tournament_type == TournamentType.TEXT:
+        return cts.MAX_TEXT_TOURNAMENT_WEIGHT
+    elif tournament_type == TournamentType.IMAGE:
+        return cts.MAX_IMAGE_TOURNAMENT_WEIGHT
+    else:
+        raise ValueError(f"Unknown tournament type: {tournament_type}")
+
+
+def calculate_innovation_incentive(performance_diff: float | None) -> float:
     """
-    Innovation incentive rewards the current champion by giving them what the previous
-    champion lost below base emission due to decay.
+    Calculate innovation incentive based on performance difference.
 
-    Formula: innovation_incentive = max(0, base_weight - prev_champion_final_emission)
+    Args:
+        performance_diff: Performance difference for the current champion
+
+    Returns:
+        Innovation incentive (emission boost based on performance)
     """
-    innovation_incentive = 0.0
-
-    latest_tournament = await get_latest_completed_tournament(psql_db, tournament_type)
-    current_champion = get_real_tournament_winner(latest_tournament)
-
-    if not current_champion:
-        logger.info(f"[{tournament_type}] No current champion hotkey found")
-        return 0.0
-
-    # Get previous champion's last tournament (before current champion's reign)
-    prev_tournament = await get_last_tournament_before_current_champion(psql_db, tournament_type, current_champion)
-
-    if not prev_tournament:
-        logger.info(
-            f"[{tournament_type}] No previous champion tournament found "
-            f"(current champion {current_champion[:8]}... is first or only champion)"
-        )
-        return 0.0
-
-    prev_champion = get_real_tournament_winner(prev_tournament)
-
-    if not prev_champion:
-        logger.info(f"[{tournament_type}] No previous champion hotkey found")
-        return 0.0
-
-    prev_perf_diff = prev_tournament.winning_performance_difference
-    if prev_perf_diff is None:
-        prev_perf_diff = 0.0
-
-    prev_emission_boost = calculate_emission_boost_from_perf(prev_perf_diff)
-    prev_consecutive_wins = await count_champion_consecutive_wins_at_tournament(
-        psql_db, tournament_type, prev_champion, prev_tournament.tournament_id
-    )
-
-    prev_first_win = await get_tournament_where_champion_first_won(psql_db, tournament_type, prev_champion)
-
-    if not prev_first_win or not prev_first_win.updated_at:
-        logger.warning(f"[{tournament_type}] Could not find first win tournament for previous champion {prev_champion}")
-        return 0.0
-
-    prev_old_decay, prev_new_decay, prev_apply_hybrid = calculate_hybrid_decays(
-        first_championship_time=prev_first_win.updated_at,
-        consecutive_wins=prev_consecutive_wins,
-        current_time=prev_tournament.updated_at,
-    )
-
-    prev_final_weight = calculate_tournament_weight_with_decay(
-        tournament_type=tournament_type,
-        base_weight=base_weight,
-        emission_boost=prev_emission_boost,
-        old_decay=prev_old_decay,
-        new_decay=prev_new_decay,
-        apply_hybrid=prev_apply_hybrid,
-        max_weight=max_weight,
-    )
-
-    innovation_incentive = max(0.0, base_weight - prev_final_weight)
-
-    logger.info(
-        f"[{tournament_type}] Previous champion {prev_champion[:8]}... had final weight {prev_final_weight:.4f} "
-        f"(base={base_weight:.4f}) → innovation_incentive={innovation_incentive:.4f}"
-    )
-
-    return innovation_incentive
+    return calculate_emission_boost_from_perf(performance_diff)
 
 
 async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
@@ -278,7 +235,7 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
 
             if winner_changed:
                 performance_diff = await calculate_performance_difference(latest_tournament.tournament_id, psql_db)
-                logger.info(f"NEW winner - calculated fresh performance difference for {tournament_type}: {performance_diff:.4f}")
+                logger.info(f"NEW winner - calculated performance difference for {tournament_type}: {performance_diff:.4f}")
             else:
                 # Champion defended - get performance from when they ACTUALLY won (not from a defense)
                 champion_hotkey = latest_tournament.base_winner_hotkey
@@ -286,12 +243,15 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
                     champion_win_tournament = await get_tournament_where_champion_first_won(
                         psql_db, tournament_type, champion_hotkey
                     )
-                    if champion_win_tournament and champion_win_tournament.winning_performance_difference is not None:
-                        performance_diff = champion_win_tournament.winning_performance_difference
-                        logger.info(
-                            f"SAME winner - using stored performance difference from when {champion_hotkey} first won "
-                            f"(tournament {champion_win_tournament.tournament_id}): {performance_diff:.4f}"
-                        )
+                    if champion_win_tournament:
+                        if champion_win_tournament.winning_performance_difference is not None:
+                            performance_diff = champion_win_tournament.winning_performance_difference
+                            logger.info(
+                                f"SAME winner - using stored performance difference from when {champion_hotkey} first won "
+                                f"(tournament {champion_win_tournament.tournament_id}): {performance_diff:.4f}"
+                            )
+                        else:
+                            performance_diff = 0.0
                     else:
                         logger.warning(f"Could not find tournament where {champion_hotkey} first won for {tournament_type}")
                         performance_diff = 0.0
@@ -302,12 +262,14 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
         if performance_diff is None and latest_tournament:
             if latest_tournament.winner_hotkey == cts.EMISSION_BURN_HOTKEY:
                 logger.info(
-                    f"No performance data available for {tournament_type} tournament, burn account won - assuming worst performance (100% difference)"
+                    f"No performance data available for {tournament_type} tournament, "
+                    f"burn account won - assuming worst performance (100% difference)"
                 )
                 performance_diff = 1.0
             else:
                 logger.info(
-                    f"No performance data available for {tournament_type} tournament, assuming perfect performance (0% difference)"
+                    f"No performance data available for {tournament_type} tournament, "
+                    f"assuming perfect performance (0% difference)"
                 )
                 performance_diff = 0.0
 
@@ -316,31 +278,11 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
         elif tournament_type == TournamentType.IMAGE:
             image_performance_diff = performance_diff
 
-    text_emission_boost_from_perf = (
-        calculate_emission_boost_from_perf(text_performance_diff) if text_performance_diff is not None else 0.0
-    )
-    image_emission_boost_from_perf = (
-        calculate_emission_boost_from_perf(image_performance_diff) if image_performance_diff is not None else 0.0
-    )
+    text_innovation_incentive = calculate_innovation_incentive(text_performance_diff)
+    image_innovation_incentive = calculate_innovation_incentive(image_performance_diff)
 
-    text_innovation_incentive = await calculate_innovation_incentive(
-        psql_db, TournamentType.TEXT, cts.TOURNAMENT_TEXT_WEIGHT, cts.MAX_TEXT_TOURNAMENT_WEIGHT
-    )
-    image_innovation_incentive = await calculate_innovation_incentive(
-        psql_db, TournamentType.IMAGE, cts.TOURNAMENT_IMAGE_WEIGHT, cts.MAX_IMAGE_TOURNAMENT_WEIGHT
-    )
-
-    text_emission_boost = text_emission_boost_from_perf + text_innovation_incentive
-    logger.info(
-        f"[TEXT] Combined boost: emission_boost={text_emission_boost_from_perf:.4f} + "
-        f"innovation_incentive={text_innovation_incentive:.4f} = {text_emission_boost:.4f}"
-    )
-
-    image_emission_boost = image_emission_boost_from_perf + image_innovation_incentive
-    logger.info(
-        f"[IMAGE] Combined boost: emission_boost={image_emission_boost_from_perf:.4f} + "
-        f"innovation_incentive={image_innovation_incentive:.4f} = {image_emission_boost:.4f}"
-    )
+    logger.info(f"[TEXT] innovation_incentive={text_innovation_incentive:.4f} (perf_diff={text_performance_diff})")
+    logger.info(f"[IMAGE] innovation_incentive={image_innovation_incentive:.4f} (perf_diff={image_performance_diff})")
 
     text_consecutive_wins = 0
     image_consecutive_wins = 0
@@ -380,20 +322,20 @@ async def get_tournament_burn_details(psql_db) -> TournamentBurnData:
     text_tournament_weight = calculate_tournament_weight_with_decay(
         tournament_type=TournamentType.TEXT,
         base_weight=cts.TOURNAMENT_TEXT_WEIGHT,
-        emission_boost=text_emission_boost,
+        emission_boost=text_innovation_incentive,
         old_decay=text_old_decay,
         new_decay=text_new_decay,
-        is_pre_cutoff=apply_hybrid_to_text,
+        apply_hybrid=apply_hybrid_to_text,
         max_weight=cts.MAX_TEXT_TOURNAMENT_WEIGHT,
     )
 
     image_tournament_weight = calculate_tournament_weight_with_decay(
         tournament_type=TournamentType.IMAGE,
         base_weight=cts.TOURNAMENT_IMAGE_WEIGHT,
-        emission_boost=image_emission_boost,
+        emission_boost=image_innovation_incentive,
         old_decay=image_old_decay,
         new_decay=image_new_decay,
-        is_pre_cutoff=apply_hybrid_to_image,
+        apply_hybrid=apply_hybrid_to_image,
         max_weight=cts.MAX_IMAGE_TOURNAMENT_WEIGHT,
     )
 

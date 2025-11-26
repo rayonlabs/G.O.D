@@ -22,7 +22,10 @@ MAX_IMAGE_TOURNAMENT_WEIGHT = 0.4      # 40% maximum
 # Performance boosts
 EMISSION_MULTIPLIER_THRESHOLD = 0.05   # Must exceed 5% to get boost
 EMISSION_MULTIPLIER_RATE = 2.0         # 2x multiplier on excess
-EMISSION_BOOST_DECAY_PER_WIN = 0.01    # -1% per consecutive win
+
+# Time-based decay (replaces consecutive wins decay)
+EMISSION_DAILY_TIME_DECAY_RATE = 0.0035  # -0.35% per day as champion
+EMISSION_TIME_DECAY_START_DATE = 2025-11-01  # When time-based decay began
 
 # Within-tournament distribution
 TOURNAMENT_SIMPLE_DECAY_BASE = 0.3     # Exponential decay: 1.0, 0.3, 0.09...
@@ -47,8 +50,9 @@ burn_weight = 0.75
 if performance_diff > 0.05:
     emission_increase = (performance_diff - 0.05) * 2.0
 
-    # Apply consecutive win decay
-    decay = max(0, consecutive_wins - 1) * 0.01
+    # Apply time-based decay
+    days_as_champion = (current_time - first_championship_time).days
+    decay = days_as_champion * 0.0035  # 0.35% per day
     emission_increase = emission_increase - decay
 
     # Apply MAX cap
@@ -99,19 +103,19 @@ Boost: (0.15 - 0.05) * 2.0 = 0.20
 Text champion weight: 0.35
 ```
 
-### Long-Reigning Champion (10th win)
+### Long-Reigning Champion (30 days)
 
 Text champion outperformed runner-up by 20% (performance_diff = 0.20):
 
 ```
 Base: 0.15
 Raw boost: (0.20 - 0.05) * 2.0 = 0.30
-Decay: 9 wins * 0.01 = 0.09
-Final boost: 0.30 - 0.09 = 0.21
-Text champion weight: 0.36
+Decay: 30 days * 0.0035 = 0.105
+Final boost: 0.30 - 0.105 = 0.195
+Text champion weight: 0.345
 ```
 
-Despite 20% performance, consecutive wins reduce boost from 0.30 to 0.21.
+Despite 20% performance, time-based decay reduces boost from 0.30 to 0.195.
 
 ### Weak Performance (below threshold)
 
@@ -128,7 +132,7 @@ Text champion weight: 0.15 (no boost - below 5% threshold)
 **Balance Controls:**
 
 - MAX caps prevent domination (60% text, 40% image)
-- Consecutive win decay (-1% per win) prevents indefinite reign
+- Time-based decay (-0.35% per day) prevents indefinite reign
 - Dual weights ensure only champions benefit from boosts
 
 **Burn as Quality Signal:** Weak performance = high burn rate

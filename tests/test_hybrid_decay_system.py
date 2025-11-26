@@ -13,8 +13,8 @@ from datetime import datetime, timezone, date, timedelta
 
 # Constants matching validator/core/constants.py
 EMISSION_BOOST_DECAY_PER_WIN = 0.01  # 1% per win (old system)
-EMISSION_DAILY_TIME_DECAY_RATE = 0.002  # 0.2% per day (new system)
-EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 17)
+EMISSION_DAILY_TIME_DECAY_RATE = 0.0035  # 0.35% per day (new system)
+EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 1)
 SECONDS_PER_DAY = 86400.0
 TOURNAMENT_TEXT_WEIGHT = 0.15
 MAX_TEXT_TOURNAMENT_WEIGHT = 0.6
