@@ -136,7 +136,7 @@ async def calculate_tournament_projection(
 
         cumulative_alpha = days * cts.DAILY_ALPHA_TO_MINERS * (initial_weight + future_weight) / 2.0
 
-        projections.append(WeightProjection(days=days, weight=future_weight, daily_alpha=cumulative_alpha))
+        projections.append(WeightProjection(days=days, weight=future_weight, total_alpha=cumulative_alpha))
 
     return TournamentProjection(
         tournament_type=tournament_type.value,

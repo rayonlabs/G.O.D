@@ -459,7 +459,7 @@ class TournamentWeightsResponse(BaseModel):
 class WeightProjection(BaseModel):
     days: int
     weight: float
-    daily_alpha: float
+    total_alpha: float
 
 
 class TournamentProjection(BaseModel):
