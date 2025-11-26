@@ -5,7 +5,7 @@ from core.constants import GRPO_DEFAULT_FIELD_PROMPT
 from core.constants import NETUID
 
 
-RAYONLABS_HF_USERNAME = "besimray"  # "rayonlabs"
+RAYONLABS_HF_USERNAME = "gradients-io-tournaments" # "besimray"  # "rayonlabs"
 
 SUCCESS = "success"
 ACCOUNT_ID = "account_id"
@@ -28,8 +28,9 @@ START_TRAINING_IMAGE_ENDPOINT = "/start_training_image/"
 START_TRAINING_GRPO_ENDPOINT = "/start_training_grpo/"
 TRAINING_REPO_ENDPOINT = "/training_repo"
 
-DEV_CONTENT_BASE_URL = "https://gradients-content-service-api-dev.onrender.com"  # "https://dev.content.gradients.io"
-PROD_CONTENT_BASE_URL = "https://gradients-content-service.onrender.com"  # "https://content.gradients.io"
+DEV_CONTENT_BASE_URL = "https://dev.content.gradients.io"
+PROD_CONTENT_BASE_URL = "https://content.gradients.io"
+
 
 
 # 241 is testnet
@@ -220,6 +221,10 @@ EMISSION_BOOST_DECAY_PER_WIN = 0.01  # Deprecated - kept for backwards compatibi
 EMISSION_DAILY_TIME_DECAY_RATE = 0.0035  # 0.35%/day
 EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 1)
 SECONDS_PER_DAY = 86400.0
+
+ALPHA_PER_SECOND = 1.0 / 12.0
+MINER_ALPHA_SHARE = 0.41
+DAILY_ALPHA_TO_MINERS = ALPHA_PER_SECOND * SECONDS_PER_DAY * MINER_ALPHA_SHARE
 
 # HF models cache management
 CACHE_TAU_DAYS = 10  # Time constant (τ) for exponential decay in days
