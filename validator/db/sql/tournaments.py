@@ -205,7 +205,7 @@ async def get_tournament_where_champion_first_won(
     psql_db: PSQLDB, tournament_type: TournamentType, champion_hotkey: str
 ) -> TournamentData | None:
     """
-    Get the LATEST tournament where the champion's actual hotkey was in the winner_hotkey field.
+    Get the LATEST tournament where the champion's actual hotkey was in the base_winner_hotkey field.
     This finds when they actually won (not defended with a burn placeholder).
     """
     async with await psql_db.connection() as connection:
@@ -214,7 +214,7 @@ async def get_tournament_where_champion_first_won(
             FROM {cst.TOURNAMENTS_TABLE}
             WHERE {cst.TOURNAMENT_TYPE} = $1
               AND {cst.TOURNAMENT_STATUS} = 'completed'
-              AND {cst.WINNER_HOTKEY} = $2
+              AND {cst.BASE_WINNER_HOTKEY} = $2
             ORDER BY {cst.CREATED_AT} DESC
             LIMIT 1
         """
