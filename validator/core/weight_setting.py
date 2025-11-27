@@ -381,7 +381,7 @@ def apply_tournament_weights(
             if hotkey == text_winner_hotkey:
                 text_contribution = weight * scaled_text_tournament_weight
             else:
-                text_contribution = weight * min(scaled_text_base_weight, scaled_text_tournament_weight)
+                text_contribution = weight * scaled_text_base_weight
             all_node_weights[node_id] = all_node_weights[node_id] + text_contribution
             text_distributed += text_contribution
 
