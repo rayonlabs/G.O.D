@@ -460,9 +460,6 @@ def standardize_grpo_column_names(dataset: Dataset, task: GrpoRawTask) -> Datase
 
 
 async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> tuple[str, str, str]:
-    should_reupload_train = FileFormat.S3 == task.file_format
-    should_reupload_test = task.test_data is None or task.file_format != FileFormat.S3
-
     train_dataset_name = task.training_data if task.training_data else task.ds
 
     if not task.test_data:
@@ -484,8 +481,6 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
         dataset_dict = await train_test_split(dataset)
         train_ds = dataset_dict["train"]
         test_ds = dataset_dict["test"]
-        should_reupload_train = True
-        should_reupload_test = True
     else:
         logger.info(f"Preparing train and test datasets. Train: {task.training_data}, Test: {task.test_data}")
         try:
@@ -517,10 +512,10 @@ async def prepare_text_task(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=
     return await _process_and_upload_datasets(
         task,
         train_ds,
-        test_ds if should_reupload_test else task.test_data,
+        test_ds,
         columns_to_sample,
-        should_reupload_train,
-        should_reupload_test,
+        True,  # always reupload train
+        True,  # always reupload test
         train_dataset_name if task.file_format == FileFormat.HF else None,
         psql_db,
     )
