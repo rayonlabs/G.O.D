@@ -25,7 +25,7 @@ EMISSION_MULTIPLIER_RATE = 2.0         # 2x multiplier on excess
 
 # Time-based decay (replaces consecutive wins decay)
 EMISSION_DAILY_TIME_DECAY_RATE = 0.0035  # -0.35% per day as champion
-EMISSION_TIME_DECAY_START_DATE = 2025-11-01  # When time-based decay began
+EMISSION_TIME_DECAY_START_DATE = 2025-11-15  # When time-based decay began
 
 # Within-tournament distribution
 TOURNAMENT_SIMPLE_DECAY_BASE = 0.3     # Exponential decay: 1.0, 0.3, 0.09...

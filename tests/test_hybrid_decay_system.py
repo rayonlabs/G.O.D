@@ -14,7 +14,7 @@ from datetime import datetime, timezone, date, timedelta
 # Constants matching validator/core/constants.py
 EMISSION_BOOST_DECAY_PER_WIN = 0.01  # 1% per win (old system)
 EMISSION_DAILY_TIME_DECAY_RATE = 0.0035  # 0.35% per day (new system)
-EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 1)
+EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 15)
 SECONDS_PER_DAY = 86400.0
 TOURNAMENT_TEXT_WEIGHT = 0.15
 MAX_TEXT_TOURNAMENT_WEIGHT = 0.6
@@ -155,7 +155,7 @@ def main():
         first_championship_time=datetime(2025, 11, 1, tzinfo=timezone.utc),
         consecutive_wins=10,
         test_times=[
-            ("Nov 1, 2025 (1st win)", datetime(2025, 11, 1, tzinfo=timezone.utc), 1),
+            ("Nov 15, 2025 (1st win)", datetime(2025, 11, 15, tzinfo=timezone.utc), 1),
             ("Nov 5, 2025 (3rd win)", datetime(2025, 11, 5, tzinfo=timezone.utc), 3),
             ("Nov 10, 2025 (6th win)", datetime(2025, 11, 10, tzinfo=timezone.utc), 6),
             ("Nov 16, 2025 (10th win)", datetime(2025, 11, 16, tzinfo=timezone.utc), 10),
@@ -185,7 +185,7 @@ def main():
         consecutive_wins=30,
         test_times=[
             ("Oct 1, 2025 (1st win)", datetime(2025, 10, 1, tzinfo=timezone.utc), 1),
-            ("Nov 1, 2025 (15th win)", datetime(2025, 11, 1, tzinfo=timezone.utc), 15),
+            ("Nov 15, 2025 (15th win)", datetime(2025, 11, 15, tzinfo=timezone.utc), 15),
             ("Nov 17, 2025 (CUTOFF - 21st)", datetime(2025, 11, 17, tzinfo=timezone.utc), 21),
             ("Nov 27, 2025 (+10d)", datetime(2025, 11, 27, tzinfo=timezone.utc), 24),
             ("Dec 17, 2025 (+30d)", datetime(2025, 12, 17, tzinfo=timezone.utc), 30),
