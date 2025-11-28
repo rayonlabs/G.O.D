@@ -13,10 +13,10 @@ from datetime import datetime, timezone, date, timedelta
 
 # Constants matching validator/core/constants.py
 EMISSION_BOOST_DECAY_PER_WIN = 0.01  # 1% per win (old system)
-EMISSION_DAILY_TIME_DECAY_RATE = 0.0035  # 0.35% per day (new system)
-EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 15)
+EMISSION_DAILY_TIME_DECAY_RATE = 0.002  # 0.2% per day (new system)
+EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 28)
 SECONDS_PER_DAY = 86400.0
-TOURNAMENT_TEXT_WEIGHT = 0.15
+TOURNAMENT_TEXT_WEIGHT = 0.20
 MAX_TEXT_TOURNAMENT_WEIGHT = 0.6
 EMISSION_MULTIPLIER_THRESHOLD = 0.05
 EMISSION_MULTIPLIER_RATE = 2.0
@@ -226,12 +226,12 @@ def main():
     print("KEY INSIGHTS - NEW HYBRID SYSTEM")
     print("=" * 100)
     print()
-    print("BEFORE Nov 17, 2025 (Cutoff):")
+    print("BEFORE Nov 28, 2025 (Cutoff):")
     print("  → Old system: decay = (consecutive_wins - 1) × 1%")
     print("  → Applied to emission boost only")
     print("  → final_weight = base + max(0, boost - old_decay)")
     print()
-    print("AFTER Nov 17, 2025 - Three Cases:")
+    print("AFTER Nov 28, 2025 - Three Cases:")
     print()
     print("1. Champion won BEFORE cutoff (apply_hybrid=True):")
     print("   → Calculate old_decay from consecutive wins")
