@@ -325,7 +325,7 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 f"Skipping advance (tournament completed, awaiting manual status update)."
             )
             return
-        
+
         logger.info(f"Advancing tournament {tournament.tournament_id} from round {completed_round.round_id}")
 
         winners = await get_round_winners(completed_round, psql_db, config)
@@ -396,17 +396,13 @@ async def advance_tournament(tournament: TournamentData, completed_round: Tourna
                 logger.info(f"Winner determined by get_round_winners: {winner}")
                 logger.info(f"Tournament base_winner_hotkey (previous champion): {tournament.base_winner_hotkey}")
 
-                # Simple logic: EMISSION_BURN_HOTKEY is the defending champion
-                if winner == cst.EMISSION_BURN_HOTKEY:
-                    # Defending champion won - upload EMISSION_BURN_HOTKEY to position 1
-                    logger.info("Defending champion (EMISSION_BURN_HOTKEY) won")
-                    position_1_upload = cst.EMISSION_BURN_HOTKEY
-                    position_2_upload = participant1  # The challenger who lost
-                else:
-                    # Challenger won - upload winner to position 1, EMISSION_BURN_HOTKEY to position 2
-                    logger.info(f"Challenger {winner} won")
-                    position_1_upload = winner
-                    position_2_upload = cst.EMISSION_BURN_HOTKEY
+                loser = participant2 if participant1 == winner else participant1
+                logger.info(f"Loser determined: {loser}")
+
+                position_1_upload = winner
+                position_2_upload = loser
+
+                if winner != cst.EMISSION_BURN_HOTKEY:
                     try:
                         logger.info(f"Creating benchmark tasks for tournament winner {winner}")
                         benchmark_task_ids = await create_benchmark_tasks_for_tournament_winner(
