@@ -20,6 +20,7 @@ from core.models.payload_models import NewTaskRequestImage
 from core.models.payload_models import NewTaskRequestInstructText
 from core.models.payload_models import NewTaskResponse
 from core.models.payload_models import NewTaskWithCustomDatasetRequest
+from core.models.payload_models import NewTaskWithCustomDatasetRequestChat
 from core.models.payload_models import NewTaskWithFixedDatasetsRequest
 from core.models.payload_models import TaskResultResponse
 from core.models.utility_models import FileFormat
@@ -57,6 +58,7 @@ TASKS_CREATE_ENDPOINT_IMAGE = "/v1/tasks/create_image"
 CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT = (
     "/v1/tasks/create_custom_dataset_text"  # TODO: this is just for instruct text tasks
 )
+CREATE_CHAT_TASK_WITH_CUSTOM_DATASET_ENDPOINT = "/v1/tasks/create_custom_dataset_chat"
 TASKS_CREATE_ENDPOINT_DPO = "/v1/tasks/create_dpo"
 TASKS_CREATE_ENDPOINT_CHAT = "/v1/tasks/create_chat"
 TASKS_CREATE_ENDPOINT_GRPO = "/v1/tasks/create_grpo"
@@ -122,7 +124,7 @@ async def create_task_dpo(
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
     if config.discord_url:
         await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
-    
+
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -162,10 +164,10 @@ async def create_task_grpo(
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
-    
+
     if config.discord_url:
         await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
-    
+
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -199,10 +201,10 @@ async def create_task_chat(
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
-    
+
     if config.discord_url:
         await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
-    
+
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -259,10 +261,10 @@ async def create_task_instruct_text(
         )
 
         new_task = await task_sql.add_task(new_task, config.psql_db)
-        
+
         if config.discord_url:
             await notify_organic_task_created(str(new_task.task_id), new_task.task_type.value, config.discord_url)
-        
+
         return NewTaskResponse(
             success=True, task_id=new_task.task_id, created_at=new_task.created_at, account_id=new_task.account_id
         )
@@ -299,10 +301,10 @@ async def create_task_instruct_text(
     task = await task_sql.add_task(task, config.psql_db)
 
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
-    
+
     if config.discord_url:
         await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
-    
+
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -340,7 +342,7 @@ async def create_task_image(
 
     if config.discord_url:
         await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
-    
+
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -354,7 +356,7 @@ async def create_text_task_with_custom_dataset(
     task = InstructTextRawTask(
         model_id=request.model_repo,
         ds=request.ds_repo or "custom",
-        file_format=request.file_format if request.ds_repo else FileFormat.S3,
+        file_format=request.file_format,
         field_system=request.field_system,
         field_instruction=request.field_instruction,
         field_input=request.field_input,
@@ -375,6 +377,44 @@ async def create_text_task_with_custom_dataset(
 
     task = await task_sql.add_task(task, config.psql_db)
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+    return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
+
+
+async def create_chat_task_with_custom_dataset(
+    request: NewTaskWithCustomDatasetRequestChat,
+    config: Config = Depends(get_config),
+) -> NewTaskResponse:
+    current_time = datetime.utcnow()
+    end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
+
+    task = ChatRawTask(
+        model_id=request.model_repo,
+        ds=request.ds_repo or "custom",
+        file_format=request.file_format,
+        chat_template=request.chat_template,
+        chat_column=request.chat_column,
+        chat_role_field=request.chat_role_field,
+        chat_content_field=request.chat_content_field,
+        chat_user_reference=request.chat_user_reference,
+        chat_assistant_reference=request.chat_assistant_reference,
+        is_organic=True,
+        status=TaskStatus.PENDING,
+        created_at=current_time,
+        termination_at=end_timestamp,
+        hours_to_complete=request.hours_to_complete,
+        account_id=request.account_id,
+        task_type=TaskType.CHATTASK,
+        result_model_name=request.result_model_name,
+        training_data=request.training_data,
+        test_data=request.test_data,
+    )
+
+    task = await task_sql.add_task(task, config.psql_db)
+    logger.info(f"Task of type {task.task_type} created: {task.task_id}")
+
+    if config.discord_url:
+        await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
+
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -411,10 +451,10 @@ async def create_task_with_fixed_datasets(
     await task_sql.update_task(task, config.psql_db)
 
     logger.info(task.task_id)
-    
+
     if config.discord_url:
         await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
-    
+
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
@@ -597,9 +637,11 @@ async def create_benchmark_root_task_from_existing(
         )
 
         logger.info(f"Created benchmark root task {copied_task.task_id} from original task {task_id}")
-        
+
         if config.discord_url:
-            await notify_organic_task_created(str(copied_task.task_id), copied_task.task_type.value, config.discord_url, is_benchmark=True)
+            await notify_organic_task_created(
+                str(copied_task.task_id), copied_task.task_type.value, config.discord_url, is_benchmark=True
+            )
 
         return NewTaskResponse(
             success=True, task_id=copied_task.task_id, created_at=copied_task.created_at, account_id=copied_task.account_id
@@ -674,6 +716,7 @@ def factory_router() -> APIRouter:
     router.add_api_route(TASKS_CREATE_ENDPOINT_GRPO, create_task_grpo, methods=["POST"])
     router.add_api_route(TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT, create_task_with_fixed_datasets, methods=["POST"])
     router.add_api_route(CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT, create_text_task_with_custom_dataset, methods=["POST"])
+    router.add_api_route(CREATE_CHAT_TASK_WITH_CUSTOM_DATASET_ENDPOINT, create_chat_task_with_custom_dataset, methods=["POST"])
     router.add_api_route(GET_TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])
     router.add_api_route(DELETE_TASK_ENDPOINT, delete_task, methods=["DELETE"])
     router.add_api_route(GET_TASKS_RESULTS_ENDPOINT, get_miner_breakdown, methods=["GET"])
