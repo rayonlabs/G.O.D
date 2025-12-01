@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import os
 import random
 from datetime import datetime
@@ -292,13 +293,17 @@ async def _create_dstack_request(
     logger.info(f"Creating dstack request for task {task.task_id} with run name {run_name}")
     
     expected_repo_name = await task_sql.get_expected_repo_name(task.task_id, EMISSION_BURN_HOTKEY, config.psql_db)
-    # For organic tasks, generate a default repo name if not found
     if not expected_repo_name:
         expected_repo_name = f"organic_{task.task_id}"
     
     required_gpus = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
-    gpu_count = _get_gpu_count_from_requirement(required_gpus)
-    gpu_name = "A100"
+    
+    if task.task_type == TaskType.IMAGETASK:
+        gpu_name = "A100"
+        gpu_count = _get_gpu_count_from_requirement(required_gpus)
+    else:
+        gpu_name = "H200"
+        gpu_count = _get_h200_count_from_requirement(required_gpus)
     
     timeout_seconds = int(task.hours_to_complete * 3600) + 3600 # Add 1 hour for provisioning/download/upload
     
@@ -335,6 +340,11 @@ async def _create_dstack_request(
     
     logger.info(f"Using docker image: {docker_image}")
     
+    if task.task_type == TaskType.IMAGETASK:
+        regions = cst.DSTACK_IMAGE_REGIONS
+    else:
+        regions = cst.DSTACK_TEXT_REGIONS
+    
     # Build dstack task configuration
     task_config = {
         "plan": {
@@ -357,7 +367,7 @@ async def _create_dstack_request(
                             "size": "1000GB"
                         }
                     },
-                    "regions": ["CA-MTL-3", "CA-MTL-1", "AP-JP-1", "US-KS-2", "US-GA-2", "US-CA-2"],
+                    "regions": regions,
                     "max_duration": timeout_seconds
                 }
             }
@@ -369,7 +379,7 @@ async def _create_dstack_request(
 
 
 def _get_gpu_count_from_requirement(requirement: GpuRequirement) -> int:
-    """Get the number of GPUs required for a given GPU requirement."""
+    """Get the number of GPUs required for a given GPU requirement (for A100)."""
     if requirement == GpuRequirement.A100:
         return 1
     elif requirement == GpuRequirement.H100_1X:
@@ -383,14 +393,25 @@ def _get_gpu_count_from_requirement(requirement: GpuRequirement) -> int:
     return 1
 
 
-def _get_gpu_name_from_requirement(requirement: GpuRequirement) -> str:
-    """Get the GPU name string for dstack from a GPU requirement."""
+def _get_h200_count_from_requirement(requirement: GpuRequirement) -> int:
+    H100_VRAM_GB = 80
+    H200_VRAM_GB = 141
+
     if requirement == GpuRequirement.A100:
-        return "A100"
-    elif requirement in [GpuRequirement.H100_1X, GpuRequirement.H100_2X, 
-                         GpuRequirement.H100_4X, GpuRequirement.H100_8X]:
-        return "H100"
-    return "H100"
+        return 1
+    elif requirement == GpuRequirement.H100_1X:
+        total_vram_needed = 1 * H100_VRAM_GB 
+    elif requirement == GpuRequirement.H100_2X:
+        total_vram_needed = 2 * H100_VRAM_GB 
+    elif requirement == GpuRequirement.H100_4X:
+        total_vram_needed = 4 * H100_VRAM_GB
+    elif requirement == GpuRequirement.H100_8X:
+        total_vram_needed = 8 * H100_VRAM_GB 
+    else:
+        return 1
+    
+    h200_count = math.ceil(total_vram_needed / H200_VRAM_GB)
+    return h200_count
 
 
 async def monitor_dstack_tasks(config: Config):
