@@ -522,6 +522,7 @@ AnyTypeTaskDetails = InstructTextTaskDetails | ChatTaskDetails| ImageTaskDetails
 class DstackRunStatus(BaseModel):
     """Dstack run status response model"""
     status: str = Field(..., description="Run status: submitted, provisioning, running, done, failed, aborted, terminated")
+    latest_job_submission: dict | None = None
     
     def get_status(self) -> str:
         """Get the status string, handling both string and dict formats"""
@@ -548,3 +549,9 @@ class DstackRunStatus(BaseModel):
         """Check if run has failed"""
         status = self.get_status().lower()
         return status in ["failed", "aborted", "terminated"]
+
+    def got_no_offers(self) -> bool:
+        """Check if run got no offers"""
+        if self.latest_job_submission is None:
+            return False
+        return self.latest_job_submission.get("status_message", "Unknown") == "no offers"

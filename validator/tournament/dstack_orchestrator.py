@@ -496,7 +496,7 @@ async def _monitor_dstack_tasks(config: Config):
                     
                     max_retries = cst.DSTACK_MAX_RETRIES
                     max_attempts = max_retries + 1
-                    if training_task.n_training_attempts >= max_attempts:
+                    if training_task.n_training_attempts >= max_attempts and not run_status.got_no_offers():
                         logger.error(
                             f"Task {training_task.task.task_id} has exceeded max retries "
                             f"({training_task.n_training_attempts}), marking as failed"
