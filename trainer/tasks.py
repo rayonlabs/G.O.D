@@ -19,6 +19,8 @@ TASK_HISTORY_FILE = Path(cst.TASKS_FILE_PATH)
 
 
 async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
+    load_task_history()
+    
     task_id = task.training_data.task_id
     hotkey = task.hotkey
 
@@ -44,6 +46,8 @@ async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
 
 
 async def complete_task(task_id: str, hotkey: str, success: bool = True):
+    load_task_history()
+    
     task = get_task(task_id, hotkey)
     if task is None:
         return
@@ -60,6 +64,8 @@ def get_task(task_id: str, hotkey: str) -> TrainerTaskLog | None:
 
 
 async def log_task(task_id: str, hotkey: str, message: str):
+    load_task_history()
+    
     task = get_task(task_id, hotkey)
     if task:
         timestamped_message = f"[{datetime.utcnow().isoformat()}] {message}"
@@ -68,6 +74,8 @@ async def log_task(task_id: str, hotkey: str, message: str):
 
 
 async def update_wandb_url(task_id: str, hotkey: str, wandb_url: str):
+    load_task_history()
+    
     task = get_task(task_id, hotkey)
     if task:
         task.wandb_url = wandb_url
@@ -104,7 +112,12 @@ async def save_task_history():
 def load_task_history():
     global task_history
     if TASK_HISTORY_FILE.exists():
-        with open(TASK_HISTORY_FILE, "r") as f:
-            data = json.load(f)
-            task_history.clear()
-            task_history.extend(TrainerTaskLog(**item) for item in data)
+        try:
+            with open(TASK_HISTORY_FILE, "r") as f:
+                data = json.load(f)
+                task_history.clear()
+                task_history.extend(TrainerTaskLog(**item) for item in data)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Failed to load task history from {TASK_HISTORY_FILE}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error loading task history: {e}")
