@@ -2,7 +2,7 @@ import asyncio
 import json
 import math
 import os
-import random
+import string
 import uuid
 from datetime import datetime
 from datetime import timezone
@@ -265,6 +265,9 @@ async def schedule_organic_tasks_for_dstack(pending_training_tasks: list, config
 
 def _generate_dstack_run_name(task_id: str, attempt_number: int = 0) -> str:
     run_name = uuid.uuid4().hex
+    if run_name[0].isdigit():
+        replacement_char = string.ascii_lowercase[int(run_name[0])]
+        run_name = f"{replacement_char}{run_name[1:]}"
     logger.debug(
         f"Generated run name {run_name} for task {task_id} (attempt {attempt_number})"
     )
