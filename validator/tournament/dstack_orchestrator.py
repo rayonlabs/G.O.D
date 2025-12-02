@@ -3,6 +3,7 @@ import json
 import math
 import os
 import random
+import uuid
 from datetime import datetime
 from datetime import timezone
 
@@ -222,16 +223,13 @@ async def schedule_organic_tasks_for_dstack(pending_training_tasks: list, config
                 minutes_since_update = time_since_update.total_seconds() / 60
                 
                 if minutes_since_update < RETRY_DELAY_MINUTES:
-                    logger.debug(
-                        f"Task {task.task_id} failed recently ({minutes_since_update:.1f} minutes ago), "
-                        f"waiting {RETRY_DELAY_MINUTES - minutes_since_update:.1f} more minutes before retry"
-                    )
                     pending_training_tasks.insert(0, pending_training_tasks.pop())
                     await asyncio.sleep(60)
                     continue
             
             try:
-                run_name = _generate_dstack_run_name(str(task.task_id), oldest_task_training.n_training_attempts)
+                attempt_number = oldest_task_training.n_training_attempts
+                run_name = _generate_dstack_run_name(str(task.task_id), attempt_number)
                 
                 dstack_config = await _create_dstack_request(
                     task, run_name, config
@@ -266,10 +264,10 @@ async def schedule_organic_tasks_for_dstack(pending_training_tasks: list, config
 
 
 def _generate_dstack_run_name(task_id: str, attempt_number: int = 0) -> str:
-    normalized_task_id = task_id.lower().replace('-', '')
-    task_id_part = normalized_task_id[:37]
-    run_name = f"a{attempt_number}-{task_id_part}"[:40]
-    
+    run_name = uuid.uuid4().hex
+    logger.debug(
+        f"Generated run name {run_name} for task {task_id} (attempt {attempt_number})"
+    )
     return run_name
 
 
@@ -301,9 +299,11 @@ async def _create_dstack_request(
     if task.task_type == TaskType.IMAGETASK:
         gpu_name = "A100"
         gpu_count = _get_gpu_count_from_requirement(required_gpus)
+        logger.info(f"Task {task.task_id} is IMAGETASK, using {gpu_count}x{gpu_name}")
     else:
         gpu_name = "H200"
         gpu_count = _get_h200_count_from_requirement(required_gpus)
+        logger.info(f"Task {task.task_id} is text task (type={task.task_type}), using {gpu_count}x{gpu_name}")
     
     timeout_seconds = int(task.hours_to_complete * 3600) + 3600 # Add 1 hour for provisioning/download/upload
     
@@ -477,11 +477,15 @@ async def _monitor_dstack_tasks(config: Config):
                 if run_status.is_done():
                     logger.info(
                         f"Task {training_task.task.task_id} "
-                        f"completed successfully on dstack"
+                        f"completed successfully on dstack with run {run_name} "
+                        f"(n_training_attempts={training_task.n_training_attempts})"
                     )
                     await tournament_sql.update_tournament_task_training_status(
                         training_task.task.task_id, training_task.hotkey, TrainingStatus.SUCCESS, config.psql_db
                     )
+                    task = training_task.task
+                    task.status = TaskStatus.PREEVALUATION
+                    await task_sql.update_task(task, config.psql_db)
                     continue
                 
                 if run_status.is_failed():
