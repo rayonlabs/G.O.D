@@ -14,7 +14,7 @@ from datetime import datetime, timezone, date, timedelta
 # Constants matching validator/core/constants.py
 EMISSION_BOOST_DECAY_PER_WIN = 0.01  # 1% per win (old system)
 EMISSION_DAILY_TIME_DECAY_RATE = 0.002  # 0.2% per day (new system)
-EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 28)
+EMISSION_TIME_DECAY_START_DATE = date(2025, 11, 1)
 SECONDS_PER_DAY = 86400.0
 TOURNAMENT_TEXT_WEIGHT = 0.20
 MAX_TEXT_TOURNAMENT_WEIGHT = 0.6
@@ -152,13 +152,13 @@ def main():
     test_scenario(
         "Before Cutoff - Old System Only",
         performance_diff=0.15,  # 15% advantage -> 20% boost
-        first_championship_time=datetime(2025, 11, 1, tzinfo=timezone.utc),
+        first_championship_time=datetime(2025, 10, 1, tzinfo=timezone.utc),
         consecutive_wins=10,
         test_times=[
-            ("Nov 15, 2025 (1st win)", datetime(2025, 11, 15, tzinfo=timezone.utc), 1),
-            ("Nov 5, 2025 (3rd win)", datetime(2025, 11, 5, tzinfo=timezone.utc), 3),
-            ("Nov 10, 2025 (6th win)", datetime(2025, 11, 10, tzinfo=timezone.utc), 6),
-            ("Nov 16, 2025 (10th win)", datetime(2025, 11, 16, tzinfo=timezone.utc), 10),
+            ("Oct 5, 2025 (1st win)", datetime(2025, 10, 5, tzinfo=timezone.utc), 1),
+            ("Oct 10, 2025 (3rd win)", datetime(2025, 10, 10, tzinfo=timezone.utc), 3),
+            ("Oct 20, 2025 (6th win)", datetime(2025, 10, 20, tzinfo=timezone.utc), 6),
+            ("Oct 28, 2025 (10th win)", datetime(2025, 10, 28, tzinfo=timezone.utc), 10),
         ],
     )
 
@@ -166,14 +166,15 @@ def main():
     test_scenario(
         "Hybrid - Small Old Decay (Boost Survives)",
         performance_diff=0.15,  # 15% advantage -> 20% boost
-        first_championship_time=datetime(2025, 11, 10, tzinfo=timezone.utc),
+        first_championship_time=datetime(2025, 10, 20, tzinfo=timezone.utc),
         consecutive_wins=5,
         test_times=[
-            ("Nov 10, 2025 (1st win)", datetime(2025, 11, 10, tzinfo=timezone.utc), 1),
-            ("Nov 17, 2025 (CUTOFF - 3rd)", datetime(2025, 11, 17, tzinfo=timezone.utc), 3),
-            ("Nov 27, 2025 (+10d)", datetime(2025, 11, 27, tzinfo=timezone.utc), 5),
-            ("Dec 17, 2025 (+30d)", datetime(2025, 12, 17, tzinfo=timezone.utc), 8),
-            ("Jan 16, 2026 (+60d)", datetime(2026, 1, 16, tzinfo=timezone.utc), 12),
+            ("Oct 20, 2025 (1st win)", datetime(2025, 10, 20, tzinfo=timezone.utc), 1),
+            ("Oct 28, 2025 (3rd win)", datetime(2025, 10, 28, tzinfo=timezone.utc), 3),
+            ("Nov 1, 2025 (CUTOFF - 4th)", datetime(2025, 11, 1, tzinfo=timezone.utc), 4),
+            ("Nov 10, 2025 (+9d)", datetime(2025, 11, 10, tzinfo=timezone.utc), 5),
+            ("Dec 1, 2025 (+30d)", datetime(2025, 12, 1, tzinfo=timezone.utc), 8),
+            ("Dec 31, 2025 (+60d)", datetime(2025, 12, 31, tzinfo=timezone.utc), 12),
         ],
     )
 
@@ -181,15 +182,15 @@ def main():
     test_scenario(
         "Hybrid - Large Old Decay (Boost Wiped Out)",
         performance_diff=0.15,  # 15% advantage -> 20% boost
-        first_championship_time=datetime(2025, 10, 1, tzinfo=timezone.utc),
+        first_championship_time=datetime(2025, 9, 1, tzinfo=timezone.utc),
         consecutive_wins=30,
         test_times=[
-            ("Oct 1, 2025 (1st win)", datetime(2025, 10, 1, tzinfo=timezone.utc), 1),
-            ("Nov 15, 2025 (15th win)", datetime(2025, 11, 15, tzinfo=timezone.utc), 15),
-            ("Nov 17, 2025 (CUTOFF - 21st)", datetime(2025, 11, 17, tzinfo=timezone.utc), 21),
-            ("Nov 27, 2025 (+10d)", datetime(2025, 11, 27, tzinfo=timezone.utc), 24),
-            ("Dec 17, 2025 (+30d)", datetime(2025, 12, 17, tzinfo=timezone.utc), 30),
-            ("Jan 16, 2026 (+60d)", datetime(2026, 1, 16, tzinfo=timezone.utc), 36),
+            ("Sep 1, 2025 (1st win)", datetime(2025, 9, 1, tzinfo=timezone.utc), 1),
+            ("Oct 15, 2025 (15th win)", datetime(2025, 10, 15, tzinfo=timezone.utc), 15),
+            ("Nov 1, 2025 (CUTOFF - 21st)", datetime(2025, 11, 1, tzinfo=timezone.utc), 21),
+            ("Nov 10, 2025 (+9d)", datetime(2025, 11, 10, tzinfo=timezone.utc), 24),
+            ("Dec 1, 2025 (+30d)", datetime(2025, 12, 1, tzinfo=timezone.utc), 30),
+            ("Dec 31, 2025 (+60d)", datetime(2025, 12, 31, tzinfo=timezone.utc), 36),
         ],
     )
 
@@ -197,14 +198,14 @@ def main():
     test_scenario(
         "New System Only - Champion Won After Cutoff",
         performance_diff=0.10,  # 10% advantage -> 10% boost
-        first_championship_time=datetime(2025, 11, 20, tzinfo=timezone.utc),
+        first_championship_time=datetime(2025, 11, 5, tzinfo=timezone.utc),
         consecutive_wins=15,
         test_times=[
-            ("Nov 20, 2025 (1st win)", datetime(2025, 11, 20, tzinfo=timezone.utc), 1),
-            ("Nov 29, 2025 (+9d)", datetime(2025, 11, 29, tzinfo=timezone.utc), 4),
-            ("Dec 20, 2025 (+30d)", datetime(2025, 12, 20, tzinfo=timezone.utc), 11),
-            ("Jan 19, 2026 (+60d)", datetime(2026, 1, 19, tzinfo=timezone.utc), 15),
-            ("Feb 18, 2026 (+90d)", datetime(2026, 2, 18, tzinfo=timezone.utc), 20),
+            ("Nov 5, 2025 (1st win)", datetime(2025, 11, 5, tzinfo=timezone.utc), 1),
+            ("Nov 14, 2025 (+9d)", datetime(2025, 11, 14, tzinfo=timezone.utc), 4),
+            ("Dec 5, 2025 (+30d)", datetime(2025, 12, 5, tzinfo=timezone.utc), 11),
+            ("Jan 4, 2026 (+60d)", datetime(2026, 1, 4, tzinfo=timezone.utc), 15),
+            ("Feb 3, 2026 (+90d)", datetime(2026, 2, 3, tzinfo=timezone.utc), 20),
         ],
     )
 
@@ -212,13 +213,13 @@ def main():
     test_scenario(
         "Edge Case - Transition at Cutoff",
         performance_diff=0.12,  # 12% advantage -> 14% boost
-        first_championship_time=datetime(2025, 11, 10, tzinfo=timezone.utc),
+        first_championship_time=datetime(2025, 10, 20, tzinfo=timezone.utc),
         consecutive_wins=8,
         test_times=[
-            ("Nov 16, 2025 (day before)", datetime(2025, 11, 16, 23, 59, tzinfo=timezone.utc), 4),
-            ("Nov 17, 2025 (cutoff day)", datetime(2025, 11, 17, 0, 0, tzinfo=timezone.utc), 5),
-            ("Nov 17, 2025 (cutoff +1h)", datetime(2025, 11, 17, 1, 0, tzinfo=timezone.utc), 5),
-            ("Nov 18, 2025 (+1 day)", datetime(2025, 11, 18, tzinfo=timezone.utc), 6),
+            ("Oct 31, 2025 (day before)", datetime(2025, 10, 31, 23, 59, tzinfo=timezone.utc), 4),
+            ("Nov 1, 2025 (cutoff day)", datetime(2025, 11, 1, 0, 0, tzinfo=timezone.utc), 5),
+            ("Nov 1, 2025 (cutoff +1h)", datetime(2025, 11, 1, 1, 0, tzinfo=timezone.utc), 5),
+            ("Nov 2, 2025 (+1 day)", datetime(2025, 11, 2, tzinfo=timezone.utc), 6),
         ],
     )
 
@@ -226,12 +227,12 @@ def main():
     print("KEY INSIGHTS - NEW HYBRID SYSTEM")
     print("=" * 100)
     print()
-    print("BEFORE Nov 28, 2025 (Cutoff):")
+    print("BEFORE Nov 1, 2025 (Cutoff):")
     print("  → Old system: decay = (consecutive_wins - 1) × 1%")
     print("  → Applied to emission boost only")
     print("  → final_weight = base + max(0, boost - old_decay)")
     print()
-    print("AFTER Nov 28, 2025 - Three Cases:")
+    print("AFTER Nov 1, 2025 - Three Cases:")
     print()
     print("1. Champion won BEFORE cutoff (apply_hybrid=True):")
     print("   → Calculate old_decay from consecutive wins")
