@@ -643,7 +643,8 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
     async with await psql_db.connection() as connection:
         query = f"""
             SELECT {cst.TASK_ID}, {cst.HOTKEY}, {cst.TRAINING_STATUS}, {cst.N_TRAINING_ATTEMPTS},
-                   {cst.CREATED_AT}, {cst.UPDATED_AT}, {cst.PRIORITY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH}
+                   {cst.CREATED_AT}, {cst.UPDATED_AT}, {cst.PRIORITY}, {cst.TRAINING_REPO}, {cst.TRAINING_COMMIT_HASH},
+                   {cst.TRAINER_IP}
             FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
             WHERE {cst.TRAINING_STATUS} = $1
             ORDER BY {cst.PRIORITY} ASC, {cst.CREATED_AT} DESC
@@ -675,6 +676,8 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
                         updated_at=row[cst.UPDATED_AT],
                         training_repo=row[cst.TRAINING_REPO],
                         training_commit_hash=row[cst.TRAINING_COMMIT_HASH],
+                        priority=row[cst.PRIORITY],
+                        trainer_ip=row[cst.TRAINER_IP],
                     )
                 )
 
@@ -687,21 +690,51 @@ async def get_tournament_training_tasks(psql_db: PSQLDB, status: TrainingStatus)
         return tournament_tasks
 
 
-async def update_tournament_task_training_status(task_id: str, hotkey: str, status: TrainingStatus, psql_db: PSQLDB):
+async def update_tournament_task_training_status(
+    task_id: str, hotkey: str, status: TrainingStatus, psql_db: PSQLDB, trainer_ip: str | None = None
+):
     """Update the training status of a specific task-hotkey pair"""
     async with await psql_db.connection() as connection:
         increment_clause = (
             f", {cst.N_TRAINING_ATTEMPTS} = {cst.N_TRAINING_ATTEMPTS} + 1" if status == TrainingStatus.TRAINING else ""
         )
+        trainer_ip_clause = f", {cst.TRAINER_IP} = $4" if trainer_ip else ""
 
         query = f"""
             UPDATE {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
-            SET {cst.TRAINING_STATUS} = $3{increment_clause}, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            SET {cst.TRAINING_STATUS} = $3{increment_clause}{trainer_ip_clause}, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
             WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
         """
 
-        await connection.execute(query, task_id, hotkey, status)
+        params = [task_id, hotkey, status]
+        if trainer_ip:
+            params.append(trainer_ip)
+        await connection.execute(query, *params)
         logger.info(f"Marked task-hotkey pair ({task_id}, {hotkey}) as {status}")
+
+
+async def update_dstack_runname(task_id: str, hotkey: str, runname: str, psql_db: PSQLDB):
+    """Update the dstack runname for a specific task-hotkey pair"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            UPDATE {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            SET {cst.DSTACK_RUNNAME} = $3, {cst.UPDATED_AT} = CURRENT_TIMESTAMP
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
+        """
+        await connection.execute(query, task_id, hotkey, runname)
+        logger.info(f"Updated dstack runname for task {task_id}, hotkey {hotkey} to {runname}")
+
+
+async def get_dstack_runname(task_id: str, hotkey: str, psql_db: PSQLDB) -> str | None:
+    """Get the dstack runname for a specific task-hotkey pair"""
+    async with await psql_db.connection() as connection:
+        query = f"""
+            SELECT {cst.DSTACK_RUNNAME}
+            FROM {cst.TOURNAMENT_TASK_HOTKEY_TRAININGS_TABLE}
+            WHERE {cst.TASK_ID} = $1 AND {cst.HOTKEY} = $2
+        """
+        result = await connection.fetchval(query, task_id, hotkey)
+        return result
 
 
 async def get_training_status_for_task_and_hotkeys(task_id: str, hotkeys: list[str], psql_db: PSQLDB) -> dict[str, str]:
@@ -1240,3 +1273,5 @@ async def get_weekly_task_participation_data(psql_db: PSQLDB) -> list[HotkeyTask
 
         logger.info(f"Found weekly task participation for {len(result)} hotkeys over 7 days")
         return result
+
+
