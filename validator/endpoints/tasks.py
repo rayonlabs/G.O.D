@@ -118,7 +118,7 @@ async def create_task_dpo(
         account_id=request.account_id,
         task_type=TaskType.DPOTASK,
         result_model_name=request.result_model_name,
-        backend=Backend(request.backend),
+        backend=Backend(request.backend or Backend.OBLIVUS.value),
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -161,7 +161,7 @@ async def create_task_grpo(
         account_id=request.account_id,
         task_type=TaskType.GRPOTASK,
         result_model_name=request.result_model_name,
-        backend=Backend(request.backend),
+        backend=Backend(request.backend or Backend.OBLIVUS.value),
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -197,7 +197,7 @@ async def create_task_chat(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        backend=Backend(request.backend),
+        backend=Backend(request.backend or Backend.OBLIVUS.value),
         task_type=TaskType.CHATTASK,
         result_model_name=request.result_model_name,
     )
@@ -298,7 +298,7 @@ async def create_task_instruct_text(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        backend=Backend(request.backend),
+        backend=Backend(request.backend or Backend.OBLIVUS.value),
         task_type=TaskType.INSTRUCTTEXTTASK,
         result_model_name=request.result_model_name,
     )
@@ -339,7 +339,7 @@ async def create_task_image(
         task_type=TaskType.IMAGETASK,
         result_model_name=request.result_model_name,
         model_type=request.model_type,
-        backend=Backend(request.backend),
+        backend=Backend(request.backend or Backend.OBLIVUS.value),
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -379,7 +379,7 @@ async def create_text_task_with_custom_dataset(
         result_model_name=request.result_model_name,
         training_data=request.training_data,
         test_data=request.test_data,
-        backend=Backend(request.backend),
+        backend=Backend(request.backend or Backend.OBLIVUS.value),
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -414,6 +414,7 @@ async def create_chat_task_with_custom_dataset(
         result_model_name=request.result_model_name,
         training_data=request.training_data,
         test_data=request.test_data,
+        backend=Backend(request.backend or Backend.OBLIVUS.value),
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -448,7 +449,7 @@ async def create_task_with_fixed_datasets(
         termination_at=end_timestamp,
         hours_to_complete=request.hours_to_complete,
         account_id=request.account_id,
-        backend=Backend(request.backend),
+        backend=Backend(request.backend or Backend.OBLIVUS.value),
         result_model_name=request.result_model_name,
     )
 
