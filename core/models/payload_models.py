@@ -326,6 +326,15 @@ class NewTaskWithCustomDatasetRequest(NewTaskRequestInstructText):
     )
 
 
+class NewTaskWithCustomDatasetRequestChat(NewTaskRequestChat):
+    ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
+    training_data: str = Field(..., description="The prepared training dataset")
+    test_data: str | None = Field(None, description="The prepared test dataset")
+    file_format: FileFormat = Field(
+        FileFormat.S3, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
+    )
+
+
 class NewTaskResponse(BaseModel):
     success: bool = Field(..., description="Whether the task was created successfully")
     task_id: UUID | None = Field(..., description="The ID of the task")
@@ -390,10 +399,13 @@ class ChatTaskDetails(TaskDetails):
     chat_role_field: str = Field(..., description="The column name to specify the role in the conversation ", examples=["from"])
     chat_content_field: str = Field(..., description="The column name to specify the text content", examples=["value"])
     chat_user_reference: str | None = Field(None, description="The column name to specify the user", examples=["user"])
-    chat_assistant_reference: str | None = Field(None, description="The column name to specify the assistant", examples=["assistant"])
+    chat_assistant_reference: str | None = Field(
+        None, description="The column name to specify the assistant", examples=["assistant"]
+    )
 
     # Turn off protected namespace for model
     model_config = ConfigDict(protected_namespaces=())
+
 
 class DpoTaskDetails(TaskDetails):
     task_type: TaskType = TaskType.DPOTASK

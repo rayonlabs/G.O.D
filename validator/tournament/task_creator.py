@@ -1,6 +1,5 @@
 import random
 
-import validator.core.constants as cst
 from core.models.tournament_models import GroupRound
 from core.models.tournament_models import KnockoutRound
 from core.models.tournament_models import Round
@@ -12,7 +11,6 @@ from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_GRPO
 from validator.core.constants import PERCENTAGE_OF_TASKS_THAT_SHOULD_BE_INSTRUCT_TEXT
 from validator.core.models import RawTask
 from validator.db.sql import tasks as task_sql
-from validator.db.sql.historical_tasks import get_random_historical_task_by_type
 from validator.db.sql.tournaments import add_tournament_tasks
 from validator.db.sql.tournaments import get_tournament_tasks
 from validator.tasks.diffusion_synth import create_synthetic_image_task
@@ -24,7 +22,6 @@ from validator.tasks.synthetic_scheduler import create_synthetic_dpo_task
 from validator.tasks.synthetic_scheduler import create_synthetic_grpo_task
 from validator.tasks.synthetic_scheduler import create_synthetic_instruct_text_task
 from validator.tournament import constants as t_cst
-from validator.tournament.boss_round_sync import copy_historical_task_into_boss_round_tournament
 from validator.tournament.utils import get_tournament_gpu_requirement
 from validator.utils.logging import get_logger
 
@@ -46,8 +43,8 @@ async def create_text_tournament_tasks(
     elif is_final_round:
         task_types = [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]
         tasks_per_type = t_cst.FINAL_ROUND_TEXT_TASKS // len(task_types)
-        logger.info(f"Creating final text tournament using historical tasks ({tasks_per_type} of each: instruct, DPO, GRPO)")
-        tasks = await _create_historical_text_boss_round_tasks(tournament_id, round_id, config)
+        logger.info(f"Creating final text tournament with new synthetic tasks ({tasks_per_type} of each: instruct, DPO, GRPO)")
+        tasks = await _create_new_text_boss_round_tasks(tournament_id, round_id, config)
     else:
         num_pairs = len(round_data.pairs)
         logger.info(f"Creating text tournament for {num_pairs} knockout pairs (probability-based)")
@@ -65,7 +62,7 @@ async def create_image_tournament_tasks(
     if isinstance(round_data, GroupRound):
         tasks = await _create_group_image_tasks(round_data, tournament_id, round_id, config, image_models)
     elif is_final_round:
-        tasks = await _create_historical_image_boss_round_tasks(tournament_id, round_id, config)
+        tasks = await _create_new_image_boss_round_tasks(tournament_id, round_id, config)
     else:
         tasks = await _create_knockout_image_tasks(round_data, tournament_id, round_id, config, image_models)
 
@@ -92,28 +89,20 @@ async def _create_single_group_image_tasks(
     group_id = f"{round_id}_group_{group_index + 1:03d}"
     logger.info(f"  Group {group_index + 1} ({len(group.member_ids)} members):")
 
-    existing_tasks = await get_tournament_tasks(round_id, config.psql_db)
-    existing_group_tasks = [task for task in existing_tasks if task.group_id == group_id]
-    existing_count = len(existing_group_tasks)
+    existing_tasks = await _get_existing_tasks_by_identifier(round_id, config, group_id=group_id)
+    existing_count = len(existing_tasks)
 
     assert t_cst.IMAGE_TASKS_PER_GROUP == 1, "Only 1 image task per group is supported"
     if existing_count >= t_cst.IMAGE_TASKS_PER_GROUP:
         logger.info(f"    Group {group_index + 1} already has {existing_count} task(s), skipping task creation")
-        return await _get_existing_tasks(existing_group_tasks, config)
+        return await _get_existing_tasks(existing_tasks, config)
 
     logger.info(f"    Group {group_index + 1} has {existing_count}/{t_cst.IMAGE_TASKS_PER_GROUP} task, creating 1 more")
 
     task = await _create_single_image_task_with_retry(config, image_models, 0, group_index)
-    tournament_task = TournamentTask(
-        tournament_id=tournament_id,
-        round_id=round_id,
-        task_id=task.task_id,
-        group_id=group_id,
-        pair_id=None,
+    await _create_and_register_tournament_task(
+        task, tournament_id, round_id, config, group_id=group_id
     )
-    await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
-    logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
 
     return [task]
 
@@ -138,29 +127,22 @@ async def _create_single_knockout_image_task(
     pair_id = f"{round_id}_pair_{pair_index + 1:03d}"
     logger.info(f"  Pair {pair_index + 1} ({pair[0]} vs {pair[1]}):")
 
-    existing_tasks = await get_tournament_tasks(round_id, config.psql_db)
-    existing_pair_tasks = [task for task in existing_tasks if task.pair_id == pair_id]
+    existing_tasks = await _get_existing_tasks_by_identifier(round_id, config, pair_id=pair_id)
+    existing_count = len(existing_tasks)
 
-    if existing_pair_tasks:
-        if len(existing_pair_tasks) > t_cst.KNOCKOUT_PAIR_TASKS:
+    if existing_tasks:
+        if existing_count > t_cst.KNOCKOUT_PAIR_TASKS:
             logger.warning(
-                f"   Pair {pair_index + 1} has {len(existing_pair_tasks)} tasks when it should only have {t_cst.KNOCKOUT_PAIR_TASKS}!"
+                f"   Pair {pair_index + 1} has {existing_count} tasks when it should only have {t_cst.KNOCKOUT_PAIR_TASKS}!"
             )
-        logger.info(f"    Pair {pair_index + 1} already has {len(existing_pair_tasks)} task(s), skipping task creation")
-        return await _get_existing_tasks(existing_pair_tasks, config)
+        logger.info(f"    Pair {pair_index + 1} already has {existing_count} task(s), skipping task creation")
+        return await _get_existing_tasks(existing_tasks, config)
 
     logger.info(f"    Pair {pair_index + 1} has no tasks, creating {t_cst.KNOCKOUT_PAIR_TASKS}")
     task = await _create_single_image_task_with_retry(config, image_models, 0, pair_index)
-    tournament_task = TournamentTask(
-        tournament_id=tournament_id,
-        round_id=round_id,
-        task_id=task.task_id,
-        group_id=None,
-        pair_id=pair_id,
+    await _create_and_register_tournament_task(
+        task, tournament_id, round_id, config, pair_id=pair_id
     )
-    await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
-    logger.info(f"    Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
     return [task]
 
 
@@ -177,6 +159,23 @@ async def _create_single_image_task_with_retry(
     return task
 
 
+async def _create_task_by_type(
+    task_type: TaskType, config: Config, models: list, instruct_datasets: list, dpo_datasets: list
+) -> RawTask:
+    """Create a synthetic task of the specified type."""
+    if task_type == TaskType.IMAGETASK:
+        return await create_synthetic_image_task(config, models)
+    elif task_type == TaskType.INSTRUCTTEXTTASK:
+        return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+    elif task_type == TaskType.DPOTASK:
+        return await create_synthetic_dpo_task(config, models, dpo_datasets)
+    elif task_type == TaskType.GRPOTASK:
+        return await create_synthetic_grpo_task(config, models, instruct_datasets)
+    else:
+        # Default to instruct text task
+        return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+
+
 async def _get_existing_tasks(existing_tournament_tasks: list, config: Config) -> list[RawTask]:
     tasks = []
     for task in existing_tournament_tasks:
@@ -184,6 +183,47 @@ async def _get_existing_tasks(existing_tournament_tasks: list, config: Config) -
         if task_obj:
             tasks.append(task_obj)
     return tasks
+
+
+async def _get_existing_tasks_by_identifier(
+    round_id: str, config: Config, group_id: str | None = None, pair_id: str | None = None
+) -> list:
+    """Get existing tournament tasks filtered by group_id or pair_id."""
+    existing_tasks = await get_tournament_tasks(round_id, config.psql_db)
+    if group_id:
+        return [task for task in existing_tasks if task.group_id == group_id]
+    elif pair_id:
+        return [task for task in existing_tasks if task.pair_id == pair_id]
+    return existing_tasks
+
+
+async def _create_and_register_tournament_task(
+    task: RawTask,
+    tournament_id: str,
+    round_id: str,
+    config: Config,
+    group_id: str | None = None,
+    pair_id: str | None = None,
+) -> None:
+    """Create a TournamentTask, register it in the database, and log the creation."""
+    tournament_task = TournamentTask(
+        tournament_id=tournament_id,
+        round_id=round_id,
+        task_id=task.task_id,
+        group_id=group_id,
+        pair_id=pair_id,
+    )
+    await add_tournament_tasks([tournament_task], config.psql_db)
+    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
+    
+    # Format log message based on task type
+    if task.task_type == TaskType.IMAGETASK:
+        logger.info(f"Image: {task.task_id} - Model: {task.model_id} - GPU: {gpu_req}")
+    else:
+        dataset_info = f" - Dataset: {task.ds}" if hasattr(task, 'ds') and task.ds else ""
+        duration_info = f" - Duration: {task.hours_to_complete} hours" if hasattr(task, 'hours_to_complete') and task.hours_to_complete else ""
+        task_type_info = f"{task.task_type.value}: " if hasattr(task.task_type, 'value') else ""
+        logger.info(f"{task_type_info}{task.task_id} - Model: {task.model_id}{dataset_info} - GPU: {gpu_req}{duration_info}")
 
 
 async def _create_group_text_tasks(
@@ -216,13 +256,12 @@ async def _create_single_group_text_tasks(
 ) -> list[RawTask]:
     group_id = f"{round_id}_group_{group_index + 1:03d}"
 
-    existing_tasks = await get_tournament_tasks(round_id, config.psql_db)
-    existing_group_tasks = [task for task in existing_tasks if task.group_id == group_id]
-    existing_count = len(existing_group_tasks)
+    existing_tasks = await _get_existing_tasks_by_identifier(round_id, config, group_id=group_id)
+    existing_count = len(existing_tasks)
 
     if existing_count >= t_cst.TEXT_TASKS_PER_GROUP:
         logger.info(f"    Group {group_index + 1} already has {existing_count} task(s), skipping task creation")
-        return await _get_existing_tasks(existing_group_tasks, config)
+        return await _get_existing_tasks(existing_tasks, config)
 
     logger.info(f"    Group {group_index + 1} has {existing_count}/{t_cst.TEXT_TASKS_PER_GROUP} task, creating 1 more")
     assert t_cst.TEXT_TASKS_PER_GROUP == 1, "Only 1 text task per group is supported"
@@ -231,17 +270,8 @@ async def _create_single_group_text_tasks(
     task.hours_to_complete = 2
     await task_sql.update_task(task, config.psql_db)
 
-    tournament_task = TournamentTask(
-        tournament_id=tournament_id,
-        round_id=round_id,
-        task_id=task.task_id,
-        group_id=group_id,
-        pair_id=None,
-    )
-    await add_tournament_tasks([tournament_task], config.psql_db)
-    gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
-    logger.info(
-        f"    Instruct: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req} - Duration: 2 hours"
+    await _create_and_register_tournament_task(
+        task, tournament_id, round_id, config, group_id=group_id
     )
 
     return [task]
@@ -269,32 +299,25 @@ async def _create_probability_based_text_tasks(
         logger.info(f"  Pair {i + 1} ({pair[0]} vs {pair[1]}):")
         pair_id = f"{round_id}_pair_{i + 1:03d}"
 
-        existing_tasks = await get_tournament_tasks(round_id, config.psql_db)
-        existing_pair_tasks = [task for task in existing_tasks if task.pair_id == pair_id]
+        existing_tasks = await _get_existing_tasks_by_identifier(round_id, config, pair_id=pair_id)
+        existing_count = len(existing_tasks)
 
-        if existing_pair_tasks:
-            if len(existing_pair_tasks) > t_cst.KNOCKOUT_PAIR_TASKS:
+        if existing_tasks:
+            if existing_count > t_cst.KNOCKOUT_PAIR_TASKS:
                 logger.warning(
-                    f"   Pair {i + 1} has {len(existing_pair_tasks)} tasks when it should only have {t_cst.KNOCKOUT_PAIR_TASKS}!"
+                    f"   Pair {i + 1} has {existing_count} tasks when it should only have {t_cst.KNOCKOUT_PAIR_TASKS}!"
                 )
-            logger.info(f"    Pair {i + 1} already has {len(existing_pair_tasks)} task(s), skipping task creation")
-            pair_task_objects = await _get_existing_tasks(existing_pair_tasks, config)
+            logger.info(f"    Pair {i + 1} already has {existing_count} task(s), skipping task creation")
+            pair_task_objects = await _get_existing_tasks(existing_tasks, config)
             tasks.extend(pair_task_objects)
             continue
 
         logger.info(f"    Pair {i + 1} has no tasks, creating {t_cst.KNOCKOUT_PAIR_TASKS}")
         task = await _create_single_probability_task(config, models, instruct_datasets, dpo_datasets, instruct_prob, dpo_prob)
 
-        tournament_task = TournamentTask(
-            tournament_id=tournament_id,
-            round_id=round_id,
-            task_id=task.task_id,
-            group_id=None,
-            pair_id=pair_id,
+        await _create_and_register_tournament_task(
+            task, tournament_id, round_id, config, pair_id=pair_id
         )
-        await add_tournament_tasks([tournament_task], config.psql_db)
-        gpu_req = get_tournament_gpu_requirement(task.task_type, task.model_params_count, task.model_id)
-        logger.info(f"    {task.task_type.value}: {task.task_id} - Model: {task.model_id} - Dataset: {task.ds} - GPU: {gpu_req}")
         tasks.append(task)
     return tasks
 
@@ -313,8 +336,9 @@ async def _create_single_probability_task(
 
 async def create_new_task_of_same_type(task: RawTask, config: Config) -> RawTask:
     if task.task_type == TaskType.IMAGETASK:
-        return await create_synthetic_image_task(config, _get_image_models(config.keypair))
-
+        models = _get_image_models(config.keypair)
+        return await _create_task_by_type(task.task_type, config, models, [], [])
+    
     model_params_b = int(task.model_params_count / t_cst.MODEL_PARAMS_TO_BILLIONS)
 
     # Handle case where model params is 0 or very small
@@ -334,32 +358,29 @@ async def create_new_task_of_same_type(task: RawTask, config: Config) -> RawTask
     instruct_datasets = _get_instruct_text_datasets(config.keypair)
     dpo_datasets = _get_dpo_datasets(config.keypair)
 
-    if task.task_type == TaskType.INSTRUCTTEXTTASK:
-        return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
-    elif task.task_type == TaskType.DPOTASK:
-        return await create_synthetic_dpo_task(config, models, dpo_datasets)
-    elif task.task_type == TaskType.GRPOTASK:
-        return await create_synthetic_grpo_task(config, models, instruct_datasets)
-    else:
-        return await create_synthetic_instruct_text_task(config, models, instruct_datasets)
+    return await _create_task_by_type(task.task_type, config, models, instruct_datasets, dpo_datasets)
 
 
-async def _create_historical_text_boss_round_tasks(tournament_id: str, round_id: str, config: Config) -> list[RawTask]:
-    """Create boss round text tasks using random historical tasks."""
+async def _create_new_text_boss_round_tasks(tournament_id: str, round_id: str, config: Config) -> list[RawTask]:
+    """Create boss round text tasks using new synthetic tasks."""
     pair_id = f"{round_id}_pair_001"
 
-    existing_tasks = await get_tournament_tasks(round_id, config.psql_db)
-    existing_pair_tasks = [task for task in existing_tasks if task.pair_id == pair_id]
+    existing_pair_tasks = await _get_existing_tasks_by_identifier(round_id, config, pair_id=pair_id)
     existing_count = len(existing_pair_tasks)
 
     if existing_count >= t_cst.FINAL_ROUND_TEXT_TASKS:
         logger.info(f"Final round already has {existing_count} tasks, skipping task creation")
         return await _get_existing_tasks(existing_pair_tasks, config)
 
-    logger.info("Creating boss round text tasks using historical tasks")
+    logger.info("Creating boss round text tasks using new synthetic tasks")
 
     task_types = [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]
     tasks_per_type = t_cst.FINAL_ROUND_TEXT_TASKS // len(task_types)
+
+    standard_models = _get_text_models(config.keypair)
+    big_models = _get_text_models(config.keypair, smallest_size_b=12.0, largest_size_b=71.0)
+    instruct_datasets = _get_instruct_text_datasets(config.keypair)
+    dpo_datasets = _get_dpo_datasets(config.keypair)
 
     existing_task_type_counts = {}
     tasks = []
@@ -374,87 +395,65 @@ async def _create_historical_text_boss_round_tasks(tournament_id: str, round_id:
     for task_type in task_types:
         existing_count = existing_task_type_counts.get(task_type.value, 0)
         for i in range(tasks_per_type - existing_count):
-            task = await _create_single_historical_text_task(task_type, tournament_id, round_id, pair_id, config)
+            rand_val = random.random()
+            if rand_val < t_cst.PROBABILITY_OF_A_BIG_TEXT_MODEL:
+                models = big_models
+            else:
+                models = standard_models
+            task = await _create_single_new_text_task(task_type, tournament_id, round_id, pair_id, config, models, instruct_datasets, dpo_datasets)
             if task:
                 tasks.append(task)
 
     return tasks
 
 
-async def _create_single_historical_text_task(
-    task_type: TaskType, tournament_id: str, round_id: str, pair_id: str, config: Config
+async def _create_single_new_text_task(
+    task_type: TaskType, tournament_id: str, round_id: str, pair_id: str, config: Config, models: list, instruct_datasets: list, dpo_datasets: list
 ) -> RawTask | None:
-    """Create a single historical text task of a specific type."""
-    historical_task_id = await get_random_historical_task_by_type(
-        task_type=task_type.value,
-        start_date=cst.BOSS_ROUND_HISTORICAL_START_DATE,
-        end_date=cst.BOSS_ROUND_HISTORICAL_END_DATE,
-        min_successful_scores=cst.MIN_SUCCESSFUL_SCORES_FOR_HISTORICAL_TASK,
-        psql_db=config.psql_db,
-    )
-
-    if historical_task_id:
-        new_task = await copy_historical_task_into_boss_round_tournament(
-            historical_task_id, tournament_id, round_id, pair_id, config.psql_db
+    """Create a single new synthetic text task of a specific type."""
+    try:
+        if task_type not in [TaskType.INSTRUCTTEXTTASK, TaskType.DPOTASK, TaskType.GRPOTASK]:
+            logger.error(f"Unknown task type {task_type} for boss round text task")
+            return None
+        
+        task = await _create_task_by_type(task_type, config, models, instruct_datasets, dpo_datasets)
+        await _create_and_register_tournament_task(
+            task, tournament_id, round_id, config, pair_id=pair_id
         )
-
-        if new_task:
-            logger.info(f"Created boss round {task_type.value} task from historical task {historical_task_id}")
-            return new_task
-    else:
-        logger.error(f"No historical {task_type.value} tasks found for boss round. Cannot proceed without historical data.")
+        return task
+    except Exception as e:
+        logger.error(f"Failed to create boss round {task_type.value} task: {e}", exc_info=True)
         return None
 
 
-async def _create_historical_image_boss_round_tasks(tournament_id: str, round_id: str, config: Config) -> list[RawTask]:
-    """Create boss round image tasks using random historical tasks."""
+async def _create_new_image_boss_round_tasks(tournament_id: str, round_id: str, config: Config) -> list[RawTask]:
+    """Create boss round image tasks using new synthetic tasks."""
     pair_id = f"{round_id}_pair_001"
 
-    existing_tasks = await get_tournament_tasks(round_id, config.psql_db)
-    existing_pair_tasks = [task for task in existing_tasks if task.pair_id == pair_id]
-    existing_count = len(existing_pair_tasks)
+    existing_tasks = await _get_existing_tasks_by_identifier(round_id, config, pair_id=pair_id)
+    existing_count = len(existing_tasks)
 
     if existing_count >= t_cst.FINAL_ROUND_IMAGE_TASKS:
         logger.info(f"Final round already has {existing_count} tasks, skipping task creation")
-        return await _get_existing_tasks(existing_pair_tasks, config)
+        return await _get_existing_tasks(existing_tasks, config)
 
-    logger.info("Creating boss round image tasks using historical tasks")
+    logger.info("Creating boss round image tasks using new synthetic tasks")
 
-    tasks = []
+    image_models = _get_image_models(config.keypair)
+    tasks = await _get_existing_tasks(existing_tasks, config)
     num_needed = t_cst.FINAL_ROUND_IMAGE_TASKS - existing_count
 
-    # Get unique historical image tasks
-    selected_ids = []
+    # Create new synthetic image tasks
     for i in range(num_needed):
-        historical_task_id = await get_random_historical_task_by_type(
-            task_type=TaskType.IMAGETASK.value,
-            start_date=cst.BOSS_ROUND_HISTORICAL_START_DATE,
-            end_date=cst.BOSS_ROUND_HISTORICAL_END_DATE,
-            min_successful_scores=cst.MIN_SUCCESSFUL_SCORES_FOR_HISTORICAL_TASK,
-            psql_db=config.psql_db,
-            exclude_task_ids=selected_ids,
-        )
-
-        if historical_task_id:
-            selected_ids.append(historical_task_id)
-            new_task = await copy_historical_task_into_boss_round_tournament(
-                historical_task_id, tournament_id, round_id, pair_id, config.psql_db
+        try:
+            task = await _create_single_image_task_with_retry(config, image_models, i, is_final=True)
+            await _create_and_register_tournament_task(
+                task, tournament_id, round_id, config, pair_id=pair_id
             )
-
-            if new_task:
-                tasks.append(new_task)
-                logger.info(f"Created boss round image task {i + 1} from historical task {historical_task_id}")
-        else:
-            logger.error(
-                f"Only found {len(selected_ids)} historical image tasks, needed {num_needed}. Cannot proceed without enough historical data."
-            )
-            break
-
-    # Add existing tasks to the return list
-    for existing_task in existing_pair_tasks:
-        existing_raw_task = await task_sql.get_task(existing_task.task_id, config.psql_db)
-        if existing_raw_task:
-            tasks.append(existing_raw_task)
+            tasks.append(task)
+        except Exception as e:
+            logger.error(f"Failed to create boss round image task {i + 1}/{num_needed}: {e}", exc_info=True)
+            # Continue creating remaining tasks even if one fails
 
     return tasks
 
@@ -480,16 +479,10 @@ async def replace_tournament_task(
         logger.error(f"Failed to create new task of type {original_task_obj.task_type}: {str(e)}", exc_info=True)
         raise
 
-    new_tournament_task = TournamentTask(
-        tournament_id=tournament_id,
-        round_id=round_id,
-        task_id=new_task.task_id,
-        group_id=group_id,
-        pair_id=pair_id,
-    )
-
     try:
-        await add_tournament_tasks([new_tournament_task], config.psql_db)
+        await _create_and_register_tournament_task(
+            new_task, tournament_id, round_id, config, group_id=group_id, pair_id=pair_id
+        )
         logger.info(f"Created replacement task {new_task.task_id} for round {round_id}")
     except Exception as e:
         logger.error(f"Failed to add tournament task to database: {str(e)}", exc_info=True)

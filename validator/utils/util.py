@@ -21,7 +21,6 @@ from core.models.utility_models import TaskType
 from validator.core.config import Config
 from validator.core.models import AnyTypeTask
 from validator.core.models import ImageTextPair
-from validator.core.models import TaskType
 from validator.utils.logging import get_logger
 from validator.utils.minio import async_minio_client
 
@@ -134,6 +133,7 @@ def convert_task_to_task_details(task: AnyTypeTask) -> AnyTypeTaskDetails:
             status=task.status,
             base_model_repository=task.model_id,
             image_text_pairs=task.image_text_pairs,
+            model_type=task.model_type,
             created_at=task.created_at,
             started_at=task.started_at,
             finished_at=task.termination_at,
