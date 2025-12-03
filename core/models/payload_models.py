@@ -162,6 +162,7 @@ class NewTaskRequest(BaseModel):
     account_id: UUID
     hours_to_complete: float = Field(..., description="The number of hours to complete the task", examples=[1])
     result_model_name: str | None = Field(None, description="The name to give to a model that is created by this task")
+    backend: str = Field(default="oblivus", description="The backend to use for training: 'oblivus' or 'runpod'", examples=["runpod", "oblivus"])
 
 
 class NewTaskRequestInstructText(NewTaskRequest):
@@ -527,4 +528,42 @@ class AddRewardFunctionRequest(BaseModel):
 
 
 # Type alias for task details types
-AnyTypeTaskDetails = InstructTextTaskDetails | ChatTaskDetails | ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
+AnyTypeTaskDetails = InstructTextTaskDetails | ChatTaskDetails| ImageTaskDetails | DpoTaskDetails | GrpoTaskDetails
+
+
+class DstackRunStatus(BaseModel):
+    """Dstack run status response model"""
+    status: str = Field(..., description="Run status: submitted, provisioning, running, done, failed, aborted, terminated")
+    latest_job_submission: dict | None = None
+    
+    def get_status(self) -> str:
+        """Get the status string, handling both string and dict formats"""
+        if isinstance(self.status, dict):
+            return self.status.get("status", "Unknown")
+        return str(self.status)
+    
+    def is_provisioning(self) -> bool:
+        """Check if run is in provisioning state"""
+        status = self.get_status().lower()
+        return "provisioning" in status or "submitted" in status
+    
+    def is_running(self) -> bool:
+        """Check if run is in running state"""
+        status = self.get_status().lower()
+        return "running" in status
+    
+    def is_done(self) -> bool:
+        """Check if run is done (successfully completed)"""
+        status = self.get_status().lower()
+        return status == "done"
+    
+    def is_failed(self) -> bool:
+        """Check if run has failed"""
+        status = self.get_status().lower()
+        return status in ["failed", "aborted", "terminated"]
+
+    def got_no_offers(self) -> bool:
+        """Check if run got no offers"""
+        if self.latest_job_submission is None:
+            return False
+        return self.latest_job_submission.get("status_message", "Unknown") == "no offers"
