@@ -446,7 +446,7 @@ async def schedule_tasks_for_training(pending_training_tasks: list[TournamentTas
                     continue
                 elif training_result:
                     await tournament_sql.update_tournament_task_training_status(
-                        training_task.task.task_id, training_task.hotkey, TrainingStatus.TRAINING, config.psql_db
+                        training_task.task.task_id, training_task.hotkey, TrainingStatus.TRAINING, config.psql_db, trainer_ip
                     )
                     await tournament_sql.update_gpu_availability(
                         trainer_ip, gpu_ids, training_task.task.hours_to_complete, config.psql_db
@@ -708,9 +708,6 @@ async def _monitor_training_tasks(config: Config):
     # Track if any tasks completed to determine if we need to update GPU availability
     any_completed = False
 
-    # Get all trainers to check task status
-    trainers = await tournament_sql.get_trainers(config.psql_db)
-
     # Check each training task
     for training_task in tournament_tasks:
         tournament_id = await get_tournament_id_by_task_id(training_task.task.task_id, config.psql_db)
@@ -718,26 +715,37 @@ async def _monitor_training_tasks(config: Config):
             logger.warning(f"Task {training_task.task.task_id} not found in tournament_tasks table - no tournament_id available")
         with LogContext(task_id=str(training_task.task.task_id), hotkey=training_task.hotkey, tournament_id=tournament_id):
             try:
-                # Query all trainers for this task
+                # Only query the trainer where this task was scheduled
+                trainer_ip = training_task.trainer_ip
+                if not trainer_ip:
+                    logger.warning(
+                        f"Task {training_task.task.task_id} with hotkey {training_task.hotkey} has no trainer_ip, "
+                        f"querying all trainers as fallback"
+                    )
+                    trainers = await tournament_sql.get_trainers(config.psql_db)
+                    trainer_ips = [trainer.trainer_ip for trainer in trainers]
+                else:
+                    trainer_ips = [trainer_ip]
+
                 logger.info(
                     f"Checking task {training_task.task.task_id} with hotkey {training_task.hotkey} "
-                    f"on trainers {[trainer.trainer_ip for trainer in trainers]}"
+                    f"on trainer(s) {trainer_ips}"
                 )
                 responses = []
-                for trainer in trainers:
+                for ip in trainer_ips:
                     try:
                         task_log = await get_training_task_details(
-                            trainer.trainer_ip, str(training_task.task.task_id), training_task.hotkey
+                            ip, str(training_task.task.task_id), training_task.hotkey
                         )
                         if task_log:
-                            responses.append((trainer.trainer_ip, task_log))
+                            responses.append((ip, task_log))
                     except httpx.HTTPStatusError as e:
                         status_code = e.response.status_code
                         if 500 <= status_code < 600:
-                            logger.error(f"Server error ({status_code}) from trainer {trainer.trainer_ip}: {str(e)}")
+                            logger.error(f"Server error ({status_code}) from trainer {ip}: {str(e)}")
                         continue
                     except Exception as e:
-                        logger.info(f"Could not get task details from trainer {trainer.trainer_ip}: {str(e)}")
+                        logger.info(f"Could not get task details from trainer {ip}: {str(e)}")
                         continue
 
                 if not responses:
