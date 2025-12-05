@@ -74,6 +74,11 @@ class TournamentData(BaseModel):
         "Calculated as: (defending_champion_score - new_winner_score) / defending_champion_score. "
         "score = loss, so lower is better. Higher diff = better perf = less burn.",
     )
+    updated_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when the tournament was last updated (typically when it completed). "
+        "Used for time-based decay calculations - represents when the champion won/defended.",
+    )
 
 
 class TournamentRoundData(BaseModel):
@@ -440,3 +445,46 @@ class NodeWeightsResult(BaseModel):
     def to_tuple(self) -> tuple[list[int], list[float]]:
         """Convert to tuple format for compatibility with existing code"""
         return self.node_ids, self.node_weights
+
+class MinerEmissionWeight(BaseModel):
+    hotkey: str
+    rank: int
+    weight: float
+
+
+class TournamentWeightsResponse(BaseModel):
+    burn_data: TournamentBurnData
+    text_top_miners: list[MinerEmissionWeight]
+    image_top_miners: list[MinerEmissionWeight]
+
+
+class WeightProjection(BaseModel):
+    days: int
+    weight: float
+    total_alpha: float
+
+
+class TournamentProjection(BaseModel):
+    tournament_type: str
+    current_champion_decay: float
+    initial_weight: float
+    projections: list[WeightProjection]
+
+
+class WeightProjectionResponse(BaseModel):
+    percentage_improvement: float
+    text_projection: TournamentProjection
+    image_projection: TournamentProjection
+
+
+class MultiWeightProjectionResponse(BaseModel):
+    projections: list[WeightProjectionResponse]
+
+
+class BossBattleResponse(BaseModel):
+    """Response for boss battle performance differences"""
+    
+    text_tournament_id: str | None
+    text_performance_differences: list[TaskPerformanceDifference]
+    image_tournament_id: str | None
+    image_performance_differences: list[TaskPerformanceDifference]
