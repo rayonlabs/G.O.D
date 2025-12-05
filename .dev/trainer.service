@@ -1,0 +1,28 @@
+[Unit]
+Description=G.O.D Trainer Service
+After=network.target docker.service
+Wants=docker.service
+Requires=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/G.O.D
+Environment="PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="ENV=DEV"
+# Deploy log shipping before starting the server
+ExecStartPre=/bin/bash -c 'source /root/.venv/bin/activate && cd /root/G.O.D && task deploy-trainer-logs'
+# Start uvicorn server directly
+ExecStart=/bin/bash -c 'source /root/.venv/bin/activate && cd /root/G.O.D && uvicorn trainer.asgi:app --reload --host 0.0.0.0 --port 8001 --env-file .trainer.env --log-level debug'
+# Restart on failure with exponential backoff
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=300
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=god-trainer
+
+[Install]
+WantedBy=multi-user.target
+
