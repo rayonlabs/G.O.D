@@ -24,8 +24,8 @@ EMISSION_MULTIPLIER_THRESHOLD = 0.05   # Must exceed 5% to get boost
 EMISSION_MULTIPLIER_RATE = 2.0         # 2x multiplier on excess
 
 # Time-based decay (replaces consecutive wins decay)
-EMISSION_DAILY_TIME_DECAY_RATE = 0.002  # -0.2% per day as champion
-EMISSION_TIME_DECAY_START_DATE = 2025-11-01  # When time-based decay began
+EMISSION_DAILY_TIME_DECAY_RATE = 0.0033  # -0.33% per day as champion
+EMISSION_TIME_DECAY_START_DATE = 2025-11-26  # When time-based decay began
 
 # Within-tournament distribution
 TOURNAMENT_SIMPLE_DECAY_BASE = 0.3     # Exponential decay: 1.0, 0.3, 0.09...
@@ -52,7 +52,7 @@ if performance_diff > 0.05:
 
     # Apply time-based decay
     days_as_champion = (current_time - first_championship_time).days
-    decay = days_as_champion * 0.002  # 0.2% per day
+    decay = days_as_champion * 0.0033  # 0.33% per day
     emission_increase = emission_increase - decay
 
     # Apply MAX cap
@@ -110,12 +110,12 @@ Text champion outperformed runner-up by 20% (performance_diff = 0.20):
 ```
 Base: 0.20
 Raw boost: (0.20 - 0.05) * 2.0 = 0.30
-Decay: 30 days * 0.002 = 0.06
-Final boost: 0.30 - 0.06 = 0.24
-Text champion weight: 0.44
+Decay: 30 days * 0.0033 = 0.099
+Final boost: 0.30 - 0.099 = 0.201
+Text champion weight: 0.401
 ```
 
-Despite 20% performance, time-based decay reduces boost from 0.30 to 0.24.
+Despite 20% performance, time-based decay reduces boost from 0.30 to 0.201.
 
 ### Weak Performance (below threshold)
 
@@ -132,7 +132,7 @@ Text champion weight: 0.20 (no boost - below 5% threshold)
 **Balance Controls:**
 
 - MAX caps prevent domination (60% text, 40% image)
-- Time-based decay (-0.2% per day) prevents indefinite reign
+- Time-based decay (-0.33% per day) prevents indefinite reign
 - Dual weights ensure only champions benefit from boosts
 
 **Burn as Quality Signal:** Weak performance = high burn rate
