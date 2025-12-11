@@ -119,6 +119,7 @@ async def create_task_dpo(
         task_type=TaskType.DPOTASK,
         result_model_name=request.result_model_name,
         backend=Backend(request.backend or Backend.OBLIVUS.value),
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -162,6 +163,7 @@ async def create_task_grpo(
         task_type=TaskType.GRPOTASK,
         result_model_name=request.result_model_name,
         backend=Backend(request.backend or Backend.OBLIVUS.value),
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -200,6 +202,7 @@ async def create_task_chat(
         backend=Backend(request.backend or Backend.OBLIVUS.value),
         task_type=TaskType.CHATTASK,
         result_model_name=request.result_model_name,
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -301,6 +304,7 @@ async def create_task_instruct_text(
         backend=Backend(request.backend or Backend.OBLIVUS.value),
         task_type=TaskType.INSTRUCTTEXTTASK,
         result_model_name=request.result_model_name,
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -380,6 +384,7 @@ async def create_text_task_with_custom_dataset(
         training_data=request.training_data,
         test_data=request.test_data,
         backend=Backend(request.backend or Backend.OBLIVUS.value),
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -415,6 +420,7 @@ async def create_chat_task_with_custom_dataset(
         training_data=request.training_data,
         test_data=request.test_data,
         backend=Backend(request.backend or Backend.OBLIVUS.value),
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -426,6 +432,7 @@ async def create_chat_task_with_custom_dataset(
     return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
 
 
+# Deprecated: use create_text_task_with_custom_dataset instead
 async def create_task_with_fixed_datasets(
     request: NewTaskWithFixedDatasetsRequest,
     config: Config = Depends(get_config),

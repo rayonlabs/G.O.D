@@ -12,9 +12,10 @@ from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
+from core.constants import YARN_VALID_FACTORS
+from core.models.utility_models import Backend
 from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
-from core.models.utility_models import Backend
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import ImageModelType
@@ -105,9 +106,21 @@ class RawTask(BaseModel):
     task_type: TaskType
     model_params_count: int = 0
     backend: Backend | None = None
+    yarn_factor: int | None = None
 
     # Turn off protected namespace for model
     model_config = ConfigDict(protected_namespaces=())
+
+    @field_validator("yarn_factor")
+    @classmethod
+    def validate_yarn_factor(cls, v: int | None) -> int | None:
+        if v is None:
+            return v
+        if not isinstance(v, int):
+            raise ValueError("yarn_factor must be an integer")
+        if v not in YARN_VALID_FACTORS:
+            raise ValueError(f"yarn_factor must be a power of 2: {YARN_VALID_FACTORS}")
+        return v
 
 
 class DpoRawTask(RawTask):

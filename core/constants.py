@@ -49,7 +49,7 @@ HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 WANDB_TOKEN = os.getenv("WANDB_TOKEN")
 
 HUGGINGFACE_USERNAME = os.getenv("HUGGINGFACE_USERNAME")
-RAYONLABS_HF_USERNAME = "gradients-io-tournaments" # "besimray"  # "rayonlabs"
+RAYONLABS_HF_USERNAME = "gradients-io-tournaments"  # "besimray"  # "rayonlabs"
 
 # DPO default dataset type
 DPO_DEFAULT_DATASET_TYPE = "chatml.default"
@@ -60,3 +60,9 @@ DPO_DEFAULT_FIELD_CHOSEN = "chosen"
 DPO_DEFAULT_FIELD_REJECTED = "rejected"
 
 GRPO_DEFAULT_FIELD_PROMPT = "prompt"
+
+# YaRN extension HuggingFace credentials (separate from main HF credentials)
+YARN_HUGGINGFACE_USERNAME = os.getenv("YARN_HUGGINGFACE_USERNAME", "gradients-io")
+YARN_HUGGINGFACE_TOKEN = os.getenv("YARN_HUGGINGFACE_TOKEN")
+
+YARN_VALID_FACTORS = [2, 4, 8, 16, 32]
