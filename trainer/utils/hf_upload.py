@@ -107,6 +107,27 @@ def sync_wandb_logs(cache_dir: str):
         except Exception as e:
             print(f"Failed to sync {run_dir}: {e}")
 
+
+def detect_subfolder(base_folder: str) -> str | None:
+    if not os.path.isdir(base_folder):
+        return None
+    for item in os.listdir(base_folder):
+        item_path = os.path.join(base_folder, item)
+        if not os.path.isdir(item_path):
+            continue
+        has_checkpoint_files = False
+        for file in os.listdir(item_path):
+            file_path = os.path.join(item_path, file)
+            if file.endswith('.safetensors'):
+                has_checkpoint_files = True
+                break
+        
+        if has_checkpoint_files:
+            return item_path
+    
+    return None
+
+
 def main():
     hf_token = os.getenv("HUGGINGFACE_TOKEN")
     hf_user = os.getenv("HUGGINGFACE_USERNAME")
@@ -131,6 +152,10 @@ def main():
     if not os.path.isdir(local_folder):
         raise FileNotFoundError(f"Local folder {local_folder} does not exist")
 
+    checkpoint_subfolder = detect_subfolder(local_folder)
+    if checkpoint_subfolder:
+        local_folder = checkpoint_subfolder
+    
     if is_folder_empty_or_metadata_only(local_folder):
         raise ValueError(f"Local folder {local_folder} is empty or only contains metadata files. Nothing to upload.")
 
