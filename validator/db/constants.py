@@ -83,6 +83,7 @@ TASK_TYPE = "task_type"
 TRAINING_REPO_BACKUP = "training_repo_backup"
 RESULT_MODEL_NAME = "result_model_name"
 MODEL_PARAMS_COUNT = "model_params_count"
+BACKEND = "backend"
 
 # Instruct Text Tasks Table Columns
 FIELD_SYSTEM = "field_system"
@@ -169,6 +170,7 @@ N_TRAINING_ATTEMPTS = "n_training_attempts"
 TRAINING_REPO = "training_repo"
 TRAINING_COMMIT_HASH = "training_commit_hash"
 BACKUP_REPO = "backup_repo"
+DSTACK_RUNNAME = "dstack_runname"
 
 # Trainer GPUs Table
 TRAINERS_GPUS_TABLE = "trainers_gpus"

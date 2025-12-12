@@ -27,7 +27,7 @@ async def start_task(task: TrainerProxyRequest) -> tuple[str, str]:
         task_id = task.training_data.task_id
         hotkey = task.hotkey
 
-        existing_task = get_task(task_id, hotkey, skip_load=True)
+        existing_task = get_task(task_id, hotkey)
         if existing_task:
             existing_task.logs.clear()
             existing_task.status = TaskStatus.TRAINING
@@ -82,7 +82,7 @@ async def update_wandb_url(task_id: str, hotkey: str, wandb_url: str):
     async with _task_lock:
         load_task_history()
         
-        task = get_task(task_id, hotkey, skip_load=True)
+        task = get_task(task_id, hotkey)
         if task:
             task.wandb_url = wandb_url
             await save_task_history()
