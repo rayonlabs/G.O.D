@@ -10,7 +10,6 @@ from uuid import UUID
 import yaml
 from substrateinterface import Keypair
 
-import core.constants as cst
 import validator.core.constants as vcst
 from core.models.payload_models import ImageModelInfo
 from core.models.payload_models import ImageModelsResponse
@@ -47,7 +46,7 @@ def maybe_get_yarn_factor() -> int | None:
     Randomly decide whether to apply YaRN extension and return the factor.
     """
     if random.random() < vcst.YARN_EXTENSION_PROBABILITY:
-        return random.choice(cst.YARN_VALID_FACTORS)
+        return random.choice(vcst.YARN_TOURNAMENT_FACTORS)
     return None
 
 
