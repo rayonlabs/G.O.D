@@ -10,7 +10,7 @@ from uuid import UUID
 import yaml
 from substrateinterface import Keypair
 
-import validator.core.constants as cst
+import validator.core.constants as vcst
 from core.models.payload_models import ImageModelInfo
 from core.models.payload_models import ImageModelsResponse
 from core.models.payload_models import InstructTextDatasetColumnsResponse
@@ -21,11 +21,6 @@ from core.models.utility_models import Role
 from core.models.utility_models import TaskStatus
 from core.models.utility_models import TaskType
 from validator.core.config import Config
-from validator.core.constants import END_OF_REASONING_TAG
-from validator.core.constants import PROMPT_PATH
-from validator.core.constants import TEXT_SYNTH_MODEL
-from validator.core.constants import TEXT_SYNTH_MODEL_MAX_TOKENS
-from validator.core.constants import TEXT_SYNTH_MODEL_TEMPERATURE
 from validator.core.models import Dataset
 from validator.core.models import DpoRawTask
 from validator.core.models import GrpoRawTask
@@ -46,8 +41,17 @@ from validator.utils.util import retry_with_backoff
 logger = get_logger(__name__)
 
 
+def maybe_get_yarn_factor() -> int | None:
+    """
+    Randomly decide whether to apply YaRN extension and return the factor.
+    """
+    if random.random() < vcst.YARN_EXTENSION_PROBABILITY:
+        return random.choice(vcst.YARN_TOURNAMENT_FACTORS)
+    return None
+
+
 def load_prompts() -> Prompts:
-    with open(PROMPT_PATH, "r") as file:
+    with open(vcst.PROMPT_PATH, "r") as file:
         prompts_dict = yaml.safe_load(file)
     return Prompts(**prompts_dict)
 
@@ -61,14 +65,14 @@ async def _get_text_models(
 
     while True:
         response = await call_content_service(
-            cst.GET_RANDOM_MODELS_ENDPOINT,
+            vcst.GET_RANDOM_MODELS_ENDPOINT,
             keypair,
             params=params,
         )
         if not isinstance(response, list):
             raise TypeError("Expected a list of responses from GET_ALL_MODELS_ENDPOINT")
         models: list[dict[str, Any]] = response
-        model_ids = [model.get(cst.GET_ALL_MODELS_ID, "") for model in models]
+        model_ids = [model.get(vcst.GET_ALL_MODELS_ID, "") for model in models]
         random.shuffle(model_ids)
         for model_id in model_ids:
             yield model_id
@@ -76,11 +80,11 @@ async def _get_text_models(
 
 async def _get_image_models(keypair: Keypair) -> AsyncGenerator[ImageModelInfo, None]:
     while True:
-        response_data = await call_content_service(cst.GET_IMAGE_MODELS_ENDPOINT, keypair)
+        response_data = await call_content_service(vcst.GET_IMAGE_MODELS_ENDPOINT, keypair)
         try:
             response = ImageModelsResponse.model_validate(response_data)
         except Exception as e:
-            logger.error(f"Invalid response format from {cst.GET_IMAGE_MODELS_ENDPOINT}: {response_data}. Error: {e}")
+            logger.error(f"Invalid response format from {vcst.GET_IMAGE_MODELS_ENDPOINT}: {response_data}. Error: {e}")
             await asyncio.sleep(5)
             continue
 
@@ -96,7 +100,7 @@ async def _get_datasets_for_bin(min_rows: int, max_rows: int, keypair: Keypair, 
         # params = {"min_rows": min_rows, "max_rows": max_rows, "dpo": dpo}
         params = {"dpo": dpo}
         try:
-            response = await call_content_service(cst.GET_RANDOM_DATASETS_ENDPOINT, keypair, params)
+            response = await call_content_service(vcst.GET_RANDOM_DATASETS_ENDPOINT, keypair, params)
             if not isinstance(response, list):
                 raise TypeError("Expected a list of responses from GET_ALL_DATASETS_ENDPOINT")
 
@@ -131,7 +135,7 @@ async def _get_instruct_text_datasets(keypair: Keypair) -> AsyncGenerator[Datase
     """Round-robin generator that cycles through all dataset size bins."""
 
     bin_generators = [
-        _get_datasets_for_bin(min_rows, max_rows, keypair, False) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE
+        _get_datasets_for_bin(min_rows, max_rows, keypair, False) for min_rows, max_rows in vcst.DATASET_BINS_TO_SAMPLE
     ]
 
     while True:
@@ -151,7 +155,7 @@ async def _get_dpo_datasets(keypair: Keypair) -> AsyncGenerator[Dataset, None]:
 
     logger.info("I AM GETTIG THE DPO DATASETS")
     bin_generators = [
-        _get_datasets_for_bin(min_rows, max_rows, keypair, True) for min_rows, max_rows in cst.DATASET_BINS_TO_SAMPLE
+        _get_datasets_for_bin(min_rows, max_rows, keypair, True) for min_rows, max_rows in vcst.DATASET_BINS_TO_SAMPLE
     ]
 
     while True:
@@ -173,7 +177,7 @@ async def _get_columns_for_instruct_dataset(
 ) -> InstructTextDatasetColumnsResponse:
     from validator.utils.call_endpoint import call_content_service_fast
 
-    url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
+    url = vcst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset_id)
     logger.info(f"Getting columns for dataset {dataset_id} - ACTUAL MAPPING CALL")
 
     response = await call_content_service_fast(url, keypair)
@@ -190,9 +194,9 @@ async def _get_columns_for_instruct_dataset(
 def _get_training_hours_from_num_rows(num_rows: int) -> tuple[int, int]:
     """Randomly select training hours for a given dataset size in bytes based on range bins."""
     min_hours, max_hours = 0, 0
-    for min_rows, max_rows in cst.INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys():
+    for min_rows, max_rows in vcst.INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE.keys():
         if min_rows <= num_rows <= max_rows:
-            min_hours, max_hours = cst.INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE[(min_rows, max_rows)]
+            min_hours, max_hours = vcst.INSTRUCT_TEXT_DATASET_BINS_TO_TRAINING_HOURS_RANGE[(min_rows, max_rows)]
             break
     if min_hours == 0 and max_hours == 0:
         raise ValueError(f"No training hours range found for {num_rows} rows")
@@ -212,7 +216,7 @@ async def get_dataset(
             try:
                 from validator.utils.call_endpoint import call_content_service_fast
 
-                url = cst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
+                url = vcst.GET_COLUMNS_FOR_DATASET_ENDPOINT.replace("{dataset}", dataset.dataset_id)
                 logger.info(f"PRE-VALIDATION: Checking column mapping for dataset {dataset.dataset_id}")
                 await call_content_service_fast(url, keypair)
                 logger.info(f"PRE-VALIDATION: Dataset {dataset.dataset_id} column mapping validated successfully")
@@ -248,6 +252,7 @@ async def create_synthetic_dpo_task(
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
+    yarn_factor = maybe_get_yarn_factor()
     task = DpoRawTask(
         model_id=model_id,
         ds=dataset.dataset_id,
@@ -260,9 +265,10 @@ async def create_synthetic_dpo_task(
         created_at=current_time,
         termination_at=end_timestamp,
         hours_to_complete=number_of_hours,
-        account_id=cst.NULL_ACCOUNT_ID,
+        account_id=vcst.NULL_ACCOUNT_ID,
+        yarn_factor=yarn_factor,
     )
-    logger.info(f"New DPO task created with dataset {dataset.dataset_id}")
+    logger.info(f"New DPO task created with dataset {dataset.dataset_id}, yarn_factor={yarn_factor}")
 
     task = await add_task(task, config.psql_db)
 
@@ -307,12 +313,12 @@ async def _generate_generic_reward_functions_from_llm(keypair: Keypair, num_rewa
 
     payload = convert_to_nineteen_payload(
         messages=messages,
-        model=TEXT_SYNTH_MODEL,
-        temperature=TEXT_SYNTH_MODEL_TEMPERATURE,
-        max_tokens=TEXT_SYNTH_MODEL_MAX_TOKENS,
+        model=vcst.TEXT_SYNTH_MODEL,
+        temperature=vcst.TEXT_SYNTH_MODEL_TEMPERATURE,
+        max_tokens=vcst.TEXT_SYNTH_MODEL_MAX_TOKENS,
     )
 
-    result = await post_to_nineteen_chat_with_reasoning(payload, keypair, END_OF_REASONING_TAG)
+    result = await post_to_nineteen_chat_with_reasoning(payload, keypair, vcst.END_OF_REASONING_TAG)
 
     if result:
         valid_reward_functions = process_reward_functions(result)
@@ -326,9 +332,9 @@ async def _generate_generic_reward_functions_from_llm(keypair: Keypair, num_rewa
 
 async def _get_generic_reward_functions(config: Config) -> list[RewardFunction]:
     reward_functions = []
-    total_rewards = random.randint(cst.MIN_NUM_REWARD_FUNCTIONS, cst.MAX_NUM_REWARD_FUNCTIONS)
+    total_rewards = random.randint(vcst.MIN_NUM_REWARD_FUNCTIONS, vcst.MAX_NUM_REWARD_FUNCTIONS)
 
-    num_generic_rewards_from_db = max(1, int(total_rewards * cst.PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_DB))
+    num_generic_rewards_from_db = max(1, int(total_rewards * vcst.PERCENTAGE_REWARD_FUNCTIONS_GENERIC_FROM_DB))
     num_generic_rewards_from_llm = total_rewards - num_generic_rewards_from_db
 
     reward_functions += await get_generic_reward_functions_from_db(config.psql_db, num_generic_rewards_from_db)
@@ -379,6 +385,7 @@ async def create_synthetic_grpo_task(
 
     reward_functions = await _get_generic_reward_functions(config)
 
+    yarn_factor = maybe_get_yarn_factor()
     task = GrpoRawTask(
         model_id=model_id,
         ds=dataset.dataset_id,
@@ -389,9 +396,10 @@ async def create_synthetic_grpo_task(
         created_at=current_time,
         termination_at=end_timestamp,
         hours_to_complete=number_of_hours,
-        account_id=cst.NULL_ACCOUNT_ID,
+        account_id=vcst.NULL_ACCOUNT_ID,
+        yarn_factor=yarn_factor,
     )
-    logger.info(f"New GRPO task created with dataset {dataset.dataset_id}")
+    logger.info(f"New GRPO task created with dataset {dataset.dataset_id}, yarn_factor={yarn_factor}")
 
     task = await add_task(task, config.psql_db)
 
@@ -407,7 +415,7 @@ async def create_synthetic_affine_grpo_task(
     model_id = await anext(models)
 
     try:
-        response = await call_content_service(cst.GET_AFFINE_GRPO_DATA_ENDPOINT, config.keypair)
+        response = await call_content_service(vcst.GET_AFFINE_GRPO_DATA_ENDPOINT, config.keypair)
         logger.info(f"Retrieved affine GRPO data: {response}")
 
         if not isinstance(response, dict):
@@ -417,10 +425,10 @@ async def create_synthetic_affine_grpo_task(
         if not s3_url:
             raise ValueError("No s3_url in affine GRPO data response")
 
-        logger.info(f"Looking for affine reward functions with IDs: {cst.AFFINE_REWARD_FN_IDS}")
+        logger.info(f"Looking for affine reward functions with IDs: {vcst.AFFINE_REWARD_FN_IDS}")
 
         affine_reward_functions = []
-        for reward_id in cst.AFFINE_REWARD_FN_IDS:
+        for reward_id in vcst.AFFINE_REWARD_FN_IDS:
             logger.debug(f"Attempting to fetch reward function with ID: {reward_id}")
             reward_function = await grpo_sql.get_reward_function_by_id(config.psql_db, UUID(reward_id))
             if reward_function:
@@ -451,6 +459,7 @@ async def create_synthetic_affine_grpo_task(
         current_time = datetime.utcnow()
         end_timestamp = current_time + timedelta(hours=number_of_hours)
 
+        yarn_factor = maybe_get_yarn_factor()
         task = GrpoRawTask(
             model_id=model_id,
             ds=s3_url,
@@ -461,12 +470,13 @@ async def create_synthetic_affine_grpo_task(
             created_at=current_time,
             termination_at=end_timestamp,
             hours_to_complete=number_of_hours,
-            account_id=cst.NULL_ACCOUNT_ID,
+            account_id=vcst.NULL_ACCOUNT_ID,
             file_format=FileFormat.S3,
             extra_column="extra",
+            yarn_factor=yarn_factor,
         )
 
-        logger.info(f"New affine GRPO task created with S3 dataset: {s3_url}")
+        logger.info(f"New affine GRPO task created with S3 dataset: {s3_url}, yarn_factor={yarn_factor}")
 
         task = await add_task(task, config.psql_db)
 
@@ -494,6 +504,7 @@ async def create_synthetic_instruct_text_task(
     current_time = datetime.utcnow()
     end_timestamp = current_time + timedelta(hours=number_of_hours)
 
+    yarn_factor = maybe_get_yarn_factor()
     task = InstructTextRawTask(
         model_id=model_id,
         ds=dataset.dataset_id,
@@ -506,9 +517,10 @@ async def create_synthetic_instruct_text_task(
         created_at=current_time,
         termination_at=end_timestamp,
         hours_to_complete=number_of_hours,
-        account_id=cst.NULL_ACCOUNT_ID,
+        account_id=vcst.NULL_ACCOUNT_ID,
+        yarn_factor=yarn_factor,
     )
-    logger.info(f"INSTRUCT_TASK: Successfully created task with dataset {dataset.dataset_id}")
+    logger.info(f"INSTRUCT_TASK: Successfully created task with dataset {dataset.dataset_id}, yarn_factor={yarn_factor}")
 
     task = await add_task(task, config.psql_db)
     logger.info(f"INSTRUCT_TASK: Task saved to database with ID: {task.task_id}")

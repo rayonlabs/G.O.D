@@ -21,6 +21,7 @@ from validator.core.models import InstructTextRawTask
 from validator.tasks.task_prep import prepare_image_task
 from validator.tasks.task_prep import prepare_text_task
 from validator.utils.logging import get_logger
+from validator.utils.yarn_extension import prepare_yarn_extended_model
 
 
 logger = get_logger(__name__)
@@ -62,6 +63,17 @@ async def run_image_task_prep(task: ImageRawTask, keypair: Keypair, psql_db=None
 
 
 async def run_text_task_prep(task: AnyTextTypeRawTask, keypair: Keypair, psql_db=None) -> AnyTextTypeRawTask:
+    if task.yarn_factor is not None:
+        logger.info(f"Applying YaRN extension with factor {task.yarn_factor} to model {task.model_id}")
+        try:
+            yarn_model_id = await prepare_yarn_extended_model(task.model_id, task.yarn_factor)
+            task.model_id = yarn_model_id
+            logger.info(f"YaRN extension applied, new model_id: {yarn_model_id}")
+        except Exception as e:
+            logger.error(f"Failed to apply YaRN extension: {e}, using original model")
+            # Clear yarn_factor to indicate extension was not applied
+            task.yarn_factor = None
+
     test_data, train_data = await prepare_text_task(task, keypair=keypair, psql_db=psql_db)
     task.training_data = train_data
     task.status = TaskStatus.LOOKING_FOR_NODES

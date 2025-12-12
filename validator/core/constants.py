@@ -5,7 +5,7 @@ from core.constants import GRPO_DEFAULT_FIELD_PROMPT
 from core.constants import NETUID
 
 
-RAYONLABS_HF_USERNAME = "gradients-io-tournaments" # "besimray"  # "rayonlabs"
+RAYONLABS_HF_USERNAME = "gradients-io-tournaments"  # "besimray"  # "rayonlabs"
 
 SUCCESS = "success"
 ACCOUNT_ID = "account_id"
@@ -30,7 +30,6 @@ TRAINING_REPO_ENDPOINT = "/training_repo"
 
 DEV_CONTENT_BASE_URL = "https://dev.content.gradients.io"
 PROD_CONTENT_BASE_URL = "https://content.gradients.io"
-
 
 
 # 241 is testnet
@@ -274,3 +273,8 @@ DSTACK_RUNS_GET_ENDPOINT = "/api/project/{project}/runs/get"
 # Tournament constants
 DEFAULT_PARTICIPANT_REPO = "https://github.com/rayonlabs/G.O.D"
 DEFAULT_PARTICIPANT_COMMIT = "8631451156e2915070f77e5547ca0d5ed3d0eb8a"
+
+# YaRN extension constants
+YARN_EXTENSION_PROBABILITY = 0.33  # Probability of applying YaRN extension to tournament tasks
+YARN_TOURNAMENT_FACTORS = [2, 4]
+MODEL_COPY_ENDPOINT = "https://huggingface.co/api/models/{source_repo}/duplicate"

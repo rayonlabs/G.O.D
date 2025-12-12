@@ -6,6 +6,7 @@ from fiber.logging_utils import get_logger
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import field_validator
 from pydantic import model_validator
 
 from core import constants as cst
@@ -163,6 +164,18 @@ class NewTaskRequest(BaseModel):
     hours_to_complete: float = Field(..., description="The number of hours to complete the task", examples=[1])
     result_model_name: str | None = Field(None, description="The name to give to a model that is created by this task")
     backend: str = Field(default="oblivus", description="The backend to use for training: 'oblivus' or 'runpod'", examples=["runpod", "oblivus"])
+    yarn_factor: int | None = Field(None, description=f"YaRN extension factor for extending context length (powers of 2: {cst.YARN_VALID_FACTORS})", examples=[2, 4, 8, 16])
+
+    @field_validator("yarn_factor")
+    @classmethod
+    def validate_yarn_factor(cls, v: int | None) -> int | None:
+        if v is None:
+            return v
+        if not isinstance(v, int):
+            raise ValueError("yarn_factor must be an integer")
+        if v not in cst.YARN_VALID_FACTORS:
+            raise ValueError(f"yarn_factor must be a power of 2: {cst.YARN_VALID_FACTORS}")
+        return v
 
 
 class NewTaskRequestInstructText(NewTaskRequest):
@@ -305,16 +318,6 @@ class NewTaskRequestImage(NewTaskRequest):
         default_factory=lambda: str(uuid4()), description="A ds name. The actual dataset is provided via the image_text_pairs"
     )
     model_type: ImageModelType = ImageModelType.SDXL
-
-
-class NewTaskWithFixedDatasetsRequest(NewTaskRequestInstructText):
-    ds_repo: str | None = Field(None, description="Optional: The original repository of the dataset")
-    file_format: FileFormat = Field(
-        FileFormat.S3, description="The format of the dataset", examples=[FileFormat.HF, FileFormat.S3]
-    )
-    training_data: str = Field(..., description="The prepared training dataset")
-    test_data: str = Field(..., description="The prepared test dataset")
-    synthetic_data: str | None = Field(None, description="Kept for backwards compatibility, not used in business logic")
 
 
 class NewTaskWithCustomDatasetRequest(NewTaskRequestInstructText):

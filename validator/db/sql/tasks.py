@@ -61,8 +61,9 @@ async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dic
         {cst.RESULT_MODEL_NAME},
         {cst.TRAINING_REPO_BACKUP},
         {cst.STARTED_AT},
-        {cst.TERMINATION_AT})
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        {cst.TERMINATION_AT},
+        {cst.YARN_FACTOR})
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
     """
     return await connection.fetchrow(
@@ -82,6 +83,7 @@ async def _insert_base_task(connection: Connection, task: AnyTypeRawTask) -> dic
         task.training_repo_backup,
         task.started_at,
         task.termination_at,
+        task.yarn_factor,
     )
 
 

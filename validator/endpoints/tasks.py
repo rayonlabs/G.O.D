@@ -21,10 +21,8 @@ from core.models.payload_models import NewTaskRequestInstructText
 from core.models.payload_models import NewTaskResponse
 from core.models.payload_models import NewTaskWithCustomDatasetRequest
 from core.models.payload_models import NewTaskWithCustomDatasetRequestChat
-from core.models.payload_models import NewTaskWithFixedDatasetsRequest
 from core.models.payload_models import TaskResultResponse
 from core.models.utility_models import Backend
-from core.models.utility_models import FileFormat
 from core.models.utility_models import MinerTaskResult
 from core.models.utility_models import TaskMinerResult
 from core.models.utility_models import TaskStatus
@@ -63,7 +61,6 @@ CREATE_CHAT_TASK_WITH_CUSTOM_DATASET_ENDPOINT = "/v1/tasks/create_custom_dataset
 TASKS_CREATE_ENDPOINT_DPO = "/v1/tasks/create_dpo"
 TASKS_CREATE_ENDPOINT_CHAT = "/v1/tasks/create_chat"
 TASKS_CREATE_ENDPOINT_GRPO = "/v1/tasks/create_grpo"
-TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT = "/v1/tasks/create_with_fixed_datasets"  # TODO: this is just for instruct text tasks
 GET_TASKS_BY_ACCOUNT_ENDPOINT = "/v1/tasks/account/{account_id}"
 GET_TASK_DETAILS_ENDPOINT = "/v1/tasks/{task_id}"
 GET_TASKS_RESULTS_ENDPOINT = "/v1/tasks/breakdown/{task_id}"
@@ -119,6 +116,7 @@ async def create_task_dpo(
         task_type=TaskType.DPOTASK,
         result_model_name=request.result_model_name,
         backend=Backend(request.backend or Backend.OBLIVUS.value),
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -162,6 +160,7 @@ async def create_task_grpo(
         task_type=TaskType.GRPOTASK,
         result_model_name=request.result_model_name,
         backend=Backend(request.backend or Backend.OBLIVUS.value),
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -200,6 +199,7 @@ async def create_task_chat(
         backend=Backend(request.backend or Backend.OBLIVUS.value),
         task_type=TaskType.CHATTASK,
         result_model_name=request.result_model_name,
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -301,6 +301,7 @@ async def create_task_instruct_text(
         backend=Backend(request.backend or Backend.OBLIVUS.value),
         task_type=TaskType.INSTRUCTTEXTTASK,
         result_model_name=request.result_model_name,
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -380,6 +381,7 @@ async def create_text_task_with_custom_dataset(
         training_data=request.training_data,
         test_data=request.test_data,
         backend=Backend(request.backend or Backend.OBLIVUS.value),
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
@@ -415,51 +417,11 @@ async def create_chat_task_with_custom_dataset(
         training_data=request.training_data,
         test_data=request.test_data,
         backend=Backend(request.backend or Backend.OBLIVUS.value),
+        yarn_factor=request.yarn_factor,
     )
 
     task = await task_sql.add_task(task, config.psql_db)
     logger.info(f"Task of type {task.task_type} created: {task.task_id}")
-
-    if config.discord_url:
-        await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
-
-    return NewTaskResponse(success=True, task_id=task.task_id, created_at=task.created_at, account_id=task.account_id)
-
-
-async def create_task_with_fixed_datasets(
-    request: NewTaskWithFixedDatasetsRequest,
-    config: Config = Depends(get_config),
-) -> NewTaskResponse:
-    current_time = datetime.utcnow()
-    end_timestamp = current_time + timedelta(hours=request.hours_to_complete)
-
-    task = InstructTextRawTask(
-        model_id=request.model_repo,
-        ds=request.ds_repo or request.training_data,
-        file_format=request.file_format if request.ds_repo else FileFormat.S3,
-        field_system=request.field_system,
-        field_instruction=request.field_instruction,
-        field_input=request.field_input,
-        field_output=request.field_output,
-        format=request.format,
-        is_organic=True,
-        no_input_format=request.no_input_format,
-        status=TaskStatus.LOOKING_FOR_NODES,
-        created_at=current_time,
-        termination_at=end_timestamp,
-        hours_to_complete=request.hours_to_complete,
-        account_id=request.account_id,
-        backend=Backend(request.backend or Backend.OBLIVUS.value),
-        result_model_name=request.result_model_name,
-    )
-
-    # NOTE: feels weird to add the task and then update it immediately
-    await task_sql.add_task(task, config.psql_db)
-    task.training_data = request.training_data
-    task.test_data = request.test_data
-    await task_sql.update_task(task, config.psql_db)
-
-    logger.info(task.task_id)
 
     if config.discord_url:
         await notify_organic_task_created(str(task.task_id), task.task_type.value, config.discord_url)
@@ -723,7 +685,6 @@ def factory_router() -> APIRouter:
     router.add_api_route(TASKS_CREATE_ENDPOINT_DPO, create_task_dpo, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_CHAT, create_task_chat, methods=["POST"])
     router.add_api_route(TASKS_CREATE_ENDPOINT_GRPO, create_task_grpo, methods=["POST"])
-    router.add_api_route(TASKS_CREATE_WITH_FIXED_DATASETS_ENDPOINT, create_task_with_fixed_datasets, methods=["POST"])
     router.add_api_route(CREATE_TEXT_TASK_WITH_CUSTOM_DATASET_ENDPOINT, create_text_task_with_custom_dataset, methods=["POST"])
     router.add_api_route(CREATE_CHAT_TASK_WITH_CUSTOM_DATASET_ENDPOINT, create_chat_task_with_custom_dataset, methods=["POST"])
     router.add_api_route(GET_TASK_DETAILS_ENDPOINT, get_task_details, methods=["GET"])
