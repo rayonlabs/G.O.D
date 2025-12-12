@@ -46,24 +46,6 @@ Authorization: Bearer {{dev_vali_api_key}}
     "model_filename": "RealVisXL_V4.0.safetensors"
 }
 
-# Create vali task with fixed datasets
-POST {{my_server_vali_url}}/v1/tasks/create_with_fixed_datasets
-Content-Type: application/json
-Authorization: Bearer {{dev_vali_api_key}}
-
-{
-    "account_id": "e3947cb3-7c20-41c7-b215-9a5e96c29011",
-    "model_repo": "{{tiny_model}}",
-    "field_instruction": "instruction",
-    "field_input": "input",
-    "field_output": "output",
-    "file_format": "hf",
-    "hours_to_complete": 1,
-    "training_data": "{{s3_ds}}",
-    "synthetic_data": "{{s3_ds}}",
-    "test_data": "{{s3_ds}}"
-}
-
 # Start miner training
 POST {{my_server_miner_url}}/start_training/
 Content-Type: application/json
