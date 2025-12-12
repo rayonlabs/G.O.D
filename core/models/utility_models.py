@@ -125,6 +125,8 @@ class ChatTemplateDatasetType(BaseModel):
 class ImageModelType(str, Enum):
     FLUX = "flux"
     SDXL = "sdxl"
+    Z_IMAGE = "z-image"
+    QWEN_IMAGE = "qwen-image"
 
 
 class Job(BaseModel):

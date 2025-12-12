@@ -1,4 +1,5 @@
 DEFAULT_IMAGE_DOCKERFILE_PATH = "dockerfiles/standalone-image-trainer.dockerfile"
+DEFAULT_IMAGE_TOOLKIT_DOCKERFILE_PATH = "dockerfiles/standalone-image-toolkit-trainer.dockerfile"
 DEFAULT_TEXT_DOCKERFILE_PATH = "dockerfiles/standalone-text-trainer.dockerfile"
 TEMP_REPO_PATH = "/tmp/trainer/repos/"
 TASKS_FILE_PATH = "trainer/task_history.json"

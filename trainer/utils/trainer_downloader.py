@@ -107,6 +107,27 @@ async def download_axolotl_base_model(repo_id: str, save_dir: str) -> str:
     return model_dir
 
 
+async def download_adapter(repo_id: str, filename: str, adapters_dir: str) -> str:
+    """Download adapter file and save it in the adapters directory"""
+    adapter_path = os.path.join(adapters_dir, filename)
+    os.makedirs(adapters_dir, exist_ok=True)
+    
+    if os.path.exists(adapter_path):
+        print(f"Adapter {filename} already exists at {adapter_path}. Skipping download.", flush=True)
+        return adapter_path
+    
+    print(f"Downloading adapter {filename} from {repo_id}...", flush=True)
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_file_path = hf_hub_download(repo_id=repo_id, filename=filename, local_dir=temp_dir)
+            shutil.move(temp_file_path, adapter_path)
+        print(f"Adapter {filename} downloaded successfully to {adapter_path}", flush=True)
+        return adapter_path
+    except Exception as e:
+        print(f"Error downloading adapter {filename}: {e}", flush=True)
+        raise e
+
+
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task-id", required=True)
@@ -122,8 +143,10 @@ async def main():
 
     dataset_dir = cst.CACHE_DATASETS_DIR
     model_dir = cst.CACHE_MODELS_DIR
+    adapters_dir = cst.HUGGINGFACE_CACHE_PATH
     os.makedirs(dataset_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(adapters_dir, exist_ok=True)
 
     print(f"Downloading datasets to: {dataset_dir}", flush=True)
     print(f"Downloading models to: {model_dir}", flush=True)
@@ -131,13 +154,30 @@ async def main():
     if args.task_type == TaskType.IMAGETASK.value:
         dataset_zip_path = await download_image_dataset(args.dataset, args.task_id, dataset_dir)
         model_path = await download_base_model(args.model, model_dir)
+        
+        print("Downloading Z-Image adapter...", flush=True)
+        zimage_adapter_path = await download_adapter(
+            repo_id="ostris/zimage_turbo_training_adapter",
+            filename="zimage_turbo_training_adapter_v2.safetensors",
+            adapters_dir=adapters_dir
+        )
+        print(f"Z-Image adapter downloaded to: {zimage_adapter_path}", flush=True)
+        
+        print("Downloading Qwen-Image adapter...", flush=True)
+        qwen_adapter_path = await download_adapter(
+            repo_id="ostris/accuracy_recovery_adapters",
+            filename="qwen_image_torchao_uint3.safetensors",
+            adapters_dir=adapters_dir
+        )
+        print(f"Qwen-Image adapter downloaded to: {qwen_adapter_path}", flush=True)
+        
         print("Downloading clip models", flush=True)
         CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH)
         CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH)
         snapshot_download(
             repo_id="google/t5-v1_1-xxl",
             repo_type="model",
-            cache_dir="/cache/hf_cache/",
+            cache_dir=cst.HUGGINGFACE_CACHE_PATH,
             local_dir_use_symlinks=False,
             allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "config.json"],
         )

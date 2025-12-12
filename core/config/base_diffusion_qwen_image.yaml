@@ -1,0 +1,47 @@
+job: extension
+config:
+  name: qwen_image_lora
+  process:
+  - type: diffusion_trainer
+    training_folder: /app/checkpoints
+    device: cuda
+    trigger_word: mytrigger
+    network:
+      type: lora
+      linear: 32
+      linear_alpha: 32
+    save:
+      dtype: bf16
+      save_every: 250
+      max_step_saves_to_keep: 4
+      save_format: diffusers
+    datasets:
+    - folder_path: /dataset/images
+      caption_ext: txt
+      cache_latents_to_disk: true
+      resolution: [512, 768, 1024]
+      is_reg: false
+    train:
+      batch_size: 1
+      steps: 3000
+      lr: 0.0001
+      optimizer: adamw8bit
+      gradient_checkpointing: true
+      noise_scheduler: flowmatch
+      timestep_type: weighted
+      dtype: bf16
+      cache_text_embeddings: true
+      train_unet: true
+      train_text_encoder: false
+    model:
+      name_or_path: /cache/models
+      arch: qwen_image
+      quantize: true
+      qtype: uint3|/cache/hf_cache/qwen_image_torchao_uint3.safetensors
+      quantize_te: true
+      qtype_te: qfloat8
+      low_vram: true
+meta:
+  name: qwen_image_lora
+  version: '1.0'
+

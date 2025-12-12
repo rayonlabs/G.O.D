@@ -17,6 +17,7 @@ from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import FileFormat
 from core.models.utility_models import GrpoDatasetType
+from core.models.utility_models import ImageModelType
 from core.models.utility_models import InstructTextDatasetType
 from core.models.utility_models import TaskType
 from trainer import constants as cst
@@ -443,6 +444,19 @@ def get_task_type(request: TrainerProxyRequest) -> TaskType:
     raise ValueError(f"Unsupported training_data type: {type(training_data)}")
 
 
+def get_dockerfile_path(task_type: TaskType, training_data, local_repo_path: str) -> str:
+    """Get the appropriate dockerfile path based on task type and model type"""
+    if task_type == TaskType.IMAGETASK:
+        model_type = training_data.model_type
+        if model_type in [ImageModelType.Z_IMAGE, ImageModelType.QWEN_IMAGE]:
+            return f"{local_repo_path}/{cst.DEFAULT_IMAGE_TOOLKIT_DOCKERFILE_PATH}"
+        else:
+            return f"{local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}"
+ 
+    else:
+        return f"{local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
+
+
 async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
     cancelled_exc: asyncio.CancelledError | None = None
     cancel_log_message: str | None = None
@@ -470,11 +484,7 @@ async def start_training_task(task: TrainerProxyRequest, local_repo_path: str):
             ),
         }
 
-        dockerfile_path = (
-            f"{local_repo_path}/{cst.DEFAULT_IMAGE_DOCKERFILE_PATH}"
-            if task_type == TaskType.IMAGETASK
-            else f"{local_repo_path}/{cst.DEFAULT_TEXT_DOCKERFILE_PATH}"
-        )
+        dockerfile_path = get_dockerfile_path(task_type, training_data, local_repo_path)
 
         logger.info("Running Cache Download Container", extra=log_labels)
         await log_task(training_data.task_id, task.hotkey, "Downloading data")
