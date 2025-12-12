@@ -22,7 +22,7 @@ import core.constants as cst
 import trainer.constants as train_cst
 import trainer.utils.training_paths as train_paths
 from core.config.config_handler import save_config, save_config_toml
-from core.dataset.prepare_diffusion_dataset import prepare_dataset
+from core.dataset.prepare_diffusion_dataset import prepare_datafdrset
 from core.models.utility_models import ImageModelType
 
 

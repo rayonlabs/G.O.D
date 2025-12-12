@@ -4,10 +4,14 @@ RUN pip install --no-cache-dir PyYAML
 
 RUN mkdir -p /dataset/configs \
     /dataset/outputs \
-    /workspace/scripts
+    /dataset/images \
+    /workspace/scripts \
+    /workspace/core
 
-COPY scripts/image_trainer.py /workspace/scripts/image_trainer.py
-COPY scripts/run_image_trainer.sh /workspace/scripts/run_image_trainer.sh
+COPY core /workspace/core
+COPY miner /workspace/miner
+COPY trainer /workspace/trainer
+COPY scripts /workspace/scripts
 
 RUN chmod +x /workspace/scripts/run_image_trainer.sh
 
