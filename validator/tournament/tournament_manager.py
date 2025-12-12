@@ -579,7 +579,7 @@ async def populate_tournament_participants(tournament_id: str, config: Config, p
                 )
 
         logger.info(
-            f"Validation complete: {len(validated_nodes)} participants selected " f"from {len(responding_nodes)} responding nodes"
+            f"Validation complete: {len(validated_nodes)} participants selected from {len(responding_nodes)} responding nodes"
         )
 
         miners_that_accept_and_give_repos = 0

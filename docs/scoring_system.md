@@ -14,15 +14,18 @@ From [`validator/core/constants.py`](../validator/core/constants.py):
 
 ```python
 # Base allocations
-TOURNAMENT_TEXT_WEIGHT = 0.15          # 15% base
-TOURNAMENT_IMAGE_WEIGHT = 0.10         # 10% base
+TOURNAMENT_TEXT_WEIGHT = 0.20          # 20% base
+TOURNAMENT_IMAGE_WEIGHT = 0.15         # 15% base
 MAX_TEXT_TOURNAMENT_WEIGHT = 0.6       # 60% maximum
 MAX_IMAGE_TOURNAMENT_WEIGHT = 0.4      # 40% maximum
 
 # Performance boosts
 EMISSION_MULTIPLIER_THRESHOLD = 0.05   # Must exceed 5% to get boost
 EMISSION_MULTIPLIER_RATE = 2.0         # 2x multiplier on excess
-EMISSION_BOOST_DECAY_PER_WIN = 0.01    # -1% per consecutive win
+
+# Time-based decay (replaces consecutive wins decay)
+EMISSION_DAILY_TIME_DECAY_RATE = 0.0033  # -0.33% per day as champion
+EMISSION_TIME_DECAY_START_DATE = 2025-11-26  # When time-based decay began
 
 # Within-tournament distribution
 TOURNAMENT_SIMPLE_DECAY_BASE = 0.3     # Exponential decay: 1.0, 0.3, 0.09...
@@ -36,9 +39,9 @@ TOURNAMENT_PARTICIPATION_WEIGHT = 0.0001  # 0.01% per participant
 ### 1. Base Allocation
 
 ```python
-text_weight = 0.15
-image_weight = 0.10
-burn_weight = 0.75
+text_weight = 0.20
+image_weight = 0.15
+burn_weight = 0.65
 ```
 
 ### 2. Performance Boost (if winner exceeds threshold)
@@ -47,12 +50,13 @@ burn_weight = 0.75
 if performance_diff > 0.05:
     emission_increase = (performance_diff - 0.05) * 2.0
 
-    # Apply consecutive win decay
-    decay = max(0, consecutive_wins - 1) * 0.01
+    # Apply time-based decay
+    days_as_champion = (current_time - first_championship_time).days
+    decay = days_as_champion * 0.0033  # 0.33% per day
     emission_increase = emission_increase - decay
 
     # Apply MAX cap
-    text_weight = min(0.15 + emission_increase, 0.6)
+    text_weight = min(0.20 + emission_increase, 0.6)
 ```
 
 **Result:** Strong performance = higher allocation, weak performance = more burn
@@ -62,7 +66,7 @@ if performance_diff > 0.05:
 **Critical:** Champions and non-champions use different weight pools.
 
 - **Champion:** Uses the boosted tournament weight pool (e.g., 0.35 if earned 20% boost)
-- **Non-champions:** Share the base weight pool (0.15 for text, 0.10 for image)
+- **Non-champions:** Share the base weight pool (0.20 for text, 0.15 for image)
 - Both are then distributed by rank using exponential decay (see below)
 - **Undistributed:** Goes to burn address
 
@@ -79,11 +83,11 @@ weight[rank] = 0.3^(rank - 1)
 
 - Champion weight = 1.0 \* 0.35 = 0.35
 
-If 3 non-champions share 0.15 base pool at ranks 2nd, 3rd, 4th:
+If 3 non-champions share 0.20 base pool at ranks 2nd, 3rd, 4th:
 
-- 2nd place = 0.3 \* (0.15 / sum_of_decay_weights)
-- 3rd place = 0.09 \* (0.15 / sum_of_decay_weights)
-- 4th place = 0.027 \* (0.15 / sum_of_decay_weights)
+- 2nd place = 0.3 \* (0.20 / sum_of_decay_weights)
+- 3rd place = 0.09 \* (0.20 / sum_of_decay_weights)
+- 4th place = 0.027 \* (0.20 / sum_of_decay_weights)
 
 Where sum_of_decay_weights = 0.3 + 0.09 + 0.027 = 0.417
 
@@ -94,31 +98,31 @@ Where sum_of_decay_weights = 0.3 + 0.09 + 0.027 = 0.417
 Text champion outperformed runner-up by 15% (performance_diff = 0.15):
 
 ```
-Base: 0.15
+Base: 0.20
 Boost: (0.15 - 0.05) * 2.0 = 0.20
-Text champion weight: 0.35
+Text champion weight: 0.40
 ```
 
-### Long-Reigning Champion (10th win)
+### Long-Reigning Champion (30 days)
 
 Text champion outperformed runner-up by 20% (performance_diff = 0.20):
 
 ```
-Base: 0.15
+Base: 0.20
 Raw boost: (0.20 - 0.05) * 2.0 = 0.30
-Decay: 9 wins * 0.01 = 0.09
-Final boost: 0.30 - 0.09 = 0.21
-Text champion weight: 0.36
+Decay: 30 days * 0.0033 = 0.099
+Final boost: 0.30 - 0.099 = 0.201
+Text champion weight: 0.401
 ```
 
-Despite 20% performance, consecutive wins reduce boost from 0.30 to 0.21.
+Despite 20% performance, time-based decay reduces boost from 0.30 to 0.201.
 
 ### Weak Performance (below threshold)
 
 Champion outperformed runner-up by only 3% (performance_diff = 0.03):
 
 ```
-Text champion weight: 0.15 (no boost - below 5% threshold)
+Text champion weight: 0.20 (no boost - below 5% threshold)
 ```
 
 ## Key Mechanisms
@@ -128,7 +132,7 @@ Text champion weight: 0.15 (no boost - below 5% threshold)
 **Balance Controls:**
 
 - MAX caps prevent domination (60% text, 40% image)
-- Consecutive win decay (-1% per win) prevents indefinite reign
+- Time-based decay (-0.33% per day) prevents indefinite reign
 - Dual weights ensure only champions benefit from boosts
 
 **Burn as Quality Signal:** Weak performance = high burn rate
